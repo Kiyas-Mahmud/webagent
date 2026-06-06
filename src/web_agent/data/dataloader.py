@@ -1,0 +1,91 @@
+"""Split loading + the 5 mode filters + stratified subsample (SPEC 6.3).
+
+Stable core (hybrid plan C). The notebook calls build_dataloader() to get a
+DataLoader, then drives the training loop itself (visible, tweakable).
+
+Modes are FILTERS over the same JSONs, never new files:
+  full_labels -> split == "train"
+  visual      -> split == "train" and not borrowed_image
+  eval_visual -> eval sub-split  and not borrowed_image
+  eval_labels -> eval sub-split
+  bbox        -> action_target_bbox is not None
+
+`limit` (smoke=16 / mini=5000) takes a stratified-by-failure_type subsample so
+small runs still see every class (LOOP is only 7.4%).
+"""
+
+from __future__ import annotations
+
+import json
+import random
+from collections import defaultdict
+from pathlib import Path
+
+from torch.utils.data import DataLoader
+
+from web_agent.data.dataset import WebAgentDataset
+
+MODE_FILTERS = ("full_labels", "visual", "eval_visual", "eval_labels", "bbox")
+EVAL_SUBSPLITS = {"test_task", "test_website", "test_domain"}
+
+
+def load_split(cfg: dict, which: str) -> list[dict]:
+    """which in {train, val, test}. UTF-8 mandatory (cp1252 fails on this data)."""
+    fname = cfg["data"][f"{which}_json"]
+    with open(Path(cfg["data"]["root"]) / fname, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _keep(rec: dict, mode: str) -> bool:
+    split = rec.get("split", "")
+    borrowed = bool(rec.get("borrowed_image", False))
+    if mode == "full_labels":
+        return split == "train"
+    if mode == "visual":
+        return split == "train" and not borrowed
+    if mode == "eval_labels":
+        return split in EVAL_SUBSPLITS
+    if mode == "eval_visual":
+        return split in EVAL_SUBSPLITS and not borrowed
+    if mode == "bbox":
+        return rec.get("action_target_bbox") is not None
+    raise ValueError(f"unknown mode {mode!r}; expected one of {MODE_FILTERS}")
+
+
+def filter_records(records: list[dict], mode: str) -> list[dict]:
+    return [r for r in records if _keep(r, mode)]
+
+
+def stratified_subsample(records: list[dict], n: int, seed: int = 42,
+                         key: str = "failure_type") -> list[dict]:
+    """Take ~n rows keeping each `key` class proportionally represented."""
+    if n >= len(records):
+        return records
+    rng = random.Random(seed)
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for r in records:
+        buckets[r.get(key)].append(r)
+    out: list[dict] = []
+    for cls, rows in buckets.items():
+        take = max(1, round(n * len(rows) / len(records)))
+        out.extend(rng.sample(rows, min(take, len(rows))))
+    rng.shuffle(out)
+    return out[:n]
+
+
+def build_dataloader(cfg, mode, records, processor, tokenizer,
+                     limit=None, batch_size=None, shuffle=True, seed=42):
+    """Filter -> (optional stratified limit) -> WebAgentDataset -> DataLoader."""
+    rows = filter_records(records, mode)
+    if limit is not None:
+        rows = stratified_subsample(rows, limit, seed=seed)
+    ds = WebAgentDataset(rows, cfg, processor, tokenizer)
+    bs = batch_size or cfg["optim"]["batch_size"]
+    return DataLoader(
+        ds,
+        batch_size=bs,
+        shuffle=shuffle,
+        num_workers=cfg["data"].get("num_workers", 2),
+        pin_memory=True,
+        drop_last=False,
+    )

@@ -1,10 +1,12 @@
-# Data — never commit (lives in ../FinalData or Kaggle dataset mount)
-data/
+# Dataset — never commit (lives in ../FinalData or Kaggle dataset mount).
+# Anchored to repo root with a leading slash so it does NOT match the source
+# package src/web_agent/data/.
+/data/
 *.json.zip
-images/
+/images/
 
 # Checkpoints + artifacts
-checkpoints/
+/checkpoints/
 *.ckpt
 *.pt
 *.pth
