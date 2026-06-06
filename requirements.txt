@@ -1,0 +1,18 @@
+# Pin exact versions after first successful Kaggle T4 run (Phase 0.1).
+# Until then, install latest compatible and freeze.
+torch
+torchvision
+transformers
+accelerate
+bitsandbytes
+pillow
+numpy
+pandas
+scikit-learn
+tqdm
+faiss-cpu
+matplotlib
+seaborn
+pyyaml
+wandb
+pytest

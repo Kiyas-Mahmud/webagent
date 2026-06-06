@@ -1,0 +1,30 @@
+# Data — never commit (lives in ../FinalData or Kaggle dataset mount)
+data/
+*.json.zip
+images/
+
+# Checkpoints + artifacts
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+
+# Results (keep folder structure, ignore heavy outputs)
+results/curves/
+results/figures/
+wandb/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Env
+.venv/
+venv/
+.env

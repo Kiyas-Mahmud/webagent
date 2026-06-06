@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "web_agent"
+version = "0.1.0"
+description = "Failure-Aware Resilient Autonomous Web Agent (4-pillar, backbone-agnostic)"
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+    "torch",
+    "torchvision",
+    "transformers",
+    "accelerate",
+    "bitsandbytes",
+    "pillow",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "tqdm",
+    "faiss-cpu",
+    "matplotlib",
+    "seaborn",
+    "pyyaml",
+    "wandb",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+web-agent = "web_agent.train.train:main"

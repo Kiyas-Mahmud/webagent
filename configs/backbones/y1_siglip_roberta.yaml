@@ -1,0 +1,21 @@
+# Y1 — SigLIP-base-256 + RoBERTa-base + cross-attention fusion.
+# THE FOUNDATION RUN: proves the whole architecture. Primary candidate.
+# Inherits configs/base.yaml; only fields below override.
+
+name: Y1
+extends: base.yaml
+
+backbone:
+  path: dual_encoder                 # dual_encoder -> uses cross-attention fusion
+  vision_encoder: google/siglip-base-patch16-256
+  text_encoder: roberta-base
+  vision_dim: 768
+  text_dim: 768
+
+fusion:
+  type: cross_attention              # the Pillar 2 novelty
+  num_blocks: 2
+  dropout: 0.1
+
+# Y1 is the primary candidate -> 3 seeds for mean +/- std (overrides base).
+seeds: [42, 1, 7]

@@ -1,0 +1,70 @@
+# Shared defaults for ALL 19 models. Per-model YAMLs override only what differs.
+# Sources: PROJECT_SPECIFICATION 4.3 (loss), 6.2 (hyperparams), 6.3 (dataloader).
+
+# ---- Data ----
+data:
+  # Runtime path to the dataset folder (holds split_*.json + images/).
+  # Kaggle (where training actually runs):
+  root: /kaggle/input/datasets/kiyasmahmud/thesisdata/FinalData
+  # Local IDE reference copy (no GPU, review only): ../FinalData
+  train_json: split_train.json
+  val_json: split_val.json
+  test_json: split_test.json
+  images_dir: images                 # ONE shared folder — never split
+  image_size: 256
+  text_max_len: 128
+  mode: full_labels                  # full_labels | visual | eval_visual | eval_labels | bbox
+
+# ---- Combined loss weights (SPEC 4.3) — fixed across all models ----
+loss:
+  outcome: 0.25
+  failure_type: 0.20
+  action_type: 0.18
+  bbox: 0.12                         # masked: only rows where bbox exists
+  memory_flag: 0.10
+  recovery: 0.10
+  confidence: 0.05
+  class_weight_action: true          # CLICK is 83.6%
+  class_weight_failure_type: true    # LOOP is only 7.4%
+
+# ---- Fused embedding dim — fixed (heads expect 768) ----
+fused_dim: 768
+
+# ---- Optimization (SPEC 6.2) ----
+optim:
+  batch_size: 32
+  grad_accum: 1
+  optimizer: adamw
+  weight_decay: 0.01
+  scheduler: cosine
+  warmup_ratio: 0.10
+  grad_clip: 1.0
+  mixed_precision: fp16              # bf16 on A100
+  early_stopping_patience: 3         # on val_loss
+
+# ---- Two-phase training (SPEC 6.1) ----
+phases:
+  warmup:                            # encoders frozen
+    epochs: 3
+    lr_fusion: 1.0e-3
+    lr_heads: 1.0e-3
+  joint:                             # all unfrozen
+    epochs: 7
+    lr_encoder: 1.0e-5
+    lr_fusion: 1.0e-4
+    lr_heads: 1.0e-4
+
+# ---- Reproducibility ----
+seeds: [42]                          # Y1 overrides to [42, 1, 7]
+checkpoint_every_steps: 500
+
+# ---- Stage row counts (test-first) ----
+stages:
+  smoke: 16
+  mini: 5000
+
+# ---- Output ----
+output:
+  checkpoint_dir: checkpoints
+  results_csv: results/results_table.csv
+  log_backend: wandb                 # wandb | tensorboard | none
