@@ -113,22 +113,28 @@ def dual_collate(batch: list[dict]) -> dict:
 
 
 def build_dataloader(cfg, mode, records, processor, tokenizer=None,
-                     limit=None, batch_size=None, shuffle=True, seed=42):
+                     limit=None, batch_size=None, shuffle=True, seed=42,
+                     num_workers=None):
     """Filter -> (optional stratified limit) -> WebAgentDataset -> DataLoader.
 
-    Picks the collate by cfg["backbone"]["path"] (vlm vs dual_encoder)."""
+    Picks the collate by cfg["backbone"]["path"] (vlm vs dual_encoder).
+    `num_workers` overrides cfg; >0 parallelizes the per-sample VLM processing
+    (the bottleneck) so the GPU stops starving. persistent_workers avoids
+    re-spawning them every epoch."""
     rows = filter_records(records, mode)
     if limit is not None:
         rows = stratified_subsample(rows, limit, seed=seed)
     ds = WebAgentDataset(rows, cfg, processor, tokenizer)
     bs = batch_size or cfg["optim"]["batch_size"]
+    nw = cfg["data"].get("num_workers", 2) if num_workers is None else num_workers
     collate = vlm_collate if cfg["backbone"]["path"] == "vlm" else dual_collate
     return DataLoader(
         ds,
         batch_size=bs,
         shuffle=shuffle,
-        num_workers=cfg["data"].get("num_workers", 2),
+        num_workers=nw,
         pin_memory=True,
         drop_last=False,
         collate_fn=collate,
+        persistent_workers=(nw > 0),
     )
