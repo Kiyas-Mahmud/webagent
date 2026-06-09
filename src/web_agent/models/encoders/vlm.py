@@ -40,7 +40,15 @@ class VLMEncoder(nn.Module):
             torch_dtype=torch.bfloat16,
             device_map={"": 0},          # 3B 4-bit fits a single T4
         )
-        self.hidden_dim = self.model.config.hidden_size
+        # Qwen2.5-VL nests the LM dims under config.text_config (no top-level
+        # hidden_size). Fall back across layouts to stay robust.
+        conf = self.model.config
+        self.hidden_dim = (
+            getattr(conf, "hidden_size", None)
+            or getattr(getattr(conf, "text_config", None), "hidden_size", None)
+        )
+        if self.hidden_dim is None:
+            raise RuntimeError("could not resolve VLM hidden size from config")
 
         # Phase-1 smoke/mini: freeze the VLM, train only adapter + heads.
         # QLoRA (LoRA on q_proj/v_proj) is added later for the full run.
