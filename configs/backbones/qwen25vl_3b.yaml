@@ -1,0 +1,29 @@
+# Qwen2.5-VL-3B-Instruct (4-bit / QLoRA) — FOUNDATION RUN (Qwen-first build order).
+# Unified VLM: uses the adapter path (SPEC 4.5), skips cross-attention fusion.
+#   VLM(image+text) -> pooled[D] -> Adapter Linear(D->768) -> 4 heads (FIXED)
+# Inherits configs/base.yaml; only fields below override.
+#
+# NOTE: Qwen2.5-VL ships 3B/7B/72B only — there is no 0.5B VL model. 3B in 4-bit
+# (~3-4 GB weights) fits free Kaggle T4 16 GB.
+
+name: Y_QWEN3B
+extends: base.yaml
+
+backbone:
+  path: vlm                                   # selects the VLM adapter path
+  vlm_model: Qwen/Qwen2.5-VL-3B-Instruct
+  load_in_4bit: true                          # bitsandbytes nf4, bf16 compute
+  qlora: true                                 # LoRA on q_proj/v_proj in the full run
+  lora_rank: 16
+  lora_alpha: 32
+  vlm_hidden_dim: 2048                        # D; adapter maps D->768. VERIFY at load.
+  # Cap vision tokens — screenshots are only 256px wide, so keep them small.
+  min_pixels: 50176                           # 224*224
+  max_pixels: 200704                          # 448*448
+
+optim:
+  batch_size: 2                               # VLM is heavy on T4
+  grad_accum: 16                              # effective batch 32
+  mixed_precision: bf16                       # bf16 compute with 4-bit base
+
+seeds: [42]

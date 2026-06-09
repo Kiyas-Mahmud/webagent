@@ -21,9 +21,17 @@ import random
 from collections import defaultdict
 from pathlib import Path
 
+import torch
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 
 from web_agent.data.dataset import WebAgentDataset
+
+# Label keys shared by both paths; stacked identically in every collate.
+_LABEL_KEYS = (
+    "bbox", "bbox_mask", "borrowed", "label_outcome", "label_failtype",
+    "label_action", "label_recovery", "label_memory", "label_confidence",
+)
 
 MODE_FILTERS = ("full_labels", "visual", "eval_visual", "eval_labels", "bbox")
 EVAL_SUBSPLITS = {"test_task", "test_website", "test_domain"}
@@ -73,14 +81,48 @@ def stratified_subsample(records: list[dict], n: int, seed: int = 42,
     return out[:n]
 
 
-def build_dataloader(cfg, mode, records, processor, tokenizer,
+def _stack_labels(batch: list[dict]) -> dict:
+    return {k: torch.stack([b[k] for b in batch]) for k in _LABEL_KEYS}
+
+
+def vlm_collate(batch: list[dict]) -> dict:
+    """Collate for the Qwen VLM path: variable-length sequences + per-image patches.
+
+    input_ids/attention_mask are left-variable -> right-pad to the longest in the
+    batch. pixel_values are flattened patches that differ per image -> concatenate
+    along dim 0 (Qwen consumes them with image_grid_thw, which we stack).
+    """
+    out = _stack_labels(batch)
+    out["input_ids"] = pad_sequence(
+        [b["input_ids"] for b in batch], batch_first=True, padding_value=0,
+    )
+    out["attention_mask"] = pad_sequence(
+        [b["attention_mask"] for b in batch], batch_first=True, padding_value=0,
+    )
+    out["pixel_values"] = torch.cat([b["pixel_values"] for b in batch], dim=0)
+    out["image_grid_thw"] = torch.stack([b["image_grid_thw"] for b in batch])
+    return out
+
+
+def dual_collate(batch: list[dict]) -> dict:
+    """Collate for the dual-encoder path: every field is fixed-size -> just stack."""
+    out = _stack_labels(batch)
+    for k in ("pixel_values", "input_ids", "attention_mask"):
+        out[k] = torch.stack([b[k] for b in batch])
+    return out
+
+
+def build_dataloader(cfg, mode, records, processor, tokenizer=None,
                      limit=None, batch_size=None, shuffle=True, seed=42):
-    """Filter -> (optional stratified limit) -> WebAgentDataset -> DataLoader."""
+    """Filter -> (optional stratified limit) -> WebAgentDataset -> DataLoader.
+
+    Picks the collate by cfg["backbone"]["path"] (vlm vs dual_encoder)."""
     rows = filter_records(records, mode)
     if limit is not None:
         rows = stratified_subsample(rows, limit, seed=seed)
     ds = WebAgentDataset(rows, cfg, processor, tokenizer)
     bs = batch_size or cfg["optim"]["batch_size"]
+    collate = vlm_collate if cfg["backbone"]["path"] == "vlm" else dual_collate
     return DataLoader(
         ds,
         batch_size=bs,
@@ -88,4 +130,5 @@ def build_dataloader(cfg, mode, records, processor, tokenizer,
         num_workers=cfg["data"].get("num_workers", 2),
         pin_memory=True,
         drop_last=False,
+        collate_fn=collate,
     )

@@ -327,10 +327,14 @@ Combined loss (same as 4.3)
 | Y1 | SigLIP-base-256 + RoBERTa-base | ~400M | ~6 GB | Kaggle T4 | FREE |
 | Y2 | SigLIP-large-384 + RoBERTa-large | ~900M | ~12 GB | Kaggle T4 | FREE |
 | Y3 | CLIP-ViT-L/14 + RoBERTa-base | ~450M | ~7 GB | Kaggle T4 | FREE |
-| Y4 | Qwen2.5-VL-0.5B (adapter path) | ~0.5B | ~6 GB | Kaggle T4 | FREE |
-| Y5 | Qwen2.5-VL-3B (adapter path, QLoRA) | ~3B | ~18 GB | Vast.ai A100 | ~$10 |
+| Y4 | Qwen2.5-VL-3B (adapter path, 4-bit) — **FOUNDATION RUN, built first (v3)** | ~3B | ~10 GB | Kaggle T4 | FREE |
+| Y5 | Qwen2.5-VL-3B (adapter path, full QLoRA / or larger) | ~3B | ~18 GB | Vast.ai A100 | ~$10 |
 | Y6 | InternVL2-2B (adapter path, 4-bit) | ~2B | ~12 GB | Kaggle T4 | FREE |
 | Y7 | Florence-2-large + RoBERTa-base | ~800M | ~10 GB | Kaggle T4 | FREE |
+
+> **Correction (v3):** "Qwen2.5-VL-0.5B" does not exist — Qwen2.5-VL ships only
+> 3B/7B/72B. The smallest is 3B, which fits free Kaggle T4 in 4-bit. Y4 above is
+> the **foundation run, built first** (Qwen-first reorder; see AGENT.md §5.2).
 
 **Primary model = chosen AFTER training, by validation results.** Do NOT pre-fix it. Report all 7 in the backbone-generalization table and mark the empirical winner as primary in the paper.
 

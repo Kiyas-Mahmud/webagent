@@ -69,11 +69,26 @@ NEVER start the next model until the current one passes E.
 ```
 
 ### 5.2 Model order (free-first, smallest-first)
+
+> **BUILD ORDER OVERRIDE (v3, current): Qwen-first.** The foundation/first run is
+> now **Qwen2.5-VL-3B-Instruct in 4-bit (QLoRA)** via the VLM adapter path, not Y1.
+> This is a REORDER, not a replacement — SigLIP+RoBERTa and the other dual-encoder
+> backbones are still trained afterwards, so the backbone-agnostic comparison (the
+> paper's novelty) is preserved. Valid because the 4 heads + combined loss never
+> change (5.4). Note: "Qwen2.5-VL-0.5B" in older docs does not exist — 3B is the
+> smallest Qwen2.5-VL. New current order:
+> ```
+> Qwen2.5-VL-3B (4-bit) -> A1..A5 ablations -> SigLIP+RoBERTa (Y1) -> Y3 -> Y7
+> -> Y2 -> Y6 -> Qwen2.5-VL-3B full QLoRA / larger -> baselines B1..B4
+> ```
+
+Original (v2) order, kept for reference:
 ```
 Y1 (SigLIP+RoBERTa) -> A1..A5 ablations -> Y3 -> Y7 -> Y4 (first VLM)
 -> Y2 -> Y6 -> Y5 (paid, LAST) -> baselines B1..B4
 ```
-Y1 is built first and proves the whole architecture; every later model reuses its code and swaps only the backbone.
+The first model built proves the whole architecture (heads + loss + training loop);
+every later model reuses its code and swaps only the backbone front-end.
 
 ### 5.3 Primary model is chosen by RESULTS
 Do not hardcode a primary model. Train all 7 backbones, compare validation Failure-F1 + Recovery-SR, then mark the winner as primary.
