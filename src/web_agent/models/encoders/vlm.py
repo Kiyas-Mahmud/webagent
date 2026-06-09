@@ -20,25 +20,28 @@ import torch.nn as nn
 class VLMEncoder(nn.Module):
     def __init__(self, cfg: dict):
         super().__init__()
-        from transformers import (
-            BitsAndBytesConfig,
-            Qwen2_5_VLForConditionalGeneration,
-        )
+        # AutoModelForImageTextToText auto-selects the right class for any
+        # Qwen-VL (Qwen2-VL-2B, Qwen2.5-VL-3B, ...) — backbone-agnostic loader.
+        from transformers import AutoModelForImageTextToText, BitsAndBytesConfig
 
         bb = cfg["backbone"]
+        # T4 (Turing) has no native bf16 — default to fp16; 4-bit uses its own
+        # compute dtype.
+        self.dtype = getattr(torch, bb.get("dtype", "float16"))
+
         quant = None
         if bb.get("load_in_4bit"):
             quant = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
-                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_compute_dtype=self.dtype,
             )
-        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        self.model = AutoModelForImageTextToText.from_pretrained(
             bb["vlm_model"],
             quantization_config=quant,
-            torch_dtype=torch.bfloat16,
-            device_map={"": 0},          # 3B 4-bit fits a single T4
+            torch_dtype=self.dtype,
+            device_map={"": 0},          # 2B/3B fits a single T4
         )
         # Qwen2.5-VL nests the LM dims under config.text_config (no top-level
         # hidden_size). Fall back across layouts to stay robust.
@@ -80,7 +83,7 @@ class VLMEncoder(nn.Module):
             out = self.model(
                 input_ids=batch["input_ids"].to(dev),
                 attention_mask=batch["attention_mask"].to(dev),
-                pixel_values=batch["pixel_values"].to(dev, dtype=torch.bfloat16),
+                pixel_values=batch["pixel_values"].to(dev, dtype=self.dtype),
                 image_grid_thw=batch["image_grid_thw"].to(dev),
                 output_hidden_states=True,
                 use_cache=False,

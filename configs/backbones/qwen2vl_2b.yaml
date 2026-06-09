@@ -1,0 +1,26 @@
+# Qwen2-VL-2B-Instruct (fp16) — smaller/faster foundation run on free Kaggle T4.
+# Genuinely 2B (older gen than 2.5), fits T4 in fp16 with no quantization overhead.
+# Same VLM adapter path: VLM(image+text) -> Adapter Linear(D->768) -> 4 heads (FIXED).
+# Inherits configs/base.yaml.
+
+name: Y_QWEN2VL_2B
+extends: base.yaml
+
+backbone:
+  path: vlm
+  vlm_model: Qwen/Qwen2-VL-2B-Instruct
+  load_in_4bit: false                         # 2B fits T4 in fp16; no quant needed
+  dtype: float16                              # T4 (Turing) has NO bf16 — use fp16
+  qlora: true                                 # LoRA q_proj/v_proj for the full run
+  lora_rank: 16
+  lora_alpha: 32
+  vlm_hidden_dim: 1536                         # D for Qwen2-VL-2B; adapter D->768 (verify at load)
+  min_pixels: 50176                           # 224*224
+  max_pixels: 200704                          # 448*448
+
+optim:
+  batch_size: 4
+  grad_accum: 8                               # effective batch 32
+  mixed_precision: fp16
+
+seeds: [42]
