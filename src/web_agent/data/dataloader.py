@@ -143,6 +143,10 @@ def vlm_collate(batch: list[dict]) -> dict:
     )
     out["pixel_values"] = torch.cat([b["pixel_values"] for b in batch], dim=0)
     out["image_grid_thw"] = torch.stack([b["image_grid_thw"] for b in batch])
+    if "mm_token_type_ids" in batch[0]:
+        out["mm_token_type_ids"] = pad_sequence(
+            [b["mm_token_type_ids"] for b in batch], batch_first=True, padding_value=0,
+        )
     return out
 
 

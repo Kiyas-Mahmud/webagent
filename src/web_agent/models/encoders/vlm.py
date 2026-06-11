@@ -96,16 +96,19 @@ class VLMEncoder(nn.Module):
 
     def forward(self, batch: dict) -> torch.Tensor:
         dev = self.device
+        kwargs = dict(
+            input_ids=batch["input_ids"].to(dev),
+            attention_mask=batch["attention_mask"].to(dev),
+            pixel_values=batch["pixel_values"].to(dev, dtype=self.dtype),
+            image_grid_thw=batch["image_grid_thw"].to(dev),
+            output_hidden_states=True,
+            use_cache=False,
+        )
+        if "mm_token_type_ids" in batch:  # required by newer Qwen2-VL (M-RoPE)
+            kwargs["mm_token_type_ids"] = batch["mm_token_type_ids"].to(dev)
         ctx = torch.no_grad() if self._frozen else contextlib.nullcontext()
         with ctx:
-            out = self.model(
-                input_ids=batch["input_ids"].to(dev),
-                attention_mask=batch["attention_mask"].to(dev),
-                pixel_values=batch["pixel_values"].to(dev, dtype=self.dtype),
-                image_grid_thw=batch["image_grid_thw"].to(dev),
-                output_hidden_states=True,
-                use_cache=False,
-            )
+            out = self.model(**kwargs)
             h = out.hidden_states[-1]                      # [B, seq, D]
             mask = batch["attention_mask"].to(dev).unsqueeze(-1).to(h.dtype)
             pooled = (h * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1.0)  # [B, D]

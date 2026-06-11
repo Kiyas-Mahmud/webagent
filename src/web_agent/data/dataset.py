@@ -150,12 +150,16 @@ class WebAgentDataset(Dataset):
             messages, tokenize=False, add_generation_prompt=True,
         )
         enc = self.processor(text=[chat], images=[image], return_tensors="pt")
-        return {
+        out = {
             "input_ids": enc["input_ids"][0],            # [seq]
             "attention_mask": enc["attention_mask"][0],  # [seq]
             "pixel_values": enc["pixel_values"],         # [num_patches, patch_dim]
             "image_grid_thw": enc["image_grid_thw"][0],  # [3] = (t, h, w)
         }
+        # Newer transformers Qwen2-VL requires per-token image/text markers (M-RoPE).
+        if "mm_token_type_ids" in enc:
+            out["mm_token_type_ids"] = enc["mm_token_type_ids"][0]  # [seq]
+        return out
 
     def __getitem__(self, idx: int) -> dict:
         rec = self.records[idx]
