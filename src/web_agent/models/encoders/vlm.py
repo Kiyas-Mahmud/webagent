@@ -1,12 +1,16 @@
 """Unified VLM encoder -> pooled [B, D] (SPEC 4.5, the adapter path).
 
-Foundation backbone (Qwen-first build order): Qwen2.5-VL-3B-Instruct in 4-bit.
-The VLM fuses image+text internally, so CROSS-ATTENTION IS SKIPPED — a single
-adapter Linear(D->768) (see ../adapter.py) maps the pooled output into the shared
-heads. D = model.config.hidden_size (2048 for Qwen2.5-VL-3B; read at load).
+Foundation backbone: Qwen2-VL-2B-Instruct in 4-bit QLoRA. The VLM fuses image+text
+internally, so CROSS-ATTENTION IS SKIPPED — a single adapter Linear(D->768)
+(see ../adapter.py) maps the pooled output into the shared heads. D is read from
+the model config at load (1536 for Qwen2-VL-2B).
 
-Requires transformers >= 4.49 for the Qwen2.5-VL classes, and bitsandbytes +
-accelerate for 4-bit. The Kaggle install cell upgrades transformers.
+QLoRA: 4-bit base (frozen) + LoRA on q_proj/v_proj (trainable). When LoRA is
+applied the base stays frozen but the LoRA params require grad, so forward runs
+WITH the autograd graph (no_grad only while fully frozen, e.g. a frozen smoke run).
+
+Requires transformers (recent), bitsandbytes, accelerate, peft. The Kaggle install
+cell provides them.
 """
 
 from __future__ import annotations
@@ -53,15 +57,34 @@ class VLMEncoder(nn.Module):
         if self.hidden_dim is None:
             raise RuntimeError("could not resolve VLM hidden size from config")
 
-        # Phase-1 smoke/mini: freeze the VLM, train only adapter + heads.
-        # QLoRA (LoRA on q_proj/v_proj) is added later for the full run.
-        for p in self.model.parameters():
-            p.requires_grad = False
         self.model.config.use_cache = False
-        # When fully frozen we don't need the autograd graph through the VLM —
-        # run it under no_grad to save VRAM on the T4. Once QLoRA adds trainable
-        # params this flips automatically.
-        self._grad_checkpoint_enabled = False
+
+        if bb.get("qlora"):
+            self._apply_qlora(bb)
+        else:
+            # Fully frozen (e.g. a quick smoke check). Forward runs under no_grad.
+            for p in self.model.parameters():
+                p.requires_grad = False
+
+    def _apply_qlora(self, bb: dict) -> None:
+        """4-bit base frozen + LoRA on attention projections (trainable)."""
+        from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+
+        # Enables gradient checkpointing + makes inputs require grad so gradients
+        # flow back to the LoRA layers through the frozen 4-bit base.
+        self.model = prepare_model_for_kbit_training(
+            self.model, use_gradient_checkpointing=True,
+        )
+        lora = LoraConfig(
+            r=bb.get("lora_rank", 8),
+            lora_alpha=bb.get("lora_alpha", 16),
+            lora_dropout=bb.get("lora_dropout", 0.05),
+            target_modules=bb.get("lora_target_modules", ["q_proj", "v_proj"]),
+            bias="none",
+            task_type="FEATURE_EXTRACTION",
+        )
+        self.model = get_peft_model(self.model, lora)
+        self.model.print_trainable_parameters()
 
     @property
     def device(self):
@@ -70,11 +93,6 @@ class VLMEncoder(nn.Module):
     @property
     def _frozen(self) -> bool:
         return not any(p.requires_grad for p in self.model.parameters())
-
-    def enable_qlora_grad_checkpointing(self) -> None:
-        """Call once LoRA params are added, so the VLM keeps gradients efficiently."""
-        self.model.gradient_checkpointing_enable()
-        self._grad_checkpoint_enabled = True
 
     def forward(self, batch: dict) -> torch.Tensor:
         dev = self.device

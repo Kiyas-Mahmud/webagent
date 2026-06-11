@@ -38,3 +38,27 @@ def compute_class_weights(records, limit: int | None = None):
         _inverse_freq(action_counts, NUM_ACTION_TYPE),
         _inverse_freq(failtype_counts, NUM_FAILURE_TYPE),
     )
+
+
+def _sklearn_balanced(labels, num_classes: int) -> torch.Tensor:
+    """sklearn compute_class_weight('balanced') over present classes; absent -> 0."""
+    from sklearn.utils.class_weight import compute_class_weight
+    import numpy as np
+
+    present = sorted(set(labels))
+    w = compute_class_weight("balanced", classes=np.array(present), y=np.array(labels))
+    out = torch.zeros(num_classes, dtype=torch.float32)
+    for c, wc in zip(present, w):
+        out[c] = float(wc)
+    return out
+
+
+def balanced_class_weights(records, limit: int | None = None):
+    """sklearn 'balanced' weights for action_type[5] and failure_type[4] (spec)."""
+    rows = records[:limit] if limit else records
+    action = [ACTION_TYPE[r["action_type"]] for r in rows]
+    failtype = [FAILURE_TYPE[r["failure_type"]] for r in rows]
+    return (
+        _sklearn_balanced(action, NUM_ACTION_TYPE),
+        _sklearn_balanced(failtype, NUM_FAILURE_TYPE),
+    )

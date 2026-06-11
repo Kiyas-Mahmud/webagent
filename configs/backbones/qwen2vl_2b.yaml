@@ -1,7 +1,9 @@
-# Qwen2-VL-2B-Instruct (fp16) — smaller/faster foundation run on free Kaggle T4.
-# Genuinely 2B (older gen than 2.5), fits T4 in fp16 with no quantization overhead.
-# Same VLM adapter path: VLM(image+text) -> Adapter Linear(D->768) -> 4 heads (FIXED).
-# Inherits configs/base.yaml.
+# Qwen2-VL-2B-Instruct — full QLoRA training (foundation run; QLoRA for all models).
+# Adapter path: VLM(image+text) -> Adapter(D->768)+LN+Dropout -> 5 heads (FIXED).
+# Inherits configs/base.yaml; fields below override.
+#
+# NOTE: spec named Qwen2.5-VL-0.5B (hidden 896) which does NOT exist (text-only).
+# Real smallest vision model = Qwen2-VL-2B, hidden D=1536 (auto-read at load).
 
 name: Y_QWEN2VL_2B
 extends: base.yaml
@@ -9,18 +11,56 @@ extends: base.yaml
 backbone:
   path: vlm
   vlm_model: Qwen/Qwen2-VL-2B-Instruct
-  load_in_4bit: false                         # 2B fits T4 in fp16; no quant needed
-  dtype: float16                              # T4 (Turing) has NO bf16 — use fp16
-  qlora: true                                 # LoRA q_proj/v_proj for the full run
-  lora_rank: 16
-  lora_alpha: 32
-  vlm_hidden_dim: 1536                         # D for Qwen2-VL-2B; adapter D->768 (verify at load)
+  load_in_4bit: true                          # 4-bit QLoRA (nf4, double-quant, fp16 compute)
+  dtype: float16                              # T4 (Turing) has NO bf16
+  qlora: true
+  lora_rank: 8
+  lora_alpha: 16
+  lora_dropout: 0.05
+  lora_target_modules: [q_proj, v_proj]
+  vlm_hidden_dim: 1536                         # D for Qwen2-VL-2B (verified at load)
   min_pixels: 50176                           # 224*224
   max_pixels: 200704                          # 448*448
 
+adapter:
+  dropout: 0.1                                # Linear(D->768) -> LayerNorm(768) -> Dropout
+
+# ---- 10-term combined loss (spec) — overrides base 7-term ----
+loss:
+  outcome: 0.22
+  failure_type: 0.18
+  action_type: 0.15
+  bbox: 0.10
+  memory_flag: 0.10
+  recovery: 0.09
+  confidence: 0.05
+  calibration: 0.05
+  contrastive: 0.04
+  recovery_outcome: 0.02
+  label_smoothing: 0.1
+  class_weight_action: true                   # sklearn balanced
+  class_weight_failure_type: true
+  confidence_clip: [0.05, 0.95]
+  contrastive_margin: 0.5
+
 optim:
-  batch_size: 4
-  grad_accum: 8                               # effective batch 32
+  batch_size: 8
+  grad_accum: 4                               # effective batch 32
+  optimizer: adamw
+  weight_decay: 0.01
+  scheduler: cosine
+  warmup_ratio: 0.10
+  grad_clip: 1.0
   mixed_precision: fp16
+  lr_lora: 1.0e-4                             # LoRA + adapter param group
+  lr_heads: 1.0e-3                            # task heads param group
+
+train:
+  epochs: 15                                  # upper bound; early stopping decides
+  early_stop_metric: failure_f1               # NOT loss
+  early_stop_patience: 3
+  checkpoint_every_steps: 500
+  keep_top_k: 3                               # by failure_f1
+  metrics_csv: results/qwen2vl2b_metrics.csv
 
 seeds: [42]

@@ -84,3 +84,16 @@ class MemoryHead(nn.Module):
             "memory_flag": torch.sigmoid(self.memory_flag(h)),
             "memory_recovery": self.recovery(h),
         }
+
+
+class RecoveryOutcomeHead(nn.Module):
+    """Did the recovery succeed? sigmoid + BCE vs recovery_success."""
+
+    def __init__(self, dim: int = 768, hidden: int = 256, dropout: float = 0.3):
+        super().__init__()
+        self.trunk = _trunk(dim, hidden, dropout)
+        self.recovery_outcome = nn.Linear(hidden, 1)        # sigmoid in forward
+
+    def forward(self, fused: torch.Tensor) -> dict:
+        h = self.trunk(fused)
+        return {"recovery_outcome": torch.sigmoid(self.recovery_outcome(h))}

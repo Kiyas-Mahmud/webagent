@@ -19,6 +19,7 @@ Per record:
 
 from __future__ import annotations
 
+from collections import defaultdict
 from pathlib import Path
 
 import torch
@@ -33,6 +34,15 @@ from web_agent.labels import (
 )
 
 SEP = " </s> "  # dual-encoder field separator (RoBERTa).
+CONTEXT_STEPS = 3  # how many previous steps of the trajectory to include
+
+
+def _step_index(task_id: str) -> int:
+    """Trailing _N of a task_id, e.g. 'train_pass1_<uuid>_0' -> 0."""
+    try:
+        return int(task_id.rsplit("_", 1)[-1])
+    except ValueError:
+        return 0
 
 
 class WebAgentDataset(Dataset):
@@ -44,6 +54,23 @@ class WebAgentDataset(Dataset):
         self.root = Path(cfg["data"]["root"])
         self.max_len = cfg["data"].get("text_max_len", 128)
         self.path = cfg["backbone"]["path"]  # "vlm" or "dual_encoder"
+        self._build_trajectory_index()
+
+    def _build_trajectory_index(self) -> None:
+        """Map each row -> its up-to-3 previous steps in the same trajectory.
+
+        Trajectory = (original_task_id, pass); steps ordered by the task_id suffix.
+        """
+        groups: dict[tuple, list[tuple[int, int]]] = defaultdict(list)
+        for i, r in enumerate(self.records):
+            key = (r.get("original_task_id"), r.get("pass"))
+            groups[key].append((_step_index(r["task_id"]), i))
+        self._prev_idx: dict[int, list[int]] = {}
+        for lst in groups.values():
+            lst.sort()
+            ordered = [i for _, i in lst]
+            for pos, i in enumerate(ordered):
+                self._prev_idx[i] = ordered[max(0, pos - CONTEXT_STEPS):pos]
 
     def __len__(self) -> int:
         return len(self.records)
@@ -76,25 +103,35 @@ class WebAgentDataset(Dataset):
             "label_recovery": torch.tensor(RECOVERY_STRATEGY[rec["recovery_strategy"]]),
             "label_memory": torch.tensor([float(rec["memory_update_flag"])]),
             "label_confidence": torch.tensor([float(rec["agent_confidence_before"])]),
+            "label_recovery_success": torch.tensor([float(rec.get("recovery_success", False))]),
+            # str field for the contrastive pair sampler / loss (carried by collate).
+            "original_task_id": rec.get("original_task_id", ""),
         }
 
-    def _prompt(self, rec: dict) -> str:
-        return (
-            f"Task: {rec.get('task_description', '') or ''}\n"
-            f"Target: {rec.get('action_target_desc', '') or ''}\n"
-            f"Website: {rec.get('website_domain', '') or ''}"
-        )
+    def _context_text(self, idx: int) -> str:
+        """Last-3-steps context + current step (spec format), empty-padded at start."""
+        prev = self._prev_idx.get(idx, [])
+        prev = [None] * (CONTEXT_STEPS - len(prev)) + prev  # left-pad to 3
+        parts = []
+        for p in prev:
+            if p is None:
+                parts.append("prev_action:  | prev_outcome: ")
+            else:
+                pr = self.records[p]
+                parts.append(
+                    f"prev_action: {pr['action_type']} | prev_outcome: {pr['execution_outcome']}"
+                )
+        rec = self.records[idx]
+        parts.append(f"current_task: {rec.get('task_description', '') or ''}")
+        parts.append(f"target: {rec.get('action_target_desc', '') or ''}")
+        parts.append(f"domain: {rec.get('website_domain', '') or ''}")
+        return " | ".join(parts)
 
     # ---- dual-encoder path ----
-    def _dual_inputs(self, image, rec):
+    def _dual_inputs(self, idx, image):
         pixel_values = self.processor(images=image, return_tensors="pt")["pixel_values"][0]
-        text = SEP.join([
-            rec.get("task_description", "") or "",
-            rec.get("action_target_desc", "") or "",
-            rec.get("website_domain", "") or "",
-        ])
         enc = self.tokenizer(
-            text, max_length=self.max_len, padding="max_length",
+            self._context_text(idx), max_length=self.max_len, padding="max_length",
             truncation=True, return_tensors="pt",
         )
         return {
@@ -103,11 +140,11 @@ class WebAgentDataset(Dataset):
             "attention_mask": enc["attention_mask"][0],
         }
 
-    # ---- VLM path (Qwen2.5-VL joint processing) ----
-    def _vlm_inputs(self, image, rec):
+    # ---- VLM path (Qwen joint processing) ----
+    def _vlm_inputs(self, idx, image):
         messages = [{
             "role": "user",
-            "content": [{"type": "image"}, {"type": "text", "text": self._prompt(rec)}],
+            "content": [{"type": "image"}, {"type": "text", "text": self._context_text(idx)}],
         }]
         chat = self.processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
@@ -126,6 +163,6 @@ class WebAgentDataset(Dataset):
         img_w, img_h = image.size
         bbox, bbox_mask = self._bbox(rec, img_w, img_h)
 
-        inputs = self._vlm_inputs(image, rec) if self.path == "vlm" else self._dual_inputs(image, rec)
+        inputs = self._vlm_inputs(idx, image) if self.path == "vlm" else self._dual_inputs(idx, image)
         inputs.update(self._labels(rec, bbox, bbox_mask))
         return inputs
