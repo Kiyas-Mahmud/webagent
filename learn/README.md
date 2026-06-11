@@ -19,6 +19,7 @@ Each phase file has the same five sections so you always know where to look:
 | 1 | [phase1_data_verification.md](phase1_data_verification.md) | Data validation, assertions, distributions, label-logic consistency |
 | 2 | [phase2_dataloader.md](phase2_dataloader.md) | PyTorch `Dataset`/`DataLoader`, tokenization, image preprocessing, bbox normalization, stratified sampling, tensor shapes & dtypes |
 | 3+ | [roadmap_phase3plus.md](roadmap_phase3plus.md) | Preview: encoders, cross-attention fusion, task heads, combined loss, training loop |
+| 5 | [phase5_qlora_training.md](phase5_qlora_training.md) | QLoRA, peft, param groups, 10-term loss, contrastive, calibration, the Trainer |
 
 ## The 30-second mental model
 
