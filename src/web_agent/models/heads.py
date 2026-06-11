@@ -81,7 +81,7 @@ class MemoryHead(nn.Module):
     def forward(self, fused: torch.Tensor) -> dict:
         h = self.trunk(fused)
         return {
-            "memory_flag": torch.sigmoid(self.memory_flag(h)),
+            "memory_flag": self.memory_flag(h),     # LOGIT (BCE-with-logits; autocast-safe)
             "memory_recovery": self.recovery(h),
         }
 
@@ -96,4 +96,4 @@ class RecoveryOutcomeHead(nn.Module):
 
     def forward(self, fused: torch.Tensor) -> dict:
         h = self.trunk(fused)
-        return {"recovery_outcome": torch.sigmoid(self.recovery_outcome(h))}
+        return {"recovery_outcome": self.recovery_outcome(h)}  # LOGIT (BCE-with-logits)

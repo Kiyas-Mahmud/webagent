@@ -102,8 +102,10 @@ class CombinedLoss(nn.Module):
         sq = (preds["bbox"] - batch["bbox"]) ** 2
         t["bbox"] = (sq * mask).sum() / (mask.sum().clamp(min=1.0) * sq.shape[1])
 
-        t["memory"] = F.binary_cross_entropy(preds["memory_flag"], batch["label_memory"])
-        t["recovery_outcome"] = F.binary_cross_entropy(
+        # with_logits is autocast(fp16)-safe; heads emit logits for these two.
+        t["memory"] = F.binary_cross_entropy_with_logits(
+            preds["memory_flag"], batch["label_memory"])
+        t["recovery_outcome"] = F.binary_cross_entropy_with_logits(
             preds["recovery_outcome"], batch["label_recovery_success"])
 
         conf = preds["confidence"].clamp(self.conf_lo, self.conf_hi)
