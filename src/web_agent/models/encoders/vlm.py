@@ -74,6 +74,7 @@ class VLMEncoder(nn.Module):
         # flow back to the LoRA layers through the frozen 4-bit base.
         self.model = prepare_model_for_kbit_training(
             self.model, use_gradient_checkpointing=True,
+            gradient_checkpointing_kwargs={"use_reentrant": False},
         )
         lora = LoraConfig(
             r=bb.get("lora_rank", 8),

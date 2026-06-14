@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import math
+import time
 from pathlib import Path
 
 import numpy as np
@@ -88,18 +89,19 @@ class Trainer:
         self.ckpt_dir.mkdir(parents=True, exist_ok=True)
         self.csv_path = Path(tr.get("metrics_csv", f"results/{cfg['name']}_metrics.csv"))
         self.keep_top_k = tr.get("keep_top_k", 3)
+        self.log_every = tr.get("log_every", 50)
+        self.steps_per_epoch = math.ceil(len(train_loader) / self.accum)
 
         self.opt = torch.optim.AdamW([
             {"params": model.lora_parameters(), "lr": o["lr_lora"]},
             {"params": model.head_parameters(), "lr": o["lr_heads"]},
         ], weight_decay=o.get("weight_decay", 0.01))
 
-        steps_per_epoch = math.ceil(len(train_loader) / self.accum)
-        total = steps_per_epoch * self.epochs
+        total = self.steps_per_epoch * self.epochs
         warmup = int(total * o.get("warmup_ratio", 0.1))
         from transformers import get_cosine_schedule_with_warmup
         self.sched = get_cosine_schedule_with_warmup(self.opt, warmup, total)
-        self.scaler = torch.cuda.amp.GradScaler()
+        self.scaler = torch.amp.GradScaler("cuda")
 
         self.best: list[tuple[float, Path]] = []   # (f1, path), kept top-k
         self.global_step = 0
@@ -109,6 +111,8 @@ class Trainer:
         if self.train_sampler is not None:
             self.train_sampler.set_epoch(epoch)
         self.opt.zero_grad()
+        t0 = time.time()
+        done = 0  # optimizer steps this epoch
         for i, batch in enumerate(self.train_loader):
             with torch.autocast("cuda", dtype=torch.float16):
                 preds = self.model(batch)
@@ -123,6 +127,13 @@ class Trainer:
                 self.opt.zero_grad()
                 self.sched.step()
                 self.global_step += 1
+                done += 1
+                if done % self.log_every == 0:
+                    el = time.time() - t0
+                    eta = el / done * (self.steps_per_epoch - done)
+                    print(f"epoch {epoch} | step {done}/{self.steps_per_epoch} | "
+                          f"loss {terms['total'].item():.3f} | "
+                          f"elapsed {el/60:.1f}min | ETA {eta/60:.1f}min", flush=True)
                 if self.global_step % 500 == 0:
                     self._save(self.ckpt_dir / "last.ckpt", epoch, f1=None)
 

@@ -61,6 +61,7 @@ train:
   early_stop_patience: 3
   checkpoint_every_steps: 500
   keep_top_k: 3                               # by failure_f1
+  log_every: 50                               # per-step progress print interval
   metrics_csv: results/qwen2vl2b_metrics.csv
 
 seeds: [42]
