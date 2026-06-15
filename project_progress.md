@@ -68,9 +68,25 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
 - Notebook cells 1-9: install → verify → batch → visual → build → smoke → mini →
   checkpoint → full train (8k subsample, ~5-6h/epoch).
 
+## First full run (8k subsample, Qwen2-VL-2B) — RAN CLEAN, but majority collapse
+- Infra perfect: 4 epochs ~78min each, per-step ETA, early stop, top-3 ckpts, round-trip,
+  full 3-split eval, CSV. ~5.21GB VRAM.
+- **Failure-F1 0.837 = the FAILURE-majority baseline** (71.9% FAILURE → predict-all-FAILURE
+  F1 = 0.836). F1 flat across epochs/splits → model collapsed to always-FAILURE. NOT real
+  failure detection.
+- failtype_acc ~0.28-0.39 (≈majority), recovery_acc ~0.30 (≈majority): also collapsed.
+- action_acc ~1.00 (genuinely learned / strongly text-cued). ECE ~0.095 (ok). bbox_mae ~0.20 (weak).
+- ROOT CAUSE: outcome loss was NOT class-weighted (only action+failtype were). 
+- FIX APPLIED (commit pending): balanced weight on the OUTCOME loss too
+  (`balanced_class_weights` now returns outcome weights; `CombinedLoss` takes
+  `outcome_class_weights`). Added honest metrics: failure_macro_f1, outcome_bal_acc,
+  outcome_mcc, success_recall — so collapse can't hide behind F1. Notebook cells 5/6 pass ow.
+  - Re-run cell 9: watch `success_recall` and `outcome_mcc` > 0. If still ~0, bump LoRA
+    rank 8→16 / more epochs / more rows.
+
 ## NEXT
-- Run cell 9 on Kaggle (8k subsample), confirm per-step ETA sane, train ~3 epochs over
-  1-2 sessions. Target **val Failure-F1 > 60%**.
+- Re-run cells 1→5→6→9 with outcome balancing; judge by macro-F1 / MCC / success_recall
+  (not raw F1). Confirm the model actually separates SUCCESS vs FAILURE.
 - Then: ablations, other backbones (free dual-encoders + paid VLMs), baselines, eval tables.
 
 ## Gotchas learned (don't re-hit)

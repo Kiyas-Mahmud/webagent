@@ -14,9 +14,11 @@ import torch
 
 from web_agent.labels import (
     ACTION_TYPE,
+    EXECUTION_OUTCOME,
     FAILURE_TYPE,
     NUM_ACTION_TYPE,
     NUM_FAILURE_TYPE,
+    NUM_OUTCOME,
 )
 
 
@@ -54,11 +56,17 @@ def _sklearn_balanced(labels, num_classes: int) -> torch.Tensor:
 
 
 def balanced_class_weights(records, limit: int | None = None):
-    """sklearn 'balanced' weights for action_type[5] and failure_type[4] (spec)."""
+    """sklearn 'balanced' weights for action_type[5], failure_type[4], outcome[2].
+
+    Outcome is added to stop the FAILURE-majority (71.9%) collapse where the model
+    just predicts FAILURE and scores the majority-baseline F1.
+    """
     rows = records[:limit] if limit else records
     action = [ACTION_TYPE[r["action_type"]] for r in rows]
     failtype = [FAILURE_TYPE[r["failure_type"]] for r in rows]
+    outcome = [EXECUTION_OUTCOME[r["execution_outcome"]] for r in rows]
     return (
         _sklearn_balanced(action, NUM_ACTION_TYPE),
         _sklearn_balanced(failtype, NUM_FAILURE_TYPE),
+        _sklearn_balanced(outcome, NUM_OUTCOME),
     )

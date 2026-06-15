@@ -29,7 +29,8 @@ import torch.nn.functional as F
 
 
 class CombinedLoss(nn.Module):
-    def __init__(self, cfg: dict, action_class_weights=None, failtype_class_weights=None):
+    def __init__(self, cfg: dict, action_class_weights=None, failtype_class_weights=None,
+                 outcome_class_weights=None):
         super().__init__()
         self.w = cfg["loss"]
         self.smoothing = self.w.get("label_smoothing", 0.0)
@@ -37,6 +38,8 @@ class CombinedLoss(nn.Module):
         self.margin = self.w.get("contrastive_margin", 0.5)
         self.register_buffer("action_w", action_class_weights, persistent=False)
         self.register_buffer("failtype_w", failtype_class_weights, persistent=False)
+        # Balancing outcome prevents the FAILURE-majority collapse.
+        self.register_buffer("outcome_w", outcome_class_weights, persistent=False)
         # 10 soft-bin centers for the calibration surrogate.
         self.register_buffer("bin_centers", torch.linspace(0.05, 0.95, 10), persistent=False)
 
@@ -82,7 +85,8 @@ class CombinedLoss(nn.Module):
         t: dict[str, torch.Tensor] = {}
 
         t["outcome"] = F.cross_entropy(
-            preds["outcome"], batch["label_outcome"], label_smoothing=self.smoothing)
+            preds["outcome"], batch["label_outcome"],
+            weight=self.outcome_w, label_smoothing=self.smoothing)
         t["failtype"] = F.cross_entropy(
             preds["failure_type"], batch["label_failtype"],
             weight=self.failtype_w, label_smoothing=self.smoothing)

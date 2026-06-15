@@ -60,6 +60,11 @@ def compute_metrics(p: dict) -> dict:
     correct = (p["outcome_pred"] == p["outcome_true"]).astype(float)
     return {
         "failure_f1": M.failure_detection_f1(p["outcome_true"], p["outcome_pred"]),
+        # honest outcome metrics — these expose majority-class collapse that F1 hides
+        "failure_macro_f1": M.failure_macro_f1(p["outcome_true"], p["outcome_pred"]),
+        "outcome_bal_acc": M.outcome_balanced_accuracy(p["outcome_true"], p["outcome_pred"]),
+        "outcome_mcc": M.outcome_mcc(p["outcome_true"], p["outcome_pred"]),
+        "success_recall": M.success_recall(p["outcome_true"], p["outcome_pred"]),
         "failtype_acc": M.accuracy(p["failtype_true"], p["failtype_pred"]),
         "action_acc": M.accuracy(p["action_true"], p["action_pred"]),
         "recovery_acc": M.accuracy(p["recovery_true"], p["recovery_pred"]),
