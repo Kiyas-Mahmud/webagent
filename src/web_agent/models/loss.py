@@ -78,12 +78,14 @@ class CombinedLoss(nn.Module):
         self_mask = torch.eye(B, dtype=torch.bool, device=z.device)
         sim = sim.masked_fill(self_mask, float("-inf"))      # drop self-similarity
         pos = (y[:, None] == y[None, :]) & ~self_mask        # same-outcome pairs
-        logp = sim - torch.logsumexp(sim, dim=1, keepdim=True)
+        logp = sim - torch.logsumexp(sim, dim=1, keepdim=True)  # diagonal -> -inf
+        # select positives with where (NOT *pos): -inf * 0 = nan at the self position.
+        logp_pos = torch.where(pos, logp, torch.zeros_like(logp))
         pos_count = pos.sum(dim=1)
         valid = pos_count > 0                                 # anchors with >=1 positive
         if not valid.any():
             return fused.sum() * 0.0
-        per = (logp * pos).sum(dim=1)[valid] / pos_count[valid].clamp(min=1)
+        per = logp_pos.sum(dim=1)[valid] / pos_count[valid].clamp(min=1)
         return -per.mean()
 
     # ---- contrastive over same-task fused embeddings ----
