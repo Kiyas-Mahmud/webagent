@@ -14,13 +14,19 @@ backbone:
   load_in_4bit: true                          # 4-bit QLoRA (nf4, double-quant, fp16 compute)
   dtype: float16                              # T4 (Turing) has NO bf16
   qlora: true
-  lora_rank: 8
-  lora_alpha: 16
+  lora_rank: 16                               # raised from 8 for capacity (plan P2-A)
+  lora_alpha: 32
   lora_dropout: 0.05
-  lora_target_modules: [q_proj, v_proj]
+  # attention + MLP projections, not just q/v — gives the adapter path room to
+  # encode the failure signal once pooling is fixed.
+  lora_target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  pooling: last                               # last non-pad token; mean|attention for ablation (P0-A)
   vlm_hidden_dim: 1536                         # D for Qwen2-VL-2B (verified at load)
   min_pixels: 50176                           # 224*224
   max_pixels: 200704                          # 448*448
+
+data:
+  use_state_after: false                      # set true for before+after input ablation (P0-B)
 
 adapter:
   dropout: 0.1                                # Linear(D->768) -> LayerNorm(768) -> Dropout
@@ -36,12 +42,14 @@ loss:
   confidence: 0.05
   calibration: 0.05
   contrastive: 0.04
-  recovery_outcome: 0.02
-  label_smoothing: 0.1
+  recovery_outcome: 0.05                       # raised from 0.02 so the head can learn (P2-B)
+  label_smoothing: 0.1                         # applies to non-outcome CE; outcome forced 0 (P1-B)
   class_weight_action: true                   # sklearn balanced
   class_weight_failure_type: true
   confidence_clip: [0.05, 0.95]
-  contrastive_margin: 0.5
+  contrastive_mode: supervised                 # SupCon on outcome; task_pair for ablation (P1-A)
+  contrastive_temp: 0.1
+  contrastive_margin: 0.5                       # only used by task_pair mode
 
 optim:
   batch_size: 8

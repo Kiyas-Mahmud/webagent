@@ -54,6 +54,10 @@ class WebAgentDataset(Dataset):
         self.root = Path(cfg["data"]["root"])
         self.max_len = cfg["data"].get("text_max_len", 128)
         self.path = cfg["backbone"]["path"]  # "vlm" or "dual_encoder"
+        # Failure is often only visible in the post-action state. When enabled (and
+        # available) feed state_before + state_after to the failure pillar; this is
+        # the input ablation in the plan (P0-B). VLM path only.
+        self.use_state_after = bool(cfg["data"].get("use_state_after", False))
         self._build_trajectory_index()
 
     def _build_trajectory_index(self) -> None:
@@ -141,20 +145,20 @@ class WebAgentDataset(Dataset):
         }
 
     # ---- VLM path (Qwen joint processing) ----
-    def _vlm_inputs(self, idx, image):
-        messages = [{
-            "role": "user",
-            "content": [{"type": "image"}, {"type": "text", "text": self._context_text(idx)}],
-        }]
+    def _vlm_inputs(self, idx, images):
+        """images: list of PIL images (1 = before only, 2 = before+after)."""
+        content = [{"type": "image"} for _ in images]
+        content.append({"type": "text", "text": self._context_text(idx)})
+        messages = [{"role": "user", "content": content}]
         chat = self.processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
         )
-        enc = self.processor(text=[chat], images=[image], return_tensors="pt")
+        enc = self.processor(text=[chat], images=list(images), return_tensors="pt")
         out = {
             "input_ids": enc["input_ids"][0],            # [seq]
             "attention_mask": enc["attention_mask"][0],  # [seq]
             "pixel_values": enc["pixel_values"],         # [num_patches, patch_dim]
-            "image_grid_thw": enc["image_grid_thw"][0],  # [3] = (t, h, w)
+            "image_grid_thw": enc["image_grid_thw"],     # [n_img, 3] = (t, h, w)
         }
         # Newer transformers Qwen2-VL requires per-token image/text markers (M-RoPE).
         if "mm_token_type_ids" in enc:
@@ -167,6 +171,12 @@ class WebAgentDataset(Dataset):
         img_w, img_h = image.size
         bbox, bbox_mask = self._bbox(rec, img_w, img_h)
 
-        inputs = self._vlm_inputs(idx, image) if self.path == "vlm" else self._dual_inputs(idx, image)
+        if self.path == "vlm":
+            images = [image]
+            if self.use_state_after and rec.get("state_after"):
+                images.append(self._load_image(rec["state_after"]))
+            inputs = self._vlm_inputs(idx, images)
+        else:
+            inputs = self._dual_inputs(idx, image)
         inputs.update(self._labels(rec, bbox, bbox_mask))
         return inputs

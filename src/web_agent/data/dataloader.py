@@ -142,7 +142,9 @@ def vlm_collate(batch: list[dict]) -> dict:
         [b["attention_mask"] for b in batch], batch_first=True, padding_value=0,
     )
     out["pixel_values"] = torch.cat([b["pixel_values"] for b in batch], dim=0)
-    out["image_grid_thw"] = torch.stack([b["image_grid_thw"] for b in batch])
+    # image_grid_thw is [n_img, 3] per sample (n_img=1 before-only, 2 with state_after);
+    # cat along images so Qwen sees [total_images, 3] matching the concatenated patches.
+    out["image_grid_thw"] = torch.cat([b["image_grid_thw"] for b in batch], dim=0)
     if "mm_token_type_ids" in batch[0]:
         out["mm_token_type_ids"] = pad_sequence(
             [b["mm_token_type_ids"] for b in batch], batch_first=True, padding_value=0,

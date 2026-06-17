@@ -59,6 +59,18 @@ class VLMEncoder(nn.Module):
 
         self.model.config.use_cache = False
 
+        # Pooling of the [B, seq, D] last hidden state into [B, D]. Qwen2.5-VL is a
+        # causal decoder, so the integrated summary lives at the LAST non-pad token,
+        # not in a uniform mean (which is dominated by the hundreds of vision-patch
+        # tokens). "last" is the default; "mean" and "attention" are kept for the
+        # pooling ablation (see docs plan P0-A).
+        self.pooling = bb.get("pooling", "last")
+        if self.pooling not in ("mean", "last", "attention"):
+            raise ValueError(f"unknown pooling {self.pooling!r}")
+        if self.pooling == "attention":
+            # tiny learned attention pool; trainable, lives in the LoRA param group.
+            self.attn_pool = nn.Linear(self.hidden_dim, 1)
+
         if bb.get("qlora"):
             self._apply_qlora(bb)
         else:
@@ -111,6 +123,21 @@ class VLMEncoder(nn.Module):
         with ctx:
             out = self.model(**kwargs)
             h = out.hidden_states[-1]                      # [B, seq, D]
-            mask = batch["attention_mask"].to(dev).unsqueeze(-1).to(h.dtype)
-            pooled = (h * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1.0)  # [B, D]
+            am = batch["attention_mask"].to(dev)           # [B, seq] (1=real, 0=pad)
+            pooled = self._pool(h, am)                     # [B, D]
         return pooled.float()
+
+    def _pool(self, h: torch.Tensor, am: torch.Tensor) -> torch.Tensor:
+        """Pool [B, seq, D] -> [B, D] per self.pooling. am = attention mask [B, seq]."""
+        if self.pooling == "mean":
+            m = am.unsqueeze(-1).to(h.dtype)
+            return (h * m).sum(dim=1) / m.sum(dim=1).clamp(min=1.0)
+        if self.pooling == "last":
+            # right-padded -> last real token index = (#real - 1)
+            last = am.sum(dim=1).clamp(min=1).long() - 1          # [B]
+            return h[torch.arange(h.size(0), device=h.device), last]
+        # attention pool: masked softmax over a learned token score (computed in fp32)
+        scores = self.attn_pool(h.float()).squeeze(-1)            # [B, seq]
+        scores = scores.masked_fill(am == 0, float("-inf"))
+        w = torch.softmax(scores, dim=1).to(h.dtype).unsqueeze(-1)  # [B, seq, 1]
+        return (h * w).sum(dim=1)

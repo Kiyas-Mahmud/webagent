@@ -84,10 +84,45 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   - Re-run cell 9: watch `success_recall` and `outcome_mcc` > 0. If still ~0, bump LoRA
     rank 8→16 / more epochs / more rows.
 
+## Second run (outcome class-weighted) — collapse FLIPPED, not fixed
+- After outcome balancing: `success_recall=0.96, failure_f1=0.07, outcome_mcc≈0, bal_acc≈0.50`.
+  Model now predicts SUCCESS (minority) for ~everything. **MCC stayed ≈0** the whole time →
+  weighting only moved the decision bias and flipped WHICH class collapses. Diagnostic proof:
+  the problem is the **representation/inputs the outcome head sees, not loss weighting**.
+
+## Representation-level fixes (this round) — code-ready, validate on Kaggle smoke
+Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
+- **Pooling (P0-A, primary):** `encoders/vlm.py` now config-selectable `backbone.pooling`
+  = `last` (default) | `mean` | `attention`. Was uniform masked-MEAN over the full
+  decoder sequence — dominated by hundreds of vision-patch tokens, blurring the causal
+  summary where the outcome signal lives. `last` = last non-pad token; `attention` = tiny
+  learned pool. (mean kept for the ablation.)
+- **state_after (P0-B):** `data.use_state_after` (default false). When true, feed
+  before+after screenshots (two images) — failure is often only visible post-action.
+  `dataset._vlm_inputs` takes an image list; `image_grid_thw` now `[n_img,3]`; collate
+  CATs it (single-image path byte-identical).
+- **Contrastive (P1-A):** `loss.contrastive_mode` = `supervised` (default, SupCon on the
+  outcome label — works in any batch with both classes) | `task_pair` (old, sparse). The
+  old term was ~dead (needed same-task SUCCESS+FAILURE in one micro-batch).
+- **Outcome weighting (P1-B):** outcome CE label_smoothing forced to 0; outcome weights
+  now `capped` (ratio ≤1.5: SUCCESS 1.5 / FAILURE 1.0) via
+  `class_weights.balanced_class_weights(outcome_scheme=...)`, not raw `balanced` (2.56× over-swing).
+  `sqrt` scheme also available.
+- **recovery_outcome (P2-B):** BCE now uses `pos_weight` (`binary_pos_weight`, ≈2.56);
+  loss weight 0.02→0.05.
+- **Capacity (P2-A):** LoRA targets q/v → q,k,v,o,gate,up,down; rank 8→16 (2B), alpha 32.
+- **Config completeness:** `qwen25vl_3b.yaml` got the full 10-term loss + lr_lora/heads +
+  train block (it inherited base's 7-term and would have KeyError'd if run).
+- **Notebook:** cell 5 computes capped outcome weights + recovery pos_weight + a
+  `DIAG_OUTCOME_ONLY` toggle (zeros the other 9 terms) for the D1/D2/D3 ceiling probe.
+
 ## NEXT
-- Re-run cells 1→5→6→9 with outcome balancing; judge by macro-F1 / MCC / success_recall
-  (not raw F1). Confirm the model actually separates SUCCESS vs FAILURE.
-- Then: ablations, other backbones (free dual-encoders + paid VLMs), baselines, eval tables.
+- Run the diagnostic protocol FIRST (cell 5 `DIAG_OUTCOME_ONLY=True`): D1 mean-pool,
+  D2 last-pool, D3 +state_after. Judge by **val outcome MCC / balanced-acc** (NOT failure_f1).
+  Whichever first lifts MCC clearly above 0 is the real fix.
+- Then full 10-term run with the winning config. Confirm SupCon `contrastive non-zero` in smoke.
+- Then: pooling + input ablations (paper contributions), baselines (majority/random rows),
+  other backbones, eval tables.
 
 ## Gotchas learned (don't re-hit)
 - JSON is UTF-8 (Windows cp1252 fails). bbox keys are `width`/`height` (not w/h).

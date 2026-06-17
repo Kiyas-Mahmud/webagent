@@ -30,16 +30,23 @@ import torch.nn.functional as F
 
 class CombinedLoss(nn.Module):
     def __init__(self, cfg: dict, action_class_weights=None, failtype_class_weights=None,
-                 outcome_class_weights=None):
+                 outcome_class_weights=None, recovery_success_pos_weight=None):
         super().__init__()
         self.w = cfg["loss"]
         self.smoothing = self.w.get("label_smoothing", 0.0)
         self.conf_lo, self.conf_hi = self.w.get("confidence_clip", [0.05, 0.95])
         self.margin = self.w.get("contrastive_margin", 0.5)
+        # "supervised" = SupCon on the outcome label (works in any batch with both
+        # classes present, the default). "task_pair" = the original same-task margin
+        # loss (needs a task's SUCCESS+FAILURE in one batch — sparse). See plan P1-A.
+        self.contrastive_mode = self.w.get("contrastive_mode", "supervised")
+        self.contrastive_temp = self.w.get("contrastive_temp", 0.1)
         self.register_buffer("action_w", action_class_weights, persistent=False)
         self.register_buffer("failtype_w", failtype_class_weights, persistent=False)
         # Balancing outcome prevents the FAILURE-majority collapse.
         self.register_buffer("outcome_w", outcome_class_weights, persistent=False)
+        # pos_weight for the recovery_success BCE head (else it pins at the prior).
+        self.register_buffer("recovery_pos_w", recovery_success_pos_weight, persistent=False)
         # 10 soft-bin centers for the calibration surrogate.
         self.register_buffer("bin_centers", torch.linspace(0.05, 0.95, 10), persistent=False)
 
@@ -56,6 +63,28 @@ class CombinedLoss(nn.Module):
         mean_acc = (w * correct[:, None]).sum(dim=0) / denom
         pop = denom / denom.sum()                   # bin weighting by population
         return (pop * (mean_conf - mean_acc).abs()).sum()
+
+    # ---- supervised contrastive (SupCon) on the outcome label ----
+    def _supcon(self, fused, outcome_label) -> torch.Tensor:
+        """Pull same-outcome embeddings together, push different-outcome apart.
+        Needs >=2 samples and both classes present in the batch; else 0 (graph kept).
+        """
+        y = outcome_label.view(-1)
+        if y.numel() < 2 or y.unique().numel() < 2:
+            return fused.sum() * 0.0
+        z = F.normalize(fused.float(), dim=-1)               # [B, d]
+        sim = (z @ z.t()) / self.contrastive_temp            # [B, B]
+        B = z.size(0)
+        self_mask = torch.eye(B, dtype=torch.bool, device=z.device)
+        sim = sim.masked_fill(self_mask, float("-inf"))      # drop self-similarity
+        pos = (y[:, None] == y[None, :]) & ~self_mask        # same-outcome pairs
+        logp = sim - torch.logsumexp(sim, dim=1, keepdim=True)
+        pos_count = pos.sum(dim=1)
+        valid = pos_count > 0                                 # anchors with >=1 positive
+        if not valid.any():
+            return fused.sum() * 0.0
+        per = (logp * pos).sum(dim=1)[valid] / pos_count[valid].clamp(min=1)
+        return -per.mean()
 
     # ---- contrastive over same-task fused embeddings ----
     def _contrastive(self, fused, outcome_label, task_ids) -> torch.Tensor:
@@ -84,9 +113,12 @@ class CombinedLoss(nn.Module):
     def forward(self, preds: dict, batch: dict) -> dict:
         t: dict[str, torch.Tensor] = {}
 
+        # No label smoothing on the binary outcome head: smoothing caps the minority
+        # gradient and, with class weights, helps flip the collapse instead of fixing
+        # it (plan P1-B). Class weighting carries the imbalance correction here.
         t["outcome"] = F.cross_entropy(
             preds["outcome"], batch["label_outcome"],
-            weight=self.outcome_w, label_smoothing=self.smoothing)
+            weight=self.outcome_w, label_smoothing=0.0)
         t["failtype"] = F.cross_entropy(
             preds["failure_type"], batch["label_failtype"],
             weight=self.failtype_w, label_smoothing=self.smoothing)
@@ -110,7 +142,8 @@ class CombinedLoss(nn.Module):
         t["memory"] = F.binary_cross_entropy_with_logits(
             preds["memory_flag"], batch["label_memory"])
         t["recovery_outcome"] = F.binary_cross_entropy_with_logits(
-            preds["recovery_outcome"], batch["label_recovery_success"])
+            preds["recovery_outcome"], batch["label_recovery_success"],
+            pos_weight=self.recovery_pos_w)
 
         conf = preds["confidence"].clamp(self.conf_lo, self.conf_hi)
         t["confidence"] = F.mse_loss(conf, batch["label_confidence"])
@@ -118,8 +151,11 @@ class CombinedLoss(nn.Module):
         correct = (preds["outcome"].argmax(dim=-1) == batch["label_outcome"]).detach()
         t["calibration"] = self._calibration(conf, correct)
 
-        t["contrastive"] = self._contrastive(
-            preds["fused"], batch["label_outcome"], batch["original_task_id"])
+        if self.contrastive_mode == "supervised":
+            t["contrastive"] = self._supcon(preds["fused"], batch["label_outcome"])
+        else:
+            t["contrastive"] = self._contrastive(
+                preds["fused"], batch["label_outcome"], batch["original_task_id"])
 
         w = self.w
         t["total"] = (
