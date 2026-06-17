@@ -30,3 +30,8 @@ dist/
 .venv/
 venv/
 .env
+
+# local data dumps - never commit
+FinalData.zip
+*.zip
+FinalData/

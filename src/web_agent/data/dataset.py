@@ -129,6 +129,12 @@ class WebAgentDataset(Dataset):
         parts.append(f"current_task: {rec.get('task_description', '') or ''}")
         parts.append(f"target: {rec.get('action_target_desc', '') or ''}")
         parts.append(f"domain: {rec.get('website_domain', '') or ''}")
+        # visual_diff_score = before->after page change (spec Pillar-2 input). Strong
+        # post-action signal (0.32 success vs 0.07 failure). NOT a leak — it's a
+        # computed observation, not a failure label.
+        vd = rec.get("visual_diff_score")
+        if isinstance(vd, (int, float)):
+            parts.append(f"visual_change: {vd:.3f}")
         return " | ".join(parts)
 
     # ---- dual-encoder path ----

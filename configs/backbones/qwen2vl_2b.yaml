@@ -26,7 +26,7 @@ backbone:
   max_pixels: 200704                          # 448*448
 
 data:
-  use_state_after: false                      # set true for before+after input ablation (P0-B)
+  use_state_after: true                       # feed before+after images (post-action effect)
 
 adapter:
   dropout: 0.1                                # Linear(D->768) -> LayerNorm(768) -> Dropout
@@ -52,8 +52,8 @@ loss:
   contrastive_margin: 0.5                       # only used by task_pair mode
 
 optim:
-  batch_size: 8
-  grad_accum: 4                               # effective batch 32
+  batch_size: 4                               # 2 images/sample ~2x vision tokens -> fit T4
+  grad_accum: 8                               # effective batch 32
   optimizer: adamw
   weight_decay: 0.01
   scheduler: cosine

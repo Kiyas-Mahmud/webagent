@@ -26,7 +26,7 @@ backbone:
   max_pixels: 200704                          # 448*448
 
 data:
-  use_state_after: false                      # set true for before+after input ablation (P0-B)
+  use_state_after: true                       # feed before+after images (post-action effect)
 
 adapter:
   dropout: 0.1
