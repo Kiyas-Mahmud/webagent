@@ -58,6 +58,11 @@ class WebAgentDataset(Dataset):
         # available) feed state_before + state_after to the failure pillar; this is
         # the input ablation in the plan (P0-B). VLM path only.
         self.use_state_after = bool(cfg["data"].get("use_state_after", False))
+        # visual_diff_score is ~the label (0.32 success vs 0.07 failure). Feeding it as
+        # text lets the model shortcut without reading the screenshots. OFF by default
+        # so the honest run learns from before+after IMAGES; turn on only for the
+        # "with diff feature" ablation row.
+        self.use_visual_diff_text = bool(cfg["data"].get("use_visual_diff_text", False))
         self._build_trajectory_index()
 
     def _build_trajectory_index(self) -> None:
@@ -129,12 +134,12 @@ class WebAgentDataset(Dataset):
         parts.append(f"current_task: {rec.get('task_description', '') or ''}")
         parts.append(f"target: {rec.get('action_target_desc', '') or ''}")
         parts.append(f"domain: {rec.get('website_domain', '') or ''}")
-        # visual_diff_score = before->after page change (spec Pillar-2 input). Strong
-        # post-action signal (0.32 success vs 0.07 failure). NOT a leak — it's a
-        # computed observation, not a failure label.
-        vd = rec.get("visual_diff_score")
-        if isinstance(vd, (int, float)):
-            parts.append(f"visual_change: {vd:.3f}")
+        # visual_diff_score as text — only when explicitly enabled (ablation), since it
+        # ~= the label and lets the model bypass the screenshots.
+        if self.use_visual_diff_text:
+            vd = rec.get("visual_diff_score")
+            if isinstance(vd, (int, float)):
+                parts.append(f"visual_change: {vd:.3f}")
         return " | ".join(parts)
 
     # ---- dual-encoder path ----

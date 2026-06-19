@@ -27,6 +27,7 @@ backbone:
 
 data:
   use_state_after: true                       # feed before+after images (post-action effect)
+  use_visual_diff_text: false                 # OFF = honest images-only; true = +diff scalar ablation
 
 adapter:
   dropout: 0.1                                # Linear(D->768) -> LayerNorm(768) -> Dropout
