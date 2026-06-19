@@ -116,13 +116,31 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - **Notebook:** cell 5 computes capped outcome weights + recovery pos_weight + a
   `DIAG_OUTCOME_ONLY` toggle (zeros the other 9 terms) for the D1/D2/D3 ceiling probe.
 
+## BREAKTHROUGH — input was the wall; before+after fixed it
+- Diagnostic (outcome-only, last-pool, before-only): **MCC frozen 0.0000** across 3 epochs →
+  proved the before-only screenshot can't predict outcome. Not loss/pooling.
+- Audited all 23 JSON fields: only legit missing inputs were **state_after image** +
+  **visual_diff_score** (spec Pillar-2 input). All other non-input fields are prediction
+  targets (outcome/failure_type/action/recovery/confidence/bbox/memory) or leaks
+  (reflection_text, injection_type). Verified `FinalData.zip` has NO extra text (DOM/HTML) —
+  dataset is screenshot-only.
+- Fed before+after images (`use_state_after`) + `visual_change` text → **outcome MCC 0 → ~0.95
+  on ALL 3 test splits** (task 0.954 / website 0.96 / domain 0.95). bal_acc 0.97, success_recall 0.93.
+- **CAVEAT (must resolve before claiming):** this run still fed `visual_diff_score` as text, and
+  it ~= the label (0.32 vs 0.07). `loss→0.000`, ece~0.30, converged epoch 0 = likely a SCALAR
+  SHORTCUT, not screenshot understanding. Gated it behind `data.use_visual_diff_text` (default
+  OFF) so the honest run learns from IMAGES only.
+- (This run was DIAG_OUTCOME_ONLY=True, so action/failtype/recovery heads are ~0 by design.)
+
 ## NEXT
-- Run the diagnostic protocol FIRST (cell 5 `DIAG_OUTCOME_ONLY=True`): D1 mean-pool,
-  D2 last-pool, D3 +state_after. Judge by **val outcome MCC / balanced-acc** (NOT failure_f1).
-  Whichever first lifts MCC clearly above 0 is the real fix.
-- Then full 10-term run with the winning config. Confirm SupCon `contrastive non-zero` in smoke.
-- Then: pooling + input ablations (paper contributions), baselines (majority/random rows),
-  other backbones, eval tables.
+- **Honest ablation (decisive):** rerun outcome-only with `use_visual_diff_text=false`
+  (before+after images, NO scalar). MCC stays ~0.95 → vision works, publishable. MCC →0 →
+  it was the scalar shortcut; revise the claim.
+- Then `use_visual_diff_text=true` as the "+diff feature" ablation row (paper table).
+- Then DIAG_OUTCOME_ONLY=False → full 10-term multitask; confirm the other heads recover.
+- Then: pooling/input ablations, baselines (majority/random), other backbones, eval tables.
+- NOTE: notebook cells do NOT update via cell-1 git pull (pull updates the package+configs only).
+  Config flags (use_state_after, use_visual_diff_text) DO take effect after re-running cell 3/5.
 
 ## Gotchas learned (don't re-hit)
 - JSON is UTF-8 (Windows cp1252 fails). bbox keys are `width`/`height` (not w/h).
@@ -134,4 +152,5 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Qwen2-VL (newer transformers) needs `mm_token_type_ids` passed through.
 
 ## Latest commit
-`590ac48` — feasible full-train on T4 (per-step ETA, 8k subsample, warning fixes).
+`52195c0` — gate visual_diff_score text behind `use_visual_diff_text` (default off);
+before+after images via `use_state_after`; outcome MCC 0→0.95 (shortcut check pending).
