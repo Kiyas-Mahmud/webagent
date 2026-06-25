@@ -151,6 +151,24 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - `F.binary_cross_entropy` unsafe under fp16 autocast → use `_with_logits` (heads emit logits).
 - Qwen2-VL (newer transformers) needs `mm_token_type_ids` passed through.
 
+## GOLD DATASET — real, leak-safe (the pivot)
+- Honest images-only run on synthetic confirmed: outcome MCC=0 from images; the 0.95 was the
+  `visual_diff_score` scalar shortcut. Synthetic 70k = leaked + non-visual → demoted to
+  synthetic-pretrain/debug only (kept frozen per supervisor).
+- Team collected a GOLD dataset: `code/data/web_agent_gold_v8_approved_2032_real_browser/`
+  — 2032 rows, real Playwright-observed (url-oracle), human-reviewed, leak fields stripped,
+  balanced (FAILURE 1058 / SUCCESS 974), disjoint splits 1219/406/407. Gitignored (not in repo).
+- Built a SEPARATE gold path (synthetic code byte-unchanged): `data/gold_dataset.py`,
+  `data/gold_dataloader.py`, `configs/backbones/qwen2vl_2b_gold.yaml` (disables
+  confidence/memory/recovery_outcome — no gold labels), `scripts/run_gold.py`.
+  Honest input = state_before+state_after+task only. Reuses model/loss/Trainer/metrics.
+- Gold label values map cleanly to existing enums (verified 0 unmapped on 1219 train rows).
+
+## NEXT
+- Upload the gold folder as a Kaggle Dataset; `python scripts/run_gold.py --stage smoke` then
+  `--stage train --data-root <kaggle path>`. Headline = `outcome_mcc` on gold TEST split.
+  Ignore memory_acc/recovery_outcome_acc/ece (heads disabled on gold).
+- Optional: fine-tune from a synthetic-pretrained ckpt via `--checkpoint`.
+
 ## Latest commit
-`52195c0` — gate visual_diff_score text behind `use_visual_diff_text` (default off);
-before+after images via `use_state_after`; outcome MCC 0→0.95 (shortcut check pending).
+`683c0e3` — separate gold training path (4 new files; synthetic pipeline untouched).
