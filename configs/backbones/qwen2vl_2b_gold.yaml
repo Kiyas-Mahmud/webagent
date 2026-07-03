@@ -6,20 +6,20 @@ name: Y_QWEN2VL_2B_GOLD
 extends: backbones/qwen2vl_2b.yaml
 
 data:
-  # Set at runtime / on Kaggle to the gold dataset folder, e.g.
-  #   /kaggle/input/datasets/<you>/webagentgold/web_agent_gold_v8_approved_2032_real_browser
-  root: data/web_agent_gold_v8_approved_2032_real_browser
+  # Set at runtime / on Kaggle to the gold dataset folder (auto-detected in the notebook).
+  #   v12 (current): data/web_agent_gold_v12_refined_balanced_combined_1970/<same-name>
+  root: data/web_agent_gold_v12_refined_balanced_combined_1970/web_agent_gold_v12_refined_balanced_combined_1970
   train_json: split_train.json
   val_json: split_val.json
   test_json: split_test.json
   use_state_after: true             # before+after images (the real visual signal)
   use_visual_diff_text: false       # never; gold split files carry no scalar anyway
 
-# Disable the 3 heads gold has no labels for (placeholders never train).
-# Active: outcome, failure_type, action, bbox, recovery, calibration, contrastive.
+# v12 has real confidence + memory labels (leak-checked) -> those heads ON.
+# recovery_success too sparse (few True) -> recovery_outcome head stays OFF.
 loss:
-  confidence: 0.0
-  memory_flag: 0.0
+  confidence: 0.05
+  memory_flag: 0.10
   recovery_outcome: 0.0
 
 train:

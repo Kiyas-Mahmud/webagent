@@ -22,8 +22,9 @@ ACTION_TYPE = {
     "CLICK": 0,
     "TYPE": 1,
     "SELECT": 2,
-    "SCROLL": 3,    # no training data — reserved
-    "NAVIGATE": 4,  # no training data — reserved
+    "SCROLL": 3,     # synthetic: reserved; gold v12: has data
+    "NAVIGATE": 4,   # reserved (no data in either source)
+    "PRESS_KEY": 5,  # gold v12 keyboard action (Enter/Tab/...); additive, synthetic has none
 }
 
 RECOVERY_STRATEGY = {

@@ -12,7 +12,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 
 from web_agent.data.dataloader import vlm_collate   # reuse, unchanged
-from web_agent.data.gold_dataset import GoldDataset
+from web_agent.data.gold_dataset import GoldDataset, view
 from web_agent.utils.class_weights import balanced_class_weights
 
 
@@ -29,14 +29,14 @@ def gold_class_weights(records, limit: int | None = None):
     Remaps gold field names onto the synthetic keys that balanced_class_weights
     reads, so we reuse that function with no new weighting code.
     """
-    remapped = [
-        {
-            "action_type": r["action_type"],
-            "failure_type": r["failure_type_4"],
-            "execution_outcome": r["outcome_label"],
-        }
-        for r in records
-    ]
+    remapped = []
+    for r in records:
+        _, lab, _ = view(r)   # handles both v12 nested and v8 flat
+        remapped.append({
+            "action_type": lab["action_type"],
+            "failure_type": lab["failure_type_4"],
+            "execution_outcome": lab["outcome_label"],
+        })
     return balanced_class_weights(remapped, limit=limit)
 
 

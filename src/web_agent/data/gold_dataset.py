@@ -1,22 +1,18 @@
 """GoldDataset — the real, leak-safe gold dataset (separate from the synthetic path).
 
 Kept fully separate from WebAgentDataset so the synthetic 70k pipeline stays
-byte-for-byte unchanged (supervisor constraint). Reuses the SAME tensor keys, so
-the shared model / loss / trainer / vlm_collate run on gold with no edits.
+byte-for-byte unchanged. Reuses the SAME tensor keys, so the shared model / loss /
+trainer / vlm_collate run on gold with no edits.
 
-Gold schema (already leak-stripped by the data team) -> model keys:
-  outcome_label   -> label_outcome      (EXECUTION_OUTCOME)
-  failure_type_4  -> label_failtype     (FAILURE_TYPE)
-  action_type     -> label_action       (ACTION_TYPE)
-  recovery_strategy -> label_recovery   (RECOVERY_STRATEGY)
-  action_target_bbox -> bbox (+ mask 0 when null)
+Handles BOTH gold layouts in one code path:
+  - v12 (current): nested  {"inputs": {...}, "labels": {...}, "meta": {...}}
+  - v8  (pilot):   flat     {state_before, outcome_label, ...}
 
-Honest input = state_before + state_after images + task_description ONLY. The split
-files contain no ssim/pixel_diff/url_after, so no scalar can leak.
+Honest input = state_before + state_after images + task_description (+ website_domain).
+The split files carry no ssim/pixel_diff/url_after, so no scalar can leak.
 
-Gold has NO labels for confidence / memory / recovery_success. We emit neutral
-placeholders ONLY so collate/loss don't KeyError; those three loss terms are set to
-weight 0 in configs/backbones/qwen2vl_2b_gold.yaml, so the placeholders never train.
+v12 provides real confidence + memory labels -> those heads are enabled in the gold
+config. recovery_success is too sparse -> that head stays disabled (placeholder).
 """
 
 from __future__ import annotations
@@ -35,6 +31,17 @@ from web_agent.labels import (
 )
 
 
+def view(rec: dict):
+    """Return (inputs, labels, meta) for either layout.
+
+    v12 nested -> the three sub-dicts. v8 flat -> the record itself for all three
+    (every field sits at the top level, so the same .get() calls work).
+    """
+    if "inputs" in rec and "labels" in rec:
+        return rec["inputs"], rec["labels"], rec.get("meta", {})
+    return rec, rec, rec
+
+
 class GoldDataset(Dataset):
     def __init__(self, records, cfg, processor):
         self.records = records
@@ -50,9 +57,9 @@ class GoldDataset(Dataset):
     def _load_image(self, rel_path: str) -> Image.Image:
         return Image.open(self.root / rel_path).convert("RGB")
 
-    def _bbox(self, rec: dict, img_w: int, img_h: int):
+    def _bbox(self, lab: dict, img_w: int, img_h: int):
         """Return (bbox[4] normalized, mask[1]); zeros + mask 0 when bbox is null."""
-        b = rec.get("action_target_bbox")
+        b = lab.get("action_target_bbox")
         if not b:
             return torch.zeros(4, dtype=torch.float32), torch.zeros(1, dtype=torch.float32)
         bbox = torch.tensor([
@@ -63,14 +70,15 @@ class GoldDataset(Dataset):
         ], dtype=torch.float32).clamp_(0.0, 1.0)
         return bbox, torch.ones(1, dtype=torch.float32)
 
-    def _context_text(self, rec: dict) -> str:
-        # gold has no domain/target-desc worth feeding; task only.
-        return f"current_task: {rec.get('task_description', '') or ''}"
+    def _context_text(self, inp: dict) -> str:
+        task = inp.get("task_description", "") or ""
+        domain = inp.get("website_domain", "") or ""
+        return f"current_task: {task} | domain: {domain}"
 
-    def _vlm_inputs(self, rec: dict, images):
+    def _vlm_inputs(self, inp: dict, images):
         """images: list of PIL images (1 = before only, 2 = before+after)."""
         content = [{"type": "image"} for _ in images]
-        content.append({"type": "text", "text": self._context_text(rec)})
+        content.append({"type": "text", "text": self._context_text(inp)})
         messages = [{"role": "user", "content": content}]
         chat = self.processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
@@ -86,32 +94,36 @@ class GoldDataset(Dataset):
             out["mm_token_type_ids"] = enc["mm_token_type_ids"][0]
         return out
 
-    def _labels(self, rec: dict, bbox, bbox_mask) -> dict:
+    def _labels(self, lab: dict, meta: dict, bbox, bbox_mask) -> dict:
         return {
             "bbox": bbox,
             "bbox_mask": bbox_mask,
             "borrowed": torch.tensor([0.0]),
-            "label_outcome": torch.tensor(EXECUTION_OUTCOME[rec["outcome_label"]]),
-            "label_failtype": torch.tensor(FAILURE_TYPE[rec["failure_type_4"]]),
-            "label_action": torch.tensor(ACTION_TYPE[rec["action_type"]]),
-            "label_recovery": torch.tensor(RECOVERY_STRATEGY[rec["recovery_strategy"]]),
-            # neutral placeholders — loss weights for these 3 heads are 0 on gold.
-            "label_memory": torch.tensor([0.0]),
-            "label_confidence": torch.tensor([0.5]),
-            "label_recovery_success": torch.tensor([0.0]),
-            "original_task_id": rec.get("task_id", ""),
+            "label_outcome": torch.tensor(EXECUTION_OUTCOME[lab["outcome_label"]]),
+            "label_failtype": torch.tensor(FAILURE_TYPE[lab["failure_type_4"]]),
+            "label_action": torch.tensor(ACTION_TYPE[lab["action_type"]]),
+            "label_recovery": torch.tensor(RECOVERY_STRATEGY[lab["recovery_strategy"]]),
+            # v12 has real confidence + memory; v8 -> neutral default (head disabled there).
+            "label_memory": torch.tensor([float(lab.get("memory_update_flag") or False)]),
+            "label_confidence": torch.tensor([float(
+                lab["agent_confidence_before"]
+                if lab.get("agent_confidence_before") is not None else 0.5)]),
+            # recovery_success sparse -> head stays disabled; placeholder keeps collate happy.
+            "label_recovery_success": torch.tensor([float(lab.get("recovery_success") or False)]),
+            "original_task_id": meta.get("task_id", ""),
         }
 
     def __getitem__(self, idx: int) -> dict:
         rec = self.records[idx]
-        before = self._load_image(rec["state_before"])
+        inp, lab, meta = view(rec)
+        before = self._load_image(inp["state_before"])
         img_w, img_h = before.size
-        bbox, bbox_mask = self._bbox(rec, img_w, img_h)
+        bbox, bbox_mask = self._bbox(lab, img_w, img_h)
 
         images = [before]
-        if self.use_state_after and rec.get("state_after"):
-            images.append(self._load_image(rec["state_after"]))
+        if self.use_state_after and inp.get("state_after"):
+            images.append(self._load_image(inp["state_after"]))
 
-        inputs = self._vlm_inputs(rec, images)
-        inputs.update(self._labels(rec, bbox, bbox_mask))
-        return inputs
+        out = self._vlm_inputs(inp, images)
+        out.update(self._labels(lab, meta, bbox, bbox_mask))
+        return out
