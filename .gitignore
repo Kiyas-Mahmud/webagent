@@ -35,3 +35,6 @@ venv/
 FinalData.zip
 *.zip
 FinalData/
+
+# local study notes - not tracked
+learn/
