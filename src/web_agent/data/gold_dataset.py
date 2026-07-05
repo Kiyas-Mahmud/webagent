@@ -108,8 +108,10 @@ class GoldDataset(Dataset):
             "label_confidence": torch.tensor([float(
                 lab["agent_confidence_before"]
                 if lab.get("agent_confidence_before") is not None else 0.5)]),
-            # recovery_success sparse -> head stays disabled; placeholder keeps collate happy.
-            "label_recovery_success": torch.tensor([float(lab.get("recovery_success") or False)]),
+            # recovery_success: -1 = not attempted (null) -> masked out in the loss/metric;
+            # 0/1 = attempted-failed / attempted-succeeded (the only rows the head learns from).
+            "label_recovery_success": torch.tensor([
+                -1.0 if lab.get("recovery_success") is None else float(lab["recovery_success"])]),
             "original_task_id": meta.get("task_id", ""),
         }
 

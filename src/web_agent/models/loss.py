@@ -143,9 +143,15 @@ class CombinedLoss(nn.Module):
         # with_logits is autocast(fp16)-safe; heads emit logits for these two.
         t["memory"] = F.binary_cross_entropy_with_logits(
             preds["memory_flag"], batch["label_memory"])
-        t["recovery_outcome"] = F.binary_cross_entropy_with_logits(
-            preds["recovery_outcome"], batch["label_recovery_success"],
-            pos_weight=self.recovery_pos_w)
+        # recovery_success = -1 marks "no recovery attempted" -> masked out (only the
+        # rows where a recovery actually happened supervise this head). Synthetic labels
+        # are 0/1, so the mask is all-ones and this equals the plain mean BCE.
+        rs = batch["label_recovery_success"]
+        ro_mask = (rs >= 0).float()
+        ro_per = F.binary_cross_entropy_with_logits(
+            preds["recovery_outcome"], rs.clamp(min=0.0),
+            pos_weight=self.recovery_pos_w, reduction="none")
+        t["recovery_outcome"] = (ro_per * ro_mask).sum() / ro_mask.sum().clamp(min=1.0)
 
         conf = preds["confidence"].clamp(self.conf_lo, self.conf_hi)
         t["confidence"] = F.mse_loss(conf, batch["label_confidence"])

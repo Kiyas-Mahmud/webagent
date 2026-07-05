@@ -7,20 +7,20 @@ extends: backbones/qwen2vl_2b.yaml
 
 data:
   # Set at runtime / on Kaggle to the gold dataset folder (auto-detected in the notebook).
-  #   v12 (current): data/web_agent_gold_v12_refined_balanced_combined_1970/<same-name>
-  root: data/web_agent_gold_v12_refined_balanced_combined_1970/web_agent_gold_v12_refined_balanced_combined_1970
+  #   v14 (current): data/gold_v14/gold_v14  (Kaggle dataset: webgoldv3)
+  root: data/gold_v14/gold_v14
   train_json: split_train.json
   val_json: split_val.json
   test_json: split_test.json
   use_state_after: true             # before+after images (the real visual signal)
   use_visual_diff_text: false       # never; gold split files carry no scalar anyway
 
-# v12 has real confidence + memory labels (leak-checked) -> those heads ON.
-# recovery_success too sparse (few True) -> recovery_outcome head stays OFF.
+# v14 has real confidence + memory + recovery_success labels -> ALL 4 pillars ON.
+# recovery_success is masked in the loss (only attempted rows) + pos_weight for imbalance.
 loss:
   confidence: 0.05
   memory_flag: 0.10
-  recovery_outcome: 0.0
+  recovery_outcome: 0.09
 
 train:
   metrics_csv: results/gold_metrics.csv
