@@ -317,3 +317,25 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Simplified the separate validation notebook preflight to pass the confirmed root directly
   to the validator and display whether root entries are links. `notebooks/kaggle_gold.ipynb`
   remains outside the change.
+
+## 2026-07-18 — first successful Kaggle 39k validation result
+- Pulled Kaggle output commit `7eb78e8`. The validator found the attached dataset at
+  `/kaggle/input/datasets/kiyasmahmud/web-gold-40k/final_data_set_40k` and completed the
+  quick audit in about 2 minutes 13 seconds without downloading or extracting it.
+- Result: 31 PASS, 1 FAIL, 1 WARN, 3 SKIP; `publication_ready=false`.
+- Strong verified properties: 39,215 expected rows; valid schema and label logic; unique
+  sample IDs; zero domain overlap; zero task/trajectory overlap; zero exact full-input
+  overlap or conflicts; all 78,430 image references exist; zero image-path overlap; and
+  600/600 sampled images decode successfully.
+- Shortcut checks passed their registered gates: task-text-only action accuracy 0.3537
+  versus 0.1901 majority accuracy (macro-F1 0.2374), and confidence-only outcome
+  MCC 0.1132 / ROC-AUC 0.5609. The task wording still contains moderate action signal and
+  must remain a reported baseline/ablation even though it is below the blocker threshold.
+- Publication blockers: all 39,215 rows remain `review_status=pending`; exact SHA-256 and
+  near-image dHash split-overlap audits were not run; and the protocol decision for 1,354
+  rows (3.45%) from 16 adult domains remains unresolved.
+- Non-blocking balance warning: SUCCESS is 43.70%, 1.30 percentage points below the stated
+  45% lower target. Action classes are well balanced (largest 18.98%).
+- Do not start headline Q1 training yet. First complete/record human review, resolve or
+  quarantine the adult-domain rows, rerun split construction if rows change, then enable
+  the full image-hash audit and rerun every validation gate.
