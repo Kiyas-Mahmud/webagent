@@ -79,6 +79,7 @@ SPLIT_FILES = {
     "val": "split_val.json",
     "test": "split_test.json",
 }
+KNOWN_KAGGLE_ROOT = Path("/kaggle/input/datasets/kiyasmahmud/web-gold-40k")
 
 
 @dataclass
@@ -237,6 +238,9 @@ def find_data_source(explicit: Path | None) -> DataSource:
         raise FileNotFoundError(
             f"No sibling split JSON files or compatible ZIP archive found under {source_path}"
         )
+
+    if KNOWN_KAGGLE_ROOT.is_dir():
+        return find_data_source(KNOWN_KAGGLE_ROOT)
 
     input_root = Path("/kaggle/input")
     if not input_root.is_dir():

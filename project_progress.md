@@ -294,3 +294,10 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   reference resolutions, and six direct archive image decodes without extraction.
 - `notebooks/kaggle_gold.ipynb` was not edited and remains SHA-256
   `340FEF1FC9A5703B4D0D0D8BA64080114FB89BCACA826B7E58D4A137A15EBE1E`.
+
+## 2026-07-18 — confirmed Kaggle dataset root
+- User-confirmed attached root: `/kaggle/input/datasets/kiyasmahmud/web-gold-40k`.
+- The validator and separate validation notebook now prefer this exact directory, then
+  recursively locate the versioned ZIP beneath it. Generic auto-discovery remains as a
+  fallback if Kaggle changes the mount layout in a future dataset version.
+- No extraction/download behavior changed; the main `kaggle_gold.ipynb` remains untouched.
