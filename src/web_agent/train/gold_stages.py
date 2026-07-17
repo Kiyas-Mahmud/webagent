@@ -200,12 +200,17 @@ def run_gold_mini(
     processor=None,
     train_rows: int = 5_000,
     val_rows: int = 500,
-    epochs: int = 3,
+    epochs: int = 5,
     seed: int = 42,
 ) -> dict:
     """Train on a stratified subset and validate without reading the test split."""
     mini_cfg = deepcopy(cfg)
     mini_cfg["train"]["epochs"] = epochs
+    # A requested mini run should finish every epoch; early stopping is for the
+    # longer headline run, not this fixed-size development gate.
+    mini_cfg["train"]["early_stop_patience"] = max(
+        epochs, mini_cfg["train"].get("early_stop_patience", 0)
+    )
     mini_cfg["name"] = f"{cfg['name']}_MINI"
     mini_cfg["train"]["metrics_csv"] = "results/gold_mini_metrics.csv"
 

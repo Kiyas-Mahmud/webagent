@@ -383,3 +383,16 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   notebook JSON is valid/output-free, merged config checks pass, and pytest reports 1 passed
   with GPU/torch-dependent tests skipped because this local Python environment has no PyTorch.
   The required real forward/backward smoke remains the first Kaggle execution gate.
+
+## 2026-07-18 — five-epoch mini result export
+- Changed the Gold mini-training default from 3 to 5 epochs in the Kaggle notebook,
+  reusable stage function, and command-line runner. Mini training raises early-stop patience
+  to the requested epoch count so this fixed development gate produces all five results.
+- Added a dependency-free CSV exporter. A successful mini run writes one row per completed
+  epoch, all training/validation metrics, the selection metric, best-epoch flag, dataset
+  sizes, and checkpoint status to `/kaggle/working/gold_mini_result.csv`.
+- The notebook now asserts that exactly five epoch records exist and that the final CSV was
+  created before declaring the mini stage passed.
+- Local verification passed: CSV export regression plus the existing dependency-free guard
+  report 2 passed / 4 PyTorch-dependent skipped; changed Python files and every output-free
+  notebook code cell compile, notebook JSON is valid, and `git diff --check` passes.

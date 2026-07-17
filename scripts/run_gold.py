@@ -14,6 +14,7 @@ import argparse
 import json
 
 from web_agent.config import load_config
+from web_agent.utils.results import save_mini_result_csv
 from web_agent.utils.seed import set_seed
 
 
@@ -25,7 +26,12 @@ def main() -> None:
     ap.add_argument("--checkpoint", default=None)
     ap.add_argument("--train-rows", type=int, default=5_000)
     ap.add_argument("--val-rows", type=int, default=500)
-    ap.add_argument("--epochs", type=int, default=3)
+    ap.add_argument("--epochs", type=int, default=5)
+    ap.add_argument(
+        "--result-csv",
+        default="/kaggle/working/gold_mini_result.csv",
+        help="one-row-per-epoch mini result table",
+    )
     args = ap.parse_args()
 
     cfg = load_config(args.config)
@@ -48,7 +54,9 @@ def main() -> None:
             epochs=args.epochs,
             seed=seed,
         )
+        csv_path = save_mini_result_csv(report, args.result_csv)
         print(json.dumps(report, indent=2))
+        print("CSV saved:", csv_path)
         return
 
     if not args.checkpoint:
