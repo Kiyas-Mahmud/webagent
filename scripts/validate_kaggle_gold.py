@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
+import posixpath
 import random
 import sys
+import zipfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass, asdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 from PIL import Image
@@ -118,13 +121,120 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def find_data_root(explicit: Path | None) -> Path:
+def normalise_member(name: str) -> str | None:
+    cleaned = name.replace("\\", "/")
+    path = PurePosixPath(cleaned)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    parts = [part for part in path.parts if part not in {"", "."}]
+    return "/".join(parts)
+
+
+class ZipDataset:
+    """Read a nested gold dataset directly from one ZIP without extracting it."""
+
+    def __init__(self, archive_path: Path):
+        self.archive_path = archive_path.resolve()
+        self.archive = zipfile.ZipFile(self.archive_path)
+        self.member_map: dict[str, str] = {}
+        self.duplicate_members: list[str] = []
+        for info in self.archive.infolist():
+            if info.is_dir():
+                continue
+            normalised = normalise_member(info.filename)
+            if normalised is None:
+                continue
+            if normalised in self.member_map:
+                self.duplicate_members.append(normalised)
+            self.member_map[normalised] = info.filename
+
+        prefixes = []
+        for member in self.member_map:
+            if PurePosixPath(member).name != SPLIT_FILES["train"]:
+                continue
+            prefix = posixpath.dirname(member)
+            if all(self._join(prefix, filename) in self.member_map for filename in SPLIT_FILES.values()):
+                prefixes.append(prefix)
+        if not prefixes:
+            self.archive.close()
+            raise FileNotFoundError(
+                f"{self.archive_path.name} does not contain sibling train/val/test split JSON files"
+            )
+        prefixes.sort(key=lambda value: (len(PurePosixPath(value).parts), value))
+        self.prefix = prefixes[0]
+
+    @staticmethod
+    def _join(prefix: str, child: str) -> str:
+        return posixpath.join(prefix, child) if prefix else child
+
+    @property
+    def description(self) -> str:
+        suffix = f"!/{self.prefix}" if self.prefix else "!/"
+        return f"{self.archive_path}{suffix}"
+
+    def split_member(self, filename: str) -> str:
+        return self._join(self.prefix, filename)
+
+    def load_records(self, filename: str) -> list[dict[str, Any]]:
+        member = self.split_member(filename)
+        with self.archive.open(self.member_map[member], "r") as raw:
+            with io.TextIOWrapper(raw, encoding="utf-8") as text:
+                return records_from_payload(json.load(text), member)
+
+    def resolve_image(self, reference: Any) -> str | None:
+        if not isinstance(reference, str) or not reference.strip():
+            return None
+        rel = normalise_member(reference)
+        if rel is None:
+            return None
+        candidates = [self._join(self.prefix, rel), rel]
+        if not rel.lower().startswith("images/"):
+            candidates.insert(1, self._join(self.prefix, f"images/{rel}"))
+        for candidate in candidates:
+            if candidate in self.member_map:
+                return candidate
+        return None
+
+    def open_binary(self, member: str):
+        return self.archive.open(self.member_map[member], "r")
+
+
+DataSource = Path | ZipDataset
+Locator = Path | str
+
+
+def zip_candidates(root: Path) -> list[Path]:
+    candidates = []
+    for pattern in ("*.zip", "*/*.zip", "*/*/*.zip"):
+        candidates.extend(root.glob(pattern))
+    return sorted(set(path.resolve() for path in candidates if path.is_file()))
+
+
+def open_zip_candidate(path: Path) -> ZipDataset | None:
+    try:
+        return ZipDataset(path)
+    except (FileNotFoundError, zipfile.BadZipFile):
+        return None
+
+
+def find_data_source(explicit: Path | None) -> DataSource:
     if explicit is not None:
-        root = explicit.resolve()
-        missing = [name for name in SPLIT_FILES.values() if not (root / name).is_file()]
-        if missing:
-            raise FileNotFoundError(f"Missing split files under {root}: {missing}")
-        return root
+        source_path = explicit.resolve()
+        if source_path.is_file():
+            if source_path.suffix.lower() != ".zip":
+                raise ValueError(f"Dataset file must be a ZIP archive: {source_path}")
+            return ZipDataset(source_path)
+        if not source_path.is_dir():
+            raise FileNotFoundError(source_path)
+        if all((source_path / name).is_file() for name in SPLIT_FILES.values()):
+            return source_path
+        for archive_path in zip_candidates(source_path):
+            archive = open_zip_candidate(archive_path)
+            if archive is not None:
+                return archive
+        raise FileNotFoundError(
+            f"No sibling split JSON files or compatible ZIP archive found under {source_path}"
+        )
 
     input_root = Path("/kaggle/input")
     if not input_root.is_dir():
@@ -139,21 +249,27 @@ def find_data_root(explicit: Path | None) -> Path:
         root = train_file.parent
         if all((root / name).is_file() for name in SPLIT_FILES.values()):
             candidates.append(root)
-    if not candidates:
-        raise FileNotFoundError(
-            "No folder containing split_train.json, split_val.json, and split_test.json "
-            "was found under /kaggle/input. Attach kiyasmahmud/web-gold-40k."
-        )
-    candidates.sort(key=lambda p: ("web-gold-40k" not in str(p).lower(), len(p.parts)))
-    if len(candidates) > 1:
-        print("Candidate roots:", *candidates, sep="\n  - ")
-        print("Using:", candidates[0])
-    return candidates[0].resolve()
+    if candidates:
+        candidates.sort(key=lambda p: ("web-gold-40k" not in str(p).lower(), len(p.parts)))
+        if len(candidates) > 1:
+            print("Candidate folders:", *candidates, sep="\n  - ")
+            print("Using:", candidates[0])
+        return candidates[0].resolve()
+
+    archives = zip_candidates(input_root)
+    archives.sort(key=lambda p: ("web-gold-40k" not in str(p).lower(), len(p.parts), str(p)))
+    for archive_path in archives:
+        archive = open_zip_candidate(archive_path)
+        if archive is not None:
+            print("Using ZIP archive:", archive.description)
+            return archive
+    raise FileNotFoundError(
+        "No folder or ZIP containing split_train.json, split_val.json, and split_test.json "
+        "was found under /kaggle/input. Attach kiyasmahmud/web-gold-40k."
+    )
 
 
-def load_records(path: Path) -> list[dict[str, Any]]:
-    with path.open(encoding="utf-8") as handle:
-        payload = json.load(handle)
+def records_from_payload(payload: Any, name: str) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         rows = payload
     elif isinstance(payload, dict):
@@ -162,12 +278,20 @@ def load_records(path: Path) -> list[dict[str, Any]]:
                 rows = payload[key]
                 break
         else:
-            raise TypeError(f"{path.name} is an object but has no records/data/rows/samples list")
+            raise TypeError(f"{name} is an object but has no records/data/rows/samples list")
     else:
-        raise TypeError(f"{path.name} must contain a JSON list or record container")
+        raise TypeError(f"{name} must contain a JSON list or record container")
     if not all(isinstance(row, dict) for row in rows):
-        raise TypeError(f"{path.name} contains non-object rows")
+        raise TypeError(f"{name} contains non-object rows")
     return rows
+
+
+def load_records(source: DataSource, filename: str) -> list[dict[str, Any]]:
+    if isinstance(source, ZipDataset):
+        return source.load_records(filename)
+    path = source / filename
+    with path.open(encoding="utf-8") as handle:
+        return records_from_payload(json.load(handle), path.name)
 
 
 def meta_value(row: dict[str, Any], keys: Iterable[str]) -> Any:
@@ -224,23 +348,40 @@ def safe_image_path(root: Path, reference: Any) -> Path | None:
     return first_safe
 
 
-def sha256(path: Path) -> str:
+def resolve_image(source: DataSource, reference: Any) -> Locator | None:
+    if isinstance(source, ZipDataset):
+        return source.resolve_image(reference)
+    return safe_image_path(source, reference)
+
+
+def open_binary(source: DataSource, locator: Locator):
+    if isinstance(source, ZipDataset):
+        if not isinstance(locator, str):
+            raise TypeError("ZIP member locator must be a string")
+        return source.open_binary(locator)
+    if not isinstance(locator, Path):
+        raise TypeError("Directory locator must be a Path")
+    return locator.open("rb")
+
+
+def sha256(source: DataSource, locator: Locator) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with open_binary(source, locator) as handle:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
 
 
-def difference_hash(path: Path) -> int:
+def difference_hash(source: DataSource, locator: Locator) -> int:
     """Return a 64-bit dHash for lightweight cross-split near-duplicate screening."""
     resampling = getattr(Image, "Resampling", Image).LANCZOS
-    with Image.open(path) as image:
-        resized = image.convert("L").resize((9, 8), resampling)
-        if hasattr(resized, "get_flattened_data"):
-            pixels = list(resized.get_flattened_data())
-        else:
-            pixels = list(resized.getdata())
+    with open_binary(source, locator) as handle:
+        with Image.open(handle) as image:
+            resized = image.convert("L").resize((9, 8), resampling)
+            if hasattr(resized, "get_flattened_data"):
+                pixels = list(resized.get_flattened_data())
+            else:
+                pixels = list(resized.getdata())
     value = 0
     for row in range(8):
         offset = row * 9
@@ -250,7 +391,7 @@ def difference_hash(path: Path) -> int:
 
 
 def near_hash_cross_split_pairs(
-    values: list[tuple[int, str, Path]], max_distance: int = 3
+    values: list[tuple[int, str, Locator]], max_distance: int = 3
 ) -> tuple[int, list[dict[str, Any]]]:
     """Find cross-split dHash neighbours using four 16-bit LSH bands.
 
@@ -258,7 +399,7 @@ def near_hash_cross_split_pairs(
     This avoids an all-pairs comparison while preserving all candidates at this threshold.
     """
     band_index: dict[tuple[int, int], list[int]] = defaultdict(list)
-    prior: list[tuple[int, str, Path]] = []
+    prior: list[tuple[int, str, Locator]] = []
     count = 0
     examples: list[dict[str, Any]] = []
     for current_hash, current_split, current_path in values:
@@ -514,24 +655,28 @@ def audit_identifiers_and_splits(
 
 def audit_images(
     audit: Audit,
-    root: Path,
+    source: DataSource,
     splits: dict[str, list[dict[str, Any]]],
     decode_sample: int,
     full_hash: bool,
 ) -> dict[str, Any]:
-    references: dict[str, list[tuple[str, Path | None]]] = defaultdict(list)
+    references: dict[str, list[tuple[str, Locator | None]]] = defaultdict(list)
     missing: list[str] = []
-    path_splits: dict[Path, set[str]] = defaultdict(set)
+    path_splits: dict[Locator, set[str]] = defaultdict(set)
     for split, rows in splits.items():
         for row in rows:
             inputs = row.get("inputs", {})
             for field in ("state_before", "state_after"):
                 ref = inputs.get(field)
-                path = safe_image_path(root, ref)
+                path = resolve_image(source, ref)
                 references[split].append((str(ref), path))
-                if path is None or not path.is_file():
+                exists = path is not None and (
+                    isinstance(source, ZipDataset) or (isinstance(path, Path) and path.is_file())
+                )
+                if not exists:
                     missing.append(f"{split}:{field}:{ref}")
                 else:
+                    assert path is not None
                     path_splits[path].add(split)
 
     audit.add(
@@ -551,11 +696,13 @@ def audit_images(
     sizes = Counter()
     for path in sampled:
         try:
-            with Image.open(path) as image:
-                image.verify()
-            with Image.open(path) as image:
-                modes[image.mode] += 1
-                sizes[f"{image.width}x{image.height}"] += 1
+            with open_binary(source, path) as handle:
+                with Image.open(handle) as image:
+                    image.verify()
+            with open_binary(source, path) as handle:
+                with Image.open(handle) as image:
+                    modes[image.mode] += 1
+                    sizes[f"{image.width}x{image.height}"] += 1
         except Exception as exc:  # noqa: BLE001 - report corrupt data, do not hide it
             corrupt.append(f"{path}: {exc}")
     audit.add(
@@ -569,11 +716,11 @@ def audit_images(
     near_hash_examples: list[dict[str, Any]] = []
     if full_hash and not missing:
         digest_splits: dict[str, set[str]] = defaultdict(set)
-        perceptual_values: list[tuple[int, str, Path]] = []
+        perceptual_values: list[tuple[int, str, Locator]] = []
         for index, path in enumerate(valid_paths, start=1):
-            digest_splits[sha256(path)].update(path_splits[path])
+            digest_splits[sha256(source, path)].update(path_splits[path])
             path_split = sorted(path_splits[path])[0]
-            perceptual_values.append((difference_hash(path), path_split, path))
+            perceptual_values.append((difference_hash(source, path), path_split, path))
             if index % 5000 == 0:
                 print(f"Content-hashed {index:,}/{len(valid_paths):,} unique images")
         hash_overlap = sum(len(parts) > 1 for parts in digest_splits.values())
@@ -702,20 +849,29 @@ def audit_shortcut_baselines(
 
 def main() -> int:
     args = parse_args()
-    root = find_data_root(args.data_root)
-    print("DATA_ROOT =", root)
-    print("No KaggleHub download API is used. Dataset reads stay under DATA_ROOT.")
+    source = find_data_source(args.data_root)
+    source_description = source.description if isinstance(source, ZipDataset) else str(source)
+    print("DATA_SOURCE =", source_description)
+    print("No KaggleHub download or ZIP extraction API is used. Files are read in place.")
 
-    splits = {name: load_records(root / filename) for name, filename in SPLIT_FILES.items()}
+    splits = {name: load_records(source, filename) for name, filename in SPLIT_FILES.items()}
     audit = Audit()
+    if isinstance(source, ZipDataset):
+        audit.add(
+            "unique safe ZIP members",
+            not source.duplicate_members,
+            f"members={len(source.member_map)}; duplicate normalised names="
+            f"{len(source.duplicate_members)}; prefix={source.prefix or '/'}",
+        )
     report: dict[str, Any] = {
-        "dataset_root": str(root),
+        "dataset_source": source_description,
+        "source_type": "zip" if isinstance(source, ZipDataset) else "directory",
         "schema": audit_schema(audit, splits),
         "counts_and_labels": audit_counts_and_labels(audit, splits),
         "identifiers_and_splits": audit_identifiers_and_splits(audit, splits),
         "images": audit_images(
             audit,
-            root,
+            source,
             splits,
             decode_sample=args.decode_sample,
             full_hash=args.full_image_hash,

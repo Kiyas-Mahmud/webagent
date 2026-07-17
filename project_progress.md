@@ -264,3 +264,17 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   the two newer training-notebook commits already on `origin/Code`, the local file matches
   the remote version exactly (SHA-256
   `340FEF1FC9A5703B4D0D0D8BA64080114FB89BCACA826B7E58D4A137A15EBE1E`).
+
+## 2026-07-17 — Kaggle ZIP-in-place validation support
+- The uploaded 40k dataset is a ZIP inside the attached Kaggle Dataset, not an extracted
+  directory. Updated the separate validator and notebook to auto-detect either layout.
+- ZIP mode locates the common folder containing `split_train.json`, `split_val.json`, and
+  `split_test.json`, loads the JSON members directly, resolves image references against the
+  same archive prefix, and streams image decode/SHA-256/dHash reads from the archive.
+- No `extract`, `extractall`, KaggleHub download, or image copy is used. Only the small JSON
+  validation report is written to `/kaggle/working`.
+- End-to-end ZIP fixture test passed: nested split discovery, unique/safe member gate, six
+  image-reference resolutions, six image decodes, exact SHA-256 audit, and dHash audit all
+  completed directly from the archive. Directory-mode regression smoke also still passes.
+- `notebooks/kaggle_gold.ipynb` remains outside the validation diff and unchanged at SHA-256
+  `340FEF1FC9A5703B4D0D0D8BA64080114FB89BCACA826B7E58D4A137A15EBE1E`.
