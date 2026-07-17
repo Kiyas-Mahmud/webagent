@@ -278,3 +278,19 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   completed directly from the archive. Directory-mode regression smoke also still passes.
 - `notebooks/kaggle_gold.ipynb` remains outside the validation diff and unchanged at SHA-256
   `340FEF1FC9A5703B4D0D0D8BA64080114FB89BCACA826B7E58D4A137A15EBE1E`.
+
+## 2026-07-18 — pulled Kaggle output and fixed deep dataset mount discovery
+- Fast-forwarded three Kaggle commits (`03f56d7`, `3b7b453`, `f36b0e5`) containing the
+  executed `kaggle_gold_data_validation.ipynb` output.
+- Saved traceback: cell 2 raised `AssertionError: Dataset not found` even though Kaggle
+  metadata showed dataset source ID `18087168` attached. Root cause was the notebook and
+  validator searching ZIPs only to a fixed shallow depth; Kaggle can mount versioned inputs
+  under a deeper `/kaggle/input/datasets/<owner>/<slug>/versions/<n>/...` hierarchy.
+- ZIP and split discovery now falls back to recursive filename search at arbitrary mount
+  depth. The notebook no longer fails in preflight: if it cannot choose a candidate itself,
+  it passes `/kaggle/input` to the validator and prints candidate paths for diagnosis.
+- Cleared the stale saved traceback/output and reset code-cell execution counts. A synthetic
+  deep Kaggle-mount fixture passed nested ZIP discovery, direct split JSON reads, six image
+  reference resolutions, and six direct archive image decodes without extraction.
+- `notebooks/kaggle_gold.ipynb` was not edited and remains SHA-256
+  `340FEF1FC9A5703B4D0D0D8BA64080114FB89BCACA826B7E58D4A137A15EBE1E`.

@@ -207,6 +207,8 @@ def zip_candidates(root: Path) -> list[Path]:
     candidates = []
     for pattern in ("*.zip", "*/*.zip", "*/*/*.zip"):
         candidates.extend(root.glob(pattern))
+    candidates.extend(root.rglob("*.zip"))
+    candidates.extend(root.rglob("*.ZIP"))
     return sorted(set(path.resolve() for path in candidates if path.is_file()))
 
 
