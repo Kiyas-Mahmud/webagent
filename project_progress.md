@@ -396,3 +396,15 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Local verification passed: CSV export regression plus the existing dependency-free guard
   report 2 passed / 4 PyTorch-dependent skipped; changed Python files and every output-free
   notebook code cell compile, notebook JSON is valid, and `git diff --check` passes.
+
+## 2026-07-18 — two-reviewer manual dataset guide
+- Added `docs/DATASET_MANUAL_REVIEW_GUIDE.md` as a beginner-friendly handoff for the two
+  human reviewers. It explains the 39,215-row dataset, nested schema, current distributions,
+  label meanings, trajectory-level image/action/outcome/failure/recovery checks, and the
+  distinction between the 7,559-row sample package and full approved-only review.
+- Defined a two-person protocol: shared calibration, 10% independent overlap, trajectory-level
+  work allocation, second review for every correction/rejection, disagreement adjudication,
+  immutable review logs, and agreement/kappa reporting.
+- Documented evidence-based change rules, prohibited edits, known blank/error and adult-domain
+  queues, review-log columns/reason codes, safe correction/versioning workflow, final full-image
+  hash audit, and the exact deliverables required before claiming publication readiness.
