@@ -339,3 +339,17 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Do not start headline Q1 training yet. First complete/record human review, resolve or
   quarantine the adult-domain rows, rerun split construction if rows change, then enable
   the full image-hash audit and rerun every validation gate.
+
+## 2026-07-18 — 39,215-row retention and training boundary
+- User will retain the current 39,215-row corpus rather than add filler to reach an exact
+  40,000 rows, and a teammate will perform the manual review. Report the exact 39,215 count
+  consistently; the rounded dataset name does not require synthetic padding.
+- The 1,354 adult-domain rows may remain only with a written inclusion, ethics, and safety
+  protocol. Keeping rows means no split rebuild is needed unless manual review rejects or
+  modifies records; any removal or label correction requires rerunning all split gates.
+- Pipeline smoke testing on 16 rows may start while review and full image hashing run in
+  parallel. Do not launch headline/full training until those publication gates pass.
+- Before mini multitask training, fix two methodology issues in the current gold runner:
+  `state_after` presently reaches the shared action/bbox/confidence heads (future-information
+  leakage), and the `train` stage automatically evaluates the test split. Use causal pre/post
+  head routing and reserve test evaluation for the final frozen model selection protocol.
