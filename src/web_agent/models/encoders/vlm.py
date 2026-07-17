@@ -107,23 +107,25 @@ class VLMEncoder(nn.Module):
     def _frozen(self) -> bool:
         return not any(p.requires_grad for p in self.model.parameters())
 
-    def forward(self, batch: dict) -> torch.Tensor:
+    def forward(self, batch: dict, prefix: str = "") -> torch.Tensor:
+        """Encode one VLM stream; causal gold batches use pre_ and post_ prefixes."""
         dev = self.device
         kwargs = dict(
-            input_ids=batch["input_ids"].to(dev),
-            attention_mask=batch["attention_mask"].to(dev),
-            pixel_values=batch["pixel_values"].to(dev, dtype=self.dtype),
-            image_grid_thw=batch["image_grid_thw"].to(dev),
+            input_ids=batch[f"{prefix}input_ids"].to(dev),
+            attention_mask=batch[f"{prefix}attention_mask"].to(dev),
+            pixel_values=batch[f"{prefix}pixel_values"].to(dev, dtype=self.dtype),
+            image_grid_thw=batch[f"{prefix}image_grid_thw"].to(dev),
             output_hidden_states=True,
             use_cache=False,
         )
-        if "mm_token_type_ids" in batch:  # required by newer Qwen2-VL (M-RoPE)
-            kwargs["mm_token_type_ids"] = batch["mm_token_type_ids"].to(dev)
+        token_type_key = f"{prefix}mm_token_type_ids"
+        if token_type_key in batch:  # required by newer Qwen2-VL (M-RoPE)
+            kwargs["mm_token_type_ids"] = batch[token_type_key].to(dev)
         ctx = torch.no_grad() if self._frozen else contextlib.nullcontext()
         with ctx:
             out = self.model(**kwargs)
             h = out.hidden_states[-1]                      # [B, seq, D]
-            am = batch["attention_mask"].to(dev)           # [B, seq] (1=real, 0=pad)
+            am = batch[f"{prefix}attention_mask"].to(dev)  # [B, seq] (1=real, 0=pad)
             pooled = self._pool(h, am)                     # [B, D]
         return pooled.float()
 

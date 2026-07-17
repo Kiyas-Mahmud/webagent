@@ -47,6 +47,16 @@ def accuracy(y_true, y_pred) -> float:
     return float((y_true == y_pred).mean()) if len(y_true) else 0.0
 
 
+def macro_f1(y_true, y_pred) -> float:
+    """Macro-F1 for any categorical head, including rare classes."""
+    return float(f1_score(y_true, y_pred, average="macro", zero_division=0))
+
+
+def mean_absolute_error(y_true, y_pred) -> float:
+    y_true, y_pred = np.asarray(y_true, dtype=float), np.asarray(y_pred, dtype=float)
+    return float(np.abs(y_true - y_pred).mean()) if len(y_true) else 0.0
+
+
 def expected_calibration_error(confidences, correct, n_bins: int = 10) -> float:
     """True hard-binned ECE (a metric, not the training loss)."""
     confidences = np.asarray(confidences, dtype=float)

@@ -1,6 +1,9 @@
 # Qwen2-VL-2B QLoRA on the GOLD dataset (real, leak-safe). Separate from the
 # synthetic config; the synthetic pipeline is untouched.
-#   honest input = state_before + state_after images + task_description only.
+#   causal inputs:
+#     pre-action  = state_before + task/domain
+#     post-action = state_before + state_after + task/domain
+#   Both paths share one VLM+adapter; no label is fed into either path.
 
 name: Y_QWEN2VL_2B_GOLD
 extends: backbones/qwen2vl_2b.yaml
@@ -14,6 +17,7 @@ data:
   test_json: split_test.json
   use_state_after: true             # before+after images (the real visual signal)
   use_visual_diff_text: false       # never; gold split files carry no scalar anyway
+  causal_routing: true              # future image cannot reach action/bbox/confidence-before
 
 # v14 has real confidence + memory + recovery_success labels -> ALL 4 pillars ON.
 # recovery_success is masked in the loss (only attempted rows) + pos_weight for imbalance.
@@ -24,3 +28,4 @@ loss:
 
 train:
   metrics_csv: results/gold_metrics.csv
+  early_stop_metric: outcome_mcc

@@ -156,8 +156,11 @@ class CombinedLoss(nn.Module):
         conf = preds["confidence"].clamp(self.conf_lo, self.conf_hi)
         t["confidence"] = F.mse_loss(conf, batch["label_confidence"])
 
-        correct = (preds["outcome"].argmax(dim=-1) == batch["label_outcome"]).detach()
-        t["calibration"] = self._calibration(conf, correct)
+        # agent_confidence_before means confidence that the action will succeed.
+        # Calibrate it against the observed SUCCESS target, not against whether the
+        # separate outcome head happened to classify the row correctly.
+        succeeded = (batch["label_outcome"] == 0).detach()
+        t["calibration"] = self._calibration(conf, succeeded)
 
         if self.contrastive_mode == "supervised":
             t["contrastive"] = self._supcon(preds["fused"], batch["label_outcome"])

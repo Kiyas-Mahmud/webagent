@@ -4,7 +4,7 @@ Every head reads the same fused [B, 768] embedding. Do NOT change these when
 swapping backbones — that constancy is the backbone-agnostic claim.
 
   FailureHead (Pillar 1): outcome(2), failure_type(4), confidence(1 sigmoid), recovery(6)
-  ActionHead  (Pillar 3): action_type(5), bbox(4 sigmoid -> [0,1])
+  ActionHead  (Pillar 3): action_type(6), bbox(4 sigmoid -> [0,1])
   MemoryHead  (Pillar 4): memory_flag(1 sigmoid), recovery(6)
 
 Each head trunk: Linear(768->256) -> ReLU -> Dropout(0.3).
@@ -42,23 +42,29 @@ class FailureHead(nn.Module):
         self.confidence = nn.Linear(hidden, 1)              # sigmoid in forward
         self.recovery = nn.Linear(hidden, NUM_RECOVERY)     # 6
 
-    def forward(self, fused: torch.Tensor) -> dict:
+    def forward(
+        self,
+        fused: torch.Tensor,
+        confidence_fused: torch.Tensor | None = None,
+    ) -> dict:
+        """Use post-action features for diagnosis and pre-action features for confidence."""
         h = self.trunk(fused)
+        confidence_h = h if confidence_fused is None else self.trunk(confidence_fused)
         return {
             "outcome": self.outcome(h),
             "failure_type": self.failure_type(h),
-            "confidence": torch.sigmoid(self.confidence(h)),
+            "confidence": torch.sigmoid(self.confidence(confidence_h)),
             "recovery": self.recovery(h),
         }
 
 
 class ActionHead(nn.Module):
-    """Pillar 3 — action_type (5-way) + bbox (4 floats in [0,1])."""
+    """Pillar 3 — action_type (6-way) + bbox (4 floats in [0,1])."""
 
     def __init__(self, dim: int = 768, hidden: int = 256, dropout: float = 0.3):
         super().__init__()
         self.trunk = _trunk(dim, hidden, dropout)
-        self.action_type = nn.Linear(hidden, NUM_ACTION_TYPE)  # 5
+        self.action_type = nn.Linear(hidden, NUM_ACTION_TYPE)  # 6
         self.bbox = nn.Linear(hidden, 4)
 
     def forward(self, fused: torch.Tensor) -> dict:

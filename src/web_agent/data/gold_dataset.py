@@ -11,6 +11,12 @@ Handles BOTH gold layouts in one code path:
 Honest input = state_before + state_after images + task_description (+ website_domain).
 The split files carry no ssim/pixel_diff/url_after, so no scalar can leak.
 
+Gold training uses two causal views of the same row:
+  pre_*  = state_before + goal text
+  post_* = state_before + state_after + goal text
+The action/bbox/confidence-before heads consume only pre_*. Failure, recovery,
+and memory heads consume post_*. No label is inserted into either prompt.
+
 v12 provides real confidence + memory labels -> those heads are enabled in the gold
 config. recovery_success is too sparse -> that head stays disabled (placeholder).
 """
@@ -49,6 +55,7 @@ class GoldDataset(Dataset):
         self.processor = processor
         self.root = Path(cfg["data"]["root"])
         self.use_state_after = bool(cfg["data"].get("use_state_after", True))
+        self.causal_routing = bool(cfg["data"].get("causal_routing", False))
 
     def __len__(self) -> int:
         return len(self.records)
@@ -70,15 +77,19 @@ class GoldDataset(Dataset):
         ], dtype=torch.float32).clamp_(0.0, 1.0)
         return bbox, torch.ones(1, dtype=torch.float32)
 
-    def _context_text(self, inp: dict) -> str:
+    def _context_text(self, inp: dict, phase: str) -> str:
         task = inp.get("task_description", "") or ""
         domain = inp.get("website_domain", "") or ""
-        return f"current_task: {task} | domain: {domain}"
+        instruction = {
+            "pre": "Choose the next action from the page before execution.",
+            "post": "Assess the result by comparing the page before and after execution.",
+        }[phase]
+        return f"{instruction} current_task: {task} | domain: {domain}"
 
-    def _vlm_inputs(self, inp: dict, images):
+    def _vlm_inputs(self, inp: dict, images, phase: str):
         """images: list of PIL images (1 = before only, 2 = before+after)."""
         content = [{"type": "image"} for _ in images]
-        content.append({"type": "text", "text": self._context_text(inp)})
+        content.append({"type": "text", "text": self._context_text(inp, phase)})
         messages = [{"role": "user", "content": content}]
         chat = self.processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
@@ -126,6 +137,14 @@ class GoldDataset(Dataset):
         if self.use_state_after and inp.get("state_after"):
             images.append(self._load_image(inp["state_after"]))
 
-        out = self._vlm_inputs(inp, images)
+        if self.causal_routing:
+            if len(images) != 2:
+                raise ValueError("causal gold routing requires both state_before and state_after")
+            pre = self._vlm_inputs(inp, [before], phase="pre")
+            post = self._vlm_inputs(inp, images, phase="post")
+            out = {f"pre_{key}": value for key, value in pre.items()}
+            out.update({f"post_{key}": value for key, value in post.items()})
+        else:
+            out = self._vlm_inputs(inp, images, phase="post")
         out.update(self._labels(lab, meta, bbox, bbox_mask))
         return out

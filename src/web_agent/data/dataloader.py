@@ -82,7 +82,8 @@ def stratified_subsample(records: list[dict], n: int, seed: int = 42,
     return out[:n]
 
 
-def _stack_labels(batch: list[dict]) -> dict:
+def stack_labels(batch: list[dict]) -> dict:
+    """Stack the label contract shared by synthetic and gold datasets."""
     out = {k: torch.stack([b[k] for b in batch]) for k in _LABEL_KEYS}
     out["original_task_id"] = [b["original_task_id"] for b in batch]  # str list (contrastive)
     return out
@@ -134,7 +135,7 @@ def vlm_collate(batch: list[dict]) -> dict:
     batch. pixel_values are flattened patches that differ per image -> concatenate
     along dim 0 (Qwen consumes them with image_grid_thw, which we stack).
     """
-    out = _stack_labels(batch)
+    out = stack_labels(batch)
     out["input_ids"] = pad_sequence(
         [b["input_ids"] for b in batch], batch_first=True, padding_value=0,
     )
@@ -154,7 +155,7 @@ def vlm_collate(batch: list[dict]) -> dict:
 
 def dual_collate(batch: list[dict]) -> dict:
     """Collate for the dual-encoder path: every field is fixed-size -> just stack."""
-    out = _stack_labels(batch)
+    out = stack_labels(batch)
     for k in ("pixel_values", "input_ids", "attention_mask"):
         out[k] = torch.stack([b[k] for b in batch])
     return out

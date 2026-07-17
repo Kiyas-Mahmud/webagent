@@ -3,10 +3,10 @@
 Imported by dataset, eval, and baselines. Do NOT redefine these anywhere else.
 Wrong label encoding is the #1 red-flag bug (loss won't drop) — keep it here only.
 
-Action head supports 5 classes but SCROLL/NAVIGATE have NO training data in the
-source (Mind2Web recorded only CLICK/TYPE/SELECT). The unused ids stay reserved;
-do not synthetically fill them. Recovery head supports 6 classes; ABORT has no
-training rows but is reserved for the production Decision Combiner.
+Action head supports the union of six actions used by the project datasets. The
+older synthetic source contains only CLICK/TYPE/SELECT, while Gold 40K contains
+all six, including PRESS_KEY. Recovery supports six strategies; ABORT remains
+reserved for the production Decision Combiner.
 """
 
 EXECUTION_OUTCOME = {"SUCCESS": 0, "FAILURE": 1}
@@ -41,7 +41,7 @@ MEMORY_FLAG = {False: 0, True: 1}
 # Number of output classes per head (drives the Linear out-features).
 NUM_OUTCOME = len(EXECUTION_OUTCOME)        # 2
 NUM_FAILURE_TYPE = len(FAILURE_TYPE)        # 4
-NUM_ACTION_TYPE = len(ACTION_TYPE)          # 5
+NUM_ACTION_TYPE = len(ACTION_TYPE)          # 6
 NUM_RECOVERY = len(RECOVERY_STRATEGY)       # 6
 
 # Reverse maps for decoding predictions back to string labels.

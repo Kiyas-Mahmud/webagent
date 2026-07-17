@@ -353,3 +353,33 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   `state_after` presently reaches the shared action/bbox/confidence heads (future-information
   leakage), and the `train` stage automatically evaluates the test split. Use causal pre/post
   head routing and reserve test evaluation for the final frozen model selection protocol.
+
+## 2026-07-18 — modular causal smoke/mini notebook
+- Reworked `notebooks/kaggle_gold.ipynb` as the explicitly authorized smoke/mini driver for
+  the 39,215-row dataset. It has a single `STAGE = "smoke" | "mini"` control, asserts the
+  new 23,499/7,861 train/validation counts, clears stale outputs, records package and commit
+  versions, and never loads test records during development stages.
+- Added causal gold routing while preserving the Gold 40K input allow-list. The same shared
+  VLM+adapter encodes two views: `pre_*` contains state-before plus task/domain and feeds
+  action, bbox, and confidence-before; `post_*` contains before+after plus task/domain and
+  feeds outcome, failure type, recovery, memory, and recovery outcome. No label is inserted
+  into either prompt.
+- Added `train/gold_stages.py` so the notebook orchestrates rather than duplicates model
+  construction. Smoke selects 16 label-covering rows and checks stream shapes, finite loss,
+  finite backward gradients, and a real parameter update. Mini uses a deterministic,
+  failure-stratified 5,000-row train subset plus 500 validation rows, requires decreasing
+  loss and positive validation MCC, and perturbs/reloads a checkpoint to prove identical
+  predictions return.
+- Gold checkpoint selection now honors `train.early_stop_metric=outcome_mcc`; checkpoint
+  files include LoRA, adapter, all heads, optimizer, scheduler, scaler, epoch, and step.
+  Gradient accumulation now flushes the final partial group instead of silently dropping it.
+- Corrected evaluation semantics: recovery-outcome accuracy/MCC mask null (not-attempted)
+  labels; agent-confidence is reported as MAE against its pre-action target; outcome ECE is
+  computed from outcome softmax confidence; failure/action macro-F1 are logged. The
+  confidence calibration loss now targets observed action success rather than whether the
+  separate outcome head happened to classify the sample correctly.
+- Corrected the stale five-action test/documentation to the six Gold 40K actions, including
+  PRESS_KEY. Local verification: all edited Python files and all notebook code cells compile,
+  notebook JSON is valid/output-free, merged config checks pass, and pytest reports 1 passed
+  with GPU/torch-dependent tests skipped because this local Python environment has no PyTorch.
+  The required real forward/backward smoke remains the first Kaggle execution gate.

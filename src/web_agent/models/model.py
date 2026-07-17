@@ -4,8 +4,10 @@ Reads cfg["backbone"]["path"]:
   vlm          -> VLMEncoder -> Adapter(D->768)                      -> fused[768]
   dual_encoder -> VisionEncoder + TextEncoder -> CrossAttentionFusion -> fused[768]
 
-Then the SAME FailureHead + ActionHead + MemoryHead run on fused[768] and the
-forward returns one flat dict of all predictions, consumed by CombinedLoss.
+Then the SAME FailureHead + ActionHead + MemoryHead return one flat prediction
+dict consumed by CombinedLoss. Gold runs can enable causal routing: the shared
+encoder/adapter creates a pre-action embedding and a post-action embedding, then
+routes each head to information that exists when its prediction is made.
 
 Qwen-first build order: the `vlm` path is implemented now; the `dual_encoder`
 path is added when SigLIP+RoBERTa is built.
@@ -28,6 +30,7 @@ class WebAgentModel(nn.Module):
     def __init__(self, cfg: dict):
         super().__init__()
         self.path = cfg["backbone"]["path"]
+        self.causal_routing = bool(cfg["data"].get("causal_routing", False))
         fused_dim = cfg.get("fused_dim", 768)
 
         if self.path == "vlm":
@@ -49,19 +52,31 @@ class WebAgentModel(nn.Module):
         self.memory_head = MemoryHead(fused_dim)
         self.recovery_outcome_head = RecoveryOutcomeHead(fused_dim)
 
-    def encode(self, batch: dict):
+    def encode(self, batch: dict, prefix: str = ""):
         """Front-end -> fused [B, 768]."""
         if self.path == "vlm":
-            return self.adapter(self.encoder(batch))
+            return self.adapter(self.encoder(batch, prefix=prefix))
         raise NotImplementedError
 
     def forward(self, batch: dict) -> dict:
-        fused = self.encode(batch)
-        preds: dict = {"fused": fused}           # exposed for the contrastive loss
-        preds.update(self.failure_head(fused))   # outcome, failure_type, confidence, recovery
-        preds.update(self.action_head(fused))    # action_type, bbox
-        preds.update(self.memory_head(fused))    # memory_flag, memory_recovery
-        preds.update(self.recovery_outcome_head(fused))  # recovery_outcome
+        if self.causal_routing:
+            pre_fused = self.encode(batch, prefix="pre_")
+            post_fused = self.encode(batch, prefix="post_")
+        else:
+            pre_fused = post_fused = self.encode(batch)
+
+        preds: dict = {
+            "fused": post_fused,  # outcome representation used by contrastive loss
+            "fused_pre": pre_fused,
+            "fused_post": post_fused,
+        }
+        preds.update(self.failure_head(
+            post_fused,
+            confidence_fused=pre_fused if self.causal_routing else None,
+        ))
+        preds.update(self.action_head(pre_fused))
+        preds.update(self.memory_head(post_fused))
+        preds.update(self.recovery_outcome_head(post_fused))
         return preds
 
     def trainable_parameters(self):
