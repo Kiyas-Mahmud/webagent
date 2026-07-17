@@ -301,3 +301,19 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   recursively locate the versioned ZIP beneath it. Generic auto-discovery remains as a
   fallback if Kaggle changes the mount layout in a future dataset version.
 - No extraction/download behavior changed; the main `kaggle_gold.ipynb` remains untouched.
+
+## 2026-07-18 — fixed Kaggle version-link traversal
+- The pinned root still raised `No sibling split JSON files or compatible ZIP archive found`.
+  Discovery reached the correct directory but used `Path.rglob()`, which does not descend
+  through Kaggle's linked version directories.
+- Replaced recursive discovery with a loop-safe `os.walk(..., followlinks=True)` traversal.
+  It now finds ZIP archives and nested extracted split folders behind version links while
+  continuing to stream ZIP contents without downloading, copying, or extracting them.
+- Failed discovery now reports rejected ZIP reasons and the first files actually visible
+  below the supplied root, so a future Kaggle layout difference can be diagnosed from one
+  saved notebook traceback rather than another generic error.
+- A Windows directory-junction fixture (the local equivalent of the linked Kaggle mount)
+  passed nested ZIP discovery. A separate nested extracted-split fixture also passed.
+- Simplified the separate validation notebook preflight to pass the confirmed root directly
+  to the validator and display whether root entries are links. `notebooks/kaggle_gold.ipynb`
+  remains outside the change.

@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import posixpath
 import random
 import sys
@@ -204,13 +205,62 @@ DataSource = Path | ZipDataset
 Locator = Path | str
 
 
+def walk_files(root: Path) -> Iterable[Path]:
+    """Yield files below root, including files behind directory symlinks.
+
+    Kaggle may expose dataset versions through directory symlinks. pathlib.rglob()
+    does not follow those links, so use a loop-safe os.walk() traversal instead.
+    """
+
+    seen_directories: set[tuple[int, int]] = set()
+    for current, directory_names, file_names in os.walk(root, followlinks=True):
+        current_path = Path(current)
+        try:
+            stat = current_path.stat()
+        except OSError:
+            directory_names[:] = []
+            continue
+
+        identity = (stat.st_dev, stat.st_ino)
+        if identity in seen_directories:
+            directory_names[:] = []
+            continue
+        seen_directories.add(identity)
+
+        directory_names.sort()
+        file_names.sort()
+        for file_name in file_names:
+            path = current_path / file_name
+            if path.is_file():
+                yield path
+
+
+def split_root_candidates(root: Path) -> list[Path]:
+    required = set(SPLIT_FILES.values())
+    found: dict[Path, set[str]] = defaultdict(set)
+    for path in walk_files(root):
+        if path.name in required:
+            found[path.parent].add(path.name)
+    return sorted(path.resolve() for path, names in found.items() if names == required)
+
+
 def zip_candidates(root: Path) -> list[Path]:
-    candidates = []
-    for pattern in ("*.zip", "*/*.zip", "*/*/*.zip"):
-        candidates.extend(root.glob(pattern))
-    candidates.extend(root.rglob("*.zip"))
-    candidates.extend(root.rglob("*.ZIP"))
-    return sorted(set(path.resolve() for path in candidates if path.is_file()))
+    return sorted(
+        set(path.resolve() for path in walk_files(root) if path.suffix.lower() == ".zip")
+    )
+
+
+def discovery_preview(root: Path, limit: int = 30) -> list[str]:
+    preview = []
+    for path in walk_files(root):
+        try:
+            label = str(path.relative_to(root))
+        except ValueError:
+            label = str(path)
+        preview.append(label)
+        if len(preview) == limit:
+            break
+    return preview
 
 
 def open_zip_candidate(path: Path) -> ZipDataset | None:
@@ -231,12 +281,32 @@ def find_data_source(explicit: Path | None) -> DataSource:
             raise FileNotFoundError(source_path)
         if all((source_path / name).is_file() for name in SPLIT_FILES.values()):
             return source_path
-        for archive_path in zip_candidates(source_path):
-            archive = open_zip_candidate(archive_path)
-            if archive is not None:
-                return archive
+        split_roots = split_root_candidates(source_path)
+        if split_roots:
+            return split_roots[0]
+
+        archives = zip_candidates(source_path)
+        rejected_archives = []
+        for archive_path in archives:
+            try:
+                return ZipDataset(archive_path)
+            except (FileNotFoundError, zipfile.BadZipFile, OSError) as error:
+                rejected_archives.append(f"{archive_path}: {error}")
+
+        preview = discovery_preview(source_path)
+        archive_detail = (
+            "\nRejected ZIP archives:\n  - " + "\n  - ".join(rejected_archives)
+            if rejected_archives
+            else "\nNo .zip files were discovered."
+        )
+        file_detail = (
+            "\nFirst discovered files:\n  - " + "\n  - ".join(preview)
+            if preview
+            else "\nNo files were discovered below this directory."
+        )
         raise FileNotFoundError(
             f"No sibling split JSON files or compatible ZIP archive found under {source_path}"
+            f"{archive_detail}{file_detail}"
         )
 
     if KNOWN_KAGGLE_ROOT.is_dir():
@@ -246,15 +316,7 @@ def find_data_source(explicit: Path | None) -> DataSource:
     if not input_root.is_dir():
         raise RuntimeError("Run this on Kaggle and attach kiyasmahmud/web-gold-40k first.")
 
-    candidates = []
-    train_files = list(input_root.glob(f"*/{SPLIT_FILES['train']}"))
-    train_files += list(input_root.glob(f"*/*/{SPLIT_FILES['train']}"))
-    if not train_files:
-        train_files = list(input_root.rglob(SPLIT_FILES["train"]))
-    for train_file in train_files:
-        root = train_file.parent
-        if all((root / name).is_file() for name in SPLIT_FILES.values()):
-            candidates.append(root)
+    candidates = split_root_candidates(input_root)
     if candidates:
         candidates.sort(key=lambda p: ("web-gold-40k" not in str(p).lower(), len(p.parts)))
         if len(candidates) > 1:
