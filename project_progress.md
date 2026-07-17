@@ -172,3 +172,95 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 
 ## Latest commit
 `683c0e3` — separate gold training path (4 new files; synthetic pipeline untouched).
+
+## 2026-07-17 — full repository and Q1-readiness audit
+- Scope inspected: all 71 tracked files, all Markdown/spec/config/source/test/result files,
+  both notebooks and their saved outputs, the v8/v12/v14 local gold artifacts, and all
+  11,864 images referenced by the v14 splits (all open successfully at 1280x720 PNG).
+- **Publication stop:** v14 does not satisfy `docs/GOLD_40K_SPEC.md` yet. All 32 domains
+  and all 15 task templates occur in train/val/test; task text predicts action type with
+  100% accuracy; 67.9% of test rows have the exact same complete model input in train.
+  The 11,864 referenced image paths reduce to only 2,113 distinct SHA-256 images; 81.9%
+  of test before-images and 80.3% of test after-images already occur in train.
+- Exact-input memorization baseline on v14 test (no neural model): outcome MCC 0.764,
+  balanced accuracy 0.869, macro-F1 0.871. Existing pilot metrics therefore cannot be
+  treated as generalization evidence. There are also 84 identical-input groups (855
+  rows) with conflicting outcome/failure/action labels.
+- **Temporal design issue:** the shared representation sees `state_after`, then predicts
+  pre-action action/bbox and `agent_confidence_before`. Those heads receive future
+  information. Split the system into a pre-action policy path (before+goal -> action,
+  bbox, confidence) and post-action verifier/recovery path (before+after+executed action
+  -> outcome, failure, recovery, memory), or enforce equivalent causal masking.
+- **Implementation completeness:** only the Qwen VLM path is implemented. Dual encoders,
+  cross-attention, generic smoke/mini/full CLI stages, and B1-B4 baselines are stubs.
+  `pytest` currently fails because labels define 6 actions while the sole test expects 5;
+  the notebook's MINI block is stored as Markdown and its checkpoint cell has a saved
+  `NameError` output.
+- **Metric/reproducibility issues:** recovery-outcome accuracy includes null sentinel
+  labels in the shared metric function; ECE compares predicted pre-action confidence to
+  model correctness despite a different training target; checkpoint files omit optimizer,
+  scheduler and scaler state; precision/checkpoint settings are partly hard-coded; package
+  dependencies remain unpinned.
+- No implementation code was changed by this audit. Next safe order: freeze headline
+  training -> build automated gold leak validator -> regenerate goal-only tasks and
+  group/domain/image-disjoint splits -> resolve causal architecture -> repair tests and
+  resumable training -> run cheap non-neural/text/image-retrieval baselines -> only then
+  launch multi-seed model experiments.
+- Commit audited: `191b554` on branch `Code`.
+
+## 2026-07-17 — 39k candidate dataset handoff report received
+- External handoff report: `C:\Users\kiyas\Downloads\DATASET_REPORT.md`; large dataset is
+  stored outside Git and intended for Kaggle, which is appropriate for the image volume.
+- Reported candidate: 39,215 rows, 29,978 trajectories, 509 domains, 23,499/7,861/7,855
+  train/val/test rows, six balanced action classes, and 9,237 recovery attempts
+  (3,153 success / 6,084 failure). Export claims task-disjoint and domain-disjoint splits.
+- This is a different and much stronger candidate than local v14, but the claims have not
+  yet been independently verified against the uploaded Kaggle files. Do not transfer the
+  old v14 leakage verdict to it, and do not mark it publishable solely from the report.
+- Remaining data gates explicitly reported: all rows still `review_status=pending`; 71
+  probable blank/browser-error rows in 62 trajectories; 1,354 rows from 16 adult domains
+  need a protocol decision; success share is 43.70% rather than the planned >=45%.
+- Required verification after the Kaggle slug/path is available: checksums/version manifest,
+  zero domain/task/trajectory overlap, zero exact/near image-hash overlap, exact full-input
+  duplicate/conflict audit, quantitative task-text-only action baseline, schema/image scan,
+  and approved-only review gates.
+- Dataset improvement does not resolve the temporal model issue: `state_after` must not feed
+  the pre-action action/bbox or `agent_confidence_before` heads. Resolve causal head inputs
+  before training the 39k candidate for headline results.
+
+## 2026-07-17 — Kaggle access path confirmed (no local dataset transfer)
+- Kaggle handle supplied: `kiyasmahmud/web-gold-40k`.
+- Do not call `kagglehub.dataset_load` or `dataset_download` from this local workspace:
+  outside Kaggle, KaggleHub downloads the selected resource into a local cache, and this
+  machine does not have enough free space.
+- The supplied example also needs a concrete tabular `file_path`; an empty path cannot be
+  used to load the mixed/large dataset as one Pandas DataFrame. `load_dataset` is deprecated
+  in current KaggleHub in favor of `dataset_load`.
+- Safe execution route: create a Kaggle Notebook, attach `web-gold-40k` as an Input, and run
+  validation/training there. KaggleHub is already authenticated in Kaggle Notebooks and
+  serves attached resources from Kaggle's shared resource cache rather than the VM disk.
+- No API token was stored, echoed, committed, or used during this check; no dataset file was
+  downloaded. If a token was pasted into any chat/plaintext location, revoke and regenerate it.
+
+## 2026-07-17 — separate Kaggle 40k data-validation notebook
+- Added `notebooks/kaggle_gold_data_validation.ipynb`; it is CPU-only, auto-detects the
+  attached `kiyasmahmud/web-gold-40k` split directory, and never calls KaggleHub/download.
+- Added reusable `scripts/validate_kaggle_gold.py`. It checks the 39,215-row handoff
+  manifest, exact nested input allow-list, required labels, approved-only status, label
+  logic/distributions, unique IDs, domain/task separation, exact-input duplicates and
+  conflicts, every image reference, sampled image decodes, and text/confidence shortcut
+  baselines. It also blocks publication readiness until the reported adult-domain inclusion
+  or quarantine decision is confirmed. It writes only a small JSON report under
+  `/kaggle/working`.
+- Optional `--full-image-hash` performs streaming SHA-256 plus 64-bit difference hashes over
+  unique referenced images. It blocks exact content overlap and cross-split perceptual pairs
+  within dHash Hamming distance <=3. It is off in the quick notebook run and must be enabled
+  for the final publication audit.
+- Local smoke validation ran end-to-end on the older v14 fixture without modifying it. The
+  validator correctly reproduced v14's known task-text leak (action accuracy 1.0000) and
+  domain overlap, while passing schema, image-reference, sampled-decode, and confidence
+  shortcut checks. Python compilation and all notebook code-cell compilation pass.
+- The validation commit does not edit `notebooks/kaggle_gold.ipynb`. After rebasing onto
+  the two newer training-notebook commits already on `origin/Code`, the local file matches
+  the remote version exactly (SHA-256
+  `340FEF1FC9A5703B4D0D0D8BA64080114FB89BCACA826B7E58D4A137A15EBE1E`).
