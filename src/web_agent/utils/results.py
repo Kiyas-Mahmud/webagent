@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -60,4 +61,34 @@ def save_mini_result_csv(report: Mapping[str, Any], path: str | Path) -> Path:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+    return destination
+
+
+def save_mini_diagnostics_json(report: Mapping[str, Any], path: str | Path) -> Path:
+    """Write the detailed, non-tabular evidence that does not belong in CSV."""
+    diagnostics = report.get("diagnostics")
+    if not isinstance(diagnostics, list) or not diagnostics:
+        raise ValueError("mini report has no detailed diagnostics to export")
+    payload = {
+        "stage": "mini",
+        "status": report.get("status", ""),
+        "train_rows": report.get("train_rows", ""),
+        "val_rows": report.get("val_rows", ""),
+        "test_rows_read": report.get("test_rows_read", ""),
+        "selection_metric": report.get("early_stop_metric", ""),
+        "best_metric": report.get("best_metric", ""),
+        "best_checkpoint": report.get("best_checkpoint", ""),
+        "best_epochs": report.get("best_epochs", {}),
+        "epoch_checkpoints": report.get("epoch_checkpoints", {}),
+        "class_weights": report.get("class_weights", {}),
+        "sampling": report.get("sampling", {}),
+        "quality_gates": report.get("quality_gates", {}),
+        "train_distribution": report.get("train_distribution", {}),
+        "validation_distribution": report.get("validation_distribution", {}),
+        "experiment_control": report.get("experiment_control", {}),
+        "epochs": diagnostics,
+    }
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return destination

@@ -17,8 +17,8 @@ Gold training uses two causal views of the same row:
 The action/bbox/confidence-before heads consume only pre_*. Failure, recovery,
 and memory heads consume post_*. No label is inserted into either prompt.
 
-v12 provides real confidence + memory labels -> those heads are enabled in the gold
-config. recovery_success is too sparse -> that head stays disabled (placeholder).
+Gold 40K provides real confidence, memory, and attempted-recovery outcome labels.
+All heads are enabled; recovery outcome is masked to attempted rows only.
 """
 
 from __future__ import annotations

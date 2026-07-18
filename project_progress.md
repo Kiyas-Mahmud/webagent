@@ -408,3 +408,40 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Documented evidence-based change rules, prohibited edits, known blank/error and adult-domain
   queues, review-log columns/reason codes, safe correction/versioning workflow, final full-image
   hash audit, and the exact deliverables required before claiming publication readiness.
+
+## 2026-07-18 — recovery-controlled mini v1 implementation
+- Pulled and audited `kiyasmahmud/kaggle-gold-v14`: the five-epoch engineering run passed,
+  but outcome MCC plateaued at 0.5217, recovery accuracy stayed at the ~0.75 NONE-class
+  prior, selected-checkpoint recovery-outcome MCC was 0.1864, and bbox/calibration degraded.
+- Added deterministic joint-proportional selection for the 5,000 training rows across failure,
+  action, recovery attempt/strategy/outcome, memory, and bbox availability. Added a recovery-aware
+  physical-batch schedule that uses every selected row exactly once and spreads attempted
+  recoveries without validation oversampling or train-row duplication.
+- Recovery strategy now uses normalized sqrt-inverse-frequency weights (cap 3.0) on both the
+  failure and memory recovery logits. Action/failure/outcome/recovery and recovery-outcome BCE
+  weights are derived from the exact selected training rows; validation labels never affect loss
+  weights. Loss coefficients, architecture, learning rates, seed, and primary outcome-MCC
+  selection remain unchanged.
+- Preserved the exact legacy v14 failure-stratified 500-row validation selector for the controlled
+  comparison. The new run uses the unique `recovery_v1` experiment tag and retains all five epoch
+  checkpoints. A validation-only historical-checkpoint re-evaluation stage can compute the newly
+  added metrics for v14 without opening the test split.
+- Expanded honest evaluation: macro-F1/balanced accuracy/MCC and majority baselines for every
+  categorical head; Brier scores; recovery denominators and predicted-class count; bbox mean/median
+  IoU and Recall@0.5; per-class precision/recall/F1, distributions, confusion matrices; raw and
+  weighted loss terms; independent best epochs; and explicit offline-recovery terminology. Scalar
+  history stays in CSV and non-tabular evidence is exported to `gold_mini_diagnostics.json`.
+- Added predeclared quality gates at the outcome-selected checkpoint: outcome retention, recovery
+  lift/diversity/outcome MCC, and non-regression bounds for action, bbox, and calibration. Engineering
+  PASS and quality PASS/FAIL are deliberately separate so a completed weak experiment is reported
+  honestly instead of crashing or being hidden.
+- Separate `notebooks/kaggle_gold_recovery_v1.ipynb` integration is output-free and asserts five
+  checkpoints, zero duplicated scheduled rows, fixed validation comparability, CSV/diagnostics
+  creation, and test-split isolation. The teammate's executed `kaggle_gold.ipynb` v14 result is
+  preserved unchanged. Downloaded Kaggle artifacts are ignored by Git and pytest is constrained
+  to the authoritative `tests/` tree.
+- Local verification: Ruff clean; `10 passed / 5 skipped` (GPU/PyTorch-dependent checks require
+  Kaggle); all Python files and notebook code cells compile; notebook JSON is valid with zero saved
+  outputs/execution counts; merged Gold config assertions and `git diff --check` pass. Next required
+  runtime gate is the Kaggle 16-row GPU smoke, followed by the controlled five-epoch mini. Headline
+  training remains blocked by manual review/adult-domain protocol and full SHA-256/dHash audit.

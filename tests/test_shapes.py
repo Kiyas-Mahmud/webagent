@@ -123,7 +123,9 @@ def test_metrics_mask_unattempted_recoveries_and_separate_confidence():
         "memory_true": np.array([0, 1, 1]),
         "recovery_outcome_pred": np.array([1, 1, 0]),
         "recovery_outcome_true": np.array([-1, 1, 0]),
+        "recovery_outcome_probability": np.array([0.9, 0.8, 0.2]),
         "outcome_confidence": np.array([0.9, 0.8, 0.6]),
+        "outcome_failure_probability": np.array([0.1, 0.8, 0.6]),
         "confidence": np.array([0.3, 0.7, 0.4]),
         "confidence_true": np.array([0.2, 0.8, 0.4]),
         "bbox_pred": np.zeros((3, 4)),
@@ -135,3 +137,15 @@ def test_metrics_mask_unattempted_recoveries_and_separate_confidence():
     assert metrics["confidence_mae"] > 0.0
     assert "outcome_ece" in metrics
     assert "ece" not in metrics
+
+
+def test_combined_loss_registers_recovery_strategy_weights():
+    torch = pytest.importorskip("torch")
+    from web_agent.models.loss import CombinedLoss
+
+    weights = torch.tensor([0.5, 1.0, 1.5, 2.0, 1.0, 0.0])
+    loss = CombinedLoss(
+        {"loss": {"confidence_clip": [0.05, 0.95]}},
+        recovery_class_weights=weights,
+    )
+    assert torch.equal(loss.recovery_w, weights)

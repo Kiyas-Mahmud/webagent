@@ -37,7 +37,8 @@ def evaluate_all_splits(model, cfg, processor, tokenizer=None, device="cuda",
         preds = collect_predictions(model, loader, device)
         results[split_name] = compute_metrics(preds)
 
-    out = Path(out_csv); out.parent.mkdir(parents=True, exist_ok=True)
+    out = Path(out_csv)
+    out.parent.mkdir(parents=True, exist_ok=True)
     if results:
         keys = list(next(iter(results.values())).keys())
         with open(out, "w", newline="") as f:

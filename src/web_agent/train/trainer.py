@@ -19,6 +19,45 @@ import numpy as np
 import torch
 
 from web_agent.eval import metrics as M
+from web_agent.labels import (
+    ACTION_TYPE_INV,
+    EXECUTION_OUTCOME_INV,
+    FAILURE_TYPE_INV,
+    RECOVERY_STRATEGY_INV,
+)
+
+
+BEST_METRIC_DIRECTIONS = {
+    "outcome_mcc": "max",
+    "failure_macro_f1": "max",
+    "failtype_macro_f1": "max",
+    "action_macro_f1": "max",
+    "recovery_macro_f1": "max",
+    "recovery_outcome_mcc": "max",
+    "memory_mcc": "max",
+    "bbox_mean_iou": "max",
+    "outcome_ece": "min",
+    "confidence_mae": "min",
+    "bbox_mae": "min",
+}
+
+
+def _best_epochs(history: list[dict]) -> dict[str, dict[str, float | int]]:
+    """Record the independently best epoch for each paper-facing metric."""
+    best: dict[str, dict[str, float | int]] = {}
+    for metric, direction in BEST_METRIC_DIRECTIONS.items():
+        candidates = [row for row in history if metric in row]
+        if not candidates:
+            continue
+        selected = (max if direction == "max" else min)(
+            candidates, key=lambda row: float(row[metric]),
+        )
+        best[metric] = {
+            "epoch": int(selected["epoch"]),
+            "value": float(selected[metric]),
+            "direction": direction,
+        }
+    return best
 
 
 def _to_device(batch: dict, device) -> dict:
@@ -33,7 +72,8 @@ def collect_predictions(model, loader, device) -> dict:
         "outcome_pred", "outcome_true", "failtype_pred", "failtype_true",
         "action_pred", "action_true", "recovery_pred", "recovery_true",
         "memory_pred", "memory_true", "recovery_outcome_pred", "recovery_outcome_true",
-        "outcome_confidence", "confidence", "confidence_true",
+        "outcome_confidence", "outcome_failure_probability",
+        "recovery_outcome_probability", "confidence", "confidence_true",
         "bbox_pred", "bbox_true", "bbox_mask")}
     for batch in loader:
         preds = model(batch)
@@ -42,6 +82,9 @@ def collect_predictions(model, loader, device) -> dict:
         acc["outcome_confidence"] += torch.softmax(
             preds["outcome"].float(), dim=-1,
         ).max(dim=-1).values.cpu().tolist()
+        acc["outcome_failure_probability"] += torch.softmax(
+            preds["outcome"].float(), dim=-1,
+        )[:, 1].cpu().tolist()
         acc["outcome_true"] += b["label_outcome"].cpu().tolist()
         acc["failtype_pred"] += preds["failure_type"].argmax(-1).cpu().tolist()
         acc["failtype_true"] += b["label_failtype"].cpu().tolist()
@@ -52,6 +95,9 @@ def collect_predictions(model, loader, device) -> dict:
         acc["memory_pred"] += (preds["memory_flag"] > 0).long().view(-1).cpu().tolist()
         acc["memory_true"] += b["label_memory"].view(-1).cpu().tolist()
         acc["recovery_outcome_pred"] += (preds["recovery_outcome"] > 0).long().view(-1).cpu().tolist()
+        acc["recovery_outcome_probability"] += torch.sigmoid(
+            preds["recovery_outcome"].float(),
+        ).view(-1).cpu().tolist()
         acc["recovery_outcome_true"] += b["label_recovery_success"].view(-1).cpu().tolist()
         acc["confidence"] += preds["confidence"].view(-1).cpu().tolist()
         acc["confidence_true"] += b["label_confidence"].view(-1).cpu().tolist()
@@ -67,25 +113,132 @@ def compute_metrics(p: dict) -> dict:
     recovery_mask = p["recovery_outcome_true"] >= 0
     recovery_true = p["recovery_outcome_true"][recovery_mask]
     recovery_pred = p["recovery_outcome_pred"][recovery_mask]
+    recovery_probability = p["recovery_outcome_probability"][recovery_mask]
+    bbox = M.bbox_iou_summary(p["bbox_pred"], p["bbox_true"], p["bbox_mask"])
+    failtype_majority = M.majority_baseline(p["failtype_true"])
+    action_majority = M.majority_baseline(p["action_true"])
+    recovery_majority = M.majority_baseline(p["recovery_true"])
+    memory_majority = M.majority_baseline(p["memory_true"])
+    outcome_majority = M.majority_baseline(p["outcome_true"])
+    recovery_outcome_majority = M.majority_baseline(recovery_true)
+    outcome_bal_acc = M.outcome_balanced_accuracy(p["outcome_true"], p["outcome_pred"])
+    failtype_macro_f1 = M.macro_f1(p["failtype_true"], p["failtype_pred"])
+    action_macro_f1 = M.macro_f1(p["action_true"], p["action_pred"])
+    recovery_macro_f1 = M.macro_f1(p["recovery_true"], p["recovery_pred"])
+    recovery_outcome_bal_acc = M.balanced_accuracy(recovery_true, recovery_pred)
+    memory_bal_acc = M.balanced_accuracy(p["memory_true"], p["memory_pred"])
     return {
         "failure_f1": M.failure_detection_f1(p["outcome_true"], p["outcome_pred"]),
         # honest outcome metrics — these expose majority-class collapse that F1 hides
         "failure_macro_f1": M.failure_macro_f1(p["outcome_true"], p["outcome_pred"]),
-        "outcome_bal_acc": M.outcome_balanced_accuracy(p["outcome_true"], p["outcome_pred"]),
+        "outcome_bal_acc": outcome_bal_acc,
         "outcome_mcc": M.outcome_mcc(p["outcome_true"], p["outcome_pred"]),
         "success_recall": M.success_recall(p["outcome_true"], p["outcome_pred"]),
+        "outcome_brier": M.brier_score(
+            p["outcome_true"], p["outcome_failure_probability"],
+        ),
+        "outcome_majority_acc": outcome_majority["accuracy"],
+        "outcome_majority_macro_f1": outcome_majority["macro_f1"],
         "failtype_acc": M.accuracy(p["failtype_true"], p["failtype_pred"]),
-        "failtype_macro_f1": M.macro_f1(p["failtype_true"], p["failtype_pred"]),
+        "failtype_macro_f1": failtype_macro_f1,
+        "failtype_bal_acc": M.balanced_accuracy(p["failtype_true"], p["failtype_pred"]),
+        "failtype_mcc": M.classification_mcc(p["failtype_true"], p["failtype_pred"]),
+        "failtype_majority_acc": failtype_majority["accuracy"],
+        "failtype_majority_macro_f1": failtype_majority["macro_f1"],
         "action_acc": M.accuracy(p["action_true"], p["action_pred"]),
-        "action_macro_f1": M.macro_f1(p["action_true"], p["action_pred"]),
+        "action_macro_f1": action_macro_f1,
+        "action_bal_acc": M.balanced_accuracy(p["action_true"], p["action_pred"]),
+        "action_mcc": M.classification_mcc(p["action_true"], p["action_pred"]),
+        "action_majority_acc": action_majority["accuracy"],
+        "action_majority_macro_f1": action_majority["macro_f1"],
         "recovery_acc": M.accuracy(p["recovery_true"], p["recovery_pred"]),
+        "recovery_macro_f1": recovery_macro_f1,
+        "recovery_bal_acc": M.balanced_accuracy(p["recovery_true"], p["recovery_pred"]),
+        "recovery_mcc": M.classification_mcc(p["recovery_true"], p["recovery_pred"]),
+        "recovery_majority_acc": recovery_majority["accuracy"],
+        "recovery_majority_macro_f1": recovery_majority["macro_f1"],
+        "recovery_pred_classes": int(len(set(p["recovery_pred"].tolist()))),
         "recovery_outcome_acc": M.accuracy(recovery_true, recovery_pred),
+        "recovery_outcome_macro_f1": M.macro_f1(recovery_true, recovery_pred),
+        "recovery_outcome_bal_acc": recovery_outcome_bal_acc,
         "recovery_outcome_mcc": M.outcome_mcc(recovery_true, recovery_pred),
+        "recovery_outcome_brier": M.brier_score(recovery_true, recovery_probability),
+        "recovery_outcome_rows": int(len(recovery_true)),
+        "recovery_outcome_majority_acc": recovery_outcome_majority["accuracy"],
+        "recovery_outcome_majority_macro_f1": recovery_outcome_majority["macro_f1"],
         "memory_acc": M.accuracy(p["memory_true"], p["memory_pred"]),
+        "memory_macro_f1": M.macro_f1(p["memory_true"], p["memory_pred"]),
+        "memory_bal_acc": memory_bal_acc,
+        "memory_mcc": M.classification_mcc(p["memory_true"], p["memory_pred"]),
+        "memory_majority_acc": memory_majority["accuracy"],
+        "memory_majority_macro_f1": memory_majority["macro_f1"],
         "outcome_ece": M.expected_calibration_error(p["outcome_confidence"], correct),
         "confidence_mae": M.mean_absolute_error(p["confidence_true"], p["confidence"]),
         "confidence_success_ece": M.expected_calibration_error(p["confidence"], succeeded),
         "bbox_mae": M.bbox_mae(p["bbox_pred"], p["bbox_true"], p["bbox_mask"]),
+        "bbox_mean_iou": bbox["mean"],
+        "bbox_median_iou": bbox["median"],
+        "bbox_recall_iou50": bbox["recall_50"],
+        "bbox_rows": bbox["rows"],
+        "pillar1_diag_score": (outcome_bal_acc + failtype_macro_f1) / 2.0,
+        "pillar3_diag_score": (action_macro_f1 + bbox["mean"]) / 2.0,
+        "pillar4_diag_score": (
+            recovery_macro_f1 + recovery_outcome_bal_acc + memory_bal_acc
+        ) / 3.0,
+    }
+
+
+def build_diagnostics(p: dict) -> dict:
+    """Detailed JSON diagnostics kept outside the compact per-epoch CSV."""
+    recovery_mask = p["recovery_outcome_true"] >= 0
+    recovery_true = p["recovery_outcome_true"][recovery_mask]
+    recovery_pred = p["recovery_outcome_pred"][recovery_mask]
+    def label_names(inverse):
+        return [inverse[index] for index in sorted(inverse)]
+    return {
+        "outcome": M.classification_diagnostics(
+            p["outcome_true"],
+            p["outcome_pred"],
+            label_names=label_names(EXECUTION_OUTCOME_INV),
+        ),
+        "failure_type": M.classification_diagnostics(
+            p["failtype_true"],
+            p["failtype_pred"],
+            label_names=label_names(FAILURE_TYPE_INV),
+        ),
+        "action_type": M.classification_diagnostics(
+            p["action_true"],
+            p["action_pred"],
+            label_names=label_names(ACTION_TYPE_INV),
+        ),
+        "recovery_strategy": M.classification_diagnostics(
+            p["recovery_true"],
+            p["recovery_pred"],
+            label_names=label_names(RECOVERY_STRATEGY_INV),
+        ),
+        "recovery_outcome_prediction": M.classification_diagnostics(
+            recovery_true,
+            recovery_pred,
+            label_names=["FAILURE", "SUCCESS"],
+        ),
+        "memory_update": M.classification_diagnostics(
+            p["memory_true"],
+            p["memory_pred"],
+            label_names=["FALSE", "TRUE"],
+        ),
+        "bbox": M.bbox_iou_summary(
+            p["bbox_pred"], p["bbox_true"], p["bbox_mask"],
+        ),
+        "terminology": {
+            "recovery_outcome_prediction": (
+                "Offline prediction on attempted-recovery labels; this is not an "
+                "executed browser recovery success rate."
+            ),
+            "pillar_scores": (
+                "Diagnostic averages only; Pillar 2 requires multimodal ablation and "
+                "has no standalone score."
+            ),
+        },
     }
 
 
@@ -124,10 +277,11 @@ class Trainer:
         self.scaler = torch.amp.GradScaler("cuda")
 
         self.best: list[tuple[float, Path]] = []   # (metric, path), kept top-k
+        self.epoch_checkpoints: dict[int, Path] = {}
         self.global_step = 0
         self.start_epoch = 0
 
-    def _train_epoch(self, epoch: int) -> float:
+    def _train_epoch(self, epoch: int) -> dict[str, float]:
         self.model.train()
         if self.train_sampler is not None:
             self.train_sampler.set_epoch(epoch)
@@ -135,6 +289,7 @@ class Trainer:
         t0 = time.time()
         done = 0  # optimizer steps this epoch
         loss_sum = 0.0
+        term_sums: dict[str, float] = {}
         batch_count = 0
         remainder = len(self.train_loader) % self.accum
         for i, batch in enumerate(self.train_loader):
@@ -150,6 +305,9 @@ class Trainer:
             if not torch.isfinite(terms["total"]):
                 raise FloatingPointError(f"non-finite loss at epoch={epoch}, batch={i}")
             loss_sum += float(terms["total"].detach())
+            for name, value in terms.items():
+                if name != "total":
+                    term_sums[name] = term_sums.get(name, 0.0) + float(value.detach())
             batch_count += 1
             self.scaler.scale(loss).backward()
             should_step = (i + 1) % self.accum == 0 or i + 1 == len(self.train_loader)
@@ -170,28 +328,55 @@ class Trainer:
                           f"elapsed {el/60:.1f}min | ETA {eta/60:.1f}min", flush=True)
                 if self.global_step % 500 == 0:
                     self._save(self.ckpt_dir / "last.ckpt", epoch, f1=None)
-        return loss_sum / max(batch_count, 1)
+        denominator = max(batch_count, 1)
+        stats = {"train_loss": loss_sum / denominator}
+        loss_weight_keys = {
+            "outcome": "outcome",
+            "failtype": "failure_type",
+            "action": "action_type",
+            "bbox": "bbox",
+            "memory": "memory_flag",
+            "recovery": "recovery",
+            "confidence": "confidence",
+            "calibration": "calibration",
+            "contrastive": "contrastive",
+            "recovery_outcome": "recovery_outcome",
+        }
+        for name, total in term_sums.items():
+            raw = total / denominator
+            stats[f"train_raw_{name}_loss"] = raw
+            stats[f"train_weighted_{name}_loss"] = (
+                raw * float(self.loss_fn.w[loss_weight_keys[name]])
+            )
+        return stats
 
     def fit(self) -> dict:
         bad = 0
         best_metric = -1.0
         history = []
+        diagnostics_history = []
         for epoch in range(self.start_epoch, self.epochs):
-            train_loss = self._train_epoch(epoch)
+            train_stats = self._train_epoch(epoch)
             preds = collect_predictions(self.model, self.val_loader, self.device)
             m = compute_metrics(preds)
-            m["train_loss"] = train_loss
+            m.update(train_stats)
             history.append({"epoch": epoch, **m})
+            diagnostics_history.append({"epoch": epoch, **build_diagnostics(preds)})
             self._log_csv(epoch, m)
             print(
-                f"epoch {epoch}: train_loss={train_loss:.4f}  "
-                + "  ".join(f"{k}={v:.4f}" for k, v in m.items() if k != "train_loss")
+                f"epoch {epoch}: train_loss={train_stats['train_loss']:.4f}  "
+                + "  ".join(
+                    f"{k}={v:.4f}"
+                    for k, v in m.items()
+                    if k != "train_loss" and not k.startswith("train_")
+                )
             )
 
             metric = m[self.early_stop_metric]
             self._maybe_keep(epoch, metric)
             if metric > best_metric + 1e-4:
-                best_metric = metric; bad = 0
+                best_metric = metric
+                bad = 0
             else:
                 bad += 1
                 if bad >= self.patience:
@@ -204,7 +389,12 @@ class Trainer:
             "early_stop_metric": self.early_stop_metric,
             "best_metric": best_metric,
             "checkpoints": [str(path) for _, path in self.best],
+            "epoch_checkpoints": {
+                str(epoch): str(path) for epoch, path in sorted(self.epoch_checkpoints.items())
+            },
+            "best_epochs": _best_epochs(history),
             "history": history,
+            "diagnostics": diagnostics_history,
         }
 
     # ---- resumable checkpointing: model + optimizer/scheduler/scaler ----
@@ -257,10 +447,14 @@ class Trainer:
             metric_name = self.early_stop_metric.replace("_", "-")
             path = self.ckpt_dir / f"best_e{epoch}_{metric_name}{metric:.3f}.ckpt"
             self._save(path, epoch, metric, epoch_complete=True)
+            self.epoch_checkpoints[epoch] = path
             self.best.append((metric, path))
             self.best.sort(key=lambda x: x[0], reverse=True)
             for _, p in self.best[self.keep_top_k:]:
                 p.unlink(missing_ok=True)
+                for kept_epoch, kept_path in list(self.epoch_checkpoints.items()):
+                    if kept_path == p:
+                        del self.epoch_checkpoints[kept_epoch]
             self.best = self.best[:self.keep_top_k]
 
     def _log_csv(self, epoch: int, m: dict) -> None:

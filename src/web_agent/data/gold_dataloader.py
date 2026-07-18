@@ -13,10 +13,16 @@ from pathlib import Path
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Sampler
 
 from web_agent.data.dataloader import stack_labels, vlm_collate
 from web_agent.data.gold_dataset import GoldDataset, view
+from web_agent.data.gold_sampling import (
+    recovery_aware_batch_indices,
+    select_recovery_aware_gold_subset,
+    sqrt_inverse_frequency_weights,
+)
+from web_agent.labels import NUM_RECOVERY, RECOVERY_STRATEGY
 from web_agent.utils.class_weights import balanced_class_weights
 
 
@@ -42,6 +48,18 @@ def gold_class_weights(records, limit: int | None = None):
             "execution_outcome": lab["outcome_label"],
         })
     return balanced_class_weights(remapped, limit=limit)
+
+
+def gold_recovery_class_weights(records, cap: float = 3.0) -> torch.Tensor:
+    """Sqrt-inverse-frequency recovery weights from the rows actually trained."""
+    labels = []
+    for record in records:
+        _, lab, _ = view(record)
+        labels.append(RECOVERY_STRATEGY[lab["recovery_strategy"]])
+    return torch.tensor(
+        sqrt_inverse_frequency_weights(labels, NUM_RECOVERY, cap=cap),
+        dtype=torch.float32,
+    )
 
 
 def stratified_gold_subsample(records, n: int, seed: int = 42):
@@ -112,6 +130,30 @@ def select_smoke_records(records, n: int = 16, seed: int = 42):
     return selected[:n]
 
 
+class RecoveryAwareBatchSampler(Sampler[list[int]]):
+    """One-pass batch sampler that spreads attempted recoveries without oversampling."""
+
+    def __init__(self, records, batch_size: int, seed: int = 42):
+        self.records = records
+        self.batch_size = batch_size
+        self.seed = seed
+        self.epoch = 0
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = int(epoch)
+
+    def __iter__(self):
+        yield from recovery_aware_batch_indices(
+            self.records,
+            self.batch_size,
+            seed=self.seed,
+            epoch=self.epoch,
+        )
+
+    def __len__(self) -> int:
+        return (len(self.records) + self.batch_size - 1) // self.batch_size
+
+
 def _collate_stream(batch: list[dict], prefix: str) -> dict:
     out = {}
     for name in ("input_ids", "attention_mask"):
@@ -140,21 +182,34 @@ def causal_gold_collate(batch: list[dict]) -> dict:
 
 def build_gold_dataloader(cfg, which, processor, records=None, limit=None,
                           batch_size=None, shuffle=True, num_workers=None,
-                          seed: int = 42, smoke: bool = False):
-    """Filter-free loader for a gold split. Random batches (SupCon is supervised,
-    so no pair-sampler needed)."""
+                          seed: int = 42, smoke: bool = False,
+                          recovery_aware: bool = False):
+    """Filter-free loader with optional distribution-preserving recovery batches."""
     rows = records if records is not None else load_gold_split(cfg, which)
     if limit is not None:
-        rows = (
-            select_smoke_records(rows, limit, seed)
-            if smoke
-            else stratified_gold_subsample(rows, limit, seed)
-        )
+        if smoke:
+            rows = select_smoke_records(rows, limit, seed)
+        elif which == "train" and recovery_aware:
+            rows = select_recovery_aware_gold_subset(rows, limit, seed)
+        else:
+            rows = stratified_gold_subsample(rows, limit, seed)
     ds = GoldDataset(rows, cfg, processor)
     bs = batch_size or cfg["optim"]["batch_size"]
     nw = cfg["data"].get("num_workers", 2) if num_workers is None else num_workers
     collate = causal_gold_collate if cfg["data"].get("causal_routing") else vlm_collate
     generator = torch.Generator().manual_seed(seed)
+    if recovery_aware:
+        if which != "train":
+            raise ValueError("recovery-aware batching is training-only")
+        batch_sampler = RecoveryAwareBatchSampler(rows, bs, seed=seed)
+        return DataLoader(
+            ds,
+            batch_sampler=batch_sampler,
+            num_workers=nw,
+            pin_memory=True,
+            collate_fn=collate,
+            persistent_workers=(nw > 0),
+        )
     return DataLoader(
         ds, batch_size=bs, shuffle=shuffle, drop_last=False,
         num_workers=nw, pin_memory=True, collate_fn=collate,

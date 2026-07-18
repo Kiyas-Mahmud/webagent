@@ -2,10 +2,14 @@
 
 L_total = 0.22 outcome + 0.18 failure_type + 0.15 action + 0.10 bbox
         + 0.10 memory + 0.09 recovery + 0.05 confidence + 0.05 calibration
-        + 0.04 contrastive + 0.02 recovery_outcome
+        + 0.04 contrastive + cfg.loss.recovery_outcome
+
+The base Qwen config uses 0.05 for recovery outcome; Gold 40K overrides it to
+0.09. All coefficients remain config-controlled for registered ablations.
 
 Details:
-  - CrossEntropy terms use label_smoothing 0.1; failure_type + action are class-weighted.
+  - CrossEntropy terms use label_smoothing 0.1; failure_type, action, and recovery
+    strategy are class-weighted.
   - recovery = mean of CE over the Failure head and the Memory head (both predict it).
   - bbox = MSE, strictly masked to rows that have a bbox.
   - memory_flag + recovery_outcome = BCE.
@@ -30,7 +34,8 @@ import torch.nn.functional as F
 
 class CombinedLoss(nn.Module):
     def __init__(self, cfg: dict, action_class_weights=None, failtype_class_weights=None,
-                 outcome_class_weights=None, recovery_success_pos_weight=None):
+                 outcome_class_weights=None, recovery_class_weights=None,
+                 recovery_success_pos_weight=None):
         super().__init__()
         self.w = cfg["loss"]
         self.smoothing = self.w.get("label_smoothing", 0.0)
@@ -45,6 +50,9 @@ class CombinedLoss(nn.Module):
         self.register_buffer("failtype_w", failtype_class_weights, persistent=False)
         # Balancing outcome prevents the FAILURE-majority collapse.
         self.register_buffer("outcome_w", outcome_class_weights, persistent=False)
+        # Gold recovery is dominated by NONE. Sqrt weighting is deliberately
+        # gentler than raw inverse frequency and is shared by both recovery heads.
+        self.register_buffer("recovery_w", recovery_class_weights, persistent=False)
         # pos_weight for the recovery_success BCE head (else it pins at the prior).
         self.register_buffer("recovery_pos_w", recovery_success_pos_weight, persistent=False)
         # 10 soft-bin centers for the calibration surrogate.
@@ -129,10 +137,17 @@ class CombinedLoss(nn.Module):
             weight=self.action_w, label_smoothing=self.smoothing)
 
         rec_t = batch["label_recovery"]
-        rec_losses = [F.cross_entropy(preds["recovery"], rec_t, label_smoothing=self.smoothing)]
+        rec_losses = [F.cross_entropy(
+            preds["recovery"], rec_t,
+            weight=self.recovery_w,
+            label_smoothing=self.smoothing,
+        )]
         if "memory_recovery" in preds:
-            rec_losses.append(F.cross_entropy(preds["memory_recovery"], rec_t,
-                                              label_smoothing=self.smoothing))
+            rec_losses.append(F.cross_entropy(
+                preds["memory_recovery"], rec_t,
+                weight=self.recovery_w,
+                label_smoothing=self.smoothing,
+            ))
         t["recovery"] = torch.stack(rec_losses).mean()
 
         # bbox masked MSE

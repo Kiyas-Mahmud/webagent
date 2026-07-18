@@ -25,7 +25,12 @@ loss:
   confidence: 0.05
   memory_flag: 0.10
   recovery_outcome: 0.09
+  # Recovery strategy is dominated by NONE. The Gold runner derives normalized
+  # sqrt-inverse-frequency weights from the selected training rows only.
+  recovery_weight_scheme: sqrt_inverse_frequency
+  recovery_weight_cap: 3.0
 
 train:
   metrics_csv: results/gold_metrics.csv
   early_stop_metric: outcome_mcc
+  controlled_experiment_tag: recovery_v1

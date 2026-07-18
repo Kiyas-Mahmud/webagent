@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import csv
+import json
 
-from web_agent.utils.results import save_mini_result_csv
+from web_agent.utils.results import save_mini_diagnostics_json, save_mini_result_csv
 
 
 def test_save_mini_result_csv_writes_one_row_per_epoch(tmp_path):
@@ -31,3 +32,39 @@ def test_save_mini_result_csv_writes_one_row_per_epoch(tmp_path):
     assert rows[1]["is_best"] == "True"
     assert rows[1]["selection_metric"] == "outcome_mcc"
     assert rows[1]["best_checkpoint"] == "checkpoints/best.ckpt"
+
+
+def test_save_mini_diagnostics_json_keeps_non_tabular_evidence(tmp_path):
+    report = {
+        "status": "PASS",
+        "train_rows": 5_000,
+        "val_rows": 500,
+        "test_rows_read": 0,
+        "early_stop_metric": "outcome_mcc",
+        "best_metric": 0.4,
+        "best_checkpoint": "checkpoints/e1.ckpt",
+        "best_epochs": {"recovery_macro_f1": {"epoch": 1, "value": 0.3}},
+        "epoch_checkpoints": {"0": "checkpoints/e0.ckpt", "1": "checkpoints/e1.ckpt"},
+        "class_weights": {"recovery_strategy": [0.5, 1.5, 0, 0, 0, 0]},
+        "sampling": {"duplicate_train_rows_scheduled": 0},
+        "train_distribution": {"recovery_attempted": {"True": 100}},
+        "validation_distribution": {"recovery_attempted": {"True": 10}},
+        "experiment_control": {"baseline": "kaggle-gold-v14"},
+        "diagnostics": [
+            {
+                "epoch": 0,
+                "recovery_strategy": {
+                    "confusion_matrix": [[1, 0], [0, 1]],
+                },
+            }
+        ],
+    }
+
+    path = save_mini_diagnostics_json(report, tmp_path / "diagnostics.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["test_rows_read"] == 0
+    assert payload["sampling"]["duplicate_train_rows_scheduled"] == 0
+    assert payload["epochs"][0]["recovery_strategy"]["confusion_matrix"] == [
+        [1, 0],
+        [0, 1],
+    ]
