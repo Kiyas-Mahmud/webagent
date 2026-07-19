@@ -1,4 +1,4 @@
-"""Combined weighted loss — 10 terms (full-training spec).
+"""Combined multitask loss with a backward-compatible recovery-v2 extension.
 
 L_total = 0.22 outcome + 0.18 failure_type + 0.15 action + 0.10 bbox
         + 0.10 memory + 0.09 recovery + 0.05 confidence + 0.05 calibration
@@ -11,7 +11,7 @@ Details:
   - CrossEntropy terms use label_smoothing 0.1; failure_type, action, and recovery
     strategy are class-weighted.
   - recovery = mean of CE over the Failure head and the Memory head (both predict it).
-  - bbox = MSE, strictly masked to rows that have a bbox.
+  - legacy bbox = masked MSE; recovery-v2 = masked SmoothL1 + GIoU.
   - memory_flag + recovery_outcome = BCE.
   - confidence = MSE after clipping predictions to [0.05, 0.95].
   - calibration = differentiable soft-binned surrogate of ECE (true ECE is logged as a
@@ -21,6 +21,10 @@ Details:
 
 Class weights come from cfg-time sklearn balanced weights (passed in); see
 web_agent.utils.class_weights.balanced_class_weights.
+
+Recovery-v2 adds binary needs-recovery, masks strategy CE to attempted rows,
+uses only proper causal transitions for recovery outcome, and can learn Kendall-
+style uncertainty weights for active tasks.
 """
 
 from __future__ import annotations
@@ -46,6 +50,9 @@ class CombinedLoss(nn.Module):
         # loss (needs a task's SUCCESS+FAILURE in one batch — sparse). See plan P1-A.
         self.contrastive_mode = self.w.get("contrastive_mode", "supervised")
         self.contrastive_temp = self.w.get("contrastive_temp", 0.1)
+        self.hierarchical_recovery = bool(self.w.get("hierarchical_recovery", False))
+        self.bbox_loss = self.w.get("bbox_loss", "mse")
+        self.dynamic_weighting = self.w.get("dynamic_weighting", "fixed")
         self.register_buffer("action_w", action_class_weights, persistent=False)
         self.register_buffer("failtype_w", failtype_class_weights, persistent=False)
         # Balancing outcome prevents the FAILURE-majority collapse.
@@ -57,6 +64,38 @@ class CombinedLoss(nn.Module):
         self.register_buffer("recovery_pos_w", recovery_success_pos_weight, persistent=False)
         # 10 soft-bin centers for the calibration surrogate.
         self.register_buffer("bin_centers", torch.linspace(0.05, 0.95, 10), persistent=False)
+        task_names = [
+            "outcome", "failtype", "action", "bbox", "memory", "recovery",
+            "confidence", "recovery_outcome",
+        ]
+        if self.hierarchical_recovery:
+            task_names.append("needs_recovery")
+        self.log_vars = nn.ParameterDict()
+        if self.dynamic_weighting == "uncertainty":
+            self.log_vars.update({
+                name: nn.Parameter(torch.zeros(())) for name in task_names
+            })
+        elif self.dynamic_weighting != "fixed":
+            raise ValueError(f"unsupported dynamic weighting: {self.dynamic_weighting!r}")
+
+    @staticmethod
+    def _bbox_giou(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """Generalized IoU for normalized xywh boxes."""
+        pred_xy2 = pred[:, :2] + pred[:, 2:]
+        target_xy2 = target[:, :2] + target[:, 2:]
+        inter_xy1 = torch.maximum(pred[:, :2], target[:, :2])
+        inter_xy2 = torch.minimum(pred_xy2, target_xy2)
+        inter_wh = (inter_xy2 - inter_xy1).clamp(min=0)
+        inter = inter_wh[:, 0] * inter_wh[:, 1]
+        pred_area = pred[:, 2] * pred[:, 3]
+        target_area = target[:, 2] * target[:, 3]
+        union = (pred_area + target_area - inter).clamp(min=1e-7)
+        iou = inter / union
+        enclosing_xy1 = torch.minimum(pred[:, :2], target[:, :2])
+        enclosing_xy2 = torch.maximum(pred_xy2, target_xy2)
+        enclosing_wh = (enclosing_xy2 - enclosing_xy1).clamp(min=0)
+        enclosing = (enclosing_wh[:, 0] * enclosing_wh[:, 1]).clamp(min=1e-7)
+        return iou - (enclosing - union) / enclosing
 
     # ---- calibration: differentiable soft-binned |confidence - accuracy| ----
     def _calibration(self, conf: torch.Tensor, correct: torch.Tensor) -> torch.Tensor:
@@ -137,23 +176,55 @@ class CombinedLoss(nn.Module):
             weight=self.action_w, label_smoothing=self.smoothing)
 
         rec_t = batch["label_recovery"]
-        rec_losses = [F.cross_entropy(
-            preds["recovery"], rec_t,
-            weight=self.recovery_w,
-            label_smoothing=self.smoothing,
-        )]
-        if "memory_recovery" in preds:
+        strategy_mask = (
+            batch["label_needs_recovery"].view(-1) > 0
+            if self.hierarchical_recovery
+            else torch.ones_like(rec_t, dtype=torch.bool)
+        )
+        rec_losses = []
+        strategy_active = bool(strategy_mask.any())
+        if strategy_active:
             rec_losses.append(F.cross_entropy(
-                preds["memory_recovery"], rec_t,
+                preds["recovery"][strategy_mask], rec_t[strategy_mask],
                 weight=self.recovery_w,
                 label_smoothing=self.smoothing,
             ))
+            if "memory_recovery" in preds:
+                rec_losses.append(F.cross_entropy(
+                    preds["memory_recovery"][strategy_mask], rec_t[strategy_mask],
+                    weight=self.recovery_w,
+                    label_smoothing=self.smoothing,
+                ))
+        else:
+            rec_losses.append(preds["recovery"].sum() * 0.0)
         t["recovery"] = torch.stack(rec_losses).mean()
+        if self.hierarchical_recovery:
+            t["needs_recovery"] = F.binary_cross_entropy_with_logits(
+                preds["needs_recovery"], batch["label_needs_recovery"],
+            )
 
-        # bbox masked MSE
+        # Bbox is supervised only where a real target exists.
         mask = batch["bbox_mask"]
-        sq = (preds["bbox"] - batch["bbox"]) ** 2
-        t["bbox"] = (sq * mask).sum() / (mask.sum().clamp(min=1.0) * sq.shape[1])
+        if self.bbox_loss == "smooth_l1_giou":
+            row_mask = mask.view(-1) > 0
+            bbox_active = bool(row_mask.any())
+            if bbox_active:
+                smooth = F.smooth_l1_loss(
+                    preds["bbox"][row_mask], batch["bbox"][row_mask],
+                )
+                giou = self._bbox_giou(
+                    preds["bbox"][row_mask], batch["bbox"][row_mask],
+                )
+                t["bbox"] = (
+                    float(self.w.get("bbox_smooth_l1_ratio", 1.0)) * smooth
+                    + float(self.w.get("bbox_giou_ratio", 1.0)) * (1.0 - giou).mean()
+                )
+            else:
+                t["bbox"] = preds["bbox"].sum() * 0.0
+        else:
+            bbox_active = bool(mask.sum() > 0)
+            sq = (preds["bbox"] - batch["bbox"]) ** 2
+            t["bbox"] = (sq * mask).sum() / (mask.sum().clamp(min=1.0) * sq.shape[1])
 
         # with_logits is autocast(fp16)-safe; heads emit logits for these two.
         t["memory"] = F.binary_cross_entropy_with_logits(
@@ -162,11 +233,26 @@ class CombinedLoss(nn.Module):
         # rows where a recovery actually happened supervise this head). Synthetic labels
         # are 0/1, so the mask is all-ones and this equals the plain mean BCE.
         rs = batch["label_recovery_success"]
-        ro_mask = (rs >= 0).float()
-        ro_per = F.binary_cross_entropy_with_logits(
-            preds["recovery_outcome"], rs.clamp(min=0.0),
-            pos_weight=self.recovery_pos_w, reduction="none")
-        t["recovery_outcome"] = (ro_per * ro_mask).sum() / ro_mask.sum().clamp(min=1.0)
+        if "recovery_row_indices" in preds:
+            indices = preds["recovery_row_indices"].to(rs.device)
+            recovery_outcome_active = bool(indices.numel())
+            if recovery_outcome_active:
+                target = rs.index_select(0, indices)
+                t["recovery_outcome"] = F.binary_cross_entropy_with_logits(
+                    preds["recovery_outcome"], target,
+                    pos_weight=self.recovery_pos_w,
+                )
+            else:
+                t["recovery_outcome"] = preds["outcome"].sum() * 0.0
+        else:
+            ro_mask = (rs >= 0).float()
+            recovery_outcome_active = bool(ro_mask.any())
+            ro_per = F.binary_cross_entropy_with_logits(
+                preds["recovery_outcome"], rs.clamp(min=0.0),
+                pos_weight=self.recovery_pos_w, reduction="none")
+            t["recovery_outcome"] = (
+                (ro_per * ro_mask).sum() / ro_mask.sum().clamp(min=1.0)
+            )
 
         conf = preds["confidence"].clamp(self.conf_lo, self.conf_hi)
         t["confidence"] = F.mse_loss(conf, batch["label_confidence"])
@@ -183,17 +269,38 @@ class CombinedLoss(nn.Module):
             t["contrastive"] = self._contrastive(
                 preds["fused"], batch["label_outcome"], batch["original_task_id"])
 
-        w = self.w
-        t["total"] = (
-            w["outcome"] * t["outcome"]
-            + w["failure_type"] * t["failtype"]
-            + w["action_type"] * t["action"]
-            + w["bbox"] * t["bbox"]
-            + w["memory_flag"] * t["memory"]
-            + w["recovery"] * t["recovery"]
-            + w["confidence"] * t["confidence"]
-            + w["calibration"] * t["calibration"]
-            + w["contrastive"] * t["contrastive"]
-            + w["recovery_outcome"] * t["recovery_outcome"]
-        )
+        coefficient = {
+            "outcome": self.w["outcome"],
+            "failtype": self.w["failure_type"],
+            "action": self.w["action_type"],
+            "bbox": self.w["bbox"],
+            "memory": self.w["memory_flag"],
+            "recovery": self.w["recovery"],
+            "confidence": self.w["confidence"],
+            "calibration": self.w["calibration"],
+            "contrastive": self.w["contrastive"],
+            "recovery_outcome": self.w["recovery_outcome"],
+        }
+        if self.hierarchical_recovery:
+            coefficient["needs_recovery"] = self.w["needs_recovery"]
+        weighted = {name: float(coefficient[name]) * t[name] for name in coefficient}
+        if self.dynamic_weighting == "uncertainty":
+            active_names = set(weighted)
+            if not strategy_active:
+                active_names.discard("recovery")
+            if not bbox_active:
+                active_names.discard("bbox")
+            if not recovery_outcome_active:
+                active_names.discard("recovery_outcome")
+            terms = []
+            for name, value in weighted.items():
+                if name in self.log_vars and name in active_names:
+                    terms.append(
+                        torch.exp(-self.log_vars[name]) * value + self.log_vars[name]
+                    )
+                else:
+                    terms.append(value)
+            t["total"] = sum(terms)
+        else:
+            t["total"] = sum(weighted.values())
         return t

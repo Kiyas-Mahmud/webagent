@@ -286,6 +286,17 @@ Typical meanings:
 | `ALTERNATIVE_TARGET` | Use another element that can achieve the same goal. |
 | `ABORT` | Stop after recovery is no longer safe/useful; use only if genuinely recorded. |
 
+For the recovery-v2 export, Reviewer A must record these four pieces together for every
+attempted recovery: (1) the failure `state_after`, (2) the next executed action and value,
+(3) the next observed `state_after`, and (4) the resulting true/false success label. Reviewer
+B must independently confirm all four before approval. A success label based only on the
+failure row is invalid.
+
+Before changing or collecting any rows, run the recovery class audit and report separate
+counts for `RETRY`, `ABORT`, `BACKTRACK`, and `LOOP_DETECTED`. If one is absent or too small
+to support the paper's claim, add only reviewed trajectories for that missing class. Do not
+rebalance by relabeling evidence, duplicating rows, or recollecting the entire dataset.
+
 ### Step 8: verify confidence and memory labels
 
 `agent_confidence_before` must come from the value recorded before the action. It must be in

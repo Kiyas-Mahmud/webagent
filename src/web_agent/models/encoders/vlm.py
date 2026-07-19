@@ -58,6 +58,12 @@ class VLMEncoder(nn.Module):
             raise RuntimeError("could not resolve VLM hidden size from config")
 
         self.model.config.use_cache = False
+        self.preserve_spatial_tokens = bool(bb.get("preserve_spatial_tokens", False))
+        text_conf = getattr(conf, "text_config", None)
+        self.image_token_id = (
+            getattr(conf, "image_token_id", None)
+            or getattr(text_conf, "image_token_id", None)
+        )
 
         # Pooling of the [B, seq, D] last hidden state into [B, D]. Qwen2.5-VL is a
         # causal decoder, so the integrated summary lives at the LAST non-pad token,
@@ -107,7 +113,7 @@ class VLMEncoder(nn.Module):
     def _frozen(self) -> bool:
         return not any(p.requires_grad for p in self.model.parameters())
 
-    def forward(self, batch: dict, prefix: str = "") -> torch.Tensor:
+    def forward(self, batch: dict, prefix: str = "") -> torch.Tensor | dict:
         """Encode one VLM stream; causal gold batches use pre_ and post_ prefixes."""
         dev = self.device
         kwargs = dict(
@@ -127,7 +133,21 @@ class VLMEncoder(nn.Module):
             h = out.hidden_states[-1]                      # [B, seq, D]
             am = batch[f"{prefix}attention_mask"].to(dev)  # [B, seq] (1=real, 0=pad)
             pooled = self._pool(h, am)                     # [B, D]
-        return pooled.float()
+        if not self.preserve_spatial_tokens:
+            return pooled.float()
+        input_ids = batch[f"{prefix}input_ids"].to(dev)
+        if self.image_token_id is None:
+            spatial_mask = am.bool()
+        else:
+            spatial_mask = input_ids.eq(int(self.image_token_id)) & am.bool()
+            empty = ~spatial_mask.any(dim=1)
+            if empty.any():
+                spatial_mask[empty] = am[empty].bool()
+        return {
+            "pooled": pooled.float(),
+            "spatial_tokens": h.float(),
+            "spatial_mask": spatial_mask,
+        }
 
     def _pool(self, h: torch.Tensor, am: torch.Tensor) -> torch.Tensor:
         """Pool [B, seq, D] -> [B, D] per self.pooling. am = attention mask [B, seq]."""

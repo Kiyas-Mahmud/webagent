@@ -9,15 +9,20 @@ dict consumed by CombinedLoss. Gold runs can enable causal routing: the shared
 encoder/adapter creates a pre-action embedding and a post-action embedding, then
 routes each head to information that exists when its prediction is made.
 
+Recovery-v2 optionally preserves spatial image tokens, adds task-specific
+residual adapters, and encodes a sparse third stream only for proper recovery
+transitions. These switches are config-gated so the completed v1 path is intact.
+
 Qwen-first build order: the `vlm` path is implemented now; the `dual_encoder`
 path is added when SigLIP+RoBERTa is built.
 """
 
 from __future__ import annotations
 
+import torch
 import torch.nn as nn
 
-from web_agent.models.adapter import Adapter
+from web_agent.models.adapter import Adapter, ResidualTaskAdapter
 from web_agent.models.heads import (
     ActionHead,
     FailureHead,
@@ -31,6 +36,14 @@ class WebAgentModel(nn.Module):
         super().__init__()
         self.path = cfg["backbone"]["path"]
         self.causal_routing = bool(cfg["data"].get("causal_routing", False))
+        self.use_recovery_transitions = bool(
+            cfg["data"].get("recovery_transitions", False)
+        )
+        self.hierarchical_recovery = bool(
+            cfg.get("loss", {}).get("hierarchical_recovery", False)
+        )
+        model_cfg = cfg.get("model", {})
+        self.spatial_grounding = bool(model_cfg.get("spatial_grounding", False))
         fused_dim = cfg.get("fused_dim", 768)
 
         if self.path == "vlm":
@@ -47,36 +60,95 @@ class WebAgentModel(nn.Module):
         else:
             raise ValueError(f"unknown backbone.path {self.path!r}")
 
-        self.failure_head = FailureHead(fused_dim)
-        self.action_head = ActionHead(fused_dim)
+        task_adapter_cfg = model_cfg.get("task_adapters", {})
+        self.use_task_adapters = bool(task_adapter_cfg.get("enabled", False))
+        if self.use_task_adapters:
+            kwargs = {
+                "dim": fused_dim,
+                "bottleneck": int(task_adapter_cfg.get("bottleneck", 128)),
+                "dropout": float(task_adapter_cfg.get("dropout", 0.1)),
+            }
+            self.task_adapters = nn.ModuleDict({
+                name: ResidualTaskAdapter(**kwargs)
+                for name in ("policy", "diagnosis", "memory", "recovery")
+            })
+        else:
+            self.task_adapters = nn.ModuleDict({
+                name: nn.Identity()
+                for name in ("policy", "diagnosis", "memory", "recovery")
+            })
+
+        self.failure_head = FailureHead(
+            fused_dim, needs_recovery=self.hierarchical_recovery,
+        )
+        self.action_head = ActionHead(
+            fused_dim, spatial_grounding=self.spatial_grounding,
+        )
         self.memory_head = MemoryHead(fused_dim)
         self.recovery_outcome_head = RecoveryOutcomeHead(fused_dim)
 
     def encode(self, batch: dict, prefix: str = ""):
-        """Front-end -> fused [B, 768]."""
+        """Front-end -> pooled features and, when enabled, spatial image tokens."""
         if self.path == "vlm":
-            return self.adapter(self.encoder(batch, prefix=prefix))
+            encoded = self.encoder(batch, prefix=prefix)
+            if isinstance(encoded, dict):
+                return {
+                    "fused": self.adapter(encoded["pooled"]),
+                    "spatial_tokens": self.adapter(encoded["spatial_tokens"]),
+                    "spatial_mask": encoded["spatial_mask"],
+                }
+            return {"fused": self.adapter(encoded)}
         raise NotImplementedError
 
     def forward(self, batch: dict) -> dict:
         if self.causal_routing:
-            pre_fused = self.encode(batch, prefix="pre_")
-            post_fused = self.encode(batch, prefix="post_")
+            pre_encoded = self.encode(batch, prefix="pre_")
+            post_encoded = self.encode(batch, prefix="post_")
         else:
-            pre_fused = post_fused = self.encode(batch)
+            pre_encoded = post_encoded = self.encode(batch)
+
+        adapters = getattr(self, "task_adapters", None)
+        def adapt(name, value):
+            return adapters[name](value) if adapters is not None else value
+        pre_fused = adapt("policy", pre_encoded["fused"])
+        post_fused = adapt("diagnosis", post_encoded["fused"])
+        memory_fused = adapt("memory", post_encoded["fused"])
 
         preds: dict = {
             "fused": post_fused,  # outcome representation used by contrastive loss
             "fused_pre": pre_fused,
             "fused_post": post_fused,
         }
-        preds.update(self.failure_head(
+        failure_predictions = self.failure_head(
             post_fused,
             confidence_fused=pre_fused if self.causal_routing else None,
-        ))
-        preds.update(self.action_head(pre_fused))
-        preds.update(self.memory_head(post_fused))
-        preds.update(self.recovery_outcome_head(post_fused))
+        )
+        preds.update(failure_predictions)
+        spatial_tokens = pre_encoded.get("spatial_tokens")
+        if spatial_tokens is not None:
+            spatial_tokens = adapt("policy", spatial_tokens)
+        if getattr(self, "spatial_grounding", False):
+            preds.update(self.action_head(
+                pre_fused,
+                spatial_tokens=spatial_tokens,
+                spatial_mask=pre_encoded.get("spatial_mask"),
+            ))
+        else:
+            preds.update(self.action_head(pre_fused))
+        preds.update(self.memory_head(memory_fused))
+        if getattr(self, "use_recovery_transitions", False):
+            if "recovery_input_ids" in batch:
+                recovery_encoded = self.encode(batch, prefix="recovery_")
+                recovery_fused = adapt("recovery", recovery_encoded["fused"])
+                preds.update(self.recovery_outcome_head(recovery_fused))
+                preds["recovery_row_indices"] = batch["recovery_row_indices"]
+            else:
+                preds["recovery_outcome"] = post_fused.new_empty((0, 1))
+                preds["recovery_row_indices"] = post_fused.new_empty(
+                    (0,), dtype=torch.long,
+                )
+        else:
+            preds.update(self.recovery_outcome_head(post_fused))
         return preds
 
     def trainable_parameters(self):
@@ -85,7 +157,7 @@ class WebAgentModel(nn.Module):
 
     def head_parameters(self):
         """Adapter + the 5 heads (the high-LR param group)."""
-        mods = [self.adapter, self.failure_head, self.action_head,
+        mods = [self.adapter, self.task_adapters, self.failure_head, self.action_head,
                 self.memory_head, self.recovery_outcome_head]
         return [p for m in mods for p in m.parameters() if p.requires_grad]
 

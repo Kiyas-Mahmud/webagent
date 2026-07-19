@@ -50,12 +50,18 @@ def gold_class_weights(records, limit: int | None = None):
     return balanced_class_weights(remapped, limit=limit)
 
 
-def gold_recovery_class_weights(records, cap: float = 3.0) -> torch.Tensor:
+def gold_recovery_class_weights(
+    records,
+    cap: float = 3.0,
+    attempted_only: bool = False,
+) -> torch.Tensor:
     """Sqrt-inverse-frequency recovery weights from the rows actually trained."""
     labels = []
     for record in records:
         _, lab, _ = view(record)
-        labels.append(RECOVERY_STRATEGY[lab["recovery_strategy"]])
+        label = RECOVERY_STRATEGY[lab["recovery_strategy"]]
+        if not attempted_only or lab.get("recovery_success") is not None:
+            labels.append(label)
     return torch.tensor(
         sqrt_inverse_frequency_weights(labels, NUM_RECOVERY, cap=cap),
         dtype=torch.float32,
@@ -173,17 +179,28 @@ def _collate_stream(batch: list[dict], prefix: str) -> dict:
 
 
 def causal_gold_collate(batch: list[dict]) -> dict:
-    """Collate independent pre-action and post-action VLM streams."""
+    """Collate causal streams; recovery transitions stay sparse and indexed."""
     out = stack_labels(batch)
+    if "label_needs_recovery" in batch[0]:
+        out["label_needs_recovery"] = torch.stack([
+            row["label_needs_recovery"] for row in batch
+        ])
     out.update(_collate_stream(batch, "pre_"))
     out.update(_collate_stream(batch, "post_"))
+    recovery_rows = [row for row in batch if "recovery_input_ids" in row]
+    if recovery_rows:
+        out.update(_collate_stream(recovery_rows, "recovery_"))
+        out["recovery_row_indices"] = torch.tensor([
+            index for index, row in enumerate(batch) if "recovery_input_ids" in row
+        ], dtype=torch.long)
     return out
 
 
 def build_gold_dataloader(cfg, which, processor, records=None, limit=None,
                           batch_size=None, shuffle=True, num_workers=None,
                           seed: int = 42, smoke: bool = False,
-                          recovery_aware: bool = False):
+                          recovery_aware: bool = False,
+                          trajectory_records=None):
     """Filter-free loader with optional distribution-preserving recovery batches."""
     rows = records if records is not None else load_gold_split(cfg, which)
     if limit is not None:
@@ -193,7 +210,12 @@ def build_gold_dataloader(cfg, which, processor, records=None, limit=None,
             rows = select_recovery_aware_gold_subset(rows, limit, seed)
         else:
             rows = stratified_gold_subsample(rows, limit, seed)
-    ds = GoldDataset(rows, cfg, processor)
+    ds = GoldDataset(
+        rows,
+        cfg,
+        processor,
+        trajectory_records=trajectory_records,
+    )
     bs = batch_size or cfg["optim"]["batch_size"]
     nw = cfg["data"].get("num_workers", 2) if num_workers is None else num_workers
     collate = causal_gold_collate if cfg["data"].get("causal_routing") else vlm_collate

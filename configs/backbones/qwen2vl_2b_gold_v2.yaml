@@ -1,0 +1,32 @@
+# Controlled recovery-v2 experiment.  This intentionally extends the completed
+# v1 setup so the comparison changes only the predeclared structural factors.
+name: Y_QWEN2VL_2B_GOLD_V2
+extends: backbones/qwen2vl_2b_gold.yaml
+
+backbone:
+  preserve_spatial_tokens: true
+
+data:
+  executed_action_post: true
+  recovery_transitions: true
+
+model:
+  spatial_grounding: true
+  task_adapters:
+    enabled: true
+    bottleneck: 128
+    dropout: 0.10
+
+loss:
+  hierarchical_recovery: true
+  needs_recovery: 0.04
+  recovery: 0.05
+  bbox_loss: smooth_l1_giou
+  bbox_smooth_l1_ratio: 1.0
+  bbox_giou_ratio: 1.0
+  dynamic_weighting: uncertainty
+
+train:
+  controlled_experiment_tag: recovery_v2
+  metrics_csv: results/gold_recovery_v2_metrics.csv
+  early_stop_metric: outcome_mcc

@@ -445,3 +445,118 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   outputs/execution counts; merged Gold config assertions and `git diff --check` pass. Next required
   runtime gate is the Kaggle 16-row GPU smoke, followed by the controlled five-epoch mini. Headline
   training remains blocked by manual review/adult-domain protocol and full SHA-256/dHash audit.
+
+## 2026-07-19 — recovery-controlled mini v1 Kaggle result analysis
+- Downloaded the latest `kiyasmahmud/kaggle-gold-v14` output to the ignored local folder
+  `kaggle_outputs/kaggle-gold-v14-latest/`. Verified all five epoch checkpoints plus `last.ckpt`
+  are complete (~234 MB each), and the CSV, diagnostics, environment manifest, and mini report are
+  present. The run used commit `be30558715e1876bbd58a1c11c4bb8987ff82982`.
+- Engineering status is PASS: five epochs completed, train loss decreased 0.9686 -> 0.5264,
+  checkpoint round-trip passed, exactly 5,000 unique train rows were scheduled with zero duplicates,
+  and no test rows were read. The predeclared quality status is FAIL.
+- At the outcome-selected epoch 4: outcome MCC 0.5080 / balanced accuracy 0.7527, failure macro-F1
+  0.7538, fail-type macro-F1 0.4874, action accuracy 0.4140 / macro-F1 0.3793, recovery macro-F1
+  0.3403 / MCC 0.1994, recovery-outcome MCC 0.1452, memory macro-F1 0.6677, outcome ECE 0.2104,
+  bbox mean IoU 0.0108, median IoU 0, and Recall@IoU50 0.
+- Versus the original v14 outcome-selected checkpoint, outcome MCC changed 0.5217 -> 0.5080,
+  action accuracy 0.396 -> 0.414, recovery-outcome MCC 0.1864 -> 0.1452, and ECE
+  0.1853 -> 0.2104. Sampling/weighting successfully broke the recovery NONE-only collapse
+  (four predicted classes; macro-F1 beats the 0.2143 majority macro-F1), but it did not produce a
+  better unified checkpoint.
+- Class diagnostics expose structural blockers: LOOP_DETECTED F1 is 0 despite 15 validation rows;
+  BACKTRACK F1 is 0; validation has no RETRY or ABORT rows and the 5k training subset also has none,
+  so a six-way recovery claim cannot be learned or evaluated from this experiment. Action predictions
+  overproduce NAVIGATE/PRESS_KEY and underproduce CLICK/SELECT/SCROLL. Bbox MAE looks superficially
+  acceptable while IoU proves localization is effectively nonfunctional.
+- Loss-scale audit: at epoch 4 the nominally 0.10-weighted bbox term contributes only ~0.0024 of
+  total loss 0.5264 (~0.5%); fail-type/action/recovery terms dominate. More epochs alone are not the
+  remedy: recovery-outcome MCC peaks at epoch 0 (0.2074) then degrades while training loss continues
+  downward, showing overfitting/negative multitask transfer.
+- Causal audit found a deeper recovery issue. Dataset review rules state `recovery_success` is verified
+  from later trajectory steps, but `GoldDataset` feeds the recovery-outcome head only the current row's
+  before/after action screenshots plus goal/domain. The target therefore depends on evidence absent
+  from the model input. Fix by re-exporting existing replay trajectories as recovery transitions
+  `(failure state, executed recovery, post-recovery state, success)` or remove recovery-success as a
+  prediction head and retain it only as a memory-index filter. This should use existing replays rather
+  than recollecting the whole dataset.
+- Recommended next controlled order: (1) finish human review and full hash gate; (2) build the causal
+  recovery-transition export; (3) factor recovery into `needs_recovery` plus an attempted-row-only
+  strategy classifier over supported classes; (4) condition post-action diagnosis on the causally
+  observed executed action; (5) replace pooled-vector bbox MSE with a spatial grounding head and
+  SmoothL1+GIoU/IoU supervision; (6) normalize or dynamically balance multitask gradients and use a
+  predeclared composite/Pareto checkpoint rule; (7) rerun 5k smoke/mini before any full-data run.
+
+## 2026-07-19 — supplied v12 metrics and leakage re-audit
+- Inspected `C:\Users\kiyas\Downloads\gold_v12_metrics.csv` and the supplied terminal screenshot.
+  The reported v12 gold-test scores are outcome MCC 0.8372, balanced accuracy 0.9254, failure
+  macro-F1 0.9114, action accuracy 0.9612, recovery accuracy 0.8760, memory accuracy 0.9018,
+  ECE 0.2175, and bbox MAE 0.0688. The screenshot itself correctly says to ignore
+  recovery-outcome accuracy because that head was disabled/sparse.
+- Re-audited the local v12 corpus (1,970 rows; 1,185/398/387 train/val/test) with the current
+  validator, including full SHA-256 and dHash checks. Saved the ignored report at
+  `kaggle_outputs/v12_reaudit_2026-07-19.json`.
+- v12 is not comparable to the current 39k domain-held-out experiment: all 26 v12 domains occur in
+  all three splits; 163 exact image-content hashes cross splits; and 304,471 cross-split image pairs
+  have dHash distance <=3. Task IDs are disjoint, but domain and visual-template generalization are
+  not tested.
+- The v12 task-text-only action baseline reaches 0.8682 accuracy / 0.8819 macro-F1 on test versus
+  the neural model's 0.9612 action accuracy. Much of the apparent 96% action result is therefore
+  available from task wording alone. By comparison, the verified 39k task-text baseline is 0.3537
+  and the recovery-v1 model reaches 0.4140: the absolute number is lower because the shortcut was
+  deliberately removed, while the incremental multimodal lift is of similar order.
+- v12 training predates causal routing. Its single shared VLM input contains both `state_before` and
+  `state_after`, then feeds action, bbox, and pre-action confidence heads. Those pre-action outputs
+  therefore receive future information. The 39k causal runner intentionally restricts them to
+  `state_before`; the score drop is expected and methodologically necessary.
+- v12 has only six successful recoveries versus 464 failed recoveries; recovery-outcome was not a
+  meaningful trained result. Its high recovery-strategy accuracy cannot substitute for recovery
+  success evidence. All 1,970 rows also remain `review_status=pending`.
+- The original 39k v14 controlled checkpoint is not far better than recovery-v1: outcome MCC
+  0.5217 vs 0.5080, while action accuracy is 0.396 vs 0.414. Its ~0.75 recovery accuracy was the
+  NONE-class prior; recovery-v1 lowers raw accuracy while increasing class diversity and honest
+  recovery macro-F1. Preserve the old scores as pilot/easy-split evidence, not Q1 headline claims.
+- Improvement must target honest generalization rather than recreate v12 leakage: add executed action
+  only to the post-action verifier; construct temporal context for LOOP_DETECTED; re-export proper
+  recovery transitions from existing replays; use hierarchical conditional recovery heads; replace
+  global pooled bbox regression with spatial grounding; increase/tiling image resolution for small UI
+  text; and control multitask gradient/loss scale before another 5k mini run.
+
+## 2026-07-19 — causal recovery-v2 implementation complete; Kaggle runtime pending
+- Added a reference-only recovery transition builder and CLI. It joins rows within a task by
+  `step_index` as `failure state -> next executed action -> post-recovery state -> success`, copies
+  no images, rejects invalid/ambiguous/missing transition supervision, and reports coverage plus
+  integrity violations. The full audit reports split-wise counts for RETRY, ABORT, BACKTRACK, and
+  LOOP_DETECTED so any additional collection can be narrowly targeted.
+- Gold v2 now supplies the executed current action only to the post-action verifier prompt. The
+  pre-action stream remains action-free and continues to own action type, bbox, and confidence.
+  Recovery-success uses a separate sparse VLM stream containing only proper transition rows, so
+  future recovery state cannot leak into the ordinary outcome/action heads.
+- Replaced flat all-row recovery supervision in the v2 config with a binary `needs_recovery` loss
+  on all rows and strategy CE only on attempted-recovery rows. Added composed inference plus honest
+  needs-recovery and attempted-strategy accuracy/macro-F1/balanced-accuracy/MCC, majority baselines,
+  per-class diagnostics, and transition-only recovery-outcome metrics.
+- V2 preserves Qwen image-token hidden states for an attention grounding bbox head. Predictions are
+  bounded normalized xywh boxes; training uses masked SmoothL1 + GIoU. Mean IoU and Recall@IoU50
+  are explicit quality gates, with MAE retained only as a supporting metric.
+- Added separate residual adapters for policy, diagnosis, memory, and recovery plus learned
+  uncertainty weighting for active multitask losses. Loss parameters are in the optimizer and both
+  task-adapter and loss states are saved/restored in checkpoints. Inactive sparse terms do not push
+  their uncertainty parameters.
+- Added `configs/backbones/qwen2vl_2b_gold_v2.yaml`, the registered protocol
+  `docs/RECOVERY_V2_EXPERIMENT.md`, recovery-v2 additions to the two-reviewer guide, and the isolated
+  output-free `notebooks/kaggle_gold_recovery_v2.ipynb`. Both earlier Kaggle notebooks remain
+  untouched. The new notebook performs the dataset audit/manifest export, enforces a 16-row smoke,
+  then runs exactly 5,000 train / 500 validation rows for five epochs and saves CSV, diagnostics,
+  environment, reports, manifests, and all checkpoints.
+- Controlled-report metadata no longer falsely lists architecture/loss coefficients as fixed for
+  v2. Predeclared v2 gates evaluate the outcome-MCC-selected epoch and separate engineering PASS
+  from outcome/action retention, hierarchical recovery lift, transition-outcome MCC, bbox IoU/
+  Recall@IoU50, and calibration quality.
+- Local schema validation on the small v12 corpus found 285/285 proper train transitions and 98/98
+  proper validation transitions with no missing, ambiguous, nonconsecutive, or invalid joins. This
+  validates the join contract only; it is not evidence about the current 39k counts or model quality.
+- Local verification passed: Ruff clean; `13 passed / 5 skipped` (PyTorch/GPU checks require Kaggle);
+  Python compileall passed; merged v2 config assertions passed; notebook JSON and every code cell
+  compile with no saved outputs/execution counts; and `git diff --check` passed. Required next gate:
+  run recovery-v2 smoke on Kaggle, restart the kernel, run the five-epoch mini, then inspect the
+  generated full class audit and quality gates before authorizing any headline/full-data training.

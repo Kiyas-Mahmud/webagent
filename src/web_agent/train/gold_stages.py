@@ -22,6 +22,10 @@ from web_agent.data.gold_dataloader import (
     stratified_gold_subsample,
 )
 from web_agent.data.gold_dataset import view
+from web_agent.data.recovery_transitions import (
+    build_recovery_transition_index,
+    recovery_class_audit,
+)
 from web_agent.data.gold_sampling import (
     label_distribution,
     recovery_aware_batch_indices,
@@ -61,6 +65,47 @@ def _controlled_quality_gates(result: dict) -> dict:
     """Predeclared v14 comparison at the outcome-selected checkpoint."""
     selected_epoch = int(result["best_epochs"]["outcome_mcc"]["epoch"])
     selected = next(row for row in result["history"] if row["epoch"] == selected_epoch)
+    if "needs_recovery_macro_f1" in selected:
+        checks = {
+            "outcome_mcc_within_0_03_of_v14": (
+                selected["outcome_mcc"] >= V14_SELECTED_BASELINE["outcome_mcc"] - 0.03
+            ),
+            "action_accuracy_not_down_more_than_0_03": (
+                selected["action_acc"] >= V14_SELECTED_BASELINE["action_acc"] - 0.03
+            ),
+            "needs_recovery_macro_f1_beats_majority_by_0_03": (
+                selected["needs_recovery_macro_f1"]
+                >= selected["needs_recovery_majority_macro_f1"] + 0.03
+            ),
+            "attempted_strategy_macro_f1_beats_majority_by_0_03": (
+                selected["strategy_attempted_macro_f1"]
+                >= selected["strategy_attempted_majority_macro_f1"] + 0.03
+            ),
+            "transition_recovery_outcome_mcc_improves_v14_by_0_01": (
+                selected["recovery_outcome_mcc"]
+                >= V14_SELECTED_BASELINE["recovery_outcome_mcc"] + 0.01
+            ),
+            "bbox_mean_iou_at_least_0_05": selected["bbox_mean_iou"] >= 0.05,
+            "bbox_recall_iou50_at_least_0_01": (
+                selected["bbox_recall_iou50"] >= 0.01
+            ),
+            "outcome_ece_not_up_more_than_0_03": (
+                selected["outcome_ece"]
+                <= V14_SELECTED_BASELINE["outcome_ece"] + 0.03
+            ),
+        }
+        return {
+            "status": "PASS" if all(checks.values()) else "FAIL",
+            "selected_epoch": selected_epoch,
+            "comparison_rule": "all gates use the outcome_mcc-selected checkpoint",
+            "v14_selected_checkpoint_reference": V14_SELECTED_BASELINE,
+            "checks": checks,
+            "limitations": [
+                "recovery-outcome semantics changed to proper causal transitions",
+                "bbox IoU thresholds are minimum functionality gates, not 90-percent claims",
+                "full training remains blocked until review and class-audit gates pass",
+            ],
+        }
     checks = {
         "outcome_mcc_within_0_02_of_v14": (
             selected["outcome_mcc"] >= V14_SELECTED_BASELINE["outcome_mcc"] - 0.02
@@ -109,7 +154,12 @@ def build_processor(cfg: dict):
     )
 
 
-def build_gold_components(cfg: dict, processor=None, train_records=None) -> GoldComponents:
+def build_gold_components(
+    cfg: dict,
+    processor=None,
+    train_records=None,
+    trajectory_records=None,
+) -> GoldComponents:
     """Build the model and derive every weight from the rows actually trained."""
     processor = processor or build_processor(cfg)
     train_records = (
@@ -124,17 +174,42 @@ def build_gold_components(cfg: dict, processor=None, train_records=None) -> Gold
     if recovery_scheme != "sqrt_inverse_frequency":
         raise ValueError(f"unsupported recovery weight scheme: {recovery_scheme!r}")
     recovery_cap = float(cfg["loss"].get("recovery_weight_cap", 3.0))
-    recovery_w = gold_recovery_class_weights(train_records, cap=recovery_cap)
+    recovery_w = gold_recovery_class_weights(
+        train_records,
+        cap=recovery_cap,
+        attempted_only=bool(cfg["loss"].get("hierarchical_recovery", False)),
+    )
 
-    recovery_values = [view(record)[1].get("recovery_success") for record in train_records]
+    if cfg["data"].get("recovery_transitions"):
+        transition_index, _ = build_recovery_transition_index(
+            trajectory_records if trajectory_records is not None else train_records,
+        )
+        selected_ids = {
+            str(meta.get("sample_id") or f"{meta.get('task_id', '')}:{meta.get('step_index', index)}")
+            for index, record in enumerate(train_records)
+            for _, _, meta in [view(record)]
+        }
+        recovery_values = [
+            transition["recovery_success"]
+            for sample_id, transition in transition_index.items()
+            if sample_id in selected_ids
+        ]
+    else:
+        recovery_values = [
+            view(record)[1].get("recovery_success") for record in train_records
+        ]
     positives = sum(value is True for value in recovery_values)
     negatives = sum(value is False for value in recovery_values)
-    recovery_pos_weight = torch.tensor([min(negatives / max(positives, 1), 5.0)])
+    recovery_ratio = negatives / max(positives, 1)
+    recovery_pos_weight = torch.tensor([
+        min(recovery_ratio, 5.0) if positives and negatives else 1.0
+    ])
 
     model = WebAgentModel(cfg)
     device = "cuda"
     for module in (
         model.adapter,
+        model.task_adapters,
         model.failure_head,
         model.action_head,
         model.memory_head,
@@ -186,7 +261,12 @@ def run_gold_smoke(
     """Verify causal streams, output shapes, finite loss, backward, and weight update."""
     all_train_records = load_gold_split(cfg, "train")
     smoke_records = select_smoke_records(all_train_records, rows, seed)
-    components = build_gold_components(cfg, processor, train_records=smoke_records)
+    components = build_gold_components(
+        cfg,
+        processor,
+        train_records=smoke_records,
+        trajectory_records=all_train_records,
+    )
     loader = build_gold_dataloader(
         cfg,
         "train",
@@ -196,6 +276,7 @@ def run_gold_smoke(
         shuffle=False,
         num_workers=0,
         seed=seed,
+        trajectory_records=all_train_records,
     )
     if len(loader.dataset) != rows:
         raise AssertionError(f"smoke loader has {len(loader.dataset)} rows, expected {rows}")
@@ -205,7 +286,10 @@ def run_gold_smoke(
     optimizer = torch.optim.AdamW(
         [
             {"params": model.lora_parameters(), "lr": cfg["optim"]["lr_lora"]},
-            {"params": model.head_parameters(), "lr": cfg["optim"]["lr_heads"]},
+            {
+                "params": model.head_parameters() + list(components.loss_fn.parameters()),
+                "lr": cfg["optim"]["lr_heads"],
+            },
         ],
         weight_decay=cfg["optim"].get("weight_decay", 0.01),
     )
@@ -266,8 +350,16 @@ def run_gold_smoke(
         "bbox": (batch_size, 4),
         "recovery": (batch_size, 6),
         "memory_flag": (batch_size, 1),
-        "recovery_outcome": (batch_size, 1),
     }
+    if cfg["loss"].get("hierarchical_recovery"):
+        expected_shapes["needs_recovery"] = (batch_size, 1)
+    recovery_batch_size = int(first_batch.get(
+        "recovery_row_indices", torch.empty(0),
+    ).numel())
+    expected_shapes["recovery_outcome"] = (
+        recovery_batch_size if cfg["data"].get("recovery_transitions") else batch_size,
+        1,
+    )
     for key, expected in expected_shapes.items():
         actual = tuple(first_predictions[key].shape)
         if actual != expected:
@@ -332,6 +424,7 @@ def run_gold_mini(
         mini_cfg,
         processor,
         train_records=selected_train_records,
+        trajectory_records=all_train_records,
     )
     train_loader = build_gold_dataloader(
         mini_cfg,
@@ -342,6 +435,7 @@ def run_gold_mini(
         num_workers=mini_cfg["data"].get("num_workers", 2),
         seed=seed,
         recovery_aware=True,
+        trajectory_records=all_train_records,
     )
     val_loader = build_gold_dataloader(
         mini_cfg,
@@ -351,6 +445,7 @@ def run_gold_mini(
         shuffle=False,
         num_workers=mini_cfg["data"].get("num_workers", 2),
         seed=seed,
+        trajectory_records=all_val_records,
     )
     trainer = Trainer(
         components.model,
@@ -405,6 +500,32 @@ def run_gold_mini(
         ),
     }
     quality_gates = _controlled_quality_gates(result)
+    is_v2 = bool(mini_cfg["data"].get("recovery_transitions"))
+    training_changes = [
+        "joint proportional training subset coverage",
+        "recovery-aware distribution-preserving physical batches",
+        "sqrt inverse-frequency recovery-strategy class weights",
+        "weights derived from selected training rows only",
+    ]
+    if is_v2:
+        training_changes.extend([
+            "executed action added only to the post-action stream",
+            "binary needs-recovery plus attempted-row-only strategy supervision",
+            "proper sparse recovery-transition stream for recovery success",
+            "spatial grounding bbox head with SmoothL1 plus GIoU",
+            "task-specific residual adapters and uncertainty loss weighting",
+        ])
+    fixed_factors = [
+        "backbone",
+        "validation_rows",
+        "seed",
+        "batch_size",
+        "gradient_accumulation",
+        "learning_rates",
+        "primary_selection_metric",
+    ]
+    if not is_v2:
+        fixed_factors.extend(["model_architecture", "loss_coefficients"])
 
     return {
         **result,
@@ -420,25 +541,29 @@ def run_gold_mini(
         "quality_gates": quality_gates,
         "train_distribution": label_distribution(selected_train_records),
         "validation_distribution": label_distribution(selected_val_records),
+        "recovery_transition_reports": {
+            "train": train_loader.dataset.transition_report,
+            "validation": val_loader.dataset.transition_report,
+        },
+        "recovery_class_audit": {
+            "train": recovery_class_audit(all_train_records),
+            "validation": recovery_class_audit(all_val_records),
+        },
         "experiment_control": {
             "baseline": "kaggle-gold-v14",
             "experiment_tag": experiment_tag.lower(),
-            "fixed": [
-                "model_architecture",
-                "validation_rows",
-                "seed",
-                "batch_size",
-                "gradient_accumulation",
-                "learning_rates",
-                "loss_coefficients",
-                "primary_selection_metric",
-            ],
-            "training_changes": [
-                "joint proportional training subset coverage",
-                "recovery-aware distribution-preserving physical batches",
-                "sqrt inverse-frequency recovery-strategy class weights",
-                "weights derived from selected training rows only",
-            ],
+            "fixed": fixed_factors,
+            "registered_structural_factors": (
+                [
+                    "causal recovery transition stream",
+                    "hierarchical recovery prediction",
+                    "post-action executed-action conditioning",
+                    "spatial bbox grounding and IoU-aware loss",
+                    "task adapters and uncertainty weighting",
+                ]
+                if is_v2 else []
+            ),
+            "training_changes": training_changes,
             "observational_changes": [
                 "honest scalar metrics",
                 "per-class diagnostics",
@@ -476,6 +601,8 @@ def reevaluate_gold_validation_checkpoint(
     saved = torch.load(checkpoint, map_location=components.device)
     set_peft_model_state_dict(components.model.encoder.model, saved["lora"])
     components.model.adapter.load_state_dict(saved["adapter"])
+    if "task_adapters" in saved:
+        components.model.task_adapters.load_state_dict(saved["task_adapters"])
     components.model.failure_head.load_state_dict(saved["failure"])
     components.model.action_head.load_state_dict(saved["action"])
     components.model.memory_head.load_state_dict(saved["memory"])

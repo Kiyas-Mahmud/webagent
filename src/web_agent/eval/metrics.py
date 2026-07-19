@@ -59,6 +59,9 @@ def accuracy(y_true, y_pred) -> float:
 
 def macro_f1(y_true, y_pred) -> float:
     """Macro-F1 for any categorical head, including rare classes."""
+    y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
+    if len(y_true) == 0:
+        return 0.0
     return float(f1_score(y_true, y_pred, average="macro", zero_division=0))
 
 

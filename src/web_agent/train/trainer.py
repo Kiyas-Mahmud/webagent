@@ -33,6 +33,8 @@ BEST_METRIC_DIRECTIONS = {
     "failtype_macro_f1": "max",
     "action_macro_f1": "max",
     "recovery_macro_f1": "max",
+    "needs_recovery_macro_f1": "max",
+    "strategy_attempted_macro_f1": "max",
     "recovery_outcome_mcc": "max",
     "memory_mcc": "max",
     "bbox_mean_iou": "max",
@@ -74,7 +76,8 @@ def collect_predictions(model, loader, device) -> dict:
         "memory_pred", "memory_true", "recovery_outcome_pred", "recovery_outcome_true",
         "outcome_confidence", "outcome_failure_probability",
         "recovery_outcome_probability", "confidence", "confidence_true",
-        "bbox_pred", "bbox_true", "bbox_mask")}
+        "bbox_pred", "bbox_true", "bbox_mask",
+        "needs_recovery_pred", "needs_recovery_true")}
     for batch in loader:
         preds = model(batch)
         b = _to_device(batch, device)
@@ -90,15 +93,42 @@ def collect_predictions(model, loader, device) -> dict:
         acc["failtype_true"] += b["label_failtype"].cpu().tolist()
         acc["action_pred"] += preds["action_type"].argmax(-1).cpu().tolist()
         acc["action_true"] += b["label_action"].cpu().tolist()
-        acc["recovery_pred"] += preds["recovery"].argmax(-1).cpu().tolist()
+        if "needs_recovery" in preds:
+            needs_pred = (preds["needs_recovery"] > 0).long().view(-1)
+            strategy_pred = preds["recovery"][:, 1:].argmax(-1) + 1
+            composed_recovery = torch.where(
+                needs_pred.bool(), strategy_pred, torch.zeros_like(strategy_pred),
+            )
+            acc["needs_recovery_pred"] += needs_pred.cpu().tolist()
+            acc["needs_recovery_true"] += b["label_needs_recovery"].view(-1).cpu().tolist()
+        else:
+            composed_recovery = preds["recovery"].argmax(-1)
+        acc["recovery_pred"] += composed_recovery.cpu().tolist()
         acc["recovery_true"] += b["label_recovery"].cpu().tolist()
         acc["memory_pred"] += (preds["memory_flag"] > 0).long().view(-1).cpu().tolist()
         acc["memory_true"] += b["label_memory"].view(-1).cpu().tolist()
-        acc["recovery_outcome_pred"] += (preds["recovery_outcome"] > 0).long().view(-1).cpu().tolist()
-        acc["recovery_outcome_probability"] += torch.sigmoid(
-            preds["recovery_outcome"].float(),
-        ).view(-1).cpu().tolist()
-        acc["recovery_outcome_true"] += b["label_recovery_success"].view(-1).cpu().tolist()
+        if "recovery_row_indices" in preds:
+            indices = preds["recovery_row_indices"].to(device)
+            if indices.numel():
+                acc["recovery_outcome_pred"] += (
+                    preds["recovery_outcome"] > 0
+                ).long().view(-1).cpu().tolist()
+                acc["recovery_outcome_probability"] += torch.sigmoid(
+                    preds["recovery_outcome"].float(),
+                ).view(-1).cpu().tolist()
+                acc["recovery_outcome_true"] += b[
+                    "label_recovery_success"
+                ].index_select(0, indices).view(-1).cpu().tolist()
+        else:
+            acc["recovery_outcome_pred"] += (
+                preds["recovery_outcome"] > 0
+            ).long().view(-1).cpu().tolist()
+            acc["recovery_outcome_probability"] += torch.sigmoid(
+                preds["recovery_outcome"].float(),
+            ).view(-1).cpu().tolist()
+            acc["recovery_outcome_true"] += b[
+                "label_recovery_success"
+            ].view(-1).cpu().tolist()
         acc["confidence"] += preds["confidence"].view(-1).cpu().tolist()
         acc["confidence_true"] += b["label_confidence"].view(-1).cpu().tolist()
         acc["bbox_pred"] += preds["bbox"].cpu().tolist()
@@ -125,6 +155,16 @@ def compute_metrics(p: dict) -> dict:
     failtype_macro_f1 = M.macro_f1(p["failtype_true"], p["failtype_pred"])
     action_macro_f1 = M.macro_f1(p["action_true"], p["action_pred"])
     recovery_macro_f1 = M.macro_f1(p["recovery_true"], p["recovery_pred"])
+    attempted_strategy_mask = p["recovery_true"] != 0
+    attempted_strategy_true = p["recovery_true"][attempted_strategy_mask]
+    attempted_strategy_pred = p["recovery_pred"][attempted_strategy_mask]
+    needs_true = p.get("needs_recovery_true")
+    needs_pred = p.get("needs_recovery_pred")
+    if needs_true is None or len(needs_true) == 0:
+        needs_true = (p["recovery_true"] != 0).astype(int)
+        needs_pred = (p["recovery_pred"] != 0).astype(int)
+    needs_majority = M.majority_baseline(needs_true)
+    attempted_strategy_majority = M.majority_baseline(attempted_strategy_true)
     recovery_outcome_bal_acc = M.balanced_accuracy(recovery_true, recovery_pred)
     memory_bal_acc = M.balanced_accuracy(p["memory_true"], p["memory_pred"])
     return {
@@ -158,6 +198,21 @@ def compute_metrics(p: dict) -> dict:
         "recovery_majority_acc": recovery_majority["accuracy"],
         "recovery_majority_macro_f1": recovery_majority["macro_f1"],
         "recovery_pred_classes": int(len(set(p["recovery_pred"].tolist()))),
+        "needs_recovery_acc": M.accuracy(needs_true, needs_pred),
+        "needs_recovery_macro_f1": M.macro_f1(needs_true, needs_pred),
+        "needs_recovery_bal_acc": M.balanced_accuracy(needs_true, needs_pred),
+        "needs_recovery_mcc": M.classification_mcc(needs_true, needs_pred),
+        "needs_recovery_majority_acc": needs_majority["accuracy"],
+        "needs_recovery_majority_macro_f1": needs_majority["macro_f1"],
+        "strategy_attempted_acc": M.accuracy(
+            attempted_strategy_true, attempted_strategy_pred,
+        ),
+        "strategy_attempted_macro_f1": M.macro_f1(
+            attempted_strategy_true, attempted_strategy_pred,
+        ),
+        "strategy_attempted_rows": int(len(attempted_strategy_true)),
+        "strategy_attempted_majority_acc": attempted_strategy_majority["accuracy"],
+        "strategy_attempted_majority_macro_f1": attempted_strategy_majority["macro_f1"],
         "recovery_outcome_acc": M.accuracy(recovery_true, recovery_pred),
         "recovery_outcome_macro_f1": M.macro_f1(recovery_true, recovery_pred),
         "recovery_outcome_bal_acc": recovery_outcome_bal_acc,
@@ -193,6 +248,12 @@ def build_diagnostics(p: dict) -> dict:
     recovery_mask = p["recovery_outcome_true"] >= 0
     recovery_true = p["recovery_outcome_true"][recovery_mask]
     recovery_pred = p["recovery_outcome_pred"][recovery_mask]
+    needs_true = p.get("needs_recovery_true")
+    needs_pred = p.get("needs_recovery_pred")
+    if needs_true is None or len(needs_true) == 0:
+        needs_true = (p["recovery_true"] != 0).astype(int)
+        needs_pred = (p["recovery_pred"] != 0).astype(int)
+    attempted = p["recovery_true"] != 0
     def label_names(inverse):
         return [inverse[index] for index in sorted(inverse)]
     return {
@@ -216,6 +277,16 @@ def build_diagnostics(p: dict) -> dict:
             p["recovery_pred"],
             label_names=label_names(RECOVERY_STRATEGY_INV),
         ),
+        "needs_recovery": M.classification_diagnostics(
+            needs_true,
+            needs_pred,
+            label_names=["NO", "YES"],
+        ),
+        "recovery_strategy_attempted_only": M.classification_diagnostics(
+            p["recovery_true"][attempted],
+            p["recovery_pred"][attempted],
+            label_names=label_names(RECOVERY_STRATEGY_INV),
+        ),
         "recovery_outcome_prediction": M.classification_diagnostics(
             recovery_true,
             recovery_pred,
@@ -231,8 +302,8 @@ def build_diagnostics(p: dict) -> dict:
         ),
         "terminology": {
             "recovery_outcome_prediction": (
-                "Offline prediction on attempted-recovery labels; this is not an "
-                "executed browser recovery success rate."
+                "Offline prediction only on causal transitions containing failure "
+                "state, executed recovery action, and post-recovery state."
             ),
             "pillar_scores": (
                 "Diagnostic averages only; Pillar 2 requires multimodal ablation and "
@@ -267,7 +338,10 @@ class Trainer:
 
         self.opt = torch.optim.AdamW([
             {"params": model.lora_parameters(), "lr": o["lr_lora"]},
-            {"params": model.head_parameters(), "lr": o["lr_heads"]},
+            {
+                "params": model.head_parameters() + list(loss_fn.parameters()),
+                "lr": o["lr_heads"],
+            },
         ], weight_decay=o.get("weight_decay", 0.01))
 
         total = self.steps_per_epoch * self.epochs
@@ -313,7 +387,10 @@ class Trainer:
             should_step = (i + 1) % self.accum == 0 or i + 1 == len(self.train_loader)
             if should_step:
                 self.scaler.unscale_(self.opt)
-                torch.nn.utils.clip_grad_norm_(self.model.trainable_parameters(), self.clip)
+                torch.nn.utils.clip_grad_norm_(
+                    self.model.trainable_parameters() + list(self.loss_fn.parameters()),
+                    self.clip,
+                )
                 self.scaler.step(self.opt)
                 self.scaler.update()
                 self.opt.zero_grad()
@@ -341,12 +418,14 @@ class Trainer:
             "calibration": "calibration",
             "contrastive": "contrastive",
             "recovery_outcome": "recovery_outcome",
+            "needs_recovery": "needs_recovery",
         }
         for name, total in term_sums.items():
             raw = total / denominator
             stats[f"train_raw_{name}_loss"] = raw
-            stats[f"train_weighted_{name}_loss"] = (
-                raw * float(self.loss_fn.w[loss_weight_keys[name]])
+            weight_key = loss_weight_keys[name]
+            stats[f"train_weighted_{name}_loss"] = raw * float(
+                self.loss_fn.w[weight_key]
             )
         return stats
 
@@ -403,10 +482,12 @@ class Trainer:
         return {
             "lora": get_peft_model_state_dict(self.model.encoder.model),
             "adapter": self.model.adapter.state_dict(),
+            "task_adapters": self.model.task_adapters.state_dict(),
             "failure": self.model.failure_head.state_dict(),
             "action": self.model.action_head.state_dict(),
             "memory": self.model.memory_head.state_dict(),
             "recovery_outcome": self.model.recovery_outcome_head.state_dict(),
+            "loss": self.loss_fn.state_dict(),
             "optimizer": self.opt.state_dict(),
             "scheduler": self.sched.state_dict(),
             "scaler": self.scaler.state_dict(),
@@ -429,10 +510,14 @@ class Trainer:
         checkpoint = torch.load(path, map_location=self.device)
         set_peft_model_state_dict(self.model.encoder.model, checkpoint["lora"])
         self.model.adapter.load_state_dict(checkpoint["adapter"])
+        if "task_adapters" in checkpoint:
+            self.model.task_adapters.load_state_dict(checkpoint["task_adapters"])
         self.model.failure_head.load_state_dict(checkpoint["failure"])
         self.model.action_head.load_state_dict(checkpoint["action"])
         self.model.memory_head.load_state_dict(checkpoint["memory"])
         self.model.recovery_outcome_head.load_state_dict(checkpoint["recovery_outcome"])
+        if "loss" in checkpoint:
+            self.loss_fn.load_state_dict(checkpoint["loss"])
         if resume_training:
             self.opt.load_state_dict(checkpoint["optimizer"])
             self.sched.load_state_dict(checkpoint["scheduler"])

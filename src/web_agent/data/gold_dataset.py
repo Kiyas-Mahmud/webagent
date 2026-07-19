@@ -35,6 +35,7 @@ from web_agent.labels import (
     FAILURE_TYPE,
     RECOVERY_STRATEGY,
 )
+from web_agent.data.recovery_transitions import build_recovery_transition_index
 
 
 def view(rec: dict):
@@ -49,13 +50,26 @@ def view(rec: dict):
 
 
 class GoldDataset(Dataset):
-    def __init__(self, records, cfg, processor):
+    def __init__(self, records, cfg, processor, trajectory_records=None):
         self.records = records
         self.cfg = cfg
         self.processor = processor
         self.root = Path(cfg["data"]["root"])
         self.use_state_after = bool(cfg["data"].get("use_state_after", True))
         self.causal_routing = bool(cfg["data"].get("causal_routing", False))
+        self.executed_action_post = bool(
+            cfg["data"].get("executed_action_post", False)
+        )
+        self.use_recovery_transitions = bool(
+            cfg["data"].get("recovery_transitions", False)
+        )
+        source_rows = trajectory_records if trajectory_records is not None else records
+        if self.use_recovery_transitions:
+            self.recovery_transitions, self.transition_report = (
+                build_recovery_transition_index(source_rows)
+            )
+        else:
+            self.recovery_transitions, self.transition_report = {}, {}
 
     def __len__(self) -> int:
         return len(self.records)
@@ -77,19 +91,49 @@ class GoldDataset(Dataset):
         ], dtype=torch.float32).clamp_(0.0, 1.0)
         return bbox, torch.ones(1, dtype=torch.float32)
 
-    def _context_text(self, inp: dict, phase: str) -> str:
+    def _context_text(
+        self,
+        inp: dict,
+        phase: str,
+        executed_action: str = "",
+        action_value: str = "",
+    ) -> str:
         task = inp.get("task_description", "") or ""
         domain = inp.get("website_domain", "") or ""
         instruction = {
             "pre": "Choose the next action from the page before execution.",
             "post": "Assess the result by comparing the page before and after execution.",
+            "recovery": (
+                "Assess whether the executed recovery succeeded by comparing the "
+                "failure state with the post-recovery state."
+            ),
         }[phase]
-        return f"{instruction} current_task: {task} | domain: {domain}"
+        action_context = ""
+        if executed_action:
+            action_context = f" | executed_action: {executed_action}"
+            if action_value:
+                action_context += f" | action_value: {action_value}"
+        return (
+            f"{instruction} current_task: {task} | domain: {domain}"
+            f"{action_context}"
+        )
 
-    def _vlm_inputs(self, inp: dict, images, phase: str):
+    def _vlm_inputs(
+        self,
+        inp: dict,
+        images,
+        phase: str,
+        executed_action: str = "",
+        action_value: str = "",
+    ):
         """images: list of PIL images (1 = before only, 2 = before+after)."""
         content = [{"type": "image"} for _ in images]
-        content.append({"type": "text", "text": self._context_text(inp, phase)})
+        content.append({
+            "type": "text",
+            "text": self._context_text(
+                inp, phase, executed_action=executed_action, action_value=action_value,
+            ),
+        })
         messages = [{"role": "user", "content": content}]
         chat = self.processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
@@ -105,7 +149,15 @@ class GoldDataset(Dataset):
             out["mm_token_type_ids"] = enc["mm_token_type_ids"][0]
         return out
 
-    def _labels(self, lab: dict, meta: dict, bbox, bbox_mask) -> dict:
+    def _labels(
+        self,
+        lab: dict,
+        meta: dict,
+        bbox,
+        bbox_mask,
+        has_recovery_transition: bool,
+    ) -> dict:
+        attempted = lab.get("recovery_success") is not None
         return {
             "bbox": bbox,
             "bbox_mask": bbox_mask,
@@ -114,6 +166,7 @@ class GoldDataset(Dataset):
             "label_failtype": torch.tensor(FAILURE_TYPE[lab["failure_type_4"]]),
             "label_action": torch.tensor(ACTION_TYPE[lab["action_type"]]),
             "label_recovery": torch.tensor(RECOVERY_STRATEGY[lab["recovery_strategy"]]),
+            "label_needs_recovery": torch.tensor([float(attempted)]),
             # v12 has real confidence + memory; v8 -> neutral default (head disabled there).
             "label_memory": torch.tensor([float(lab.get("memory_update_flag") or False)]),
             "label_confidence": torch.tensor([float(
@@ -122,7 +175,7 @@ class GoldDataset(Dataset):
             # recovery_success: -1 = not attempted (null) -> masked out in the loss/metric;
             # 0/1 = attempted-failed / attempted-succeeded (the only rows the head learns from).
             "label_recovery_success": torch.tensor([
-                -1.0 if lab.get("recovery_success") is None else float(lab["recovery_success"])]),
+                -1.0 if not has_recovery_transition else float(lab["recovery_success"])]),
             "original_task_id": meta.get("task_id", ""),
         }
 
@@ -137,14 +190,49 @@ class GoldDataset(Dataset):
         if self.use_state_after and inp.get("state_after"):
             images.append(self._load_image(inp["state_after"]))
 
+        sample_id = str(meta.get("sample_id") or f"{meta.get('task_id', '')}:{meta.get('step_index', idx)}")
+        transition = self.recovery_transitions.get(sample_id)
+
         if self.causal_routing:
             if len(images) != 2:
                 raise ValueError("causal gold routing requires both state_before and state_after")
             pre = self._vlm_inputs(inp, [before], phase="pre")
-            post = self._vlm_inputs(inp, images, phase="post")
+            post = self._vlm_inputs(
+                inp,
+                images,
+                phase="post",
+                executed_action=lab.get("action_type", "") if self.executed_action_post else "",
+                action_value=lab.get("action_value", "") if self.executed_action_post else "",
+            )
             out = {f"pre_{key}": value for key, value in pre.items()}
             out.update({f"post_{key}": value for key, value in post.items()})
         else:
             out = self._vlm_inputs(inp, images, phase="post")
-        out.update(self._labels(lab, meta, bbox, bbox_mask))
+        if transition is not None:
+            recovery_inp = {
+                "task_description": transition["task_description"],
+                "website_domain": transition["website_domain"],
+            }
+            recovery = self._vlm_inputs(
+                recovery_inp,
+                [
+                    self._load_image(transition["failure_state"]),
+                    self._load_image(transition["post_recovery_state"]),
+                ],
+                phase="recovery",
+                executed_action=transition["executed_recovery_action"],
+                action_value=transition["recovery_action_value"],
+            )
+            out.update({f"recovery_{key}": value for key, value in recovery.items()})
+        out.update(self._labels(
+            lab,
+            meta,
+            bbox,
+            bbox_mask,
+            has_recovery_transition=(
+                transition is not None
+                if self.use_recovery_transitions
+                else lab.get("recovery_success") is not None
+            ),
+        ))
         return out

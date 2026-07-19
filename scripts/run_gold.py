@@ -119,6 +119,8 @@ def _load(model, path: str) -> None:
     ck = torch.load(path, map_location="cuda")
     set_peft_model_state_dict(model.encoder.model, ck["lora"])
     model.adapter.load_state_dict(ck["adapter"])
+    if "task_adapters" in ck:
+        model.task_adapters.load_state_dict(ck["task_adapters"])
     model.failure_head.load_state_dict(ck["failure"])
     model.action_head.load_state_dict(ck["action"])
     model.memory_head.load_state_dict(ck["memory"])
