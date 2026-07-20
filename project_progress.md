@@ -671,3 +671,15 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Cleared the stale executed/error output from `notebooks/kaggle_gold_recovery_v2_2.ipynb` while
   retaining `STAGE='smoke'`. Rerun this cheap stage once to produce a completely green publication
   artifact; only then change the stage to `bbox_overfit`.
+
+## 2026-07-20 — bbox micro-overfit gate authorized
+- No additional Kaggle commit followed the smoke-report fix. Reassessed whether repeating the GPU
+  smoke would add evidence: the original `run_gold_smoke` had already returned `status=PASS` only
+  after processing all 16 rows, checking finite loss/backward, verifying every required gradient and
+  parameter update, confirming valid bbox supervision/spatial tokens, and avoiding the test split.
+  The later `KeyError` was outside that function and the fix added only the constant report field
+  `test_rows_read: 0`; it did not affect data selection, forward/backward, loss, or optimization.
+- Accepted that existing smoke as the engineering gate rather than spending another Kaggle GPU run
+  solely to reproduce an observational field. Advanced the clean isolated notebook to
+  `STAGE='bbox_overfit'`. The registered next gate remains 32 verified valid bbox rows for 100
+  steps; diagnostic training stays blocked until every micro-overfit check passes.
