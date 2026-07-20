@@ -73,6 +73,7 @@ def audit_bbox_geometry(
     fatal_invalid_rows = 0
     maskable_invalid_rows = 0
     coordinates = {name: [] for name in REQUIRED_BBOX_KEYS}
+    log_sizes = {"width": [], "height": []}
 
     for index, record in enumerate(records):
         inputs, labels, _ = _view(record)
@@ -157,6 +158,8 @@ def audit_bbox_geometry(
         valid_rows += 1
         for name, value in zip(REQUIRED_BBOX_KEYS, normalized, strict=True):
             coordinates[name].append(value)
+        log_sizes["width"].append(math.log(normalized[2]))
+        log_sizes["height"].append(math.log(normalized[3]))
 
     invalid_rows = bbox_rows - valid_rows
     return {
@@ -173,10 +176,42 @@ def audit_bbox_geometry(
         "normalized_valid_distribution": {
             name: _summary(values) for name, values in coordinates.items()
         },
+        "normalized_valid_log_size_distribution": {
+            name: _summary(values) for name, values in log_sizes.items()
+        },
         "contract": (
             "finite x/y, positive width/height, and the complete box must stay "
             "inside the actual state_before image"
         ),
+    }
+
+
+def bbox_log_size_prior(
+    records: list[dict],
+    data_root: str | Path,
+) -> dict:
+    """Compute a geometric width/height prior from valid training rows.
+
+    Invalid localization labels are excluded exactly as they are from bbox
+    supervision.  Fatal image errors still stop construction because those rows
+    are unusable for the multimodal model, not merely for localization.
+    """
+    report = audit_bbox_geometry(records, data_root, max_examples=5)
+    if report["fatal_invalid_bbox_rows"]:
+        raise ValueError(
+            "cannot derive bbox prior with fatal state-before image errors"
+        )
+    if report["valid_bbox_rows"] <= 0:
+        raise ValueError("cannot derive bbox prior without a valid bbox row")
+    distribution = report["normalized_valid_log_size_distribution"]
+    log_width = float(distribution["width"]["mean"])
+    log_height = float(distribution["height"]["mean"])
+    return {
+        "source": "valid training bbox rows only",
+        "valid_rows": int(report["valid_bbox_rows"]),
+        "excluded_invalid_rows": int(report["invalid_bbox_rows"]),
+        "log_wh": [log_width, log_height],
+        "geometric_mean_wh": [math.exp(log_width), math.exp(log_height)],
     }
 
 

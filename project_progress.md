@@ -715,3 +715,57 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   notebook outputs/execution counts are empty; and `git diff --check` passed. This does not guarantee
   the empirical IoU gate. The next evidence must be the v2.3 Kaggle `smoke`, followed by manual
   montage review and only then the unchanged `bbox_overfit` gate.
+
+## 2026-07-20 — v2.3 bbox overfit failure isolated to zero-size saturation
+- Analyzed the user-supplied v2.3 audit and complete 32-row/100-step overfit report. The audit is an
+  accepted PASS: 31,360 records retained, 9,068 valid bbox targets, 2,534 invalid targets masked
+  only from localization, zero fatal image errors, and zero test rows read. The exact overfit sample
+  contains 32/32 valid boxes, so invalid dataset geometry did not cause this failure.
+- V2.3 fixed the earlier numerical and centre-grounding defects. All 100 optimizer steps had finite
+  gradients; bbox/grounding first-gradient norms were 6.315/2.205 and update norms were 0.150/3.646.
+  Attention entropy sharpened from 5.519 to 1.007 and the final x/y predictions became nonconstant
+  (std 0.155/0.065). The loss decreased from a 7.188 first-window mean to 5.324, with the last
+  pre-update step at 3.686.
+- The remaining failure is the width/height decoder: public predicted width and height both became
+  exactly zero with zero variance, versus target means 0.1559 and 0.0502. Consequently final mean
+  IoU and Recall@IoU50 were both zero, and IoU gain was -0.00539. The current coordinate head uses
+  `sigmoid(size_logits)` while the inherited head LR is 1e-3. It starts near width/height 0.54/0.53,
+  far above these small targets; once logits overshoot deeply negative, sigmoid underflow produces
+  zero size and its derivative cannot recover reliably. This mechanism matches both the code and
+  the observed exact zero-size output; it is not a speculative data diagnosis.
+- Do not run the 5k diagnostic and do not lower the IoU gates. The registered next correction should
+  preserve v2.3 centre attention, FP32 grounding, rows, seed, steps, 5:2 outer loss ratio, and gates,
+  while replacing only the size branch with train-only-prior initialization plus direct log-width/
+  log-height supervision. Log internal centre/size/logit distributions at fixed step intervals so
+  saturation or final-step overshoot is visible. Implement this as isolated v2.4 artifacts only
+  after explicit approval; v2.3 remains the failed controlled result.
+
+## 2026-07-20 — recovery-v2.4 log-size correction implemented
+- Implemented the approved correction as an isolated v2.4 experiment; v2.3 and
+  `notebooks/kaggle_gold.ipynb` remain unchanged. The coordinate-softargmax centre, FP32 grounding,
+  deterministic 32 rows, seed 42, 100 steps, optimizer settings, 5:2 bbox ratios, and registered
+  IoU/full-screen gates are inherited without relaxation.
+- Added config-gated log-space width/height prediction. Public/internal sizes use a bounded
+  exponential decode, while SmoothL1 reads the **unclamped** predicted log-width/log-height. This
+  leaves a direct nonzero recovery gradient even when the decoded size reaches its numerical floor,
+  removing the exact saturated-sigmoid mechanism demonstrated by v2.3.
+- The size head now starts from the geometric mean width/height calculated only from valid bbox rows
+  in the exact selected training records. Invalid localization targets are excluded consistently
+  with their bbox mask; validation and test records never contribute to this prior. The prior and
+  its source counts are saved in smoke/mini or overfit reports.
+- Expanded the micro-overfit evidence with public coordinate minima/maxima, internal cxcywh size
+  ranges, raw log-size distributions, centre/log-size/GIoU sublosses, and a named pre-update trace at
+  optimizer steps 10,20,...,100. V2.4 additionally fails if any final public/internal width or
+  height returns below `1e-6`; the original mean-IoU gain and final-IoU thresholds are unchanged.
+- Added `configs/backbones/qwen2vl_2b_gold_v2_4.yaml`,
+  `docs/RECOVERY_V2_4_EXPERIMENT.md`, output-free
+  `notebooks/kaggle_gold_recovery_v2_4.ipynb`, and regression tests for training-only prior
+  provenance, saturated-logit gradients, head initialization/decoding, combined-loss routing,
+  inherited controls, and notebook compilation. The notebook deliberately starts at `smoke`
+  because the size parameterization and loss changed.
+- Local verification passed: Ruff clean; Python compileall passed; full local suite `24 passed / 18
+  skipped` (PyTorch/GPU execution is unavailable in this Windows runtime and remains a Kaggle gate);
+  merged v2.4 config proves optimizer equality with v2.3; notebook JSON and every code cell compile
+  with empty outputs/execution counts; and `git diff --check` passed. The next permitted action is
+  v2.4 `smoke`, manual confirmation of the unchanged montage, then `bbox_overfit`. Diagnostic/mini
+  training remains blocked until every saved overfit check is true.

@@ -101,6 +101,15 @@ class WebAgentModel(nn.Module):
             bbox_grounding_mode=model_cfg.get(
                 "bbox_grounding_mode", "content_attention",
             ),
+            bbox_size_parameterization=model_cfg.get(
+                "bbox_size_parameterization", "sigmoid",
+            ),
+            bbox_log_size_min=float(model_cfg.get(
+                "bbox_log_size_min", -9.210340371976184,
+            )),
+            bbox_log_size_max=float(model_cfg.get(
+                "bbox_log_size_max", 0.0,
+            )),
         )
         self.memory_head = MemoryHead(fused_dim)
         self.recovery_outcome_head = RecoveryOutcomeHead(fused_dim)

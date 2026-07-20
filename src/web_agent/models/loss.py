@@ -11,7 +11,8 @@ Details:
   - CrossEntropy terms use label_smoothing 0.1; failure_type, action, and recovery
     strategy are class-weighted.
   - recovery = mean of CE over the Failure head and the Memory head (both predict it).
-  - legacy bbox = masked MSE; recovery-v2 = masked SmoothL1 + GIoU.
+  - legacy bbox = masked MSE; recovery-v2 adds IoU-aware objectives; v2.4 uses
+    centre L1 + direct log-size SmoothL1 + GIoU.
   - memory_flag + recovery_outcome = BCE.
   - confidence = MSE after clipping predictions to [0.05, 0.95].
   - calibration = differentiable soft-binned surrogate of ECE (true ECE is logged as a
@@ -35,7 +36,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from web_agent.models.bbox import detr_bbox_loss_terms
+from web_agent.models.bbox import (
+    detr_bbox_log_size_loss_terms,
+    detr_bbox_loss_terms,
+)
 
 
 class CombinedLoss(nn.Module):
@@ -213,19 +217,38 @@ class CombinedLoss(nn.Module):
         # Bbox is supervised only where a real target exists.
         bbox_diagnostics = {}
         mask = batch["bbox_mask"]
-        if self.bbox_loss == "detr_l1_giou":
+        if self.bbox_loss in {"detr_l1_giou", "detr_log_size_giou"}:
             row_mask = mask.view(-1) > 0
             bbox_active = bool(row_mask.any())
             if bbox_active:
                 if "bbox_cxcywh" not in preds:
                     raise KeyError(
-                        "detr_l1_giou requires centre-format bbox_cxcywh predictions"
+                        f"{self.bbox_loss} requires centre-format bbox_cxcywh "
+                        "predictions"
                     )
-                l1, giou = detr_bbox_loss_terms(
-                    preds["bbox_cxcywh"][row_mask],
-                    batch["bbox"][row_mask],
-                )
-                bbox_diagnostics = {"bbox_l1": l1, "bbox_giou": giou}
+                if self.bbox_loss == "detr_log_size_giou":
+                    if "bbox_log_wh" not in preds:
+                        raise KeyError(
+                            "detr_log_size_giou requires unclamped bbox_log_wh"
+                        )
+                    centre_l1, log_size, giou = detr_bbox_log_size_loss_terms(
+                        preds["bbox_cxcywh"][row_mask],
+                        preds["bbox_log_wh"][row_mask],
+                        batch["bbox"][row_mask],
+                    )
+                    l1 = centre_l1 + log_size
+                    bbox_diagnostics = {
+                        "bbox_l1": l1,
+                        "bbox_center_l1": centre_l1,
+                        "bbox_log_size_smooth_l1": log_size,
+                        "bbox_giou": giou,
+                    }
+                else:
+                    l1, giou = detr_bbox_loss_terms(
+                        preds["bbox_cxcywh"][row_mask],
+                        batch["bbox"][row_mask],
+                    )
+                    bbox_diagnostics = {"bbox_l1": l1, "bbox_giou": giou}
                 t["bbox"] = (
                     float(self.w.get("bbox_l1_ratio", 5.0)) * l1
                     + float(self.w.get("bbox_giou_ratio", 2.0)) * giou
@@ -236,6 +259,11 @@ class CombinedLoss(nn.Module):
                     "bbox_l1": t["bbox"],
                     "bbox_giou": t["bbox"],
                 }
+                if self.bbox_loss == "detr_log_size_giou":
+                    bbox_diagnostics.update({
+                        "bbox_center_l1": t["bbox"],
+                        "bbox_log_size_smooth_l1": t["bbox"],
+                    })
         elif self.bbox_loss == "smooth_l1_giou":
             row_mask = mask.view(-1) > 0
             bbox_active = bool(row_mask.any())

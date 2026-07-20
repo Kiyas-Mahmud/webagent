@@ -1,0 +1,25 @@
+# Recovery-v2.4: isolated correction for the registered v2.3 zero-size collapse.
+# V2.3 proved that the centre attention, gradients, updates, and FP32 path work,
+# while sigmoid width/height saturated at exactly zero. Dataset, selected rows,
+# seed, steps, optimizer, outer 5:2 ratios, and IoU gates stay unchanged.
+name: Y_QWEN2VL_2B_GOLD_V2_4
+extends: backbones/qwen2vl_2b_gold_v2_3.yaml
+
+model:
+  # Predict unconstrained log(width), log(height). Public sizes use a bounded
+  # exponential decode, but the direct size loss reads the unclamped logits.
+  bbox_size_parameterization: log_space
+  bbox_log_size_min: -9.210340371976184  # log(1e-4)
+  bbox_log_size_max: 0.0                 # log(1.0)
+
+loss:
+  # Preserve centre L1 and GIoU. Replace only the saturated decoded-size L1
+  # contribution with SmoothL1 on the raw log-size values.
+  bbox_loss: detr_log_size_giou
+
+train:
+  controlled_experiment_tag: recovery_v2_4
+  metrics_csv: results/gold_recovery_v2_4_metrics.csv
+  # Existing v2.3 IoU gates are inherited unchanged. This additional gate
+  # rejects the exact width=height=0 failure seen in the v2.3 Kaggle report.
+  bbox_overfit_min_predicted_size: 0.000001

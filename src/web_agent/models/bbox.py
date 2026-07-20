@@ -4,6 +4,11 @@ Dataset labels use normalized top-left ``xywh``.  Recovery-v2.2 predicts the
 DETR-style centre representation ``cxcywh`` internally, applies coordinate L1
 there, and converts to corners for GIoU.  Public model predictions remain
 top-left ``xywh`` so existing metrics and saved-result schemas stay stable.
+
+Recovery-v2.4 keeps the centre path unchanged but predicts width/height in log
+space.  Its direct log-size loss is intentionally computed from the unclamped
+logits: unlike a saturated sigmoid, that path keeps a useful gradient when a
+decoded size is extremely small.
 """
 
 from __future__ import annotations
@@ -82,3 +87,45 @@ def detr_bbox_loss_terms(
         target_cxcywh,
     )).mean()
     return l1, giou
+
+
+def detr_bbox_log_size_loss_terms(
+    prediction_cxcywh: torch.Tensor,
+    prediction_log_wh: torch.Tensor,
+    target_xywh: torch.Tensor,
+    *,
+    minimum_target_size: float = 1e-7,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return centre L1, log-size SmoothL1, and GIoU losses.
+
+    The target boxes have already passed the strict geometry audit, so their
+    sizes are positive.  ``clamp_min`` is only a final numerical guard before
+    ``log``.  Crucially, the size loss reads the *unclamped* predicted log-size;
+    therefore its gradient cannot disappear merely because the public decoded
+    width or height is very small.
+    """
+    if prediction_log_wh.shape != prediction_cxcywh[..., 2:].shape:
+        raise ValueError(
+            "prediction_log_wh must match the two cxcywh size coordinates"
+        )
+    target_cxcywh = xywh_to_cxcywh(target_xywh.float())
+    prediction_cxcywh = prediction_cxcywh.float()
+    prediction_log_wh = prediction_log_wh.float()
+    centre_l1 = F.l1_loss(
+        prediction_cxcywh[..., :2],
+        target_cxcywh[..., :2],
+        reduction="none",
+    ).sum(dim=-1).mean()
+    target_log_wh = torch.log(
+        target_cxcywh[..., 2:].clamp_min(float(minimum_target_size))
+    )
+    log_size_smooth_l1 = F.smooth_l1_loss(
+        prediction_log_wh,
+        target_log_wh,
+        reduction="none",
+    ).sum(dim=-1).mean()
+    giou = (1.0 - generalized_iou_cxcywh(
+        prediction_cxcywh,
+        target_cxcywh,
+    )).mean()
+    return centre_l1, log_size_smooth_l1, giou

@@ -4,12 +4,14 @@ Every head reads the same fused [B, 768] embedding. Do NOT change these when
 swapping backbones — that constancy is the backbone-agnostic claim.
 
   FailureHead (Pillar 1): outcome(2), failure_type(4), confidence(1 sigmoid), recovery(6)
-  ActionHead  (Pillar 3): action_type(6), bbox(4 sigmoid -> [0,1])
+  ActionHead  (Pillar 3): action_type(6), bbox(4 normalized coordinates)
   MemoryHead  (Pillar 4): memory_flag(1 sigmoid), recovery(6)
 
 Each head trunk: Linear(768->256) -> ReLU -> Dropout(0.3). The registered Gold
 recovery-v2 experiment adds a needs-recovery logit and optional image-token
 grounding while keeping the legacy path available for controlled comparison.
+Recovery-v2.4 optionally predicts width/height in log space to avoid a saturated
+sigmoid size branch.
 """
 
 from __future__ import annotations
@@ -85,6 +87,9 @@ class ActionHead(nn.Module):
         spatial_grounding: bool = False,
         bbox_parameterization: str = "legacy_xywh",
         bbox_grounding_mode: str = "content_attention",
+        bbox_size_parameterization: str = "sigmoid",
+        bbox_log_size_min: float = -9.210340371976184,
+        bbox_log_size_max: float = 0.0,
     ):
         super().__init__()
         self.spatial_grounding = spatial_grounding
@@ -100,6 +105,23 @@ class ActionHead(nn.Module):
         if bbox_grounding_mode == "coordinate_softargmax" and not spatial_grounding:
             raise ValueError("coordinate_softargmax requires spatial_grounding=true")
         self.bbox_grounding_mode = bbox_grounding_mode
+        if bbox_size_parameterization not in {"sigmoid", "log_space"}:
+            raise ValueError(
+                "unsupported bbox size parameterization: "
+                f"{bbox_size_parameterization!r}"
+            )
+        if (
+            bbox_size_parameterization == "log_space"
+            and bbox_grounding_mode != "coordinate_softargmax"
+        ):
+            raise ValueError(
+                "log-space bbox size requires coordinate_softargmax grounding"
+            )
+        if bbox_log_size_min >= bbox_log_size_max:
+            raise ValueError("bbox_log_size_min must be smaller than max")
+        self.bbox_size_parameterization = bbox_size_parameterization
+        self.bbox_log_size_min = float(bbox_log_size_min)
+        self.bbox_log_size_max = float(bbox_log_size_max)
         self.trunk = _trunk(dim, hidden, dropout)
         self.action_type = nn.Linear(hidden, NUM_ACTION_TYPE)  # 6
         if spatial_grounding:
@@ -116,6 +138,21 @@ class ActionHead(nn.Module):
             hidden,
             2 if bbox_grounding_mode == "coordinate_softargmax" else 4,
         )
+
+    @torch.no_grad()
+    def initialize_bbox_size_prior(self, log_wh) -> None:
+        """Initialize the log-size branch from valid training rows only."""
+        if self.bbox_size_parameterization != "log_space":
+            raise RuntimeError("bbox size prior is only valid in log-space mode")
+        prior = torch.as_tensor(
+            log_wh,
+            dtype=self.bbox.bias.dtype,
+            device=self.bbox.bias.device,
+        ).view(-1)
+        if prior.numel() != 2 or not torch.isfinite(prior).all():
+            raise ValueError("bbox log-size prior must contain two finite values")
+        self.bbox.weight.zero_()
+        self.bbox.bias.copy_(prior)
 
     def forward(
         self,
@@ -165,13 +202,23 @@ class ActionHead(nn.Module):
                     bbox_query, grounded.squeeze(1),
                 ], dim=-1))
             attention_entropy = None
+            raw_log_wh = None
             if self.bbox_grounding_mode == "coordinate_softargmax":
                 centre, attention_entropy = spatial_soft_argmax(
                     attention_weights.squeeze(1),
                     spatial_coords,
                     spatial_mask,
                 )
-                size = torch.sigmoid(self.bbox(bbox_h))
+                size_prediction = self.bbox(bbox_h)
+                if self.bbox_size_parameterization == "log_space":
+                    raw_log_wh = size_prediction
+                    size = torch.exp(torch.clamp(
+                        raw_log_wh,
+                        min=self.bbox_log_size_min,
+                        max=self.bbox_log_size_max,
+                    ))
+                else:
+                    size = torch.sigmoid(size_prediction)
                 raw_bbox = torch.cat([centre, size], dim=-1)
             else:
                 raw_bbox = torch.sigmoid(self.bbox(bbox_h))
@@ -189,6 +236,8 @@ class ActionHead(nn.Module):
         }
         if self.bbox_parameterization == "cxcywh":
             result["bbox_cxcywh"] = raw_bbox
+        if raw_log_wh is not None:
+            result["bbox_log_wh"] = raw_log_wh
         if attention_entropy is not None:
             result["bbox_attention_entropy"] = attention_entropy
         return result
