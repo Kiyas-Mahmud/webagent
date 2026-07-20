@@ -39,7 +39,7 @@ import torch.nn.functional as F
 class CombinedLoss(nn.Module):
     def __init__(self, cfg: dict, action_class_weights=None, failtype_class_weights=None,
                  outcome_class_weights=None, recovery_class_weights=None,
-                 recovery_success_pos_weight=None):
+                 recovery_success_pos_weight=None, needs_recovery_pos_weight=None):
         super().__init__()
         self.w = cfg["loss"]
         self.smoothing = self.w.get("label_smoothing", 0.0)
@@ -62,6 +62,9 @@ class CombinedLoss(nn.Module):
         self.register_buffer("recovery_w", recovery_class_weights, persistent=False)
         # pos_weight for the recovery_success BCE head (else it pins at the prior).
         self.register_buffer("recovery_pos_w", recovery_success_pos_weight, persistent=False)
+        self.register_buffer(
+            "needs_recovery_pos_w", needs_recovery_pos_weight, persistent=False,
+        )
         # 10 soft-bin centers for the calibration surrogate.
         self.register_buffer("bin_centers", torch.linspace(0.05, 0.95, 10), persistent=False)
         task_names = [
@@ -200,7 +203,9 @@ class CombinedLoss(nn.Module):
         t["recovery"] = torch.stack(rec_losses).mean()
         if self.hierarchical_recovery:
             t["needs_recovery"] = F.binary_cross_entropy_with_logits(
-                preds["needs_recovery"], batch["label_needs_recovery"],
+                preds["needs_recovery"],
+                batch["label_needs_recovery"],
+                pos_weight=self.needs_recovery_pos_w,
             )
 
         # Bbox is supervised only where a real target exists.

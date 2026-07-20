@@ -560,3 +560,40 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   compile with no saved outputs/execution counts; and `git diff --check` passed. Required next gate:
   run recovery-v2 smoke on Kaggle, restart the kernel, run the five-epoch mini, then inspect the
   generated full class audit and quality gates before authorizing any headline/full-data training.
+
+## 2026-07-20 — recovery-v2 epoch audit and evidence-driven v2.1 correction
+- Audited the supplied recovery-v2 epoch 0/1 logs. The causal transition head is validated as a
+  useful change: recovery-outcome MCC improved 0.4970 -> 0.7268 and macro-F1 0.7415 -> 0.8566.
+  Outcome MCC reached 0.5514 (above the v14 0.5217 reference), memory MCC reached 0.6635, and
+  outcome ECE fell to 0.0625. Action accuracy remained within the registered non-regression band.
+- Confirmed two code defects rather than assuming the data was bad. First, attempted-strategy
+  metrics consumed the composed recovery prediction, so an all-negative needs-recovery gate forced
+  every attempted strategy prediction to `NONE` and produced a false zero. Second, the binary
+  needs-recovery BCE was unweighted even though the exact 5k subset has 1,191 positive versus 3,809
+  negative rows; the printed 1.93 weight applied only to success/failure within attempted recovery.
+- Corrected evaluation to retain raw conditional-strategy predictions separately from the composed
+  end-to-end recovery decision. Attempted-only accuracy/macro-F1/class diversity and diagnostics now
+  use raw strategy logits; overall recovery metrics still honestly include the binary gate.
+- Added exact selected-training-row needs-recovery `pos_weight = negative / positive` (cap 5.0),
+  recorded its counts/scheme in the class-weight report, and never uses validation labels. For the
+  observed v2 subset this resolves to approximately 3.20.
+- Did not guess a new bbox loss or arbitrary coefficient. The unchanged v2 localization metrics
+  (MAE 0.6106, mean IoU 0.0079, Recall@IoU50 0 across epochs 0/1) instead triggered direct
+  instrumentation: first-step gradient norms, epoch parameter-update norms, bbox coordinate
+  prediction/target distributions, spatial-token counts, and learned uncertainty multipliers.
+- Added a bbox-specific residual grounding adapter so localization no longer shares the policy
+  adapter with action classification. Strengthened smoke to require real bbox supervision plus
+  finite nonzero gradients and optimizer updates for bbox, grounding adapter, needs recovery,
+  strategy, and recovery outcome. Checkpoint round-trip now verifies every affected output/module.
+- Separated the nominal weighted loss from the uncertainty objective. The latter may legitimately
+  become negative because of learned log-variance terms, so the loss-decrease gate now uses the
+  interpretable nominal weighted loss and CSV logs both log-variances and effective multipliers.
+- Added registered config `qwen2vl_2b_gold_v2_1.yaml`, protocol
+  `docs/RECOVERY_V2_1_EXPERIMENT.md`, and isolated output-free notebook
+  `notebooks/kaggle_gold_recovery_v2_1.ipynb`. Required order is smoke -> one-epoch 5k diagnostic
+  -> five-epoch mini only after diagnostics are healthy; v2 artifacts remain preserved.
+- Local verification passed: Ruff clean; `13 passed / 8 skipped` (the added tensor/head tests and
+  all GPU paths require the Kaggle PyTorch runtime); Python compileall passed; v2.1 merged-config and
+  notebook-cell assertions passed; all older Kaggle notebooks have zero diff; and
+  `git diff --check` passed. The next evidence must come from the v2.1 Kaggle smoke, not another
+  assumption-driven training run.

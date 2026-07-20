@@ -204,6 +204,24 @@ def build_gold_components(
     recovery_pos_weight = torch.tensor([
         min(recovery_ratio, 5.0) if positives and negatives else 1.0
     ])
+    needs_positive = sum(
+        view(record)[1].get("recovery_success") is not None
+        for record in train_records
+    )
+    needs_negative = len(train_records) - needs_positive
+    needs_scheme = cfg["loss"].get(
+        "needs_recovery_weight_scheme", "exact_inverse_frequency",
+    )
+    if needs_scheme != "exact_inverse_frequency":
+        raise ValueError(
+            f"unsupported needs-recovery weight scheme: {needs_scheme!r}"
+        )
+    needs_cap = float(cfg["loss"].get("needs_recovery_weight_cap", 5.0))
+    needs_ratio = needs_negative / max(needs_positive, 1)
+    needs_recovery_pos_weight = torch.tensor([
+        min(needs_ratio, needs_cap)
+        if needs_positive and needs_negative else 1.0
+    ])
 
     model = WebAgentModel(cfg)
     device = "cuda"
@@ -224,6 +242,7 @@ def build_gold_components(
         outcome_class_weights=outcome_w.to(device),
         recovery_class_weights=recovery_w.to(device),
         recovery_success_pos_weight=recovery_pos_weight.to(device),
+        needs_recovery_pos_weight=needs_recovery_pos_weight.to(device),
     ).to(device)
 
     print("train rows:", len(train_records))
@@ -234,6 +253,10 @@ def build_gold_components(
     print(
         "recovery pos_weight:", round(float(recovery_pos_weight), 2),
         f"(attempted success={positives}, failure={negatives})",
+    )
+    print(
+        "needs-recovery pos_weight:", round(float(needs_recovery_pos_weight), 2),
+        f"(needed={needs_positive}, not-needed={needs_negative})",
     )
     weight_report = {
         "source_rows": len(train_records),
@@ -246,6 +269,10 @@ def build_gold_components(
         "recovery_outcome_pos_weight": float(recovery_pos_weight.item()),
         "recovery_outcome_attempted_success": positives,
         "recovery_outcome_attempted_failure": negatives,
+        "needs_recovery_pos_weight": float(needs_recovery_pos_weight.item()),
+        "needs_recovery_weight_scheme": needs_scheme,
+        "needs_recovery_positive": needs_positive,
+        "needs_recovery_negative": needs_negative,
     }
     return GoldComponents(
         processor, model, loss_fn, train_records, weight_report, device,
@@ -294,8 +321,21 @@ def run_gold_smoke(
         weight_decay=cfg["optim"].get("weight_decay", 0.01),
     )
     scaler = torch.amp.GradScaler("cuda")
-    probe = next(parameter for parameter in model.action_head.parameters() if parameter.requires_grad)
-    before = probe.detach().clone()
+    probes = {
+        "bbox": model.action_head.bbox.weight,
+        "strategy": model.failure_head.recovery.weight,
+        "recovery_outcome": model.recovery_outcome_head.recovery_outcome.weight,
+    }
+    if model.failure_head.needs_recovery is not None:
+        probes["needs_recovery"] = model.failure_head.needs_recovery.weight
+    if "grounding" in model.task_adapters:
+        probes["grounding_adapter"] = next(
+            model.task_adapters["grounding"].parameters()
+        )
+    before = {
+        name: parameter.detach().clone()
+        for name, parameter in probes.items()
+    }
 
     optimizer.zero_grad(set_to_none=True)
     term_sums = {}
@@ -304,6 +344,7 @@ def run_gold_smoke(
     processed_rows = 0
     pre_images = 0
     post_images = 0
+    bbox_rows = 0
     for batch in loader:
         with torch.autocast("cuda", dtype=torch.float16):
             predictions = model(batch)
@@ -323,10 +364,18 @@ def run_gold_smoke(
         processed_rows += int(batch["label_outcome"].shape[0])
         pre_images += int(batch["pre_image_grid_thw"].shape[0])
         post_images += int(batch["post_image_grid_thw"].shape[0])
+        bbox_rows += int(batch["bbox_mask"].sum())
 
     if processed_rows != rows or first_batch is None or first_predictions is None:
         raise AssertionError(f"smoke processed {processed_rows} rows, expected {rows}")
     scaler.unscale_(optimizer)
+    probe_gradient_norms = {
+        name: (
+            float(parameter.grad.detach().float().norm())
+            if parameter.grad is not None else 0.0
+        )
+        for name, parameter in probes.items()
+    }
     gradients = [
         parameter.grad
         for parameter in model.trainable_parameters()
@@ -336,9 +385,20 @@ def run_gold_smoke(
         raise FloatingPointError("smoke backward produced missing or non-finite gradients")
     scaler.step(optimizer)
     scaler.update()
-    parameter_changed = not torch.equal(before, probe.detach())
-    if not parameter_changed:
-        raise AssertionError("optimizer step did not change the action head")
+    probe_update_norms = {
+        name: float((parameter.detach() - before[name]).float().norm())
+        for name, parameter in probes.items()
+    }
+    inactive_probes = [
+        name for name in probes
+        if probe_gradient_norms[name] <= 0.0 or probe_update_norms[name] <= 0.0
+    ]
+    if bbox_rows <= 0:
+        raise AssertionError("smoke rows contain no bbox supervision")
+    if inactive_probes:
+        raise AssertionError(
+            f"smoke probes did not receive gradient/update: {inactive_probes}"
+        )
 
     batch_size = first_batch["label_outcome"].shape[0]
     expected_shapes = {
@@ -364,6 +424,10 @@ def run_gold_smoke(
         actual = tuple(first_predictions[key].shape)
         if actual != expected:
             raise AssertionError(f"{key} shape={actual}, expected={expected}")
+    spatial_counts = first_predictions.get("spatial_token_counts")
+    if cfg.get("model", {}).get("spatial_grounding"):
+        if spatial_counts is None or not bool((spatial_counts > 0).all()):
+            raise AssertionError("spatial grounding received an empty image-token mask")
 
     return {
         "status": "PASS",
@@ -376,7 +440,14 @@ def run_gold_smoke(
         "train_distribution": label_distribution(smoke_records),
         "pre_images_processed": pre_images,
         "post_images_processed": post_images,
-        "parameter_changed": parameter_changed,
+        "parameter_changed": True,
+        "probe_gradient_norms": probe_gradient_norms,
+        "probe_update_norms": probe_update_norms,
+        "bbox_supervised_rows": bbox_rows,
+        "spatial_tokens_per_row": (
+            spatial_counts.detach().cpu().tolist()
+            if spatial_counts is not None else []
+        ),
         "peak_gpu_gb": torch.cuda.max_memory_allocated() / 1e9,
     }
 
@@ -463,9 +534,13 @@ def run_gold_mini(
     trainer.load_checkpoint(checkpoint, resume_training=False)
     checkpoint_roundtrip = _verify_checkpoint_roundtrip(trainer, val_loader)
     history = result["history"]
-    loss_decreased = len(history) > 1 and history[-1]["train_loss"] < history[0]["train_loss"]
-    if not loss_decreased:
-        raise AssertionError("mini training loss did not decrease across epochs")
+    loss_decreased = (
+        history[-1]["train_nominal_weighted_loss"]
+        < history[0]["train_nominal_weighted_loss"]
+        if len(history) > 1 else None
+    )
+    if len(history) > 1 and not loss_decreased:
+        raise AssertionError("nominal weighted mini loss did not decrease across epochs")
     if result["best_metric"] <= 0.0:
         raise AssertionError(
             f"validation {result['early_stop_metric']} did not beat the degenerate floor"
@@ -501,6 +576,7 @@ def run_gold_mini(
     }
     quality_gates = _controlled_quality_gates(result)
     is_v2 = bool(mini_cfg["data"].get("recovery_transitions"))
+    is_v2_1 = experiment_tag.lower() == "recovery_v2_1"
     training_changes = [
         "joint proportional training subset coverage",
         "recovery-aware distribution-preserving physical batches",
@@ -514,6 +590,11 @@ def run_gold_mini(
             "proper sparse recovery-transition stream for recovery success",
             "spatial grounding bbox head with SmoothL1 plus GIoU",
             "task-specific residual adapters and uncertainty loss weighting",
+        ])
+    if is_v2_1:
+        training_changes.extend([
+            "exact selected-row needs-recovery positive weighting",
+            "bbox-specific residual adapter separate from action classification",
         ])
     fixed_factors = [
         "backbone",
@@ -560,6 +641,13 @@ def run_gold_mini(
                     "post-action executed-action conditioning",
                     "spatial bbox grounding and IoU-aware loss",
                     "task adapters and uncertainty weighting",
+                    *(
+                        [
+                            "exact needs-recovery balancing",
+                            "bbox-specific grounding adapter",
+                        ]
+                        if is_v2_1 else []
+                    ),
                 ]
                 if is_v2 else []
             ),
@@ -568,6 +656,10 @@ def run_gold_mini(
                 "honest scalar metrics",
                 "per-class diagnostics",
                 "raw and weighted loss terms",
+                "raw conditional-strategy metrics separate from composed recovery",
+                "per-head gradient and parameter-update norms",
+                "uncertainty log-variances and effective multipliers",
+                "bbox coordinate prediction and target distributions",
                 "all mini epoch checkpoints retained",
             ],
         },
@@ -621,18 +713,40 @@ def reevaluate_gold_validation_checkpoint(
 
 @torch.no_grad()
 def _verify_checkpoint_roundtrip(trainer: Trainer, val_loader) -> bool:
-    """Perturb one head, reload, and prove deterministic validation logits return."""
+    """Perturb critical heads/adapters, reload, and prove their logits return."""
     trainer.model.eval()
     batch = next(iter(val_loader))
     with torch.autocast("cuda", dtype=torch.float16):
-        expected = trainer.model(batch)["action_type"].float().cpu()
+        original = trainer.model(batch)
+        keys = ["action_type", "bbox", "recovery", "recovery_outcome"]
+        if "needs_recovery" in original:
+            keys.append("needs_recovery")
+        expected = {key: original[key].float().cpu() for key in keys}
 
-    parameter = next(trainer.model.action_head.parameters())
-    parameter.add_(0.25)
+    parameters = [
+        trainer.model.action_head.action_type.weight,
+        trainer.model.action_head.bbox.weight,
+        trainer.model.failure_head.recovery.weight,
+        trainer.model.recovery_outcome_head.recovery_outcome.weight,
+    ]
+    if trainer.model.failure_head.needs_recovery is not None:
+        parameters.append(trainer.model.failure_head.needs_recovery.weight)
+    if "grounding" in trainer.model.task_adapters:
+        parameters.append(next(trainer.model.task_adapters["grounding"].parameters()))
+    for parameter in parameters:
+        parameter.add_(0.25)
     trainer.load_checkpoint(trainer.best[0][1], resume_training=False)
     trainer.model.eval()
     with torch.autocast("cuda", dtype=torch.float16):
-        restored = trainer.model(batch)["action_type"].float().cpu()
-    if not torch.allclose(expected, restored, atol=1e-5, rtol=1e-5):
-        raise AssertionError("checkpoint reload did not restore identical predictions")
+        restored = trainer.model(batch)
+    mismatched = [
+        key for key in keys
+        if not torch.allclose(
+            expected[key], restored[key].float().cpu(), atol=1e-5, rtol=1e-5,
+        )
+    ]
+    if mismatched:
+        raise AssertionError(
+            f"checkpoint reload did not restore identical outputs: {mismatched}"
+        )
     return True

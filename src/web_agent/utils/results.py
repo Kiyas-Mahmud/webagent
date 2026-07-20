@@ -86,6 +86,8 @@ def save_mini_diagnostics_json(report: Mapping[str, Any], path: str | Path) -> P
         "train_distribution": report.get("train_distribution", {}),
         "validation_distribution": report.get("validation_distribution", {}),
         "experiment_control": report.get("experiment_control", {}),
+        "recovery_transition_reports": report.get("recovery_transition_reports", {}),
+        "recovery_class_audit": report.get("recovery_class_audit", {}),
         "epochs": diagnostics,
     }
     destination = Path(path)

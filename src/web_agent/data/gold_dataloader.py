@@ -100,11 +100,13 @@ def select_smoke_records(records, n: int = 16, seed: int = 42):
     covered_failures = set()
     covered_actions = set()
     covered_recovery_outcomes = set()
+    covered_bbox = False
     for record in shuffled:
         _, labels, _ = view(record)
         failure = labels["failure_type_4"]
         action = labels["action_type"]
         recovery_outcome = labels.get("recovery_success")
+        has_bbox = labels.get("action_target_bbox") is not None
         adds_recovery_coverage = (
             recovery_outcome in {True, False}
             and recovery_outcome not in covered_recovery_outcomes
@@ -113,22 +115,26 @@ def select_smoke_records(records, n: int = 16, seed: int = 42):
             failure not in covered_failures
             or action not in covered_actions
             or adds_recovery_coverage
+            or (has_bbox and not covered_bbox)
         ):
             selected.append(record)
             covered_failures.add(failure)
             covered_actions.add(action)
             if recovery_outcome in {True, False}:
                 covered_recovery_outcomes.add(recovery_outcome)
+            covered_bbox = covered_bbox or has_bbox
         if (
             len(covered_failures) == 4
             and len(covered_actions) == 6
             and covered_recovery_outcomes == {True, False}
+            and covered_bbox
         ):
             break
     if (
         len(covered_failures) != 4
         or len(covered_actions) != 6
         or covered_recovery_outcomes != {True, False}
+        or not covered_bbox
     ):
         raise ValueError("gold smoke records do not cover all required label categories")
     chosen_ids = {id(record) for record in selected}

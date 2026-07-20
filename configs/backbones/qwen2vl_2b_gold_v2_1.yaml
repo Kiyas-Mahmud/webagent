@@ -1,0 +1,19 @@
+# Recovery-v2.1: evidence-driven correction after the first v2 epochs.
+# Fixed factors remain the same; changed factors are registered below.
+name: Y_QWEN2VL_2B_GOLD_V2_1
+extends: backbones/qwen2vl_2b_gold_v2.yaml
+
+model:
+  task_adapters:
+    separate_bbox: true
+
+loss:
+  # Derived from the exact selected training rows. The first v2 run had
+  # 1,191 positives and 3,809 negatives (3.20), while its unweighted head
+  # predicted only the negative class.
+  needs_recovery_weight_scheme: exact_inverse_frequency
+  needs_recovery_weight_cap: 5.0
+
+train:
+  controlled_experiment_tag: recovery_v2_1
+  metrics_csv: results/gold_recovery_v2_1_metrics.csv

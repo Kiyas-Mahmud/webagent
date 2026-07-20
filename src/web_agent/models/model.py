@@ -62,15 +62,21 @@ class WebAgentModel(nn.Module):
 
         task_adapter_cfg = model_cfg.get("task_adapters", {})
         self.use_task_adapters = bool(task_adapter_cfg.get("enabled", False))
+        self.separate_bbox_adapter = self.use_task_adapters and bool(
+            task_adapter_cfg.get("separate_bbox", False)
+        )
         if self.use_task_adapters:
             kwargs = {
                 "dim": fused_dim,
                 "bottleneck": int(task_adapter_cfg.get("bottleneck", 128)),
                 "dropout": float(task_adapter_cfg.get("dropout", 0.1)),
             }
+            task_names = ["policy", "diagnosis", "memory", "recovery"]
+            if self.separate_bbox_adapter:
+                task_names.append("grounding")
             self.task_adapters = nn.ModuleDict({
                 name: ResidualTaskAdapter(**kwargs)
-                for name in ("policy", "diagnosis", "memory", "recovery")
+                for name in task_names
             })
         else:
             self.task_adapters = nn.ModuleDict({
@@ -111,6 +117,10 @@ class WebAgentModel(nn.Module):
         def adapt(name, value):
             return adapters[name](value) if adapters is not None else value
         pre_fused = adapt("policy", pre_encoded["fused"])
+        bbox_fused = (
+            adapt("grounding", pre_encoded["fused"])
+            if self.separate_bbox_adapter else pre_fused
+        )
         post_fused = adapt("diagnosis", post_encoded["fused"])
         memory_fused = adapt("memory", post_encoded["fused"])
 
@@ -119,6 +129,8 @@ class WebAgentModel(nn.Module):
             "fused_pre": pre_fused,
             "fused_post": post_fused,
         }
+        if pre_encoded.get("spatial_mask") is not None:
+            preds["spatial_token_counts"] = pre_encoded["spatial_mask"].sum(dim=1)
         failure_predictions = self.failure_head(
             post_fused,
             confidence_fused=pre_fused if self.causal_routing else None,
@@ -126,10 +138,14 @@ class WebAgentModel(nn.Module):
         preds.update(failure_predictions)
         spatial_tokens = pre_encoded.get("spatial_tokens")
         if spatial_tokens is not None:
-            spatial_tokens = adapt("policy", spatial_tokens)
+            spatial_tokens = adapt(
+                "grounding" if self.separate_bbox_adapter else "policy",
+                spatial_tokens,
+            )
         if getattr(self, "spatial_grounding", False):
             preds.update(self.action_head(
                 pre_fused,
+                bbox_fused=bbox_fused,
                 spatial_tokens=spatial_tokens,
                 spatial_mask=pre_encoded.get("spatial_mask"),
             ))

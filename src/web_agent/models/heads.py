@@ -94,6 +94,7 @@ class ActionHead(nn.Module):
     def forward(
         self,
         fused: torch.Tensor,
+        bbox_fused: torch.Tensor | None = None,
         spatial_tokens: torch.Tensor | None = None,
         spatial_mask: torch.Tensor | None = None,
     ) -> dict:
@@ -102,14 +103,17 @@ class ActionHead(nn.Module):
         if self.spatial_grounding:
             if spatial_tokens is None or spatial_mask is None:
                 raise ValueError("spatial grounding requires image tokens and a token mask")
+            bbox_query = bbox_fused if bbox_fused is not None else fused
             grounded, _ = self.grounding_attention(
-                fused.unsqueeze(1),
+                bbox_query.unsqueeze(1),
                 spatial_tokens,
                 spatial_tokens,
                 key_padding_mask=~spatial_mask.bool(),
                 need_weights=False,
             )
-            bbox_h = self.bbox_trunk(torch.cat([fused, grounded.squeeze(1)], dim=-1))
+            bbox_h = self.bbox_trunk(torch.cat([
+                bbox_query, grounded.squeeze(1),
+            ], dim=-1))
         raw_bbox = torch.sigmoid(self.bbox(bbox_h))
         if self.spatial_grounding:
             # xywh remains normalized and is guaranteed to stay within the image.

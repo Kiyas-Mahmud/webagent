@@ -77,7 +77,7 @@ def collect_predictions(model, loader, device) -> dict:
         "outcome_confidence", "outcome_failure_probability",
         "recovery_outcome_probability", "confidence", "confidence_true",
         "bbox_pred", "bbox_true", "bbox_mask",
-        "needs_recovery_pred", "needs_recovery_true")}
+        "needs_recovery_pred", "needs_recovery_true", "strategy_pred_raw")}
     for batch in loader:
         preds = model(batch)
         b = _to_device(batch, device)
@@ -102,7 +102,9 @@ def collect_predictions(model, loader, device) -> dict:
             acc["needs_recovery_pred"] += needs_pred.cpu().tolist()
             acc["needs_recovery_true"] += b["label_needs_recovery"].view(-1).cpu().tolist()
         else:
-            composed_recovery = preds["recovery"].argmax(-1)
+            strategy_pred = preds["recovery"].argmax(-1)
+            composed_recovery = strategy_pred
+        acc["strategy_pred_raw"] += strategy_pred.cpu().tolist()
         acc["recovery_pred"] += composed_recovery.cpu().tolist()
         acc["recovery_true"] += b["label_recovery"].cpu().tolist()
         acc["memory_pred"] += (preds["memory_flag"] > 0).long().view(-1).cpu().tolist()
@@ -157,7 +159,8 @@ def compute_metrics(p: dict) -> dict:
     recovery_macro_f1 = M.macro_f1(p["recovery_true"], p["recovery_pred"])
     attempted_strategy_mask = p["recovery_true"] != 0
     attempted_strategy_true = p["recovery_true"][attempted_strategy_mask]
-    attempted_strategy_pred = p["recovery_pred"][attempted_strategy_mask]
+    raw_strategy_pred = p.get("strategy_pred_raw", p["recovery_pred"])
+    attempted_strategy_pred = raw_strategy_pred[attempted_strategy_mask]
     needs_true = p.get("needs_recovery_true")
     needs_pred = p.get("needs_recovery_pred")
     if needs_true is None or len(needs_true) == 0:
@@ -202,6 +205,7 @@ def compute_metrics(p: dict) -> dict:
         "needs_recovery_macro_f1": M.macro_f1(needs_true, needs_pred),
         "needs_recovery_bal_acc": M.balanced_accuracy(needs_true, needs_pred),
         "needs_recovery_mcc": M.classification_mcc(needs_true, needs_pred),
+        "needs_recovery_pred_classes": int(len(set(needs_pred.tolist()))),
         "needs_recovery_majority_acc": needs_majority["accuracy"],
         "needs_recovery_majority_macro_f1": needs_majority["macro_f1"],
         "strategy_attempted_acc": M.accuracy(
@@ -211,6 +215,9 @@ def compute_metrics(p: dict) -> dict:
             attempted_strategy_true, attempted_strategy_pred,
         ),
         "strategy_attempted_rows": int(len(attempted_strategy_true)),
+        "strategy_attempted_pred_classes": int(
+            len(set(attempted_strategy_pred.tolist()))
+        ),
         "strategy_attempted_majority_acc": attempted_strategy_majority["accuracy"],
         "strategy_attempted_majority_macro_f1": attempted_strategy_majority["macro_f1"],
         "recovery_outcome_acc": M.accuracy(recovery_true, recovery_pred),
@@ -243,6 +250,33 @@ def compute_metrics(p: dict) -> dict:
     }
 
 
+def _bbox_prediction_distribution(p: dict) -> dict:
+    """Coordinate summaries on valid bbox rows for detecting frozen/collapsed heads."""
+    mask = np.asarray(p["bbox_mask"]).reshape(-1) > 0.5
+    names = ("x", "y", "width", "height")
+    if not mask.any():
+        return {"rows": 0, "prediction": {}, "target": {}}
+    pred = np.asarray(p["bbox_pred"], dtype=float)[mask]
+    target = np.asarray(p["bbox_true"], dtype=float)[mask]
+
+    def summarize(values):
+        return {
+            name: {
+                "mean": float(values[:, index].mean()),
+                "std": float(values[:, index].std()),
+                "min": float(values[:, index].min()),
+                "max": float(values[:, index].max()),
+            }
+            for index, name in enumerate(names)
+        }
+
+    return {
+        "rows": int(mask.sum()),
+        "prediction": summarize(pred),
+        "target": summarize(target),
+    }
+
+
 def build_diagnostics(p: dict) -> dict:
     """Detailed JSON diagnostics kept outside the compact per-epoch CSV."""
     recovery_mask = p["recovery_outcome_true"] >= 0
@@ -254,6 +288,7 @@ def build_diagnostics(p: dict) -> dict:
         needs_true = (p["recovery_true"] != 0).astype(int)
         needs_pred = (p["recovery_pred"] != 0).astype(int)
     attempted = p["recovery_true"] != 0
+    raw_strategy_pred = p.get("strategy_pred_raw", p["recovery_pred"])
     def label_names(inverse):
         return [inverse[index] for index in sorted(inverse)]
     return {
@@ -284,7 +319,7 @@ def build_diagnostics(p: dict) -> dict:
         ),
         "recovery_strategy_attempted_only": M.classification_diagnostics(
             p["recovery_true"][attempted],
-            p["recovery_pred"][attempted],
+            raw_strategy_pred[attempted],
             label_names=label_names(RECOVERY_STRATEGY_INV),
         ),
         "recovery_outcome_prediction": M.classification_diagnostics(
@@ -300,6 +335,7 @@ def build_diagnostics(p: dict) -> dict:
         "bbox": M.bbox_iou_summary(
             p["bbox_pred"], p["bbox_true"], p["bbox_mask"],
         ),
+        "bbox_prediction_distribution": _bbox_prediction_distribution(p),
         "terminology": {
             "recovery_outcome_prediction": (
                 "Offline prediction only on causal transitions containing failure "
@@ -365,6 +401,27 @@ class Trainer:
         loss_sum = 0.0
         term_sums: dict[str, float] = {}
         batch_count = 0
+        probe_parameters = {
+            "bbox": self.model.action_head.bbox.weight,
+            "strategy": self.model.failure_head.recovery.weight,
+            "recovery_outcome": self.model.recovery_outcome_head.recovery_outcome.weight,
+        }
+        needs_head = getattr(self.model.failure_head, "needs_recovery", None)
+        if needs_head is not None:
+            probe_parameters["needs_recovery"] = needs_head.weight
+        grounding_adapter = (
+            self.model.task_adapters["grounding"]
+            if "grounding" in self.model.task_adapters else None
+        )
+        if grounding_adapter is not None:
+            probe_parameters["grounding_adapter"] = next(
+                grounding_adapter.parameters()
+            )
+        probe_before = {
+            name: parameter.detach().clone()
+            for name, parameter in probe_parameters.items()
+        }
+        first_gradient_norms: dict[str, float] = {}
         remainder = len(self.train_loader) % self.accum
         for i, batch in enumerate(self.train_loader):
             denominator = (
@@ -387,6 +444,14 @@ class Trainer:
             should_step = (i + 1) % self.accum == 0 or i + 1 == len(self.train_loader)
             if should_step:
                 self.scaler.unscale_(self.opt)
+                if not first_gradient_norms:
+                    first_gradient_norms = {
+                        name: (
+                            float(parameter.grad.detach().float().norm())
+                            if parameter.grad is not None else 0.0
+                        )
+                        for name, parameter in probe_parameters.items()
+                    }
                 torch.nn.utils.clip_grad_norm_(
                     self.model.trainable_parameters() + list(self.loss_fn.parameters()),
                     self.clip,
@@ -427,6 +492,19 @@ class Trainer:
             stats[f"train_weighted_{name}_loss"] = raw * float(
                 self.loss_fn.w[weight_key]
             )
+        stats["train_nominal_weighted_loss"] = sum(
+            value for key, value in stats.items()
+            if key.startswith("train_weighted_") and key.endswith("_loss")
+        )
+        for name, parameter in probe_parameters.items():
+            stats[f"train_grad_{name}_first"] = first_gradient_norms.get(name, 0.0)
+            stats[f"train_update_{name}_norm"] = float(
+                (parameter.detach() - probe_before[name]).float().norm()
+            )
+        for name, log_var in self.loss_fn.log_vars.items():
+            value = float(log_var.detach())
+            stats[f"train_uncertainty_log_var_{name}"] = value
+            stats[f"train_uncertainty_multiplier_{name}"] = math.exp(-value)
         return stats
 
     def fit(self) -> dict:
