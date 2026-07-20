@@ -1,0 +1,21 @@
+# Recovery-v2.6: raise the vision-grid resolution so centre-x can be localized.
+# v2.5 fixed centre-y (attention KL: y-error ~0.003) but centre-x stayed coarse and
+# final mean IoU was 0.173 (< 0.20). Diagnosis: the ~0.048 patch X-spacing at 448px
+# is wider than a typical target box (~0.04), which caps achievable IoU on small
+# controls, and the v2.5 IoU was still climbing at step 100 (0.081->0.141->0.173).
+# Fix: finer grid (higher max_pixels -> more X patches) + more overfit steps so the
+# X attention has room to converge. Everything else inherits v2.5 unchanged.
+name: Y_QWEN2VL_2B_GOLD_V2_6
+extends: backbones/qwen2vl_2b_gold_v2_5.yaml
+
+backbone:
+  # 16:9 gold frames (1280x720). 448px -> ~21x12 grid (X-spacing ~0.048).
+  # v2.6 -> ~33x18 grid (X-spacing ~0.030), roughly matching small-box widths.
+  min_pixels: 100352      # 224*448
+  max_pixels: 501760      # ~944x531 for 16:9
+
+train:
+  controlled_experiment_tag: recovery_v2_6
+  metrics_csv: results/gold_recovery_v2_6_metrics.csv
+  # v2.5 IoU was still rising at the registered 100; give X-attention more steps.
+  bbox_overfit_steps: 200
