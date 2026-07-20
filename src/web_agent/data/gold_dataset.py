@@ -24,6 +24,7 @@ All heads are enabled; recovery outcome is masked to attempted rows only.
 from __future__ import annotations
 
 from pathlib import Path
+import math
 
 import torch
 from PIL import Image
@@ -63,6 +64,9 @@ class GoldDataset(Dataset):
         self.use_recovery_transitions = bool(
             cfg["data"].get("recovery_transitions", False)
         )
+        self.strict_bbox_geometry = bool(
+            cfg["data"].get("strict_bbox_geometry", False)
+        )
         source_rows = trajectory_records if trajectory_records is not None else records
         if self.use_recovery_transitions:
             self.recovery_transitions, self.transition_report = (
@@ -83,12 +87,35 @@ class GoldDataset(Dataset):
         b = lab.get("action_target_bbox")
         if not b:
             return torch.zeros(4, dtype=torch.float32), torch.zeros(1, dtype=torch.float32)
+        values = (
+            float(b["x"]),
+            float(b["y"]),
+            float(b["width"]),
+            float(b["height"]),
+        )
+        if self.strict_bbox_geometry:
+            x, y, width, height = values
+            valid = (
+                all(math.isfinite(value) for value in values)
+                and x >= 0
+                and y >= 0
+                and width > 0
+                and height > 0
+                and x + width <= img_w + 1e-6
+                and y + height <= img_h + 1e-6
+            )
+            if not valid:
+                raise ValueError(
+                    f"invalid bbox {b!r} for state_before image {img_w}x{img_h}"
+                )
         bbox = torch.tensor([
-            b["x"] / img_w,
-            b["y"] / img_h,
-            b["width"] / img_w,
-            b["height"] / img_h,
-        ], dtype=torch.float32).clamp_(0.0, 1.0)
+            values[0] / img_w,
+            values[1] / img_h,
+            values[2] / img_w,
+            values[3] / img_h,
+        ], dtype=torch.float32)
+        if not self.strict_bbox_geometry:
+            bbox.clamp_(0.0, 1.0)
         return bbox, torch.ones(1, dtype=torch.float32)
 
     def _context_text(

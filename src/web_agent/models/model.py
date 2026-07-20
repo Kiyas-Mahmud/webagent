@@ -88,7 +88,11 @@ class WebAgentModel(nn.Module):
             fused_dim, needs_recovery=self.hierarchical_recovery,
         )
         self.action_head = ActionHead(
-            fused_dim, spatial_grounding=self.spatial_grounding,
+            fused_dim,
+            spatial_grounding=self.spatial_grounding,
+            bbox_parameterization=model_cfg.get(
+                "bbox_parameterization", "legacy_xywh",
+            ),
         )
         self.memory_head = MemoryHead(fused_dim)
         self.recovery_outcome_head = RecoveryOutcomeHead(fused_dim)
@@ -166,6 +170,36 @@ class WebAgentModel(nn.Module):
         else:
             preds.update(self.recovery_outcome_head(post_fused))
         return preds
+
+    def forward_bbox(self, batch: dict) -> dict:
+        """Run only the causal pre-action stream and bbox grounding branch.
+
+        This is used by the v2.2 micro-overfit gate.  It avoids spending compute
+        on post-action and recovery streams while proving localization can learn.
+        """
+        pre_encoded = self.encode(batch, prefix="pre_")
+        adapters = getattr(self, "task_adapters", None)
+
+        def adapt(name, value):
+            return adapters[name](value) if adapters is not None else value
+
+        pre_fused = adapt("policy", pre_encoded["fused"])
+        bbox_fused = (
+            adapt("grounding", pre_encoded["fused"])
+            if self.separate_bbox_adapter else pre_fused
+        )
+        spatial_tokens = pre_encoded.get("spatial_tokens")
+        if spatial_tokens is not None:
+            spatial_tokens = adapt(
+                "grounding" if self.separate_bbox_adapter else "policy",
+                spatial_tokens,
+            )
+        return self.action_head(
+            pre_fused,
+            bbox_fused=bbox_fused,
+            spatial_tokens=spatial_tokens,
+            spatial_mask=pre_encoded.get("spatial_mask"),
+        )
 
     def trainable_parameters(self):
         """All params with requires_grad: LoRA + adapter + 5 heads (4-bit base frozen)."""

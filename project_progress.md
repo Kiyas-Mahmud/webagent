@@ -597,3 +597,37 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   notebook-cell assertions passed; all older Kaggle notebooks have zero diff; and
   `git diff --check` passed. The next evidence must come from the v2.1 Kaggle smoke, not another
   assumption-driven training run.
+
+## 2026-07-20 — bbox v2.2 correction implemented after diagnostic collapse
+- Audited the supplied v2.1 one-epoch diagnostic before changing code. Its bbox prediction is a
+  near-constant full-image box (`x=0.00014`, `y≈0`, `width=0.99986`, `height=0.999998`) with mean
+  IoU 0.0079 and Recall@IoU50 0. The bbox output and grounding adapter both had nonzero gradients and
+  substantial optimizer updates, while uncertainty slightly upweighted bbox. This rules out frozen
+  parameters or a starved generic task coefficient and supports a geometry/objective correction.
+- Added config-gated centre-format bbox prediction. V2.2 predicts normalized `cxcywh` internally,
+  keeps the existing public/metric output as bounded top-left `xywh`, and replaces equal
+  mean-SmoothL1/GIoU with separately logged DETR-style `5*L1(cxcywh) + 2*GIoU(xyxy)`. Older v2/v2.1
+  configs and outputs retain their original path.
+- Added a read-only full train/validation bbox audit against each actual `state_before` image plus
+  strict v2.2 dataset enforcement. It reports exact IDs/reasons and never clips bad thesis labels.
+  Reviewers must reconstruct the box from image/replay evidence or set only the unrecoverable bbox
+  to `null`; the row remains available for every non-localization task.
+- Running the audit on the local structured v14 reference copy found real coordinate-space defects:
+  85/1,796 non-null train boxes and 23/621 validation boxes are invalid, dominated by vertical
+  coordinates such as `y=1223.5` for a 1280x720 image. This local copy is smaller than the current
+  Kaggle 39k corpus, so its counts are not substituted for the required Kaggle full audit. The
+  supplied v2.1 validation distribution independently showed normalized target `y` reaching 1 with
+  positive height, consistent with the same issue in the current run.
+- Added a bbox-only 32-row/100-step micro-overfit gate that freezes the VLM and unrelated heads,
+  runs only the pre-action stream, and trains the projection/grounding/bbox path. It requires loss
+  decrease, IoU gain >=0.10, final training mean IoU >=0.20, full-screen fraction <=0.10,
+  nonconstant predictions, and nonzero bbox/grounding gradient and update before another 5k epoch.
+- Added registered config `qwen2vl_2b_gold_v2_2.yaml`, protocol
+  `docs/RECOVERY_V2_2_EXPERIMENT.md`, reviewer guidance for mismatched coordinate spaces, and the
+  isolated output-free `notebooks/kaggle_gold_recovery_v2_2.ipynb`. Required order is
+  `audit -> smoke -> bbox_overfit -> diagnostic -> mini`; `kaggle_gold.ipynb` and all v2/v2.1
+  notebooks remain untouched.
+- Local verification passed: Ruff clean; `17 passed / 10 skipped` (PyTorch/GPU paths require
+  Kaggle); Python compileall passed; v2.2 merged-config assertions passed; notebook JSON and every
+  code cell compile with no outputs/execution counts; `git diff --check` passed. The first Kaggle
+  action is `STAGE='audit'`; do not bypass its reported data corrections.

@@ -488,6 +488,10 @@ class Trainer:
         for name, total in term_sums.items():
             raw = total / denominator
             stats[f"train_raw_{name}_loss"] = raw
+            if name not in loss_weight_keys:
+                # Diagnostic subterms such as bbox L1/GIoU are already included
+                # inside a registered task loss and must not be counted twice.
+                continue
             weight_key = loss_weight_keys[name]
             stats[f"train_weighted_{name}_loss"] = raw * float(
                 self.loss_fn.w[weight_key]

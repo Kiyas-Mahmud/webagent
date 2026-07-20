@@ -235,6 +235,12 @@ For a non-null bounding box, check it against the image's native size:
 
 Do not assume a fixed screenshot size; inspect the image's real dimensions.
 
+If a box uses coordinates from a taller/different screenshot (for example, `y=1223.5` for a
+1280x720 image), do not clamp it to the bottom edge. Reconstruct the box by visually locating the
+target in the attached `state_before` image. If the correct target cannot be established from replay
+evidence, set only `action_target_bbox` to `null` and keep the row for its other supervised tasks.
+Record the decision and reason in the review sheet.
+
 ### Step 5: inspect `state_after` and decide the outcome
 
 Compare the two screenshots and the task's immediate goal.

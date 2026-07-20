@@ -1,0 +1,31 @@
+# Recovery-v2.2: evidence-driven bbox correction after v2.1 diagnostic collapse.
+# Recovery structure, data selection, seed, backbone, and outer task weights stay
+# unchanged.  Only bbox geometry/parameterization and its internal loss change.
+name: Y_QWEN2VL_2B_GOLD_V2_2
+extends: backbones/qwen2vl_2b_gold_v2_1.yaml
+
+data:
+  # Never hide an out-of-image annotation by independently clipping x/y/w/h.
+  strict_bbox_geometry: true
+
+model:
+  # Dataset/public metrics remain top-left xywh; the head predicts DETR-style
+  # centre coordinates internally and decodes them for the stable public API.
+  bbox_parameterization: cxcywh
+
+loss:
+  bbox_loss: detr_l1_giou
+  # Official DETR defaults: coordinate L1=5 and GIoU=2.  The existing outer
+  # multitask bbox coefficient and uncertainty weighting remain unchanged.
+  bbox_l1_ratio: 5.0
+  bbox_giou_ratio: 2.0
+
+train:
+  controlled_experiment_tag: recovery_v2_2
+  metrics_csv: results/gold_recovery_v2_2_metrics.csv
+  # Engineering-only memorization gate before another 5k diagnostic epoch.
+  bbox_overfit_rows: 32
+  bbox_overfit_steps: 100
+  bbox_overfit_min_iou_gain: 0.10
+  bbox_overfit_min_mean_iou: 0.20
+  bbox_overfit_max_full_screen_fraction: 0.10

@@ -17,6 +17,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
+from web_agent.models.bbox import cxcywh_to_bounded_xywh
 from web_agent.labels import (
     NUM_ACTION_TYPE,
     NUM_FAILURE_TYPE,
@@ -79,9 +80,15 @@ class ActionHead(nn.Module):
         hidden: int = 256,
         dropout: float = 0.3,
         spatial_grounding: bool = False,
+        bbox_parameterization: str = "legacy_xywh",
     ):
         super().__init__()
         self.spatial_grounding = spatial_grounding
+        if bbox_parameterization not in {"legacy_xywh", "cxcywh"}:
+            raise ValueError(
+                f"unsupported bbox parameterization: {bbox_parameterization!r}"
+            )
+        self.bbox_parameterization = bbox_parameterization
         self.trunk = _trunk(dim, hidden, dropout)
         self.action_type = nn.Linear(hidden, NUM_ACTION_TYPE)  # 6
         if spatial_grounding:
@@ -115,14 +122,21 @@ class ActionHead(nn.Module):
                 bbox_query, grounded.squeeze(1),
             ], dim=-1))
         raw_bbox = torch.sigmoid(self.bbox(bbox_h))
-        if self.spatial_grounding:
+        if self.bbox_parameterization == "cxcywh":
+            bbox = cxcywh_to_bounded_xywh(raw_bbox)
+        elif self.spatial_grounding:
             # xywh remains normalized and is guaranteed to stay within the image.
             xy = raw_bbox[:, :2]
-            raw_bbox = torch.cat([xy, raw_bbox[:, 2:] * (1.0 - xy)], dim=-1)
-        return {
+            bbox = torch.cat([xy, raw_bbox[:, 2:] * (1.0 - xy)], dim=-1)
+        else:
+            bbox = raw_bbox
+        result = {
             "action_type": self.action_type(h),
-            "bbox": raw_bbox,
+            "bbox": bbox,
         }
+        if self.bbox_parameterization == "cxcywh":
+            result["bbox_cxcywh"] = raw_bbox
+        return result
 
 
 class MemoryHead(nn.Module):

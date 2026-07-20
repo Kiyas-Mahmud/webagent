@@ -35,6 +35,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from web_agent.models.bbox import detr_bbox_loss_terms
+
 
 class CombinedLoss(nn.Module):
     def __init__(self, cfg: dict, action_class_weights=None, failtype_class_weights=None,
@@ -209,8 +211,32 @@ class CombinedLoss(nn.Module):
             )
 
         # Bbox is supervised only where a real target exists.
+        bbox_diagnostics = {}
         mask = batch["bbox_mask"]
-        if self.bbox_loss == "smooth_l1_giou":
+        if self.bbox_loss == "detr_l1_giou":
+            row_mask = mask.view(-1) > 0
+            bbox_active = bool(row_mask.any())
+            if bbox_active:
+                if "bbox_cxcywh" not in preds:
+                    raise KeyError(
+                        "detr_l1_giou requires centre-format bbox_cxcywh predictions"
+                    )
+                l1, giou = detr_bbox_loss_terms(
+                    preds["bbox_cxcywh"][row_mask],
+                    batch["bbox"][row_mask],
+                )
+                bbox_diagnostics = {"bbox_l1": l1, "bbox_giou": giou}
+                t["bbox"] = (
+                    float(self.w.get("bbox_l1_ratio", 5.0)) * l1
+                    + float(self.w.get("bbox_giou_ratio", 2.0)) * giou
+                )
+            else:
+                t["bbox"] = preds["bbox"].sum() * 0.0
+                bbox_diagnostics = {
+                    "bbox_l1": t["bbox"],
+                    "bbox_giou": t["bbox"],
+                }
+        elif self.bbox_loss == "smooth_l1_giou":
             row_mask = mask.view(-1) > 0
             bbox_active = bool(row_mask.any())
             if bbox_active:
@@ -308,4 +334,5 @@ class CombinedLoss(nn.Module):
             t["total"] = sum(terms)
         else:
             t["total"] = sum(weighted.values())
+        t.update(bbox_diagnostics)
         return t
