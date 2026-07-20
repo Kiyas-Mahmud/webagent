@@ -7,6 +7,10 @@ extends: backbones/qwen2vl_2b_gold_v2_1.yaml
 data:
   # Never hide an out-of-image annotation by independently clipping x/y/w/h.
   strict_bbox_geometry: true
+  # The Kaggle audit found systematic document-space coordinates on viewport
+  # screenshots. Keep those records for every other task, but exclude only their
+  # invalid localization target from bbox loss and metrics.
+  invalid_bbox_policy: mask
 
 model:
   # Dataset/public metrics remain top-left xywh; the head predicts DETR-style

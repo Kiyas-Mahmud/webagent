@@ -241,6 +241,12 @@ target in the attached `state_before` image. If the correct target cannot be est
 evidence, set only `action_target_bbox` to `null` and keep the row for its other supervised tasks.
 Record the decision and reason in the review sheet.
 
+For the current Kaggle export, the automated audit found this mismatch systematically in 2,534
+train/validation boxes. Do not ask the two reviewers to guess corrections for all of them. The v2.2
+training path keeps every affected row but sets its runtime `bbox_mask` to zero, so only localization
+supervision is excluded. The source JSON is left unchanged and the audit report is preserved. Human
+correction is appropriate only when the replay or source screenshot proves the replacement box.
+
 ### Step 5: inspect `state_after` and decide the outcome
 
 Compare the two screenshots and the task's immediate goal.

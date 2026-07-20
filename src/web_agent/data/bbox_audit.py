@@ -10,6 +10,11 @@ from statistics import fmean, pstdev
 from PIL import Image
 
 REQUIRED_BBOX_KEYS = ("x", "y", "width", "height")
+FATAL_IMAGE_REASONS = {
+    "missing_state_before_path",
+    "unreadable_state_before_image",
+    "invalid_image_size",
+}
 
 
 def _view(record: dict) -> tuple[dict, dict, dict]:
@@ -55,8 +60,9 @@ def audit_bbox_geometry(
 ) -> dict:
     """Check boxes against the actual state-before image dimensions.
 
-    No coordinate is clipped or repaired.  The report identifies the exact rows
-    that require human correction instead of silently changing thesis labels.
+    No coordinate is clipped or repaired. The report identifies the exact rows
+    that must either be excluded from bbox supervision or corrected from source
+    evidence instead of silently changing thesis labels.
     """
     root = Path(data_root)
     image_sizes: dict[str, tuple[int, int]] = {}
@@ -64,6 +70,8 @@ def audit_bbox_geometry(
     examples: list[dict] = []
     bbox_rows = 0
     valid_rows = 0
+    fatal_invalid_rows = 0
+    maskable_invalid_rows = 0
     coordinates = {name: [] for name in REQUIRED_BBOX_KEYS}
 
     for index, record in enumerate(records):
@@ -132,6 +140,10 @@ def audit_bbox_geometry(
         unique_reasons = sorted(set(row_reasons))
         reasons.update(unique_reasons)
         if unique_reasons:
+            if FATAL_IMAGE_REASONS.intersection(unique_reasons):
+                fatal_invalid_rows += 1
+            else:
+                maskable_invalid_rows += 1
             if len(examples) < max_examples:
                 examples.append({
                     "record_id": _record_id(record, index),
@@ -153,6 +165,8 @@ def audit_bbox_geometry(
         "bbox_rows": bbox_rows,
         "valid_bbox_rows": valid_rows,
         "invalid_bbox_rows": invalid_rows,
+        "maskable_invalid_bbox_rows": maskable_invalid_rows,
+        "fatal_invalid_bbox_rows": fatal_invalid_rows,
         "invalid_reason_counts": dict(sorted(reasons.items())),
         "invalid_examples": examples,
         "unique_images_opened": len(image_sizes),

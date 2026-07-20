@@ -19,6 +19,8 @@ and memory heads consume post_*. No label is inserted into either prompt.
 
 Gold 40K provides real confidence, memory, and attempted-recovery outcome labels.
 All heads are enabled; recovery outcome is masked to attempted rows only.
+When configured, invalid bbox geometry is likewise masked only from localization;
+the same row remains available to every other supervised head.
 """
 
 from __future__ import annotations
@@ -67,6 +69,18 @@ class GoldDataset(Dataset):
         self.strict_bbox_geometry = bool(
             cfg["data"].get("strict_bbox_geometry", False)
         )
+        self.invalid_bbox_policy = str(
+            cfg["data"].get("invalid_bbox_policy", "error")
+        )
+        if self.invalid_bbox_policy not in {"error", "mask"}:
+            raise ValueError(
+                "invalid_bbox_policy must be either 'error' or 'mask', got "
+                f"{self.invalid_bbox_policy!r}"
+            )
+        if self.invalid_bbox_policy == "mask" and not self.strict_bbox_geometry:
+            raise ValueError(
+                "invalid_bbox_policy='mask' requires strict_bbox_geometry=true"
+            )
         source_rows = trajectory_records if trajectory_records is not None else records
         if self.use_recovery_transitions:
             self.recovery_transitions, self.transition_report = (
@@ -87,12 +101,22 @@ class GoldDataset(Dataset):
         b = lab.get("action_target_bbox")
         if not b:
             return torch.zeros(4, dtype=torch.float32), torch.zeros(1, dtype=torch.float32)
-        values = (
-            float(b["x"]),
-            float(b["y"]),
-            float(b["width"]),
-            float(b["height"]),
-        )
+        try:
+            values = (
+                float(b["x"]),
+                float(b["y"]),
+                float(b["width"]),
+                float(b["height"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            if self.strict_bbox_geometry and self.invalid_bbox_policy == "mask":
+                return (
+                    torch.zeros(4, dtype=torch.float32),
+                    torch.zeros(1, dtype=torch.float32),
+                )
+            raise ValueError(
+                f"invalid bbox object {b!r} for state_before image {img_w}x{img_h}"
+            ) from None
         if self.strict_bbox_geometry:
             x, y, width, height = values
             valid = (
@@ -105,6 +129,11 @@ class GoldDataset(Dataset):
                 and y + height <= img_h + 1e-6
             )
             if not valid:
+                if self.invalid_bbox_policy == "mask":
+                    return (
+                        torch.zeros(4, dtype=torch.float32),
+                        torch.zeros(1, dtype=torch.float32),
+                    )
                 raise ValueError(
                     f"invalid bbox {b!r} for state_before image {img_w}x{img_h}"
                 )

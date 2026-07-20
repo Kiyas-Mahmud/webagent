@@ -631,3 +631,27 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   Kaggle); Python compileall passed; v2.2 merged-config assertions passed; notebook JSON and every
   code cell compile with no outputs/execution counts; `git diff --check` passed. The first Kaggle
   action is `STAGE='audit'`; do not bypass its reported data corrections.
+
+## 2026-07-20 — full Kaggle bbox audit resolved with target-level masking
+- Analyzed the user-supplied full Kaggle audit rather than inferring from the earlier local subset.
+  Train has 23,499 records, 8,761 non-null boxes, 6,719 valid boxes, and 2,042 invalid boxes;
+  validation has 7,861 records, 2,841 non-null boxes, 2,349 valid boxes, and 492 invalid boxes.
+  Combined, 2,534/11,602 non-null boxes are invalid (`21.84%`), while 9,068 remain valid.
+- The dominant errors are bottom-boundary overflow and y-origin outside 1280x720 viewport images,
+  including document-space y values in the thousands. This is a systematic coordinate-space
+  mismatch, so clipping or manually guessing all 2,534 replacements would create label noise.
+- V2.2 now retains every record and every non-bbox label while setting `bbox_mask=0` only for an
+  invalid localization target. The original split JSON is neither edited nor silently clipped.
+  The audit separately counts bbox-only maskable defects and fatal missing/unreadable image errors;
+  only the former can pass as `PASS_WITH_INVALID_BBOX_MASKED`.
+- The smoke stage guarantees at least one verified valid bbox target. The 32-row micro-overfit stage
+  now samples only boxes verified against their actual images, eliminating random audit failures.
+  Mini reports include the raw train/validation bbox geometry for the selected 5k/500 rows so paper
+  denominators remain explicit.
+- Updated the isolated output-free `notebooks/kaggle_gold_recovery_v2_2.ipynb`, v2.2 experiment
+  protocol, reviewer guide, config, and regression tests. `kaggle_gold.ipynb` and older recovery
+  notebooks remain untouched. Local verification: Ruff and compileall pass; `18 passed / 12 skipped`
+  (tensor/GPU paths require Kaggle); notebook JSON/cell compilation and `git diff --check` pass.
+- Next Kaggle action: connect `notebooks/kaggle_gold_recovery_v2_2.ipynb`, run `STAGE='audit'`, and
+  require `training_disposition='PASS_WITH_INVALID_BBOX_MASKED'`, `masked_bbox_rows=2534`,
+  `bbox_supervision_rows=9068`, and `fatal_invalid_bbox_rows=0` before moving to `STAGE='smoke'`.

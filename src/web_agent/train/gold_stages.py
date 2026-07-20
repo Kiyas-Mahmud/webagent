@@ -287,7 +287,12 @@ def build_gold_components(
 
 
 def run_gold_bbox_audit(cfg: dict) -> dict:
-    """Audit complete train/validation bbox geometry without opening test labels."""
+    """Audit bbox geometry and decide whether training can safely continue.
+
+    ``mask`` keeps the complete records but removes invalid bbox targets from
+    localization loss and metrics. Missing or unreadable source images remain
+    fatal because masking a bbox cannot make the multimodal row usable.
+    """
     train_records = load_gold_split(cfg, "train")
     validation_records = load_gold_split(cfg, "val")
     train_report = audit_bbox_geometry(train_records, cfg["data"]["root"])
@@ -295,16 +300,74 @@ def run_gold_bbox_audit(cfg: dict) -> dict:
         validation_records,
         cfg["data"]["root"],
     )
+    split_reports = (train_report, validation_report)
+    geometry_passed = all(report["status"] == "PASS" for report in split_reports)
+    invalid_policy = str(cfg["data"].get("invalid_bbox_policy", "error"))
+    masking_enabled = (
+        bool(cfg["data"].get("strict_bbox_geometry", False))
+        and invalid_policy == "mask"
+    )
+    fatal_rows = sum(
+        report["fatal_invalid_bbox_rows"] for report in split_reports
+    )
+    valid_rows = sum(report["valid_bbox_rows"] for report in split_reports)
+    accepted_with_masking = (
+        not geometry_passed
+        and masking_enabled
+        and fatal_rows == 0
+        and all(report["valid_bbox_rows"] > 0 for report in split_reports)
+    )
+    training_passed = geometry_passed or accepted_with_masking
+    masked_rows = (
+        sum(report["maskable_invalid_bbox_rows"] for report in split_reports)
+        if accepted_with_masking else 0
+    )
     return {
-        "status": (
-            "PASS"
-            if train_report["status"] == validation_report["status"] == "PASS"
-            else "FAIL"
+        "status": "PASS" if training_passed else "FAIL",
+        "raw_geometry_status": "PASS" if geometry_passed else "FAIL",
+        "training_disposition": (
+            "PASS_CLEAN_GEOMETRY"
+            if geometry_passed
+            else (
+                "PASS_WITH_INVALID_BBOX_MASKED"
+                if accepted_with_masking
+                else "FAIL"
+            )
         ),
+        "invalid_bbox_policy": invalid_policy,
+        "retained_records": sum(report["records"] for report in split_reports),
+        "bbox_supervision_rows": valid_rows,
+        "masked_bbox_rows": masked_rows,
+        "fatal_invalid_bbox_rows": fatal_rows,
         "test_rows_read": 0,
         "train": train_report,
         "validation": validation_report,
     }
+
+
+def _select_valid_bbox_records(
+    records: list[dict],
+    data_root: str | Path,
+    rows: int,
+    seed: int,
+) -> list[dict]:
+    """Select deterministic, verified in-image bbox rows for a small probe."""
+    candidates = [
+        record for record in records
+        if view(record)[1].get("action_target_bbox") is not None
+    ]
+    rng = random.Random(seed)
+    rng.shuffle(candidates)
+    selected = []
+    for record in candidates:
+        report = audit_bbox_geometry([record], data_root, max_examples=1)
+        if report["status"] == "PASS":
+            selected.append(record)
+            if len(selected) == rows:
+                return selected
+    raise ValueError(
+        f"bbox probe requested {rows} valid rows but only {len(selected)} were found"
+    )
 
 
 @torch.no_grad()
@@ -360,17 +423,12 @@ def run_gold_bbox_overfit(
     if rows <= 0 or steps <= 0:
         raise ValueError("bbox overfit rows and steps must both be positive")
     all_train_records = load_gold_split(overfit_cfg, "train")
-    bbox_records = [
-        record for record in all_train_records
-        if view(record)[1].get("action_target_bbox") is not None
-    ]
-    if len(bbox_records) < rows:
-        raise ValueError(
-            f"bbox overfit requested {rows} rows but only {len(bbox_records)} exist"
-        )
-    rng = random.Random(seed)
-    rng.shuffle(bbox_records)
-    selected_records = bbox_records[:rows]
+    selected_records = _select_valid_bbox_records(
+        all_train_records,
+        overfit_cfg["data"]["root"],
+        rows,
+        seed,
+    )
     geometry = audit_bbox_geometry(
         selected_records,
         overfit_cfg["data"]["root"],
@@ -556,6 +614,23 @@ def run_gold_smoke(
     """Verify causal streams, output shapes, finite loss, backward, and weight update."""
     all_train_records = load_gold_split(cfg, "train")
     smoke_records = select_smoke_records(all_train_records, rows, seed)
+    smoke_bbox_geometry = audit_bbox_geometry(
+        smoke_records,
+        cfg["data"]["root"],
+    )
+    if smoke_bbox_geometry["valid_bbox_rows"] == 0:
+        # Category coverage is chosen before select_smoke_records appends filler;
+        # replacing the final filler row preserves that coverage.
+        smoke_records[-1] = _select_valid_bbox_records(
+            all_train_records,
+            cfg["data"]["root"],
+            1,
+            seed,
+        )[0]
+        smoke_bbox_geometry = audit_bbox_geometry(
+            smoke_records,
+            cfg["data"]["root"],
+        )
     components = build_gold_components(
         cfg,
         processor,
@@ -714,6 +789,7 @@ def run_gold_smoke(
         "probe_gradient_norms": probe_gradient_norms,
         "probe_update_norms": probe_update_norms,
         "bbox_supervised_rows": bbox_rows,
+        "bbox_geometry": smoke_bbox_geometry,
         "spatial_tokens_per_row": (
             spatial_counts.detach().cpu().tolist()
             if spatial_counts is not None else []
@@ -761,6 +837,16 @@ def run_gold_mini(
     )
     all_val_records = load_gold_split(mini_cfg, "val")
     selected_val_records = stratified_gold_subsample(all_val_records, val_rows, seed)
+    selected_bbox_geometry = {
+        "train": audit_bbox_geometry(
+            selected_train_records,
+            mini_cfg["data"]["root"],
+        ),
+        "validation": audit_bbox_geometry(
+            selected_val_records,
+            mini_cfg["data"]["root"],
+        ),
+    }
     components = build_gold_components(
         mini_cfg,
         processor,
@@ -875,7 +961,7 @@ def run_gold_mini(
         ])
     if is_v2_2:
         training_changes.extend([
-            "strict bbox boundary validation against actual source images",
+            "strict bbox validation with invalid targets masked only for localization",
             "internal centre-format bbox regression with stable public xywh output",
             "separately logged bbox coordinate-L1 and GIoU components",
         ])
@@ -905,6 +991,7 @@ def run_gold_mini(
         "quality_gates": quality_gates,
         "train_distribution": label_distribution(selected_train_records),
         "validation_distribution": label_distribution(selected_val_records),
+        "bbox_geometry": selected_bbox_geometry,
         "recovery_transition_reports": {
             "train": train_loader.dataset.transition_report,
             "validation": val_loader.dataset.transition_report,
@@ -933,7 +1020,7 @@ def run_gold_mini(
                     ),
                     *(
                         [
-                            "strict source-image bbox geometry gate",
+                            "strict source-image bbox audit and target-level invalid masking",
                             "DETR-style centre-format localization objective",
                             "bbox-only micro-overfit trainability gate",
                         ]

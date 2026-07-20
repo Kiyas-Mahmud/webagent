@@ -19,7 +19,9 @@ geometry/objective collapse, not evidence that the entire 39k dataset needs reco
 1. Audit train and validation boxes against each actual `state_before` image. A box must have
    finite nonnegative origin, positive size, and satisfy `x + width <= image_width` and
    `y + height <= image_height`. Invalid examples are reported by record ID and are never silently
-   clipped or repaired. Test labels remain unopened.
+   clipped or repaired. Test labels remain unopened. Invalid bbox targets are masked only from
+   localization loss/metrics; their records and all non-bbox labels remain in training. Missing or
+   unreadable source images are fatal and cannot be accepted through this policy.
 2. Predict normalized centre-format `cx, cy, width, height` internally. Decode to bounded top-left
    `xywh` only for the existing model-output and metric contract.
 3. Replace equal mean-SmoothL1/GIoU with separately logged DETR-style coordinate L1 and GIoU:
@@ -48,10 +50,10 @@ GIoU, and the 5:2 coefficients:
 
 Use `notebooks/kaggle_gold_recovery_v2_2.ipynb` and restart the kernel between stages:
 
-1. `audit`: full train/validation geometry must pass. If it fails, correct only the reported source
-   annotations and rerun; do not train through invalid boxes. Keep every dataset row: reconstruct
-   the bbox from the actual image/replay when possible, otherwise set only that bbox to `null` so the
-   row remains available to the non-localization heads.
+1. `audit`: the raw geometry report may remain `FAIL`, but the training disposition must be
+   `PASS_WITH_INVALID_BBOX_MASKED`. This requires at least one valid bbox in each split and zero
+   missing/unreadable source images. The notebook retains every row, supervises bbox only on valid
+   in-image targets, reports the exact masked count, and never clips or rewrites the source JSON.
 2. `smoke`: the normal 16-row multimodal engineering smoke must pass.
 3. `bbox_overfit`: registered checks require decreasing loss, mean-IoU gain >= 0.10, final training
    mean IoU >= 0.20, full-screen fraction <= 0.10, nonconstant predictions, and nonzero gradient/
@@ -65,3 +67,23 @@ Use `notebooks/kaggle_gold_recovery_v2_2.ipynb` and restart the kernel between s
 
 Full/headline training remains blocked by the existing human-review, full-image-hash, missing-class,
 and controlled-mini quality gates.
+
+## Kaggle full-audit decision (2026-07-20)
+
+The full user-supplied audit contained 31,360 train/validation records and 11,602 non-null bbox
+labels. Of these, 9,068 are valid and 2,534 are invalid (`21.84%` of non-null bboxes):
+
+| Split | Records retained | Non-null bbox | Valid bbox supervision | Masked invalid bbox |
+| --- | ---: | ---: | ---: | ---: |
+| Train | 23,499 | 8,761 | 6,719 | 2,042 |
+| Validation | 7,861 | 2,841 | 2,349 | 492 |
+| Combined | 31,360 | 11,602 | 9,068 | 2,534 |
+
+The dominant defects are bottom-boundary overflow and y-origin outside the image, with examples
+such as `y=2436`, `5675`, or `11012` against 1280x720 screenshots. This is systematic
+document/full-page coordinate metadata paired with viewport screenshots, not a small set of
+independent transcription mistakes. Manually guessing 2,534 replacement boxes or clipping them
+would create new label noise. The registered controlled experiment therefore uses the 9,068 valid
+targets and masks the 2,534 invalid targets only for bbox learning. Reviewers may later reconstruct
+a targeted, evidence-backed subset from replay data, but this is not required before the v2.2 smoke
+and micro-overfit gates.

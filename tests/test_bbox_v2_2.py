@@ -47,7 +47,52 @@ def test_bbox_audit_reports_boundary_overflow_without_repairing(tmp_path):
         "bottom_boundary_overflow": 1,
         "right_boundary_overflow": 1,
     }
+    assert report["maskable_invalid_bbox_rows"] == 1
+    assert report["fatal_invalid_bbox_rows"] == 0
     assert report["invalid_examples"][0]["bbox"] == box
+
+
+def test_bbox_audit_separates_unreadable_images_from_maskable_labels(tmp_path):
+    report = audit_bbox_geometry([
+        _record({"x": 10, "y": 20, "width": 30, "height": 15}),
+    ], tmp_path)
+
+    assert report["status"] == "FAIL"
+    assert report["maskable_invalid_bbox_rows"] == 0
+    assert report["fatal_invalid_bbox_rows"] == 1
+    assert report["invalid_reason_counts"] == {
+        "unreadable_state_before_image": 1,
+    }
+
+
+def test_gold_dataset_masks_only_invalid_bbox_supervision():
+    torch = pytest.importorskip("torch")
+    from web_agent.data.gold_dataset import GoldDataset
+
+    dataset = GoldDataset.__new__(GoldDataset)
+    dataset.strict_bbox_geometry = True
+    dataset.invalid_bbox_policy = "mask"
+    bbox, mask = dataset._bbox({
+        "action_target_bbox": {"x": 10, "y": 90, "width": 20, "height": 20},
+    }, 100, 100)
+
+    assert torch.equal(bbox, torch.zeros(4))
+    assert torch.equal(mask, torch.zeros(1))
+
+
+def test_gold_dataset_preserves_valid_bbox_supervision():
+    torch = pytest.importorskip("torch")
+    from web_agent.data.gold_dataset import GoldDataset
+
+    dataset = GoldDataset.__new__(GoldDataset)
+    dataset.strict_bbox_geometry = True
+    dataset.invalid_bbox_policy = "mask"
+    bbox, mask = dataset._bbox({
+        "action_target_bbox": {"x": 10, "y": 20, "width": 30, "height": 15},
+    }, 100, 100)
+
+    assert torch.allclose(bbox, torch.tensor([0.10, 0.20, 0.30, 0.15]))
+    assert torch.equal(mask, torch.ones(1))
 
 
 def test_centre_bbox_conversion_and_detr_loss_have_useful_gradient():
@@ -103,6 +148,7 @@ def test_action_head_exposes_internal_centre_box_and_stable_xywh():
 def test_v2_2_config_changes_only_registered_bbox_controls():
     cfg = load_config("configs/backbones/qwen2vl_2b_gold_v2_2.yaml")
     assert cfg["data"]["strict_bbox_geometry"] is True
+    assert cfg["data"]["invalid_bbox_policy"] == "mask"
     assert cfg["model"]["bbox_parameterization"] == "cxcywh"
     assert cfg["model"]["task_adapters"]["separate_bbox"] is True
     assert cfg["loss"]["bbox_loss"] == "detr_l1_giou"
@@ -116,6 +162,10 @@ def test_v2_2_notebook_is_output_free_and_every_code_cell_compiles():
     path = Path("notebooks/kaggle_gold_recovery_v2_2.ipynb")
     notebook = json.loads(path.read_text(encoding="utf-8"))
     assert notebook["nbformat"] == 4
+    all_source = "".join(
+        "".join(cell.get("source", [])) for cell in notebook["cells"]
+    )
+    assert "invalid_bbox_policy'] == 'mask'" in all_source
     for index, cell in enumerate(notebook["cells"]):
         if cell["cell_type"] != "code":
             continue
