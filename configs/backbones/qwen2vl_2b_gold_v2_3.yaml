@@ -1,0 +1,26 @@
+# Recovery-v2.3: coordinate-aware localization after the registered v2.2
+# micro-overfit probe improved MAE but failed its IoU and finite-gradient gates.
+# The dataset, 32 selected rows, seed, 100 steps, loss ratios, and pass thresholds
+# remain unchanged so the result is a controlled structural comparison.
+name: Y_QWEN2VL_2B_GOLD_V2_3
+extends: backbones/qwen2vl_2b_gold_v2_2.yaml
+
+model:
+  # Attach normalized patch centres to the preserved Qwen image tokens. The
+  # bbox centre is their attention soft-argmax; width/height remain learned.
+  bbox_grounding_mode: coordinate_softargmax
+  # Keep the frozen/quantized VLM in FP16 but run the trainable grounding
+  # adapter, attention, coordinate projection, and bbox branch in FP32.
+  bbox_fp32_grounding: true
+
+train:
+  controlled_experiment_tag: recovery_v2_3
+  metrics_csv: results/gold_recovery_v2_3_metrics.csv
+  bbox_overfit_rows: 32
+  bbox_overfit_steps: 100
+  bbox_overfit_min_iou_gain: 0.10
+  bbox_overfit_min_mean_iou: 0.20
+  bbox_overfit_max_full_screen_fraction: 0.10
+  bbox_overfit_fp32_grounding: true
+  bbox_overfit_disable_dropout: true
+  bbox_overfit_require_finite_gradients: true

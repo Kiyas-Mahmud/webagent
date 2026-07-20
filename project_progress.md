@@ -683,3 +683,35 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   solely to reproduce an observational field. Advanced the clean isolated notebook to
   `STAGE='bbox_overfit'`. The registered next gate remains 32 verified valid bbox rows for 100
   steps; diagnostic training stays blocked until every micro-overfit check passes.
+
+## 2026-07-20 — recovery-v2.3 coordinate grounding implemented
+- Analyzed the completed v2.2 32-row/100-step micro-overfit report before changing code. Bbox MAE
+  improved from 0.31535 to 0.11328 and both bbox/grounding parameters updated, but mean IoU improved
+  only 0.00406 -> 0.02465 (+0.02059 versus the registered +0.10 gate), final mean IoU missed the
+  registered 0.20 gate, and predicted y collapsed near the top edge (mean 0.03018, std 0.00391).
+  The first reported bbox and grounding gradients were non-finite under scaled FP16. This evidence
+  supports a coordinate-representation and numerical-stability correction, not a lower threshold,
+  generic loss-weight increase, or wholesale data recollection.
+- Added explicit normalized Qwen patch centres derived from `image_grid_thw` after spatial merging,
+  with a strict token-count alignment check. Recovery-v2.3 adds these coordinates to the spatial
+  attention tokens, obtains the bbox centre through differentiable attention soft-argmax, predicts
+  width/height through the bbox MLP, and preserves the external normalized top-left `xywh` contract.
+  All legacy/content-attention configs remain on their previous code path.
+- The frozen/quantized VLM remains in FP16 while the v2.3 trainable grounding adapter, coordinate
+  projection, attention, bbox trunk/output, and DETR bbox loss run in FP32. The overfit probe disables
+  dropout, records the first accepted finite gradients, counts attempted/rejected non-finite steps,
+  and requires zero rejected steps. The original 32 rows, seed 42, 100 accepted updates, L1:GIoU
+  ratio 5:2, IoU thresholds, and full-screen threshold remain unchanged.
+- Added a deterministic visual montage of the exact 32 overfit records with their original bbox
+  targets drawn in green. The isolated v2.3 notebook starts at `STAGE='smoke'` because the bbox
+  architecture changed and refuses `bbox_overfit` until a reviewer explicitly sets
+  `BBOX_MONTAGE_REVIEWED=True` after inspecting all targets.
+- Added `configs/backbones/qwen2vl_2b_gold_v2_3.yaml`,
+  `docs/RECOVERY_V2_3_EXPERIMENT.md`, output-free
+  `notebooks/kaggle_gold_recovery_v2_3.ipynb`, spatial utilities, and config/notebook/gradient-path
+  regression tests. V2.2 and `notebooks/kaggle_gold.ipynb` were not modified.
+- Local verification passed: Ruff clean; `21 passed / 15 skipped` (PyTorch/GPU tensor execution
+  requires Kaggle); Python compileall passed; merged config and every notebook code cell compile;
+  notebook outputs/execution counts are empty; and `git diff --check` passed. This does not guarantee
+  the empirical IoU gate. The next evidence must be the v2.3 Kaggle `smoke`, followed by manual
+  montage review and only then the unchanged `bbox_overfit` gate.

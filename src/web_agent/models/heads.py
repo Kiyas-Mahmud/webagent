@@ -14,10 +14,13 @@ grounding while keeping the legacy path available for controlled comparison.
 
 from __future__ import annotations
 
+import contextlib
+
 import torch
 import torch.nn as nn
 
 from web_agent.models.bbox import cxcywh_to_bounded_xywh
+from web_agent.models.spatial import spatial_soft_argmax
 from web_agent.labels import (
     NUM_ACTION_TYPE,
     NUM_FAILURE_TYPE,
@@ -81,6 +84,7 @@ class ActionHead(nn.Module):
         dropout: float = 0.3,
         spatial_grounding: bool = False,
         bbox_parameterization: str = "legacy_xywh",
+        bbox_grounding_mode: str = "content_attention",
     ):
         super().__init__()
         self.spatial_grounding = spatial_grounding
@@ -89,6 +93,13 @@ class ActionHead(nn.Module):
                 f"unsupported bbox parameterization: {bbox_parameterization!r}"
             )
         self.bbox_parameterization = bbox_parameterization
+        if bbox_grounding_mode not in {
+            "content_attention", "coordinate_softargmax",
+        }:
+            raise ValueError(f"unsupported bbox grounding mode: {bbox_grounding_mode!r}")
+        if bbox_grounding_mode == "coordinate_softargmax" and not spatial_grounding:
+            raise ValueError("coordinate_softargmax requires spatial_grounding=true")
+        self.bbox_grounding_mode = bbox_grounding_mode
         self.trunk = _trunk(dim, hidden, dropout)
         self.action_type = nn.Linear(hidden, NUM_ACTION_TYPE)  # 6
         if spatial_grounding:
@@ -96,7 +107,15 @@ class ActionHead(nn.Module):
                 dim, num_heads=8, dropout=dropout, batch_first=True,
             )
             self.bbox_trunk = _trunk(dim * 2, hidden, dropout)
-        self.bbox = nn.Linear(hidden, 4)
+            if bbox_grounding_mode == "coordinate_softargmax":
+                self.coordinate_projection = nn.Sequential(
+                    nn.Linear(2, dim, bias=False),
+                    nn.LayerNorm(dim),
+                )
+        self.bbox = nn.Linear(
+            hidden,
+            2 if bbox_grounding_mode == "coordinate_softargmax" else 4,
+        )
 
     def forward(
         self,
@@ -104,38 +123,74 @@ class ActionHead(nn.Module):
         bbox_fused: torch.Tensor | None = None,
         spatial_tokens: torch.Tensor | None = None,
         spatial_mask: torch.Tensor | None = None,
+        spatial_coords: torch.Tensor | None = None,
+        force_fp32_bbox: bool = False,
     ) -> dict:
         h = self.trunk(fused)
-        bbox_h = h
-        if self.spatial_grounding:
-            if spatial_tokens is None or spatial_mask is None:
-                raise ValueError("spatial grounding requires image tokens and a token mask")
-            bbox_query = bbox_fused if bbox_fused is not None else fused
-            grounded, _ = self.grounding_attention(
-                bbox_query.unsqueeze(1),
-                spatial_tokens,
-                spatial_tokens,
-                key_padding_mask=~spatial_mask.bool(),
-                need_weights=False,
-            )
-            bbox_h = self.bbox_trunk(torch.cat([
-                bbox_query, grounded.squeeze(1),
-            ], dim=-1))
-        raw_bbox = torch.sigmoid(self.bbox(bbox_h))
-        if self.bbox_parameterization == "cxcywh":
-            bbox = cxcywh_to_bounded_xywh(raw_bbox)
-        elif self.spatial_grounding:
-            # xywh remains normalized and is guaranteed to stay within the image.
-            xy = raw_bbox[:, :2]
-            bbox = torch.cat([xy, raw_bbox[:, 2:] * (1.0 - xy)], dim=-1)
-        else:
-            bbox = raw_bbox
+        bbox_context = (
+            torch.autocast("cuda", enabled=False)
+            if force_fp32_bbox else contextlib.nullcontext()
+        )
+        with bbox_context:
+            bbox_h = h.float() if force_fp32_bbox else h
+            if self.spatial_grounding:
+                if spatial_tokens is None or spatial_mask is None:
+                    raise ValueError(
+                        "spatial grounding requires image tokens and a token mask"
+                    )
+                bbox_query = bbox_fused if bbox_fused is not None else fused
+                attention_tokens = spatial_tokens
+                if force_fp32_bbox:
+                    bbox_query = bbox_query.float()
+                    attention_tokens = attention_tokens.float()
+                need_weights = self.bbox_grounding_mode == "coordinate_softargmax"
+                if need_weights:
+                    if spatial_coords is None:
+                        raise ValueError(
+                            "coordinate_softargmax requires normalized spatial "
+                            "coordinates"
+                        )
+                    attention_tokens = attention_tokens + self.coordinate_projection(
+                        spatial_coords.to(attention_tokens.dtype)
+                    )
+                grounded, attention_weights = self.grounding_attention(
+                    bbox_query.unsqueeze(1),
+                    attention_tokens,
+                    attention_tokens,
+                    key_padding_mask=~spatial_mask.bool(),
+                    need_weights=need_weights,
+                    average_attn_weights=True,
+                )
+                bbox_h = self.bbox_trunk(torch.cat([
+                    bbox_query, grounded.squeeze(1),
+                ], dim=-1))
+            attention_entropy = None
+            if self.bbox_grounding_mode == "coordinate_softargmax":
+                centre, attention_entropy = spatial_soft_argmax(
+                    attention_weights.squeeze(1),
+                    spatial_coords,
+                    spatial_mask,
+                )
+                size = torch.sigmoid(self.bbox(bbox_h))
+                raw_bbox = torch.cat([centre, size], dim=-1)
+            else:
+                raw_bbox = torch.sigmoid(self.bbox(bbox_h))
+            if self.bbox_parameterization == "cxcywh":
+                bbox = cxcywh_to_bounded_xywh(raw_bbox)
+            elif self.spatial_grounding:
+                # xywh remains normalized and is guaranteed to stay within the image.
+                xy = raw_bbox[:, :2]
+                bbox = torch.cat([xy, raw_bbox[:, 2:] * (1.0 - xy)], dim=-1)
+            else:
+                bbox = raw_bbox
         result = {
             "action_type": self.action_type(h),
             "bbox": bbox,
         }
         if self.bbox_parameterization == "cxcywh":
             result["bbox_cxcywh"] = raw_bbox
+        if attention_entropy is not None:
+            result["bbox_attention_entropy"] = attention_entropy
         return result
 
 

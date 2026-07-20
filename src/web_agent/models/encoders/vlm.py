@@ -20,6 +20,8 @@ import contextlib
 import torch
 import torch.nn as nn
 
+from web_agent.models.spatial import normalized_spatial_coordinates
+
 
 class VLMEncoder(nn.Module):
     def __init__(self, cfg: dict):
@@ -59,6 +61,14 @@ class VLMEncoder(nn.Module):
 
         self.model.config.use_cache = False
         self.preserve_spatial_tokens = bool(bb.get("preserve_spatial_tokens", False))
+        self.coordinate_spatial_tokens = (
+            cfg.get("model", {}).get("bbox_grounding_mode")
+            == "coordinate_softargmax"
+        )
+        vision_conf = getattr(conf, "vision_config", None)
+        self.spatial_merge_size = int(
+            getattr(vision_conf, "spatial_merge_size", 2)
+        )
         text_conf = getattr(conf, "text_config", None)
         self.image_token_id = (
             getattr(conf, "image_token_id", None)
@@ -143,11 +153,18 @@ class VLMEncoder(nn.Module):
             empty = ~spatial_mask.any(dim=1)
             if empty.any():
                 spatial_mask[empty] = am[empty].bool()
-        return {
+        result = {
             "pooled": pooled.float(),
             "spatial_tokens": h.float(),
             "spatial_mask": spatial_mask,
         }
+        if self.coordinate_spatial_tokens:
+            result["spatial_coords"] = normalized_spatial_coordinates(
+                spatial_mask,
+                batch[f"{prefix}image_grid_thw"].to(dev),
+                spatial_merge_size=self.spatial_merge_size,
+            )
+        return result
 
     def _pool(self, h: torch.Tensor, am: torch.Tensor) -> torch.Tensor:
         """Pool [B, seq, D] -> [B, D] per self.pooling. am = attention mask [B, seq]."""

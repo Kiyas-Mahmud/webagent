@@ -13,6 +13,7 @@ from pathlib import Path
 import random
 
 import torch
+from PIL import Image, ImageDraw
 
 from web_agent.data.gold_dataloader import (
     build_gold_dataloader,
@@ -370,24 +371,120 @@ def _select_valid_bbox_records(
     )
 
 
+def _probe_record_id(record: dict, index: int) -> str:
+    """Return the stable identifier shared by the montage and overfit report."""
+    _, _, meta = view(record)
+    return str(
+        meta.get("sample_id") or meta.get("task_id") or f"selected-row:{index}"
+    )
+
+
+def save_gold_bbox_probe_montage(
+    cfg: dict,
+    output_path: str | Path,
+    *,
+    rows: int = 32,
+    seed: int = 42,
+    columns: int = 4,
+) -> dict:
+    """Draw the exact deterministic micro-overfit targets for human review."""
+    records = _select_valid_bbox_records(
+        load_gold_split(cfg, "train"),
+        cfg["data"]["root"],
+        rows,
+        seed,
+    )
+    if columns <= 0:
+        raise ValueError("montage columns must be positive")
+    tile_width, image_height, label_height = 384, 240, 28
+    tile_height = image_height + label_height
+    montage_rows = (len(records) + columns - 1) // columns
+    montage = Image.new(
+        "RGB",
+        (columns * tile_width, montage_rows * tile_height),
+        "white",
+    )
+    draw = ImageDraw.Draw(montage)
+    record_ids = []
+    for index, record in enumerate(records):
+        inputs, labels, _ = view(record)
+        record_id = _probe_record_id(record, index)
+        record_ids.append(record_id)
+        image_path = Path(cfg["data"]["root"]) / inputs["state_before"]
+        with Image.open(image_path) as source:
+            source = source.convert("RGB")
+            original_width, original_height = source.size
+            scale = min(
+                tile_width / original_width,
+                image_height / original_height,
+            )
+            rendered_size = (
+                max(1, round(original_width * scale)),
+                max(1, round(original_height * scale)),
+            )
+            rendered = source.resize(rendered_size, Image.Resampling.LANCZOS)
+        column = index % columns
+        row = index // columns
+        tile_x = column * tile_width
+        tile_y = row * tile_height
+        offset_x = tile_x + (tile_width - rendered_size[0]) // 2
+        offset_y = tile_y + label_height + (image_height - rendered_size[1]) // 2
+        montage.paste(rendered, (offset_x, offset_y))
+        box = labels["action_target_bbox"]
+        x0 = offset_x + float(box["x"]) * scale
+        y0 = offset_y + float(box["y"]) * scale
+        x1 = x0 + float(box["width"]) * scale
+        y1 = y0 + float(box["height"]) * scale
+        draw.rectangle((x0, y0, x1, y1), outline="#00ff00", width=3)
+        draw.text((tile_x + 6, tile_y + 6), record_id[:54], fill="black")
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    montage.save(output, quality=92)
+    return {
+        "status": "PASS",
+        "path": str(output),
+        "rows": len(records),
+        "seed": seed,
+        "columns": columns,
+        "record_ids": record_ids,
+        "test_rows_read": 0,
+    }
+
+
 @torch.no_grad()
-def _evaluate_bbox_overfit(model, loader, device: str) -> dict:
+def _evaluate_bbox_overfit(
+    model,
+    loader,
+    device: str,
+    *,
+    force_fp32_grounding: bool = False,
+) -> dict:
     """Evaluate localization only on the fixed micro-overfit records."""
     model.eval()
     predictions = []
     targets = []
     masks = []
+    attention_entropies = []
     for batch in loader:
-        with torch.autocast("cuda", dtype=torch.float16):
-            output = model.forward_bbox(batch)
+        if force_fp32_grounding:
+            output = model.forward_bbox(batch, force_fp32_grounding=True)
+        else:
+            with torch.autocast("cuda", dtype=torch.float16):
+                output = model.forward_bbox(batch)
         predictions.append(output["bbox"].float().cpu())
         targets.append(batch["bbox"].float().cpu())
         masks.append(batch["bbox_mask"].view(-1).float().cpu())
+        if "bbox_attention_entropy" in output:
+            attention_entropies.append(
+                output["bbox_attention_entropy"].float().cpu()
+            )
     prediction = torch.cat(predictions)
     target = torch.cat(targets)
     mask = torch.cat(masks)
     valid = mask > 0.5
     valid_prediction = prediction[valid]
+    valid_target = target[valid]
     summary = bbox_iou_summary(prediction.numpy(), target.numpy(), mask.numpy())
     coordinate_std = valid_prediction.std(dim=0, unbiased=False)
     full_screen = (
@@ -396,7 +493,7 @@ def _evaluate_bbox_overfit(model, loader, device: str) -> dict:
         & (valid_prediction[:, 2] >= 0.95)
         & (valid_prediction[:, 3] >= 0.95)
     )
-    return {
+    report = {
         "bbox_mae": bbox_mae(prediction.numpy(), target.numpy(), mask.numpy()),
         "bbox_mean_iou": summary["mean"],
         "bbox_median_iou": summary["median"],
@@ -404,8 +501,15 @@ def _evaluate_bbox_overfit(model, loader, device: str) -> dict:
         "bbox_rows": summary["rows"],
         "prediction_coordinate_mean": valid_prediction.mean(dim=0).tolist(),
         "prediction_coordinate_std": coordinate_std.tolist(),
+        "target_coordinate_mean": valid_target.mean(dim=0).tolist(),
+        "target_coordinate_std": valid_target.std(dim=0, unbiased=False).tolist(),
         "full_screen_fraction": float(full_screen.float().mean()),
     }
+    if attention_entropies:
+        entropy = torch.cat(attention_entropies)
+        report["attention_entropy_mean"] = float(entropy.mean())
+        report["attention_entropy_std"] = float(entropy.std(unbiased=False))
+    return report
 
 
 def run_gold_bbox_overfit(
@@ -464,6 +568,8 @@ def run_gold_bbox_overfit(
         model.action_head.bbox_trunk,
         model.action_head.bbox,
     ]
+    if hasattr(model.action_head, "coordinate_projection"):
+        trainable_modules.append(model.action_head.coordinate_projection)
     parameters = []
     seen = set()
     for module in trainable_modules:
@@ -473,7 +579,23 @@ def run_gold_bbox_overfit(
                 parameters.append(parameter)
                 seen.add(id(parameter))
 
-    initial = _evaluate_bbox_overfit(model, loader, "cuda")
+    force_fp32_grounding = bool(
+        overfit_cfg["train"].get("bbox_overfit_fp32_grounding", False)
+    )
+    disable_dropout = bool(
+        overfit_cfg["train"].get("bbox_overfit_disable_dropout", False)
+    )
+    require_finite_gradients = bool(
+        overfit_cfg["train"].get(
+            "bbox_overfit_require_finite_gradients", False,
+        )
+    )
+    initial = _evaluate_bbox_overfit(
+        model,
+        loader,
+        "cuda",
+        force_fp32_grounding=force_fp32_grounding,
+    )
     bbox_probe = model.action_head.bbox.weight
     grounding_probe = next(model.task_adapters["grounding"].parameters())
     probe_before = {
@@ -485,29 +607,62 @@ def run_gold_bbox_overfit(
         lr=float(overfit_cfg["optim"]["lr_heads"]),
         weight_decay=float(overfit_cfg["optim"].get("weight_decay", 0.01)),
     )
-    scaler = torch.amp.GradScaler("cuda")
+    scaler = None if force_fp32_grounding else torch.amp.GradScaler("cuda")
     l1_ratio = float(overfit_cfg["loss"].get("bbox_l1_ratio", 5.0))
     giou_ratio = float(overfit_cfg["loss"].get("bbox_giou_ratio", 2.0))
     loss_history = []
     first_gradient_norms = {}
     completed_steps = 0
-    model.train()
+    attempted_steps = 0
+    nonfinite_gradient_steps = 0
+    max_attempts = steps + max(10, steps // 5)
+    model.eval() if disable_dropout else model.train()
     model.encoder.eval()
-    while completed_steps < steps:
+    while completed_steps < steps and attempted_steps < max_attempts:
         for batch in loader:
+            attempted_steps += 1
             optimizer.zero_grad(set_to_none=True)
-            with torch.autocast("cuda", dtype=torch.float16):
-                prediction = model.forward_bbox(batch)
+            if force_fp32_grounding:
+                prediction = model.forward_bbox(
+                    batch,
+                    force_fp32_grounding=True,
+                )
                 row_mask = (batch["bbox_mask"].view(-1) > 0).to("cuda")
                 l1, giou = detr_bbox_loss_terms(
                     prediction["bbox_cxcywh"][row_mask],
                     batch["bbox"].to("cuda")[row_mask],
                 )
                 loss = l1_ratio * l1 + giou_ratio * giou
+            else:
+                with torch.autocast("cuda", dtype=torch.float16):
+                    prediction = model.forward_bbox(batch)
+                    row_mask = (batch["bbox_mask"].view(-1) > 0).to("cuda")
+                    l1, giou = detr_bbox_loss_terms(
+                        prediction["bbox_cxcywh"][row_mask],
+                        batch["bbox"].to("cuda")[row_mask],
+                    )
+                    loss = l1_ratio * l1 + giou_ratio * giou
             if not torch.isfinite(loss):
                 raise FloatingPointError("bbox micro-overfit loss is non-finite")
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
+            if scaler is None:
+                loss.backward()
+            else:
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+            finite_gradients = all(
+                torch.isfinite(parameter.grad).all()
+                for parameter in parameters
+                if parameter.grad is not None
+            )
+            if not finite_gradients:
+                nonfinite_gradient_steps += 1
+                if scaler is not None:
+                    scaler.step(optimizer)
+                    scaler.update()
+                optimizer.zero_grad(set_to_none=True)
+                if attempted_steps >= max_attempts:
+                    break
+                continue
             if not first_gradient_norms:
                 first_gradient_norms = {
                     "bbox": (
@@ -523,8 +678,11 @@ def run_gold_bbox_overfit(
                 parameters,
                 float(overfit_cfg["optim"].get("grad_clip", 1.0)),
             )
-            scaler.step(optimizer)
-            scaler.update()
+            if scaler is None:
+                optimizer.step()
+            else:
+                scaler.step(optimizer)
+                scaler.update()
             loss_history.append({
                 "step": completed_steps,
                 "total": float(loss.detach()),
@@ -535,7 +693,18 @@ def run_gold_bbox_overfit(
             if completed_steps >= steps:
                 break
 
-    final = _evaluate_bbox_overfit(model, loader, "cuda")
+    if completed_steps != steps:
+        raise FloatingPointError(
+            "bbox micro-overfit could not complete the registered finite-gradient "
+            f"steps ({completed_steps}/{steps}, attempts={attempted_steps})"
+        )
+
+    final = _evaluate_bbox_overfit(
+        model,
+        loader,
+        "cuda",
+        force_fp32_grounding=force_fp32_grounding,
+    )
     window = min(10, len(loss_history))
     initial_loss = sum(row["total"] for row in loss_history[:window]) / window
     final_loss = sum(row["total"] for row in loss_history[-window:]) / window
@@ -573,10 +742,20 @@ def run_gold_bbox_overfit(
     }
     checks["bbox_update_nonzero"] = updates["bbox"] > 0.0
     checks["grounding_update_nonzero"] = updates["grounding_adapter"] > 0.0
+    if require_finite_gradients:
+        checks["all_gradient_steps_finite"] = nonfinite_gradient_steps == 0
     return {
         "status": "PASS" if all(checks.values()) else "FAIL",
         "rows": rows,
+        "selected_record_ids": [
+            _probe_record_id(record, index)
+            for index, record in enumerate(selected_records)
+        ],
         "steps": steps,
+        "attempted_steps": attempted_steps,
+        "nonfinite_gradient_steps": nonfinite_gradient_steps,
+        "fp32_grounding": force_fp32_grounding,
+        "dropout_disabled": disable_dropout,
         "test_rows_read": 0,
         "bbox_geometry": geometry,
         "loss": {
@@ -675,6 +854,10 @@ def run_gold_smoke(
         probes["grounding_adapter"] = next(
             model.task_adapters["grounding"].parameters()
         )
+    if hasattr(model.action_head, "coordinate_projection"):
+        probes["coordinate_projection"] = next(
+            model.action_head.coordinate_projection.parameters()
+        )
     before = {
         name: parameter.detach().clone()
         for name, parameter in probes.items()
@@ -756,6 +939,8 @@ def run_gold_smoke(
     }
     if cfg.get("model", {}).get("bbox_parameterization") == "cxcywh":
         expected_shapes["bbox_cxcywh"] = (batch_size, 4)
+    if cfg.get("model", {}).get("bbox_grounding_mode") == "coordinate_softargmax":
+        expected_shapes["bbox_attention_entropy"] = (batch_size,)
     if cfg["loss"].get("hierarchical_recovery"):
         expected_shapes["needs_recovery"] = (batch_size, 1)
     recovery_batch_size = int(first_batch.get(
@@ -934,9 +1119,12 @@ def run_gold_mini(
     quality_gates = _controlled_quality_gates(result)
     is_v2 = bool(mini_cfg["data"].get("recovery_transitions"))
     is_v2_1_or_later = experiment_tag.lower() in {
-        "recovery_v2_1", "recovery_v2_2",
+        "recovery_v2_1", "recovery_v2_2", "recovery_v2_3",
     }
-    is_v2_2 = experiment_tag.lower() == "recovery_v2_2"
+    is_v2_2_or_later = experiment_tag.lower() in {
+        "recovery_v2_2", "recovery_v2_3",
+    }
+    is_v2_3 = experiment_tag.lower() == "recovery_v2_3"
     training_changes = [
         "joint proportional training subset coverage",
         "recovery-aware distribution-preserving physical batches",
@@ -950,7 +1138,7 @@ def run_gold_mini(
             "proper sparse recovery-transition stream for recovery success",
             (
                 "spatial grounding bbox head with centre L1(5) plus GIoU(2)"
-                if is_v2_2
+                if is_v2_2_or_later
                 else "spatial grounding bbox head with SmoothL1 plus GIoU"
             ),
             "task-specific residual adapters and uncertainty loss weighting",
@@ -960,11 +1148,17 @@ def run_gold_mini(
             "exact selected-row needs-recovery positive weighting",
             "bbox-specific residual adapter separate from action classification",
         ])
-    if is_v2_2:
+    if is_v2_2_or_later:
         training_changes.extend([
             "strict bbox validation with invalid targets masked only for localization",
             "internal centre-format bbox regression with stable public xywh output",
             "separately logged bbox coordinate-L1 and GIoU components",
+        ])
+    if is_v2_3:
+        training_changes.extend([
+            "explicit normalized 2D patch coordinates for localization",
+            "attention soft-argmax bbox centre with learned width and height",
+            "FP32 trainable grounding path with the frozen VLM kept in FP16",
         ])
     fixed_factors = [
         "backbone",
@@ -1025,7 +1219,15 @@ def run_gold_mini(
                             "DETR-style centre-format localization objective",
                             "bbox-only micro-overfit trainability gate",
                         ]
-                        if is_v2_2 else []
+                        if is_v2_2_or_later else []
+                    ),
+                    *(
+                        [
+                            "coordinate-aware attention and soft-argmax centre",
+                            "FP32 trainable localization branch",
+                            "manual montage review of the fixed overfit rows",
+                        ]
+                        if is_v2_3 else []
                     ),
                 ]
                 if is_v2 else []
@@ -1044,7 +1246,14 @@ def run_gold_mini(
                         "separate bbox L1 and GIoU loss components",
                         "full train/validation bbox boundary audit",
                     ]
-                    if is_v2_2 else []
+                    if is_v2_2_or_later else []
+                ),
+                *(
+                    [
+                        "bbox attention entropy",
+                        "finite-gradient attempt and rejection counts",
+                    ]
+                    if is_v2_3 else []
                 ),
                 "all mini epoch checkpoints retained",
             ],

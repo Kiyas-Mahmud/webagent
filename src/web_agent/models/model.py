@@ -19,6 +19,8 @@ path is added when SigLIP+RoBERTa is built.
 
 from __future__ import annotations
 
+import contextlib
+
 import torch
 import torch.nn as nn
 
@@ -44,6 +46,9 @@ class WebAgentModel(nn.Module):
         )
         model_cfg = cfg.get("model", {})
         self.spatial_grounding = bool(model_cfg.get("spatial_grounding", False))
+        self.bbox_fp32_grounding = bool(
+            model_cfg.get("bbox_fp32_grounding", False)
+        )
         fused_dim = cfg.get("fused_dim", 768)
 
         if self.path == "vlm":
@@ -93,6 +98,9 @@ class WebAgentModel(nn.Module):
             bbox_parameterization=model_cfg.get(
                 "bbox_parameterization", "legacy_xywh",
             ),
+            bbox_grounding_mode=model_cfg.get(
+                "bbox_grounding_mode", "content_attention",
+            ),
         )
         self.memory_head = MemoryHead(fused_dim)
         self.recovery_outcome_head = RecoveryOutcomeHead(fused_dim)
@@ -101,14 +109,21 @@ class WebAgentModel(nn.Module):
         """Front-end -> pooled features and, when enabled, spatial image tokens."""
         if self.path == "vlm":
             encoded = self.encoder(batch, prefix=prefix)
-            if isinstance(encoded, dict):
-                return {
-                    "fused": self.adapter(encoded["pooled"]),
-                    "spatial_tokens": self.adapter(encoded["spatial_tokens"]),
-                    "spatial_mask": encoded["spatial_mask"],
-                }
-            return {"fused": self.adapter(encoded)}
+            return self._project_encoder_output(encoded)
         raise NotImplementedError
+
+    def _project_encoder_output(self, encoded) -> dict:
+        """Apply the shared adapter while preserving spatial metadata."""
+        if not isinstance(encoded, dict):
+            return {"fused": self.adapter(encoded.float())}
+        result = {
+            "fused": self.adapter(encoded["pooled"].float()),
+            "spatial_tokens": self.adapter(encoded["spatial_tokens"].float()),
+            "spatial_mask": encoded["spatial_mask"],
+        }
+        if "spatial_coords" in encoded:
+            result["spatial_coords"] = encoded["spatial_coords"].float()
+        return result
 
     def forward(self, batch: dict) -> dict:
         if self.causal_routing:
@@ -121,10 +136,6 @@ class WebAgentModel(nn.Module):
         def adapt(name, value):
             return adapters[name](value) if adapters is not None else value
         pre_fused = adapt("policy", pre_encoded["fused"])
-        bbox_fused = (
-            adapt("grounding", pre_encoded["fused"])
-            if self.separate_bbox_adapter else pre_fused
-        )
         post_fused = adapt("diagnosis", post_encoded["fused"])
         memory_fused = adapt("memory", post_encoded["fused"])
 
@@ -140,18 +151,35 @@ class WebAgentModel(nn.Module):
             confidence_fused=pre_fused if self.causal_routing else None,
         )
         preds.update(failure_predictions)
-        spatial_tokens = pre_encoded.get("spatial_tokens")
-        if spatial_tokens is not None:
-            spatial_tokens = adapt(
-                "grounding" if self.separate_bbox_adapter else "policy",
-                spatial_tokens,
+        bbox_context = (
+            torch.autocast("cuda", enabled=False)
+            if self.bbox_fp32_grounding else contextlib.nullcontext()
+        )
+        with bbox_context:
+            bbox_source = (
+                pre_encoded["fused"].float()
+                if self.bbox_fp32_grounding else pre_encoded["fused"]
             )
+            bbox_fused = (
+                adapt("grounding", bbox_source)
+                if self.separate_bbox_adapter else pre_fused
+            )
+            spatial_tokens = pre_encoded.get("spatial_tokens")
+            if spatial_tokens is not None:
+                if self.bbox_fp32_grounding:
+                    spatial_tokens = spatial_tokens.float()
+                spatial_tokens = adapt(
+                    "grounding" if self.separate_bbox_adapter else "policy",
+                    spatial_tokens,
+                )
         if getattr(self, "spatial_grounding", False):
             preds.update(self.action_head(
                 pre_fused,
                 bbox_fused=bbox_fused,
                 spatial_tokens=spatial_tokens,
                 spatial_mask=pre_encoded.get("spatial_mask"),
+                spatial_coords=pre_encoded.get("spatial_coords"),
+                force_fp32_bbox=self.bbox_fp32_grounding,
             ))
         else:
             preds.update(self.action_head(pre_fused))
@@ -171,13 +199,23 @@ class WebAgentModel(nn.Module):
             preds.update(self.recovery_outcome_head(post_fused))
         return preds
 
-    def forward_bbox(self, batch: dict) -> dict:
+    def forward_bbox(self, batch: dict, *, force_fp32_grounding: bool = False) -> dict:
         """Run only the causal pre-action stream and bbox grounding branch.
 
-        This is used by the v2.2 micro-overfit gate.  It avoids spending compute
-        on post-action and recovery streams while proving localization can learn.
+        This is used by the registered bbox micro-overfit gates. It avoids
+        spending compute on post-action and recovery streams while proving
+        localization can learn.
         """
-        pre_encoded = self.encode(batch, prefix="pre_")
+        if force_fp32_grounding:
+            # Keep the frozen/quantized VLM in its native T4 precision, then run
+            # every trainable localization component in FP32. This prevents the
+            # scaled-FP16 gradient overflow observed in the v2.2 probe.
+            with torch.autocast("cuda", dtype=torch.float16):
+                encoded = self.encoder(batch, prefix="pre_")
+            with torch.autocast("cuda", enabled=False):
+                pre_encoded = self._project_encoder_output(encoded)
+        else:
+            pre_encoded = self.encode(batch, prefix="pre_")
         adapters = getattr(self, "task_adapters", None)
 
         def adapt(name, value):
@@ -194,12 +232,19 @@ class WebAgentModel(nn.Module):
                 "grounding" if self.separate_bbox_adapter else "policy",
                 spatial_tokens,
             )
-        return self.action_head(
-            pre_fused,
-            bbox_fused=bbox_fused,
-            spatial_tokens=spatial_tokens,
-            spatial_mask=pre_encoded.get("spatial_mask"),
+        context = (
+            torch.autocast("cuda", enabled=False)
+            if force_fp32_grounding else contextlib.nullcontext()
         )
+        with context:
+            return self.action_head(
+                pre_fused,
+                bbox_fused=bbox_fused,
+                spatial_tokens=spatial_tokens,
+                spatial_mask=pre_encoded.get("spatial_mask"),
+                spatial_coords=pre_encoded.get("spatial_coords"),
+                force_fp32_bbox=force_fp32_grounding,
+            )
 
     def trainable_parameters(self):
         """All params with requires_grad: LoRA + adapter + 5 heads (4-bit base frozen)."""
