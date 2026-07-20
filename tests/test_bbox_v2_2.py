@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -172,3 +173,25 @@ def test_v2_2_notebook_is_output_free_and_every_code_cell_compiles():
         assert cell["execution_count"] is None
         assert cell["outputs"] == []
         compile("".join(cell["source"]), f"{path}:cell-{index}", "exec")
+
+
+def test_smoke_report_explicitly_records_that_test_split_was_not_read():
+    path = Path("src/web_agent/train/gold_stages.py")
+    module = ast.parse(path.read_text(encoding="utf-8"))
+    smoke_function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "run_gold_smoke"
+    )
+    report = next(
+        node.value
+        for node in ast.walk(smoke_function)
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict)
+    )
+    fields = {
+        key.value: value
+        for key, value in zip(report.keys, report.values, strict=True)
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    }
+
+    assert ast.literal_eval(fields["test_rows_read"]) == 0

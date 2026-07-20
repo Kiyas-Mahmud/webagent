@@ -776,6 +776,7 @@ def run_gold_smoke(
 
     return {
         "status": "PASS",
+        "test_rows_read": 0,
         "dataset_rows": rows,
         "processed_rows": processed_rows,
         "forward_batch_size": batch_size,

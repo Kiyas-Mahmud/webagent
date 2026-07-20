@@ -655,3 +655,19 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Next Kaggle action: connect `notebooks/kaggle_gold_recovery_v2_2.ipynb`, run `STAGE='audit'`, and
   require `training_disposition='PASS_WITH_INVALID_BBOX_MASKED'`, `masked_bbox_rows=2534`,
   `bbox_supervision_rows=9068`, and `fatal_invalid_bbox_rows=0` before moving to `STAGE='smoke'`.
+
+## 2026-07-20 — v2.2 smoke result accepted; report-contract fix
+- Pulled Kaggle result commit `2fa4a40`. It executed the intended code commit `667ed69` on a T4.
+  The full audit passed its training disposition with 31,360 records retained, 9,068 valid bbox
+  targets, 2,534 invalid bbox targets masked, zero fatal image errors, and zero test rows read.
+- The core 16-row smoke returned `status=PASS`: all 16 rows were processed, loss was finite
+  (`1.6658`), four valid bbox targets were supervised, all required bbox/recovery/grounding probes
+  had positive gradients and optimizer updates, every sampled row retained 252 spatial tokens, and
+  peak allocated GPU memory was 4.16 GB.
+- The notebook's final policy cell stopped only because the smoke report omitted the observational
+  field `test_rows_read`; this was a report-schema `KeyError`, not a model, loss, data, or GPU
+  failure. Added the explicit constant `test_rows_read: 0` to `run_gold_smoke` plus an AST-based
+  regression test. No learning behavior or registered experiment factor changed.
+- Cleared the stale executed/error output from `notebooks/kaggle_gold_recovery_v2_2.ipynb` while
+  retaining `STAGE='smoke'`. Rerun this cheap stage once to produce a completely green publication
+  artifact; only then change the stage to `bbox_overfit`.
