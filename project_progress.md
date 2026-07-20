@@ -769,3 +769,10 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   with empty outputs/execution counts; and `git diff --check` passed. The next permitted action is
   v2.4 `smoke`, manual confirmation of the unchanged montage, then `bbox_overfit`. Diagnostic/mini
   training remains blocked until every saved overfit check is true.
+- During push, remote commit `916a698` arrived with the completed v2.3 Kaggle notebook evidence
+  (`STAGE='bbox_overfit'`, montage reviewed, six executed cells with outputs). It was preserved by a
+  clean rebase and not edited. Consequently the old source-hygiene test that requires the protected
+  v2.3 notebook to remain at `STAGE='smoke'` and output-free now reports one expected failure; the
+  post-rebase v2.4/v2.2 targeted suite remains green (`9 passed / 7 skipped`), Ruff remains clean,
+  and compileall passes. Do not "fix" that failure by deleting the user's v2.3 evidence inside this
+  v2.4 task; archive/clean the executed notebook only under a separately approved artifact policy.
