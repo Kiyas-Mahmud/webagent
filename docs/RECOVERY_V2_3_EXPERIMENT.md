@@ -53,20 +53,21 @@ The following stay identical to v2.2:
 
 ## Required execution order
 
-Use `notebooks/kaggle_gold_recovery_v2_3.ipynb` only. Restart the Kaggle kernel
-between stages.
+Use `notebooks/kaggle_gold_recovery_v2_3.ipynb` only. Every execution first runs
+the complete train/validation geometry audit and still blocks fatal image/file
+errors. Because the accepted target-level masking disposition and data are
+unchanged from v2.2, the notebook begins directly at `smoke`. Restart the Kaggle
+kernel between stages.
 
-1. `audit`: accept only the existing target-level masking disposition; fatal
-   image/file errors still block execution.
-2. `smoke`: verify output shapes, finite backward, and non-zero updates for the
+1. `smoke`: verify output shapes, finite backward, and non-zero updates for the
    bbox, coordinate projection, grounding adapter, and all recovery probes.
-3. Inspect the generated montage of the exact 32 micro-overfit rows. Confirm
+2. Inspect the generated montage of the exact 32 micro-overfit rows. Confirm
    each green rectangle marks the intended interactive target, then set
    `BBOX_MONTAGE_REVIEWED = True`.
-4. `bbox_overfit`: require every registered check, including zero rejected
+3. `bbox_overfit`: require every registered check, including zero rejected
    non-finite gradient steps.
-5. `diagnostic`: run one controlled 5k/500 epoch only after overfit passes.
-6. `mini`: run five epochs only after all diagnostic functionality gates pass.
+4. `diagnostic`: run one controlled 5k/500 epoch only after overfit passes.
+5. `mini`: run five epochs only after all diagnostic functionality gates pass.
 
 ## Decision rule
 
