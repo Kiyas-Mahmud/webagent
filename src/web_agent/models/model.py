@@ -110,6 +110,7 @@ class WebAgentModel(nn.Module):
             bbox_log_size_max=float(model_cfg.get(
                 "bbox_log_size_max", 0.0,
             )),
+            bbox_attention_dropout=model_cfg.get("bbox_attention_dropout"),
         )
         self.memory_head = MemoryHead(fused_dim)
         self.recovery_outcome_head = RecoveryOutcomeHead(fused_dim)

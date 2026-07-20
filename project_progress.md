@@ -776,3 +776,56 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   post-rebase v2.4/v2.2 targeted suite remains green (`9 passed / 7 skipped`), Ruff remains clean,
   and compileall passes. Do not "fix" that failure by deleting the user's v2.3 evidence inside this
   v2.4 task; archive/clean the executed notebook only under a separately approved artifact policy.
+
+## 2026-07-20 — v2.4 overfit result fixes size collapse; centre attention remains gated
+- Analyzed the supplied full Kaggle v2.4 audit and 32-row/100-step overfit report. The full audit
+  remains accepted with 31,360 records retained, 9,068 valid bbox targets, 2,534 invalid targets
+  masked only from localization, zero fatal rows, and zero test rows read. The fixed probe itself is
+  32/32 geometry-valid, so raw full-corpus geometry status `FAIL` is not the overfit cause.
+- V2.4 solved the exact v2.3 saturation defect: final public widths/heights are positive and
+  nonconstant, internal size minima are 0.0775/0.0358, log-size outputs are finite, every gradient
+  step is finite, loss falls 6.772 -> 4.804, bbox MAE improves 0.1588 -> 0.0746, mean-IoU gain is
+  0.1291 (passing the registered +0.10 gate), and Recall@IoU50 rises 0 -> 0.125.
+- Only the unchanged final mean-IoU gate fails (`0.1291 < 0.20`). Size means are now close to target,
+  and horizontal location is reasonable. The remaining error is vertical localization: internal
+  predicted centre-y averages 0.0925 versus target centre-y about 0.1962, with much less spread.
+  Attention entropy collapses 5.519 -> 1.104, showing a sharp but usually wrong patch selection.
+- Verified against Hugging Face's Qwen2-VL implementation that merged vision positions are flattened
+  temporal-height-width/raster order, matching the repository coordinate construction. Do not spend
+  another run merely swapping coordinates or lower the IoU threshold.
+- Next registered experiment should remain isolated: preserve v2.4 size/prior and all 100-step
+  controls; first add a feasibility audit for duplicate pre-action inputs with conflicting bbox
+  targets, then add direct target-distribution supervision to the existing attention map and log
+  per-row/step localization. Do not simultaneously extend steps or tune the threshold. Diagnostic,
+  mini, and full training remain blocked until the unchanged 0.20 micro-overfit gate passes.
+
+## 2026-07-20 — recovery-v2.5 supervised patch attention implemented
+- Implemented the evidence-selected v2.5 correction without changing v2.4, earlier recovery
+  notebooks, or `notebooks/kaggle_gold.ipynb`. The fixed 32 rows, seed 42, 100 optimizer updates,
+  optimizer settings, centre/log-size ratio 5.0, GIoU ratio 2.0, minimum +0.10 IoU gain, minimum
+  0.20 final mean IoU, full-screen limit, FP32 grounding, size prior/decoder, recovery design, and
+  every non-bbox objective remain inherited unchanged.
+- Added a normalized `KL(target patch distribution || grounding attention)` auxiliary term on valid
+  bbox rows. The masked target distribution is centred on the target bbox, scales with half its
+  width/height, and assigns zero mass to padding. Only grounding-attention dropout is registered as
+  zero so the supervised probabilities are stable; the inherited trunk/head dropout is unchanged.
+- Added a pre-GPU feasibility gate for the exact fixed probe. It hashes decoded RGB pixels plus
+  dimensions and combines them with the exact pre-action task/domain text. Identical deterministic
+  inputs with conflicting normalized bbox targets now return a structured FAIL instead of being
+  misdiagnosed as an optimization defect. The audit is read-only and reports zero test rows read.
+- Expanded the overfit evidence to complete fixed-set evaluations at steps 0, 25, 50, 75, and 100.
+  Every checkpoint records attention KL/entropy, bbox metrics and distributions, and all 32 rows'
+  IDs, predictions, targets, IoUs, centre errors, attention peaks, and raw log sizes, plus the ten
+  worst rows. V2.5 additionally requires attention KL to decrease; no empirical gate was weakened.
+- Added `configs/backbones/qwen2vl_2b_gold_v2_5.yaml`,
+  `docs/RECOVERY_V2_5_EXPERIMENT.md`, output-free
+  `notebooks/kaggle_gold_recovery_v2_5.ipynb`, and focused regression tests for conflict detection,
+  target distribution/masking, differentiability, head output contracts, combined-loss routing,
+  inherited controls, and notebook isolation/compilation. The notebook starts at `STAGE='smoke'`.
+- Local verification: Ruff clean; Python compileall passed; v2.5 non-PyTorch tests `4 passed` and
+  PyTorch-dependent tests `4 skipped` because no local Python runtime has PyTorch; notebook JSON and
+  every code cell compile with empty outputs/execution counts; and `git diff --check` passed. The
+  wider bbox suite is otherwise green but retains the single known v2.3 notebook-hygiene failure
+  caused by preserved executed Kaggle evidence. Actual tensor/GPU behavior remains intentionally
+  gated by v2.5 Kaggle `smoke`, followed by manual montage review and then `bbox_overfit`; diagnostic
+  and mini remain blocked until the unchanged bbox overfit checks all pass.

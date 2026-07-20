@@ -90,6 +90,7 @@ class ActionHead(nn.Module):
         bbox_size_parameterization: str = "sigmoid",
         bbox_log_size_min: float = -9.210340371976184,
         bbox_log_size_max: float = 0.0,
+        bbox_attention_dropout: float | None = None,
     ):
         super().__init__()
         self.spatial_grounding = spatial_grounding
@@ -122,11 +123,21 @@ class ActionHead(nn.Module):
         self.bbox_size_parameterization = bbox_size_parameterization
         self.bbox_log_size_min = float(bbox_log_size_min)
         self.bbox_log_size_max = float(bbox_log_size_max)
+        attention_dropout = (
+            dropout
+            if bbox_attention_dropout is None
+            else float(bbox_attention_dropout)
+        )
+        if not 0.0 <= attention_dropout < 1.0:
+            raise ValueError("bbox_attention_dropout must be in [0, 1)")
         self.trunk = _trunk(dim, hidden, dropout)
         self.action_type = nn.Linear(hidden, NUM_ACTION_TYPE)  # 6
         if spatial_grounding:
             self.grounding_attention = nn.MultiheadAttention(
-                dim, num_heads=8, dropout=dropout, batch_first=True,
+                dim,
+                num_heads=8,
+                dropout=attention_dropout,
+                batch_first=True,
             )
             self.bbox_trunk = _trunk(dim * 2, hidden, dropout)
             if bbox_grounding_mode == "coordinate_softargmax":
@@ -240,6 +251,9 @@ class ActionHead(nn.Module):
             result["bbox_log_wh"] = raw_log_wh
         if attention_entropy is not None:
             result["bbox_attention_entropy"] = attention_entropy
+            result["bbox_attention_weights"] = attention_weights.squeeze(1)
+            result["bbox_spatial_coords"] = spatial_coords
+            result["bbox_spatial_mask"] = spatial_mask
         return result
 
 

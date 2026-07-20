@@ -129,3 +129,75 @@ def detr_bbox_log_size_loss_terms(
         target_cxcywh,
     )).mean()
     return centre_l1, log_size_smooth_l1, giou
+
+
+def bbox_attention_target_distribution(
+    spatial_coords: torch.Tensor,
+    spatial_mask: torch.Tensor,
+    target_xywh: torch.Tensor,
+    *,
+    minimum_scale: float = 1e-4,
+) -> torch.Tensor:
+    """Build a soft target over patches from each supervised target box.
+
+    The Gaussian is centred on the target box and uses half its width/height as
+    the axis scales. This makes small controls select their nearest patch while
+    larger elements supervise a broader region. Invalid/padded tokens receive
+    exactly zero probability.
+    """
+    if spatial_coords.ndim != 3 or spatial_coords.shape[-1] != 2:
+        raise ValueError("spatial_coords must have shape [batch, sequence, 2]")
+    if spatial_mask.shape != spatial_coords.shape[:2]:
+        raise ValueError("spatial_mask must match the coordinate batch/sequence")
+    if target_xywh.shape != (spatial_coords.shape[0], 4):
+        raise ValueError("target_xywh must have shape [batch, 4]")
+    if not spatial_mask.bool().any(dim=1).all().item():
+        raise ValueError("every row needs at least one valid spatial token")
+
+    target_cxcywh = xywh_to_cxcywh(target_xywh.float())
+    centre = target_cxcywh[:, None, :2]
+    scale = (0.5 * target_cxcywh[:, None, 2:]).clamp_min(
+        float(minimum_scale)
+    )
+    standardized = (spatial_coords.float() - centre) / scale
+    logits = -0.5 * standardized.square().sum(dim=-1)
+    logits = logits.masked_fill(~spatial_mask.bool(), float("-inf"))
+    return torch.softmax(logits, dim=-1)
+
+
+def bbox_attention_kl_loss(
+    predicted_attention: torch.Tensor,
+    spatial_coords: torch.Tensor,
+    spatial_mask: torch.Tensor,
+    target_xywh: torch.Tensor,
+    *,
+    epsilon: float = 1e-8,
+) -> torch.Tensor:
+    """Normalized KL(target || predicted) for direct patch supervision.
+
+    Dividing each row by ``log(valid_patch_count)`` keeps this auxiliary term on
+    a comparable scale across Qwen's dynamic image resolutions. The prediction
+    is renormalized after masking, so only real image tokens participate.
+    """
+    if predicted_attention.shape != spatial_mask.shape:
+        raise ValueError("predicted attention and spatial_mask must match")
+    mask = spatial_mask.bool()
+    prediction = predicted_attention.float().masked_fill(~mask, 0.0)
+    prediction = prediction.clamp_min(0.0)
+    prediction = prediction / prediction.sum(dim=-1, keepdim=True).clamp_min(
+        float(epsilon)
+    )
+    target = bbox_attention_target_distribution(
+        spatial_coords,
+        mask,
+        target_xywh,
+    )
+    per_row = (
+        target
+        * (
+            torch.log(target + float(epsilon))
+            - torch.log(prediction + float(epsilon))
+        )
+    ).sum(dim=-1)
+    normalizer = torch.log(mask.sum(dim=-1).float()).clamp_min(1.0)
+    return (per_row / normalizer).mean()

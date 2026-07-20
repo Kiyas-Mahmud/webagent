@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections import Counter
 from pathlib import Path
@@ -212,6 +213,97 @@ def bbox_log_size_prior(
         "excluded_invalid_rows": int(report["invalid_bbox_rows"]),
         "log_wh": [log_width, log_height],
         "geometric_mean_wh": [math.exp(log_width), math.exp(log_height)],
+    }
+
+
+def audit_bbox_probe_feasibility(
+    records: list[dict],
+    data_root: str | Path,
+    *,
+    tolerance: float = 1e-6,
+    max_examples: int = 10,
+) -> dict:
+    """Detect impossible bbox supervision for identical pre-action inputs.
+
+    The policy/bbox stream sees state-before image content, task description,
+    and website domain. If those exact inputs repeat with different normalized
+    boxes, no deterministic model can memorize every row. Image content is
+    hashed so duplicate files under different relative paths are still found.
+    """
+    geometry = audit_bbox_geometry(records, data_root, max_examples=max_examples)
+    if geometry["status"] != "PASS":
+        return {
+            "status": "FAIL",
+            "reason": "selected probe contains invalid bbox geometry",
+            "records": len(records),
+            "bbox_geometry": geometry,
+            "test_rows_read": 0,
+        }
+
+    root = Path(data_root)
+    image_hashes: dict[str, str] = {}
+    image_sizes: dict[str, tuple[int, int]] = {}
+    groups: dict[tuple[str, str, str], list[dict]] = {}
+    for index, record in enumerate(records):
+        inputs, labels, _ = _view(record)
+        relative_path = str(inputs["state_before"])
+        if relative_path not in image_hashes:
+            digest = hashlib.sha256()
+            with Image.open(root / relative_path) as image:
+                rgb = image.convert("RGB")
+                image_sizes[relative_path] = rgb.size
+                digest.update(f"{rgb.width}x{rgb.height}:RGB".encode("ascii"))
+                digest.update(rgb.tobytes())
+            image_hashes[relative_path] = digest.hexdigest()
+        width, height = image_sizes[relative_path]
+        box = labels["action_target_bbox"]
+        normalized_box = (
+            float(box["x"]) / width,
+            float(box["y"]) / height,
+            float(box["width"]) / width,
+            float(box["height"]) / height,
+        )
+        key = (
+            image_hashes[relative_path],
+            str(inputs.get("task_description") or ""),
+            str(inputs.get("website_domain") or ""),
+        )
+        groups.setdefault(key, []).append({
+            "record_id": _record_id(record, index),
+            "state_before": relative_path,
+            "normalized_bbox": list(normalized_box),
+        })
+
+    duplicate_groups = [rows for rows in groups.values() if len(rows) > 1]
+    conflicting_groups = []
+    for rows in duplicate_groups:
+        reference = rows[0]["normalized_bbox"]
+        if any(
+            any(abs(left - right) > tolerance for left, right in zip(
+                reference,
+                row["normalized_bbox"],
+                strict=True,
+            ))
+            for row in rows[1:]
+        ):
+            conflicting_groups.append(rows)
+    conflicting_rows = sum(len(rows) for rows in conflicting_groups)
+    return {
+        "status": "PASS" if not conflicting_groups else "FAIL",
+        "reason": (
+            "no identical pre-action inputs have conflicting bbox targets"
+            if not conflicting_groups
+            else "identical pre-action inputs have conflicting bbox targets"
+        ),
+        "records": len(records),
+        "unique_pre_action_inputs": len(groups),
+        "duplicate_input_groups": len(duplicate_groups),
+        "conflicting_input_groups": len(conflicting_groups),
+        "conflicting_rows": conflicting_rows,
+        "conflict_examples": conflicting_groups[:max_examples],
+        "image_identity": "sha256 decoded RGB pixels plus dimensions",
+        "text_identity": "exact task_description plus website_domain",
+        "test_rows_read": 0,
     }
 
 

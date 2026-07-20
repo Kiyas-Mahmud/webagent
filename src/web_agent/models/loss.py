@@ -37,6 +37,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from web_agent.models.bbox import (
+    bbox_attention_kl_loss,
     detr_bbox_log_size_loss_terms,
     detr_bbox_loss_terms,
 )
@@ -253,6 +254,31 @@ class CombinedLoss(nn.Module):
                     float(self.w.get("bbox_l1_ratio", 5.0)) * l1
                     + float(self.w.get("bbox_giou_ratio", 2.0)) * giou
                 )
+                attention_ratio = float(
+                    self.w.get("bbox_attention_ratio", 0.0)
+                )
+                if attention_ratio < 0.0:
+                    raise ValueError("bbox_attention_ratio must be non-negative")
+                if attention_ratio > 0.0:
+                    required = (
+                        "bbox_attention_weights",
+                        "bbox_spatial_coords",
+                        "bbox_spatial_mask",
+                    )
+                    missing = [name for name in required if name not in preds]
+                    if missing:
+                        raise KeyError(
+                            "bbox attention supervision requires: "
+                            + ", ".join(missing)
+                        )
+                    attention_kl = bbox_attention_kl_loss(
+                        preds["bbox_attention_weights"][row_mask],
+                        preds["bbox_spatial_coords"][row_mask],
+                        preds["bbox_spatial_mask"][row_mask],
+                        batch["bbox"][row_mask],
+                    )
+                    t["bbox"] = t["bbox"] + attention_ratio * attention_kl
+                    bbox_diagnostics["bbox_attention_kl"] = attention_kl
             else:
                 t["bbox"] = preds["bbox"].sum() * 0.0
                 bbox_diagnostics = {
@@ -264,6 +290,8 @@ class CombinedLoss(nn.Module):
                         "bbox_center_l1": t["bbox"],
                         "bbox_log_size_smooth_l1": t["bbox"],
                     })
+                if float(self.w.get("bbox_attention_ratio", 0.0)) > 0.0:
+                    bbox_diagnostics["bbox_attention_kl"] = t["bbox"]
         elif self.bbox_loss == "smooth_l1_giou":
             row_mask = mask.view(-1) > 0
             bbox_active = bool(row_mask.any())

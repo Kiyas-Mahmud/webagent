@@ -1,0 +1,23 @@
+# Recovery-v2.5: isolated correction for v2.4's sharp-but-wrong patch attention.
+# V2.4 fixed size saturation and passed IoU-gain, finite-gradient, and size gates,
+# but final mean IoU was 0.1291 because centre-y stayed near the page top.
+# Rows, seed, steps, optimizer, centre/size/GIoU loss, and thresholds are fixed.
+name: Y_QWEN2VL_2B_GOLD_V2_5
+extends: backbones/qwen2vl_2b_gold_v2_4.yaml
+
+model:
+  # A supervised probability map must represent the pre-dropout distribution.
+  # Other head/trunk dropout remains inherited and unchanged.
+  bbox_attention_dropout: 0.0
+
+loss:
+  # Normalized KL(target patch distribution || grounding attention). The target
+  # is derived only from each valid training bbox centre and width/height.
+  bbox_attention_ratio: 1.0
+
+train:
+  controlled_experiment_tag: recovery_v2_5
+  metrics_csv: results/gold_recovery_v2_5_metrics.csv
+  # Full fixed-set evaluations expose whether a final result hides an earlier
+  # good/bad centre trajectory. The registered optimizer still stops at 100.
+  bbox_overfit_full_eval_steps: [25, 50, 75]
