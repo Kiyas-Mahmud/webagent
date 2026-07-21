@@ -829,3 +829,29 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   caused by preserved executed Kaggle evidence. Actual tensor/GPU behavior remains intentionally
   gated by v2.5 Kaggle `smoke`, followed by manual montage review and then `bbox_overfit`; diagnostic
   and mini remain blocked until the unchanged bbox overfit checks all pass.
+
+## 2026-07-21 — recovery-v2.7 checkpoint selection correction
+- Preserved the completed v2.6 training evidence and model weights. V2.7 changes no data,
+  architecture, loss, optimizer, seed, thresholds, or validation rows; it changes only how a
+  completed epoch is permitted to represent the controlled experiment.
+- Registered `all_gates_then_outcome_mcc`: evaluate all eight quality gates independently for every
+  epoch, keep only all-gate-eligible epochs, then maximize the primary outcome MCC with an
+  earlier-epoch tie break. If no epoch is eligible, the run remains quality `FAIL` and the
+  unconstrained outcome epoch is retained only for diagnosis.
+- Replaying the exact five-epoch v2.6 report produces eligible epochs `[3, 4]` and selects epoch 4
+  (`outcome_mcc=0.5480665`). Epoch 1 remains recorded separately as the unconstrained maximum
+  (`0.5542802`) and is not misreported as the selected quality checkpoint. All eight epoch-4 gates
+  pass and zero test rows were read.
+- Synchronized the selected epoch, checkpoint path, selected metric, quality report, CSV flags, and
+  prediction round-trip load path. A fresh v2.7 mini now loads and round-trip checks the selected
+  epoch checkpoint, rather than always loading the trainer's unconstrained first checkpoint.
+- Replaced omission-prone hard-coded v2 metadata sets with numeric version comparison, so v2.6 and
+  v2.7 reports retain every inherited recovery/bbox control. Added a selection-only config, pure
+  replay utility, output-free Kaggle notebook, and regression tests covering the v2.6 epoch history,
+  no-eligible failure, deterministic ties, missing checkpoint rejection, config invariance, report
+  synchronization, CSV selection markers, and notebook compilation.
+- Local verification: exact v2.6 replay `PASS`; selected epoch 4 and eligible epochs `[3, 4]`; Ruff
+  clean; Python compilation passed; focused suite `13 passed`; full suite `37 passed / 22 skipped / 2
+  known failures`. The two failures are pre-existing hygiene assertions against preserved executed
+  v2.3/v2.5 Kaggle evidence and are unrelated to v2.7. The fast v2.7 notebook does not retrain or
+  claim a new checkpoint prediction round-trip; future fresh training through the v2.7 config does.

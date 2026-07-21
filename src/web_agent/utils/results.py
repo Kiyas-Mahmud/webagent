@@ -25,14 +25,34 @@ def save_mini_result_csv(report: Mapping[str, Any], path: str | Path) -> Path:
         raise ValueError(f"epoch history is missing selection metric: {selection_metric}")
 
     best_metric = float(report["best_metric"])
+    quality_gates = report.get("quality_gates", {})
+    selected_epoch = report.get("selected_epoch")
+    if selected_epoch is None and isinstance(quality_gates, Mapping):
+        selected_epoch = quality_gates.get("selected_epoch")
+    if selected_epoch is None:
+        selected_epoch = next(
+            int(epoch["epoch"])
+            for epoch in history
+            if abs(float(epoch[selection_metric]) - best_metric) <= 1e-12
+        )
+    selected_epoch = int(selected_epoch)
+    unconstrained_best_metric = float(
+        report.get("unconstrained_best_metric", best_metric)
+    )
     context = {
         "stage": "mini",
         "status": report.get("status", ""),
         "train_rows": report.get("train_rows", ""),
         "val_rows": report.get("val_rows", ""),
         "selection_metric": selection_metric,
+        "selection_rule": report.get("selection_rule", selection_metric),
+        "selected_epoch": selected_epoch,
         "best_metric": best_metric,
         "best_checkpoint": report.get("best_checkpoint", ""),
+        "unconstrained_best_metric": unconstrained_best_metric,
+        "unconstrained_best_checkpoint": report.get(
+            "unconstrained_best_checkpoint", report.get("best_checkpoint", "")
+        ),
         "checkpoint_roundtrip": report.get("checkpoint_roundtrip", ""),
         "loss_decreased": report.get("loss_decreased", ""),
     }
@@ -46,17 +66,28 @@ def save_mini_result_csv(report: Mapping[str, Any], path: str | Path) -> Path:
             if key not in metric_fields:
                 metric_fields.append(key)
         metric_value = float(epoch_metrics[selection_metric])
+        epoch_number = int(epoch_metrics["epoch"])
         rows.append(
             {
                 **context,
                 **epoch_metrics,
-                "is_best": abs(metric_value - best_metric) <= 1e-12,
+                "is_best": epoch_number == selected_epoch,
+                "is_selected": epoch_number == selected_epoch,
+                "is_unconstrained_best": (
+                    abs(metric_value - unconstrained_best_metric) <= 1e-12
+                ),
             }
         )
 
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [*context, *metric_fields, "is_best"]
+    fieldnames = [
+        *context,
+        *metric_fields,
+        "is_best",
+        "is_selected",
+        "is_unconstrained_best",
+    ]
     with destination.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -76,8 +107,14 @@ def save_mini_diagnostics_json(report: Mapping[str, Any], path: str | Path) -> P
         "val_rows": report.get("val_rows", ""),
         "test_rows_read": report.get("test_rows_read", ""),
         "selection_metric": report.get("early_stop_metric", ""),
+        "selection_rule": report.get("selection_rule", ""),
+        "selected_epoch": report.get("selected_epoch", ""),
         "best_metric": report.get("best_metric", ""),
         "best_checkpoint": report.get("best_checkpoint", ""),
+        "unconstrained_best_metric": report.get("unconstrained_best_metric", ""),
+        "unconstrained_best_checkpoint": report.get(
+            "unconstrained_best_checkpoint", ""
+        ),
         "best_epochs": report.get("best_epochs", {}),
         "epoch_checkpoints": report.get("epoch_checkpoints", {}),
         "class_weights": report.get("class_weights", {}),

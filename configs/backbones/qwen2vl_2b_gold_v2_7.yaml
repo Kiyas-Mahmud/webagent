@@ -1,0 +1,15 @@
+# Recovery-v2.7: checkpoint-selection and reproducibility correction only.
+#
+# V2.6 proved that epochs 3 and 4 pass every registered quality gate, while the
+# unconstrained outcome-MCC maximum at epoch 1 fails both localization gates.
+# This version does not change data, architecture, losses, optimizer, seed, or
+# thresholds.  It preregisters a constrained selector: quality gates establish
+# eligibility, then outcome MCC ranks eligible epochs with an earlier-epoch tie
+# break.  A run with no eligible epoch remains FAIL.
+name: Y_QWEN2VL_2B_GOLD_V2_7
+extends: backbones/qwen2vl_2b_gold_v2_6.yaml
+
+train:
+  controlled_experiment_tag: recovery_v2_7
+  metrics_csv: results/gold_recovery_v2_7_metrics.csv
+  quality_selection_rule: all_gates_then_outcome_mcc

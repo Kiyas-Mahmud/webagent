@@ -68,3 +68,34 @@ def test_save_mini_diagnostics_json_keeps_non_tabular_evidence(tmp_path):
         [1, 0],
         [0, 1],
     ]
+
+
+def test_save_mini_result_csv_marks_constrained_checkpoint(tmp_path):
+    report = {
+        "status": "PASS",
+        "train_rows": 5_000,
+        "val_rows": 500,
+        "early_stop_metric": "outcome_mcc",
+        "selection_rule": "all_gates_then_outcome_mcc",
+        "selected_epoch": 4,
+        "best_metric": 0.548,
+        "best_checkpoint": "checkpoints/e4.ckpt",
+        "unconstrained_best_metric": 0.554,
+        "unconstrained_best_checkpoint": "checkpoints/e1.ckpt",
+        "checkpoint_roundtrip": True,
+        "loss_decreased": True,
+        "history": [
+            {"epoch": 1, "outcome_mcc": 0.554, "train_loss": 1.5},
+            {"epoch": 4, "outcome_mcc": 0.548, "train_loss": 1.1},
+        ],
+    }
+
+    result_path = save_mini_result_csv(report, tmp_path / "constrained.csv")
+    with result_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert rows[0]["is_unconstrained_best"] == "True"
+    assert rows[0]["is_selected"] == "False"
+    assert rows[1]["is_best"] == "True"
+    assert rows[1]["is_selected"] == "True"
+    assert rows[1]["best_checkpoint"] == "checkpoints/e4.ckpt"

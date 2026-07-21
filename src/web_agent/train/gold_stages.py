@@ -54,6 +54,11 @@ from web_agent.train.trainer import (
     collect_predictions,
     compute_metrics,
 )
+from web_agent.train.selection import (
+    LEGACY_OUTCOME_RULE,
+    controlled_quality_gates,
+    require_selected_checkpoint,
+)
 
 
 @dataclass
@@ -66,96 +71,20 @@ class GoldComponents:
     device: str = "cuda"
 
 
-V14_SELECTED_BASELINE = {
-    "epoch": 3,
-    "outcome_mcc": 0.5216751841203641,
-    "action_acc": 0.396,
-    "recovery_outcome_mcc": 0.18641092980036,
-    "bbox_mae": 0.1862636590092959,
-    "outcome_ece": 0.18528690659999844,
-}
-
-
-def _controlled_quality_gates(result: dict) -> dict:
-    """Predeclared v14 comparison at the outcome-selected checkpoint."""
-    selected_epoch = int(result["best_epochs"]["outcome_mcc"]["epoch"])
-    selected = next(row for row in result["history"] if row["epoch"] == selected_epoch)
-    if "needs_recovery_macro_f1" in selected:
-        checks = {
-            "outcome_mcc_within_0_03_of_v14": (
-                selected["outcome_mcc"] >= V14_SELECTED_BASELINE["outcome_mcc"] - 0.03
-            ),
-            "action_accuracy_not_down_more_than_0_03": (
-                selected["action_acc"] >= V14_SELECTED_BASELINE["action_acc"] - 0.03
-            ),
-            "needs_recovery_macro_f1_beats_majority_by_0_03": (
-                selected["needs_recovery_macro_f1"]
-                >= selected["needs_recovery_majority_macro_f1"] + 0.03
-            ),
-            "attempted_strategy_macro_f1_beats_majority_by_0_03": (
-                selected["strategy_attempted_macro_f1"]
-                >= selected["strategy_attempted_majority_macro_f1"] + 0.03
-            ),
-            "transition_recovery_outcome_mcc_improves_v14_by_0_01": (
-                selected["recovery_outcome_mcc"]
-                >= V14_SELECTED_BASELINE["recovery_outcome_mcc"] + 0.01
-            ),
-            "bbox_mean_iou_at_least_0_05": selected["bbox_mean_iou"] >= 0.05,
-            "bbox_recall_iou50_at_least_0_01": (
-                selected["bbox_recall_iou50"] >= 0.01
-            ),
-            "outcome_ece_not_up_more_than_0_03": (
-                selected["outcome_ece"]
-                <= V14_SELECTED_BASELINE["outcome_ece"] + 0.03
-            ),
-        }
-        return {
-            "status": "PASS" if all(checks.values()) else "FAIL",
-            "selected_epoch": selected_epoch,
-            "comparison_rule": "all gates use the outcome_mcc-selected checkpoint",
-            "v14_selected_checkpoint_reference": V14_SELECTED_BASELINE,
-            "checks": checks,
-            "limitations": [
-                "recovery-outcome semantics changed to proper causal transitions",
-                "bbox IoU thresholds are minimum functionality gates, not 90-percent claims",
-                "full training remains blocked until review and class-audit gates pass",
-            ],
-        }
-    checks = {
-        "outcome_mcc_within_0_02_of_v14": (
-            selected["outcome_mcc"] >= V14_SELECTED_BASELINE["outcome_mcc"] - 0.02
-        ),
-        "recovery_macro_f1_beats_majority_by_0_03": (
-            selected["recovery_macro_f1"]
-            >= selected["recovery_majority_macro_f1"] + 0.03
-        ),
-        "recovery_predicts_at_least_3_classes": selected["recovery_pred_classes"] >= 3,
-        "recovery_outcome_mcc_improves_v14_by_0_01": (
-            selected["recovery_outcome_mcc"]
-            >= V14_SELECTED_BASELINE["recovery_outcome_mcc"] + 0.01
-        ),
-        "action_accuracy_not_down_more_than_0_02": (
-            selected["action_acc"] >= V14_SELECTED_BASELINE["action_acc"] - 0.02
-        ),
-        "bbox_mae_not_up_more_than_0_02": (
-            selected["bbox_mae"] <= V14_SELECTED_BASELINE["bbox_mae"] + 0.02
-        ),
-        "outcome_ece_not_up_more_than_0_02": (
-            selected["outcome_ece"] <= V14_SELECTED_BASELINE["outcome_ece"] + 0.02
-        ),
-    }
-    return {
-        "status": "PASS" if all(checks.values()) else "FAIL",
-        "selected_epoch": selected_epoch,
-        "comparison_rule": "all gates use the outcome_mcc-selected checkpoint",
-        "v14_selected_checkpoint_reference": V14_SELECTED_BASELINE,
-        "checks": checks,
-        "limitations": [
-            "v14 did not save recovery macro-F1 or confusion matrices",
-            "exact recovery-macro delta requires re-evaluating the v14 checkpoint",
-            "quality failure does not invalidate the engineering smoke/mini execution",
-        ],
-    }
+def _recovery_version_at_least(experiment_tag: str, minimum_minor: int) -> bool:
+    """Compare recovery-v2 experiment suffixes without an omission-prone set."""
+    normalized = experiment_tag.lower()
+    if normalized == "recovery_v2":
+        minor = 0
+    elif normalized.startswith("recovery_v2_"):
+        suffix = normalized.removeprefix("recovery_v2_")
+        try:
+            minor = int(suffix)
+        except ValueError:
+            return False
+    else:
+        return False
+    return minor >= minimum_minor
 
 
 def build_processor(cfg: dict):
@@ -1370,9 +1299,15 @@ def run_gold_mini(
     if not result["checkpoints"]:
         raise AssertionError("mini training did not create a checkpoint")
 
-    checkpoint = Path(result["checkpoints"][0])
+    selection_rule = str(
+        mini_cfg["train"].get("quality_selection_rule", LEGACY_OUTCOME_RULE)
+    )
+    quality_gates = controlled_quality_gates(result, selection_rule)
+    checkpoint = Path(require_selected_checkpoint(result, quality_gates))
     trainer.load_checkpoint(checkpoint, resume_training=False)
-    checkpoint_roundtrip = _verify_checkpoint_roundtrip(trainer, val_loader)
+    checkpoint_roundtrip = _verify_checkpoint_roundtrip(
+        trainer, val_loader, checkpoint
+    )
     history = result["history"]
     loss_decreased = (
         history[-1]["train_nominal_weighted_loss"]
@@ -1414,22 +1349,14 @@ def run_gold_mini(
             - len({index for batch in scheduled_batches for index in batch})
         ),
     }
-    quality_gates = _controlled_quality_gates(result)
     is_v2 = bool(mini_cfg["data"].get("recovery_transitions"))
-    is_v2_1_or_later = experiment_tag.lower() in {
-        "recovery_v2_1", "recovery_v2_2", "recovery_v2_3", "recovery_v2_4",
-        "recovery_v2_5",
-    }
-    is_v2_2_or_later = experiment_tag.lower() in {
-        "recovery_v2_2", "recovery_v2_3", "recovery_v2_4", "recovery_v2_5",
-    }
-    is_v2_3_or_later = experiment_tag.lower() in {
-        "recovery_v2_3", "recovery_v2_4", "recovery_v2_5",
-    }
-    is_v2_4_or_later = experiment_tag.lower() in {
-        "recovery_v2_4", "recovery_v2_5",
-    }
-    is_v2_5 = experiment_tag.lower() == "recovery_v2_5"
+    is_v2_1_or_later = _recovery_version_at_least(experiment_tag, 1)
+    is_v2_2_or_later = _recovery_version_at_least(experiment_tag, 2)
+    is_v2_3_or_later = _recovery_version_at_least(experiment_tag, 3)
+    is_v2_4_or_later = _recovery_version_at_least(experiment_tag, 4)
+    is_v2_5_or_later = _recovery_version_at_least(experiment_tag, 5)
+    is_v2_6_or_later = _recovery_version_at_least(experiment_tag, 6)
+    is_v2_7_or_later = _recovery_version_at_least(experiment_tag, 7)
     training_changes = [
         "joint proportional training subset coverage",
         "recovery-aware distribution-preserving physical batches",
@@ -1470,11 +1397,15 @@ def run_gold_mini(
             "train-only geometric width/height prior",
             "unclamped log-size SmoothL1 supervision with bounded exponential decode",
         ])
-    if is_v2_5:
+    if is_v2_5_or_later:
         training_changes.extend([
             "direct target-distribution supervision of spatial attention",
             "undropped grounding probabilities for the supervised attention map",
         ])
+    if is_v2_6_or_later:
+        training_changes.append(
+            "higher-resolution bbox micro-overfit grid with extended optimizer trace"
+        )
     fixed_factors = [
         "backbone",
         "validation_rows",
@@ -1487,6 +1418,12 @@ def run_gold_mini(
     if not is_v2:
         fixed_factors.extend(["model_architecture", "loss_coefficients"])
 
+    selected_epoch = int(quality_gates["selected_epoch"])
+    selected_history = next(
+        row for row in history if int(row["epoch"]) == selected_epoch
+    )
+    unconstrained_checkpoint = str(result["checkpoints"][0])
+
     return {
         **result,
         "status": "PASS",
@@ -1495,7 +1432,12 @@ def run_gold_mini(
         "test_rows_read": 0,
         "loss_decreased": loss_decreased,
         "checkpoint_roundtrip": checkpoint_roundtrip,
+        "best_metric": float(selected_history[result["early_stop_metric"]]),
         "best_checkpoint": str(checkpoint),
+        "selected_epoch": selected_epoch,
+        "selection_rule": selection_rule,
+        "unconstrained_best_metric": float(result["best_metric"]),
+        "unconstrained_best_checkpoint": unconstrained_checkpoint,
         "class_weights": components.class_weight_report,
         "sampling": sampling_report,
         "quality_gates": quality_gates,
@@ -1513,6 +1455,7 @@ def run_gold_mini(
         "experiment_control": {
             "baseline": "kaggle-gold-v14",
             "experiment_tag": experiment_tag.lower(),
+            "quality_selection_rule": selection_rule,
             "fixed": fixed_factors,
             "registered_structural_factors": (
                 [
@@ -1556,7 +1499,7 @@ def run_gold_mini(
                             "duplicate/conflicting pre-action bbox feasibility audit",
                             "target-distribution patch-attention supervision",
                         ]
-                        if is_v2_5 else []
+                        if is_v2_5_or_later else []
                     ),
                 ]
                 if is_v2 else []
@@ -1596,7 +1539,14 @@ def run_gold_mini(
                         "per-row bbox predictions, centres, attention peaks, and IoU",
                         "full fixed-set evaluations at registered optimizer steps",
                     ]
-                    if is_v2_5 else []
+                    if is_v2_5_or_later else []
+                ),
+                *(
+                    [
+                        "all-gates eligibility before outcome-MCC checkpoint ranking",
+                        "selected-checkpoint identity synchronized across report and exports",
+                    ]
+                    if is_v2_7_or_later else []
                 ),
                 "all mini epoch checkpoints retained",
             ],
@@ -1650,7 +1600,9 @@ def reevaluate_gold_validation_checkpoint(
 
 
 @torch.no_grad()
-def _verify_checkpoint_roundtrip(trainer: Trainer, val_loader) -> bool:
+def _verify_checkpoint_roundtrip(
+    trainer: Trainer, val_loader, checkpoint: str | Path,
+) -> bool:
     """Perturb critical heads/adapters, reload, and prove their logits return."""
     trainer.model.eval()
     batch = next(iter(val_loader))
@@ -1677,7 +1629,7 @@ def _verify_checkpoint_roundtrip(trainer: Trainer, val_loader) -> bool:
         parameters.append(next(trainer.model.task_adapters["grounding"].parameters()))
     for parameter in parameters:
         parameter.add_(0.25)
-    trainer.load_checkpoint(trainer.best[0][1], resume_training=False)
+    trainer.load_checkpoint(checkpoint, resume_training=False)
     trainer.model.eval()
     with torch.autocast("cuda", dtype=torch.float16):
         restored = trainer.model(batch)
