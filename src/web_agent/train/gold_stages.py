@@ -967,7 +967,7 @@ def run_gold_bbox_overfit(
         "full_set_trajectory": full_set_trajectory,
         "trajectory_contract": (
             "initial/final are full fixed-set evaluations; optimizer_trace rows "
-            "are the named pre-update batch forward for steps 10,20,...,100"
+            f"are the named pre-update batch forward for steps 10,20,...,{steps}"
         ),
         "initial": initial,
         "final": final,

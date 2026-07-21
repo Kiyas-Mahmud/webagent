@@ -38,14 +38,46 @@ def test_v2_7_notebook_is_output_free_and_compiles():
         "".join(cell.get("source", [])) for cell in notebook["cells"]
     )
 
-    assert "replay_v2_7_selection.py" in source
+    assert "qwen2vl_2b_gold_v2_7.yaml" in source
+    assert "run_gold_bbox_audit" in source
+    assert "run_gold_smoke" in source
+    assert "run_gold_bbox_overfit" in source
+    assert "run_gold_mini" in source
     assert "all_gates_then_outcome_mcc" in source
+    assert "EXPECTED_OPTIMIZER_TRACE_ROWS = OVERFIT_STEPS // 10" in source
+    assert "quality['selected_checkpoint'] == stage_report['best_checkpoint']" in source
+    assert "checkpoint_roundtrip" in source
     assert "test_rows_read" in source
     assert "kaggle_gold.ipynb" not in source
     for cell in notebook["cells"]:
         if cell["cell_type"] == "code":
             assert cell.get("execution_count") is None
             assert cell.get("outputs") == []
+            ast.parse("".join(cell["source"]))
+
+
+def test_v2_7_selection_notebook_preserves_successful_replay_evidence():
+    path = Path("notebooks/kaggle_gold_recovery_v2_7_selection.ipynb")
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    source = "".join(
+        "".join(cell.get("source", [])) for cell in notebook["cells"]
+    )
+    output = "".join(
+        "".join(item.get("text", []))
+        for cell in notebook["cells"]
+        for item in cell.get("outputs", [])
+        if item.get("output_type") == "stream"
+    )
+
+    assert "replay_v2_7_selection.py" in source
+    assert "selected_checkpoint_roundtrip_rerun" in source
+    assert "V2.7 SELECTION REPLAY PASSED" in output
+    assert "eligible epochs: [3, 4]" in output
+    assert "selected epoch: 4" in output
+    assert "checkpoint artifact: NOT_MOUNTED" in output
+    for cell in notebook["cells"]:
+        if cell["cell_type"] == "code":
+            assert cell.get("execution_count") is not None
             ast.parse("".join(cell["source"]))
 
 

@@ -855,3 +855,26 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   known failures`. The two failures are pre-existing hygiene assertions against preserved executed
   v2.3/v2.5 Kaggle evidence and are unrelated to v2.7. The fast v2.7 notebook does not retrain or
   claim a new checkpoint prediction round-trip; future fresh training through the v2.7 config does.
+
+## 2026-07-21 - recovery-v2.7 full workflow and replay evidence split
+- Preserved the completed no-GPU Kaggle selection replay, including its PASS transcript, as
+  `notebooks/kaggle_gold_recovery_v2_7_selection.ipynb`. It records eligible epochs `[3, 4]`,
+  selected epoch 4, outcome MCC `0.5480665242205773`, zero test rows, and the honest
+  `NOT_MOUNTED` status for the old physical checkpoint.
+- Replaced `notebooks/kaggle_gold_recovery_v2_7.ipynb` with the full output-free controlled
+  workflow. It retains audit, smoke, 32-row bbox overfit, one-epoch diagnostic, and five-epoch mini
+  stages; uses only the v2.7 config; exports versioned environment/report/CSV/diagnostic artifacts;
+  and never opens the test split.
+- The full mini contract now proves all-gate eligibility before ranking, derives the expected
+  selected epoch from the fresh history, synchronizes the selected checkpoint and metric, requires
+  the explicit selected-checkpoint prediction round-trip, retains the unconstrained best metric for
+  diagnosis, and confirms exactly one selected row in the CSV.
+- Corrected stale bbox-overfit notebook assumptions: v2.6/v2.7 register 200 optimizer steps, while
+  the old notebook asserted a 100-step trace. V2.7 derives trace length and full-set evaluation
+  steps directly from configuration. The core trajectory description also reports its actual final
+  step instead of always claiming step 100.
+- Local verification: both notebook JSON documents and all code cells compile; the full notebook has
+  zero outputs/execution counts; the exact v2.6 selection replay passes and selects epoch 4; Ruff and
+  `git diff --check` pass; focused selection/export tests are `14 passed`; the full suite is `38
+  passed / 22 skipped / 2 known failures`. The two unchanged failures are the preserved executed
+  v2.3/v2.5 notebook-hygiene checks and do not involve v2.7.
