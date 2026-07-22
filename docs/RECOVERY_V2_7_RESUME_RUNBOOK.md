@@ -22,6 +22,11 @@ Create a new Kaggle notebook from
    - `gold_recovery_v2_7_environment.json`;
    - no completed epoch-4 checkpoint.
 
+The prior output may be attached as loose files or as the original `results.zip`. When it is a ZIP,
+the resume notebook identifies the archive by its contents and extracts only the two metadata files
+and four checkpoints into `/kaggle/working/v2_7_prior_artifacts`. It does not extract the Gold data
+archive. Approximately 1.2 GB of Kaggle working storage is required for these checkpoints.
+
 Do not attach `results.zip` as the Gold dataset and do not connect `kaggle_gold.ipynb`.
 
 ## What the notebook proves before training

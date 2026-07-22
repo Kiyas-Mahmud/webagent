@@ -183,6 +183,9 @@ def test_resume_notebook_is_output_free_and_enforces_provenance():
     assert "gold_mini_recovery_v2_7_metrics.csv" in source
     assert "best_e3_outcome-mcc*.ckpt" in source
     assert "2f4a7e415c6382f0983d2c705d2cd6526d5e766c42319ff40f2adcc71240f9ba" in source
+    assert "zipfile.ZipFile" in source
+    assert "v2_7_prior_artifacts" in source
+    assert "shutil.copyfileobj" in source
     assert "independent_run_rows_combined" in source
     assert "rng_state_restored" in source
     assert "test_rows_read" in source
