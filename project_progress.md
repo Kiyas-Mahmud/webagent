@@ -878,3 +878,28 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   `git diff --check` pass; focused selection/export tests are `14 passed`; the full suite is `38
   passed / 22 skipped / 2 known failures`. The two unchanged failures are the preserved executed
   v2.3/v2.5 notebook-hygiene checks and do not involve v2.7.
+
+## 2026-07-22 - time-safe v2.7 epoch-4 continuation
+
+- Inspected the complete failed-run archive instead of inferring from the screenshot. The log ends
+  without a traceback at about 11 h 47 min after epoch-4 step 150/157, so the absent epoch-4 row is
+  a finalization/session-time failure rather than evidence of a model-quality failure.
+- Verified the retained epoch-3 checkpoint metadata: `epoch=3`, `step=628`,
+  `epoch_complete=true`, selection metric `outcome_mcc`, value `0.5615662253`, and SHA-256
+  `2f4a7e415c6382f0983d2c705d2cd6526d5e766c42319ff40f2adcc71240f9ba`. The four-row CSV and
+  current quality gates select epoch 3 and pass all eight checks. `last.ckpt` is an incomplete
+  rolling checkpoint from epoch 3 step 500 and is explicitly forbidden for this continuation.
+- Added an output-free `kaggle_gold_recovery_v2_7_resume.ipynb` and modular resume runner. It accepts
+  only the same v2.7 lineage, validates environment/config/epoch/step/metric/checkpoint mappings
+  before GPU training, restores weights plus optimizer/scheduler/scaler, trains only epoch 4, then
+  applies the registered selector to the complete 0–4 history.
+- The selected physical artifact is copied to Kaggle working output, prediction-roundtrip tested,
+  re-evaluated on the unchanged locked 500-row validation subset, and compared with its historical
+  gate metrics before report/CSV/diagnostic export. Independent run rows and test rows are rejected.
+- Recorded the only unavoidable limitation honestly: the historical checkpoint did not save RNG
+  states, so the continued epoch uses registered seed 42 but is not a bitwise replay of the aborted
+  in-memory epoch-4 stream. Trainer checkpoints now preserve Python, NumPy, CPU Torch, and CUDA RNG
+  states for exact future interruption recovery.
+- Added `docs/RECOVERY_V2_7_RESUME_RUNBOOK.md` plus pure provenance/history/checkpoint discovery and
+  notebook-contract tests. The actual extracted epoch-3 metadata passes the new signature validator
+  with expected step 628 and a `0.00000377` CSV-rounding difference.

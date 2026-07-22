@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import math
+import random
 import time
 from pathlib import Path
 
@@ -561,6 +562,7 @@ class Trainer:
     # ---- resumable checkpointing: model + optimizer/scheduler/scaler ----
     def _state(self) -> dict:
         from peft import get_peft_model_state_dict
+        numpy_state = np.random.get_state()
         return {
             "lora": get_peft_model_state_dict(self.model.encoder.model),
             "adapter": self.model.adapter.state_dict(),
@@ -574,6 +576,20 @@ class Trainer:
             "scheduler": self.sched.state_dict(),
             "scaler": self.scaler.state_dict(),
             "config": self.cfg,
+            "rng_state": {
+                "python": random.getstate(),
+                "numpy": {
+                    "bit_generator": numpy_state[0],
+                    "keys": numpy_state[1].tolist(),
+                    "position": int(numpy_state[2]),
+                    "has_gauss": int(numpy_state[3]),
+                    "cached_gaussian": float(numpy_state[4]),
+                },
+                "torch_cpu": torch.get_rng_state(),
+                "torch_cuda": (
+                    torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []
+                ),
+            },
         }
 
     def _save(self, path: Path, epoch: int, f1, epoch_complete: bool = False) -> None:
@@ -589,7 +605,7 @@ class Trainer:
         """Restore every trained module; optionally restore optimizer progress too."""
         from peft import set_peft_model_state_dict
 
-        checkpoint = torch.load(path, map_location=self.device)
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         set_peft_model_state_dict(self.model.encoder.model, checkpoint["lora"])
         self.model.adapter.load_state_dict(checkpoint["adapter"])
         if "task_adapters" in checkpoint:
@@ -607,6 +623,22 @@ class Trainer:
             self.global_step = int(checkpoint.get("step", 0))
             epoch = int(checkpoint.get("epoch", 0))
             self.start_epoch = epoch + int(bool(checkpoint.get("epoch_complete", False)))
+            rng_state = checkpoint.get("rng_state")
+            if rng_state is not None:
+                random.setstate(rng_state["python"])
+                numpy_state = rng_state["numpy"]
+                np.random.set_state((
+                    numpy_state["bit_generator"],
+                    np.asarray(numpy_state["keys"], dtype=np.uint32),
+                    int(numpy_state["position"]),
+                    int(numpy_state["has_gauss"]),
+                    float(numpy_state["cached_gaussian"]),
+                ))
+                torch.set_rng_state(rng_state["torch_cpu"].cpu())
+                if torch.cuda.is_available() and rng_state["torch_cuda"]:
+                    torch.cuda.set_rng_state_all([
+                        state.cpu() for state in rng_state["torch_cuda"]
+                    ])
         return checkpoint
 
     def _maybe_keep(self, epoch: int, metric: float) -> None:
