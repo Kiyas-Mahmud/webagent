@@ -13,7 +13,7 @@ data, backbone, architecture, loss, optimizer, seed, validation subset, or quali
 ## Kaggle inputs
 
 Create a new Kaggle notebook from
-`notebooks/kaggle_gold_recovery_v2_7_resume.ipynb`, enable a GPU and Internet, and attach:
+`notebooks/kaggle_gold_recovery_v2_7_resume.ipynb`, select a T4 GPU, enable Internet, and attach:
 
 1. `kiyasmahmud/web-gold-40k` (the original structured dataset).
 2. The failed v2.7 notebook output as a Kaggle input. It must contain:
@@ -28,6 +28,9 @@ and four checkpoints into `/kaggle/working/v2_7_prior_artifacts`. It does not ex
 archive. Approximately 1.2 GB of Kaggle working storage is required for these checkpoints.
 
 Do not attach `results.zip` as the Gold dataset and do not connect `kaggle_gold.ipynb`.
+The first code cell rejects P100 or CPU sessions before cloning, installing, extracting, or
+training. Notebook code cannot make Kaggle allocate a T4; change the accelerator/session in Kaggle
+and restart until the first cell prints `Verified GPU` with a T4 device name.
 
 ## What the notebook proves before training
 

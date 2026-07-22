@@ -186,6 +186,8 @@ def test_resume_notebook_is_output_free_and_enforces_provenance():
     assert "zipfile.ZipFile" in source
     assert "v2_7_prior_artifacts" in source
     assert "shutil.copyfileobj" in source
+    assert "'T4' in GPU_NAME.upper()" in source
+    assert source.index("'T4' in GPU_NAME.upper()") < source.index("git', 'clone")
     assert "independent_run_rows_combined" in source
     assert "rng_state_restored" in source
     assert "test_rows_read" in source
