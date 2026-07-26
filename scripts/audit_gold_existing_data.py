@@ -94,7 +94,6 @@ class ImageReader:
                 try:
                     with open_binary(self.source, locator) as handle:
                         with Image.open(handle) as image:
-                            image.load()
                             result = (image.size, "")
                 except (FileNotFoundError, OSError, ValueError):
                     result = (None, "unreadable_state_before_image")
