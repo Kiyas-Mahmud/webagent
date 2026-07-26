@@ -927,6 +927,7 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   runbook, and synchronization with the existing manual-review guide. The raw 39,215-row dataset
   remains unchanged.
 - Verification: focused audit/recovery suite `11 passed`; synthetic end-to-end nested-ZIP test
-  confirms streaming, output creation, zero test rows, and no extraction. Full repository suite is
-  `58 passed / 22 skipped / 2 known failures`; the two unchanged failures are preserved executed
-  v2.3/v2.5 notebook-hygiene assertions and do not involve this workflow.
+  confirms streaming, output creation, zero test rows, and no extraction. After rebasing onto the
+  latest remote Kaggle evidence, the full repository suite is
+  `57 passed / 22 skipped / 3 known failures`; the unchanged failures are preserved executed
+  v2.3/v2.5/resume notebook-hygiene assertions and do not involve this workflow.
