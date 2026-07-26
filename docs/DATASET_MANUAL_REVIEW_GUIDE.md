@@ -29,6 +29,13 @@ inside Kaggle at `/kaggle/input/datasets/kiyasmahmud/web-gold-40k`. Do not downl
 extract it onto a low-storage local machine. Reviewers may instead use the provided HTML
 review packages, screenshots, replays, and audit records supplied by the data owner.
 
+For the current bbox and weak-class improvement cycle, the data lead must first run
+`notebooks/kaggle_gold_existing_data_improvement.ipynb`. Its exact operating contract,
+reviewer division, output files, and post-review gates are defined in
+`docs/EXISTING_DATA_IMPROVEMENT_RUNBOOK.md`. The notebook reads train/validation only,
+streams the attached ZIP without extraction, and produces the immutable starting queues;
+reviewers must not create their own edited copies of the split JSON files.
+
 | Item | Current value |
 | --- | ---: |
 | Total rows | 39,215 |

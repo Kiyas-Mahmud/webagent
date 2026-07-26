@@ -57,6 +57,14 @@ python scripts/run_model.py --config configs/backbones/y1_siglip_roberta.yaml --
 On Kaggle T4: open `notebooks/kaggle_train.ipynb`, which only does `pip install -e .`
 and calls the same entry point.
 
+## Current Gold-data improvement audit
+
+Run `notebooks/kaggle_gold_existing_data_improvement.ipynb` on Kaggle CPU after
+attaching `kiyasmahmud/web-gold-40k`. It streams the existing train/validation
+data from the attached ZIP, creates invalid-bbox and weak-class reviewer queues,
+keeps the locked test split unread, and never changes the source dataset. See
+`docs/EXISTING_DATA_IMPROVEMENT_RUNBOOK.md` before applying any correction.
+
 ## Rules (non-negotiable — see docs/AGENT.md §5)
 
 - Test-first every model: SMOKE -> MINI -> FULL -> EVAL -> CHECKPOINT. Never full-train unverified code.

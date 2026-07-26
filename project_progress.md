@@ -903,3 +903,30 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Added `docs/RECOVERY_V2_7_RESUME_RUNBOOK.md` plus pure provenance/history/checkpoint discovery and
   notebook-contract tests. The actual extracted epoch-3 metadata passes the new signature validator
   with expected step 628 and a `0.00000377` CSV-rounding difference.
+
+## 2026-07-27 - existing-data bbox and weak-class improvement workflow
+
+- Added a separate, CPU-only Kaggle workflow for improving the existing Web-Gold-40K export without
+  touching `notebooks/kaggle_gold.ipynb`, extracting the attached ZIP, modifying source records, or
+  reading the locked test split. The workflow streams only train/validation and records
+  `test_rows_read=0`.
+- Implemented a complete invalid-bbox review ledger and mask manifest. Every box is checked against
+  its native `state_before` dimensions; invalid rows remain usable for every non-localization head
+  while bbox loss stays masked. Because the exported input/label/meta schema has no verified
+  document-to-viewport scroll offset, the system performs zero automatic bbox corrections and
+  leaves replacement fields blank pending direct replay/screenshot evidence.
+- Implemented deterministic trajectory-level review queues for `SCROLL`, `SELECT`, `NAVIGATE`,
+  `LOOP_DETECTED`, `BACKTRACK`, `RETRY`, and `ABORT`. Complete trajectories stay together; 10% are
+  assigned to both reviewers for agreement; recovery rows include failure state, executed recovery
+  action/value, post-recovery state, and observed outcome.
+- Added class-coverage evidence that audits existing nonzero classes first and requests targeted real
+  collection only for zero-support recovery strategies that remain inside the registered thesis
+  claim. In the current train/validation export, this applies to `RETRY` and `ABORT`; the workflow
+  never duplicates or relabels data to fill them.
+- Added reviewer montages, CSV/JSON outputs, a small downloadable review-package ZIP, an exact
+  runbook, and synchronization with the existing manual-review guide. The raw 39,215-row dataset
+  remains unchanged.
+- Verification: focused audit/recovery suite `11 passed`; synthetic end-to-end nested-ZIP test
+  confirms streaming, output creation, zero test rows, and no extraction. Full repository suite is
+  `58 passed / 22 skipped / 2 known failures`; the two unchanged failures are preserved executed
+  v2.3/v2.5 notebook-hygiene assertions and do not involve this workflow.
