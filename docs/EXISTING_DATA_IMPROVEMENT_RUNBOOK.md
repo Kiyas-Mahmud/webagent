@@ -20,13 +20,105 @@ claim.
 ## Files
 
 - Notebook: `notebooks/kaggle_gold_existing_data_improvement.ipynb`
+- Interactive reviewer notebook: `notebooks/kaggle_gold_manual_review.ipynb`
 - Kaggle script: `scripts/audit_gold_existing_data.py`
+- Review reconciliation script: `scripts/reconcile_gold_reviews.py`
 - Pure audit logic: `src/web_agent/data/improvement_audit.py`
-- Tests: `tests/test_improvement_audit.py`
+- Immutable event validation: `src/web_agent/data/review_session.py`
+- Two-person reconciliation: `src/web_agent/data/review_reconciliation.py`
+- Tests: `tests/test_improvement_audit.py`, `tests/test_review_session.py`
 - General review rules: `docs/DATASET_MANUAL_REVIEW_GUIDE.md`
 - Verified Kaggle result: `docs/EXISTING_DATA_IMPROVEMENT_AUDIT_RESULT.md`
 
 The main `notebooks/kaggle_gold.ipynb` is not changed or called.
+
+## Run the two-person manual review
+
+Use `notebooks/kaggle_gold_manual_review.ipynb` in an interactive Kaggle
+**Edit** session. Do not commit it as a batch run because it intentionally
+waits for human decisions.
+
+Each reviewer must:
+
+1. Attach `kiyasmahmud/web-gold-40k`.
+2. Attach the accepted output of
+   `kiyasmahmud/web-gold-existing-data-improvement`.
+3. Use CPU.
+4. Set `REVIEWER_ID` to their own identity, set `QUEUE_KIND`, read the guide,
+   and set `REVIEWER_CONFIRMED_GUIDE = True`.
+5. Finish `bbox`, export its queue-specific event CSV and summary, then repeat
+   for `weak`.
+6. Download the event CSV frequently. To resume, attach exactly one previously
+   exported queue-specific event CSV; cell 3 restores and validates it.
+
+The notebook:
+
+- reads only train and validation;
+- shows the complete trajectory around every decision target;
+- shows failure state, executed action, and post-recovery state for recovery;
+- validates replacement boxes against native image dimensions;
+- requires evidence for every proposed correction;
+- appends revisions instead of overwriting earlier decisions;
+- keeps Reviewer A and Reviewer B in separate logs;
+- reads zero test rows and never edits source JSON or screenshots.
+
+The four primary event logs are:
+
+```text
+reviewer_A_bbox_review_events.csv
+reviewer_A_weak_review_events.csv
+reviewer_B_bbox_review_events.csv
+reviewer_B_weak_review_events.csv
+```
+
+For the accepted version-3 queues, the notebook should report these assigned
+decision-target counts (the shared `A+B` overlap appears once for each person):
+
+| Reviewer | BBox targets | Weak-class targets |
+| --- | ---: | ---: |
+| A | 1,406 | 884 |
+| B | 1,371 | 970 |
+
+Stop and report the mismatch if the notebook shows different counts while
+using the accepted audit output.
+
+## Reconcile the reviewer logs
+
+After both reviewers finish their primary queues, run:
+
+```bash
+python scripts/reconcile_gold_reviews.py \
+  --bbox-queue bbox_review_queue.csv \
+  --weak-queue weak_class_review_queue.csv \
+  --reviewer-log reviewer_A_bbox_review_events.csv \
+  --reviewer-log reviewer_A_weak_review_events.csv \
+  --reviewer-log reviewer_B_bbox_review_events.csv \
+  --reviewer-log reviewer_B_weak_review_events.csv \
+  --output-dir gold_review_reconciliation
+```
+
+This command is lightweight: it reads CSV logs and queues, not the large image
+dataset. It preserves all immutable events and produces:
+
+- missing primary reviews;
+- agreement pairs, raw agreement, and Cohen's kappa;
+- disagreements and unresolved cases;
+- approved two-person corrections;
+- finalized dispositions;
+- secondary-review queues;
+- a checksummed reconciliation report and ZIP.
+
+`A+B` targets always require both reviewers. In addition, any
+`approve_after_correction`, `needs_discussion`, `reject_recollect`, or
+`quarantine_policy` decision from a singly assigned target automatically
+creates a task for the other reviewer. Attach the corresponding
+`bbox_secondary_review_queue.csv` or `weak_secondary_review_queue.csv` to the
+manual-review notebook, finish those targets, and rerun reconciliation with
+the updated logs.
+
+Use `--require-pass` only for the final reconciliation. A `PASS` means the
+targeted improvement queues are complete and a controlled mini may proceed. It
+does **not** mean the full 39,215-row dataset is publication-ready.
 
 ## Run on Kaggle
 

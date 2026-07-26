@@ -94,6 +94,9 @@ All existing attempted recoveries have a causal next-step transition:
 - Weak-class focus rows: 1,674; the remaining 303 rows are trajectory context.
 - BBox assignments: A 1,163, B 1,128, A+B 243.
 - Weak-task assignments: A 418, B 453, A+B 106.
+- Decision targets shown by the manual-review notebook, including `A+B`
+  independently for each person: Reviewer A 1,406 bbox and 884 weak; Reviewer
+  B 1,371 bbox and 970 weak.
 - Reviewer decisions currently filled: 0.
 - Proposed bbox corrections currently filled: 0.
 
@@ -107,10 +110,17 @@ documented and masked. This does not mean the underlying labels were corrected.
 
 The next permitted work is human review:
 
-1. Reviewer A and Reviewer B complete their assigned queues.
-2. Every correction, rejection, and ambiguity receives a second decision.
-3. Corrections are applied only through the source/export ledger.
-4. Counts, split integrity, leakage gates, and the bbox audit are rerun.
-5. A controlled 5k mini experiment is permitted only after review adjudication.
+1. Reviewer A and Reviewer B use
+   `notebooks/kaggle_gold_manual_review.ipynb` to complete their assigned bbox
+   and weak-class queues.
+2. `scripts/reconcile_gold_reviews.py` measures agreement and generates
+   secondary-review queues for every correction, rejection, quarantine, or
+   ambiguity that was not already assigned `A+B`.
+3. Both reviewers complete those secondary queues and reconciliation is rerun
+   with `--require-pass`.
+4. Corrections are applied only through the source/export ledger.
+5. Counts, split integrity, leakage gates, and the bbox audit are rerun.
+6. A controlled 5k mini experiment is permitted only after review
+   adjudication.
 
 Do not start headline/full training from this audit result alone.

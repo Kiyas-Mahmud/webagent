@@ -431,6 +431,15 @@ collection record. Record both the old and proposed value.
 Use a shared CSV or spreadsheet. Keep one immutable row per reviewer decision; add final
 resolution columns instead of overwriting the original decision.
 
+For the current bbox/weak-class cycle, use
+`notebooks/kaggle_gold_manual_review.ipynb` rather than editing a CSV by hand.
+It validates assignments and corrections, writes one queue-specific immutable
+event log per reviewer, restores a previously attached log for resumption, and
+shows complete trajectory context. After the four primary logs are complete,
+the data lead runs `scripts/reconcile_gold_reviews.py`. Its generated secondary
+queues ensure that every correction, rejection, quarantine, or ambiguous
+decision receives the required independent second review.
+
 Recommended columns:
 
 ```text

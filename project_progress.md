@@ -947,3 +947,16 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   collection only if retained in the learned-strategy claim. The package contains 2,534 bbox rows
   and 1,977 trajectory-preserving weak-class rows; all human decision/correction fields remain
   intentionally blank.
+- Added the separate interactive `kaggle_gold_manual_review.ipynb` workspace for the two human
+  reviewers. It reads train/validation only, restores queue-specific immutable logs, skips already
+  reviewed targets, validates native-image bbox proposals, requires correction evidence, shows
+  causal recovery transitions, and leaves the source export untouched.
+- Added review reconciliation that preserves both reviewers' events, measures raw agreement and
+  Cohen's kappa, blocks unresolved/disagreeing decisions, and automatically creates a secondary
+  task for the other reviewer whenever a singly assigned correction, rejection, quarantine, or
+  ambiguity occurs. A reconciliation `PASS` permits only the controlled 5k improvement mini; it
+  explicitly does not claim that all 39,215 rows are publication-ready.
+- Current verification: the focused review/audit suite passes `22/22`; Ruff and `git diff --check`
+  pass. The repository suite is `71 passed / 22 skipped / 3 known failures`. The same three
+  pre-existing failures remain in executed v2.3, v2.5, and v2.7-resume notebook-hygiene checks and
+  are outside this manual-review change.

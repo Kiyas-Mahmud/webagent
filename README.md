@@ -64,6 +64,10 @@ attaching `kiyasmahmud/web-gold-40k`. It streams the existing train/validation
 data from the attached ZIP, creates invalid-bbox and weak-class reviewer queues,
 keeps the locked test split unread, and never changes the source dataset. See
 `docs/EXISTING_DATA_IMPROVEMENT_RUNBOOK.md` before applying any correction.
+Reviewer A and Reviewer B then use the separate interactive
+`notebooks/kaggle_gold_manual_review.ipynb`; their immutable logs are checked
+with `scripts/reconcile_gold_reviews.py`. This targeted workflow does not touch
+the main `notebooks/kaggle_gold.ipynb`.
 
 ## Rules (non-negotiable — see docs/AGENT.md §5)
 
