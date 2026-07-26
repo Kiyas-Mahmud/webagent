@@ -956,7 +956,18 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   task for the other reviewer whenever a singly assigned correction, rejection, quarantine, or
   ambiguity occurs. A reconciliation `PASS` permits only the controlled 5k improvement mini; it
   explicitly does not claim that all 39,215 rows are publication-ready.
-- Current verification: the focused review/audit suite passes `22/22`; Ruff and `git diff --check`
-  pass. The repository suite is `71 passed / 22 skipped / 3 known failures`. The same three
+- Current verification: the focused review/audit/overlay suite passes `28/28`; Ruff and
+  `git diff --check` pass. The repository suite is
+  `77 passed / 22 skipped / 3 known failures`. The same three
   pre-existing failures remain in executed v2.3, v2.5, and v2.7-resume notebook-hygiene checks and
   are outside this manual-review change.
+- Added an evidence-checked runtime review overlay for the post-reconciliation controlled mini.
+  It refuses incomplete/tampered reconciliation artifacts, verifies each original field before
+  applying a correction, excludes confirmed reject/quarantine rows, validates corrected recovery
+  tuples and bbox geometry, applies only to train/validation, reads zero test rows, and never
+  rewrites the 39,215-row source. A separate CPU Kaggle notebook validates the overlay against the
+  real mounted dataset before GPU work.
+- Corrected the comparison contract for reviewed validation labels: historical v2.7 metrics are
+  not directly comparable after corrections/exclusions. The selected v2.7 checkpoint must first
+  be re-evaluated on the exact same checksummed overlay; the subsequent mini report records this
+  requirement and provenance, and the CLI forbids a development overlay during locked-test eval.

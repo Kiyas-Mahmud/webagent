@@ -46,6 +46,7 @@ from web_agent.models.bbox import (
     detr_bbox_log_size_loss_terms,
     detr_bbox_loss_terms,
 )
+from web_agent.data.review_overlay import ReviewOverlay
 from web_agent.models.model import WebAgentModel
 from web_agent.eval.metrics import bbox_iou_summary, bbox_iou_values, bbox_mae
 from web_agent.train.trainer import (
@@ -1243,6 +1244,12 @@ def run_gold_mini(
     mini_cfg["train"]["keep_top_k"] = max(
         epochs, int(mini_cfg["train"].get("keep_top_k", 3)),
     )
+    review_overlay_root = mini_cfg["data"].get("review_overlay_dir")
+    review_overlay = (
+        ReviewOverlay.load(review_overlay_root)
+        if review_overlay_root
+        else None
+    )
 
     all_train_records = load_gold_split(mini_cfg, "train")
     selected_train_records = select_recovery_aware_gold_subset(
@@ -1335,7 +1342,10 @@ def run_gold_mini(
     sampling_report = {
         "train_selector": "joint_proportional_v1",
         "validation_selector": "legacy_failure_stratified_v14_fixed",
-        "validation_comparable_to_v14": True,
+        "validation_comparable_to_v14": review_overlay is None,
+        "comparison_requires_baseline_reevaluation_on_overlay": (
+            review_overlay is not None
+        ),
         "batch_sampler": "recovery_aware_no_oversampling_v1",
         "physical_batch_size": int(mini_cfg["optim"]["batch_size"]),
         "batches": len(scheduled_batches),
@@ -1363,6 +1373,10 @@ def run_gold_mini(
         "sqrt inverse-frequency recovery-strategy class weights",
         "weights derived from selected training rows only",
     ]
+    if review_overlay is not None:
+        training_changes.append(
+            "passed two-person review overlay on train and validation"
+        )
     if is_v2:
         training_changes.extend([
             "executed action added only to the post-action stream",
@@ -1453,7 +1467,11 @@ def run_gold_mini(
             "validation": recovery_class_audit(all_val_records),
         },
         "experiment_control": {
-            "baseline": "kaggle-gold-v14",
+            "baseline": (
+                "v2.7 selected checkpoint re-evaluated on the same review overlay"
+                if review_overlay is not None
+                else "kaggle-gold-v14"
+            ),
             "experiment_tag": experiment_tag.lower(),
             "quality_selection_rule": selection_rule,
             "fixed": fixed_factors,
@@ -1551,6 +1569,11 @@ def run_gold_mini(
                 "all mini epoch checkpoints retained",
             ],
         },
+        "review_overlay": (
+            review_overlay.provenance()
+            if review_overlay is not None
+            else {"enabled": False}
+        ),
     }
 
 
@@ -1562,7 +1585,13 @@ def reevaluate_gold_validation_checkpoint(
     val_rows: int = 500,
     seed: int = 42,
 ) -> dict:
-    """Re-score an old checkpoint on the fixed v14 validation subset only."""
+    """Re-score an old checkpoint on validation, with any configured overlay."""
+    review_overlay_root = cfg["data"].get("review_overlay_dir")
+    review_overlay = (
+        ReviewOverlay.load(review_overlay_root)
+        if review_overlay_root
+        else None
+    )
     train_records = load_gold_split(cfg, "train")
     components = build_gold_components(cfg, processor, train_records=train_records)
     val_records = stratified_gold_subsample(load_gold_split(cfg, "val"), val_rows, seed)
@@ -1592,8 +1621,14 @@ def reevaluate_gold_validation_checkpoint(
         "status": "PASS",
         "checkpoint": str(checkpoint),
         "validation_selector": "legacy_failure_stratified_v14_fixed",
+        "validation_comparable_to_original_v14": review_overlay is None,
         "val_rows": len(val_loader.dataset),
         "test_rows_read": 0,
+        "review_overlay": (
+            review_overlay.provenance()
+            if review_overlay is not None
+            else {"enabled": False}
+        ),
         "metrics": compute_metrics(predictions),
         "diagnostics": build_diagnostics(predictions),
     }

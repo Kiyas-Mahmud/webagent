@@ -23,6 +23,9 @@ claim.
 - Interactive reviewer notebook: `notebooks/kaggle_gold_manual_review.ipynb`
 - Kaggle script: `scripts/audit_gold_existing_data.py`
 - Review reconciliation script: `scripts/reconcile_gold_reviews.py`
+- Overlay validation notebook:
+  `notebooks/kaggle_gold_review_overlay_validation.ipynb`
+- Overlay validator: `scripts/validate_gold_review_overlay.py`
 - Pure audit logic: `src/web_agent/data/improvement_audit.py`
 - Immutable event validation: `src/web_agent/data/review_session.py`
 - Two-person reconciliation: `src/web_agent/data/review_reconciliation.py`
@@ -32,11 +35,21 @@ claim.
 
 The main `notebooks/kaggle_gold.ipynb` is not changed or called.
 
+Workflow order:
+
+1. Generate the audit package using **Generate the audit package on Kaggle
+   (first)** below.
+2. Run the two-person manual review.
+3. Reconcile primary and required secondary reviews until `PASS`.
+4. Validate the passed overlay on the real mounted data.
+5. Re-evaluate v2.7 and run the controlled mini on that identical overlay.
+
 ## Run the two-person manual review
 
 Use `notebooks/kaggle_gold_manual_review.ipynb` in an interactive Kaggle
 **Edit** session. Do not commit it as a batch run because it intentionally
-waits for human decisions.
+waits for human decisions. Start only after the audit package has been
+generated.
 
 Each reviewer must:
 
@@ -120,7 +133,67 @@ Use `--require-pass` only for the final reconciliation. A `PASS` means the
 targeted improvement queues are complete and a controlled mini may proceed. It
 does **not** mean the full 39,215-row dataset is publication-ready.
 
-## Run on Kaggle
+## Validate and use the passed review overlay
+
+Do not create or upload a second full image dataset for the controlled mini.
+The training loader supports an opt-in, evidence-checked in-memory overlay.
+
+1. Open `notebooks/kaggle_gold_review_overlay_validation.ipynb`.
+2. Attach the existing `kiyasmahmud/web-gold-40k` dataset.
+3. Attach exactly one reconciliation output whose report is `PASS`.
+4. Use CPU and run all cells.
+5. Preserve `gold_review_overlay_validation.json`.
+
+The validator:
+
+- verifies SHA-256 values for the correction and disposition CSVs;
+- requires `controlled_mini_permitted=true`, `test_rows_read=0`, and
+  `publication_ready=false` in the reconciliation report;
+- checks every corrected row's split, sample, task, step, and original value
+  against the mounted source version;
+- checks corrected bbox geometry against the real native image;
+- applies approved corrections in memory;
+- excludes independently confirmed `reject_recollect` and
+  `quarantine_policy` rows;
+- leaves `review_status` unchanged and does not write split JSON or images;
+- reads train/validation only.
+
+For the next controlled mini, attach the same reconciliation output and set:
+
+```python
+cfg["data"]["review_overlay_dir"] = str(RECONCILIATION_DIR)
+```
+
+`load_gold_split` applies it only for `train` and `val`; test remains untouched.
+Any changed source value, tampered ledger, missing target, conflicting
+correction, invalid recovery tuple, or invalid bbox fails before training.
+
+Because corrected or excluded validation rows change the evaluation data, do
+not compare the new mini directly with the historical v2.7 numbers. First
+re-evaluate the selected v2.7 checkpoint on the same passed overlay:
+
+```bash
+python scripts/run_gold.py \
+  --config configs/backbones/qwen2vl_2b_gold_v2_7.yaml \
+  --stage reeval \
+  --data-root /kaggle/input/datasets/kiyasmahmud/web-gold-40k \
+  --review-overlay-dir /kaggle/input/PASSED_RECONCILIATION \
+  --checkpoint /kaggle/input/PRIOR_V2_7/best_e4_outcome-mcc0.548.ckpt \
+  --reeval-json /kaggle/working/v2_7_reviewed_overlay_reeval.json
+```
+
+Then train the new controlled mini on that identical overlay. The mini report
+records the reconciliation SHA-256 and explicitly marks historical v14/v2.7
+validation metrics as non-comparable. Improvement claims must use the
+re-evaluated v2.7 checkpoint as the baseline. The runner rejects
+`--review-overlay-dir` for locked-test `eval`.
+
+This overlay is experiment evidence, not the final publication dataset. After
+the controlled mini confirms the effect, approved source-level changes must
+still be applied to the versioned collection/export ledger, splits regenerated
+when required, and the complete publication validator rerun.
+
+## Generate the audit package on Kaggle (first)
 
 1. Create a new Kaggle notebook from
    `notebooks/kaggle_gold_existing_data_improvement.ipynb`.
@@ -256,6 +329,8 @@ to fill a class.
 
 Another controlled mini experiment is permitted only after:
 
+- review reconciliation passes with `--require-pass`;
+- the real mounted-data overlay validation passes;
 - every proposed correction has two-person evidence;
 - the bbox mask/correction totals reconcile with the audit report;
 - weak-class reviewer disagreements are resolved;
@@ -264,5 +339,6 @@ Another controlled mini experiment is permitted only after:
 - test rows read remains zero.
 
 The experiment must compare against v2.7 with the same seed, 5k/500 subsets,
-validation-only selection, and eight quality gates. Improvement is judged with
-per-class F1/MCC/balanced accuracy and bbox IoU, not headline accuracy alone.
+validation-only selection, passed overlay, and eight quality gates. Improvement
+is judged with per-class F1/MCC/balanced accuracy and bbox IoU, not headline
+accuracy alone.

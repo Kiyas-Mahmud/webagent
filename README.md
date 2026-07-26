@@ -68,6 +68,10 @@ Reviewer A and Reviewer B then use the separate interactive
 `notebooks/kaggle_gold_manual_review.ipynb`; their immutable logs are checked
 with `scripts/reconcile_gold_reviews.py`. This targeted workflow does not touch
 the main `notebooks/kaggle_gold.ipynb`.
+After reconciliation passes,
+`notebooks/kaggle_gold_review_overlay_validation.ipynb` verifies the approved
+in-memory train/validation overlay against the mounted source before another
+controlled mini.
 
 ## Rules (non-negotiable — see docs/AGENT.md §5)
 

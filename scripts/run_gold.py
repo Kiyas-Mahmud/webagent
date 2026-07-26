@@ -29,6 +29,14 @@ def main() -> None:
         choices=("smoke", "mini", "reeval", "eval"),
     )
     ap.add_argument("--data-root", default=None, help="override cfg.data.root (Kaggle path)")
+    ap.add_argument(
+        "--review-overlay-dir",
+        default=None,
+        help=(
+            "passed reconciliation directory; applies in memory to train/val "
+            "only"
+        ),
+    )
     ap.add_argument("--checkpoint", default=None)
     ap.add_argument("--train-rows", type=int, default=5_000)
     ap.add_argument("--val-rows", type=int, default=500)
@@ -53,6 +61,13 @@ def main() -> None:
     cfg = load_config(args.config)
     if args.data_root:
         cfg["data"]["root"] = args.data_root
+    if args.review_overlay_dir:
+        if args.stage == "eval":
+            ap.error(
+                "--review-overlay-dir is development-only and cannot be used "
+                "for locked-test eval"
+            )
+        cfg["data"]["review_overlay_dir"] = args.review_overlay_dir
     seed = cfg.get("seeds", [42])[0]
     set_seed(seed)
 

@@ -22,6 +22,7 @@ from web_agent.data.gold_sampling import (
     select_recovery_aware_gold_subset,
     sqrt_inverse_frequency_weights,
 )
+from web_agent.data.review_overlay import ReviewOverlay
 from web_agent.labels import NUM_RECOVERY, RECOVERY_STRATEGY
 from web_agent.utils.class_weights import balanced_class_weights
 
@@ -30,7 +31,14 @@ def load_gold_split(cfg: dict, which: str) -> list[dict]:
     """which in {train, val, test}. Reads cfg['data'][f'{which}_json'] under data.root."""
     fname = cfg["data"][f"{which}_json"]
     with open(Path(cfg["data"]["root"]) / fname, encoding="utf-8") as f:
-        return json.load(f)
+        records = json.load(f)
+    overlay_root = cfg["data"].get("review_overlay_dir")
+    if overlay_root and which in {"train", "val"}:
+        records, _ = ReviewOverlay.load(overlay_root).apply(
+            records,
+            split=which,
+        )
+    return records
 
 
 def gold_class_weights(records, limit: int | None = None):
