@@ -931,3 +931,19 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   latest remote Kaggle evidence, the full repository suite is
   `57 passed / 22 skipped / 3 known failures`; the unchanged failures are preserved executed
   v2.3/v2.5/resume notebook-hygiene assertions and do not involve this workflow.
+- Kaggle kernel `kiyasmahmud/web-gold-existing-data-improvement` version 3 completed on CPU.
+  The accepted package has SHA-256
+  `48534e7e815135b5530514887835be2b046da1efc1416c2d3d7124dc425e1770`; all 11 ZIP
+  members pass integrity reading. The real output reconciles 2,534 unique invalid bbox rows
+  (2,042 train + 492 validation) between the review CSV and mask manifest, with zero test rows,
+  zero source mutation, and zero automatic correction.
+- The bbox evidence is systematic: 2,132 rows have both bottom overflow and y-origin-outside,
+  only 289 distinct invalid bbox values are repeated across 2,534 rows, and all affected
+  `action_coordinates` are null. `SELECT` contributes 1,618 invalid rows, `TYPE` 552, and `CLICK`
+  364. No exported scroll-offset evidence exists, so masking remains the only defensible automatic
+  action.
+- Existing validation support is SCROLL 1,293, SELECT 1,292, NAVIGATE 1,499, LOOP_DETECTED 240,
+  and BACKTRACK 200. RETRY and ABORT remain zero-support classes requiring real targeted
+  collection only if retained in the learned-strategy claim. The package contains 2,534 bbox rows
+  and 1,977 trajectory-preserving weak-class rows; all human decision/correction fields remain
+  intentionally blank.

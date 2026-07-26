@@ -24,6 +24,7 @@ claim.
 - Pure audit logic: `src/web_agent/data/improvement_audit.py`
 - Tests: `tests/test_improvement_audit.py`
 - General review rules: `docs/DATASET_MANUAL_REVIEW_GUIDE.md`
+- Verified Kaggle result: `docs/EXISTING_DATA_IMPROVEMENT_AUDIT_RESULT.md`
 
 The main `notebooks/kaggle_gold.ipynb` is not changed or called.
 
