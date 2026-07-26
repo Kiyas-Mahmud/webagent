@@ -241,8 +241,19 @@ def weak_class_montages(
         )
         for index, row in enumerate(chosen):
             tile = Image.new("RGB", (tile_width, tile_height), "white")
-            before = reader.image(str(row["state_before"]))
-            after = reader.image(str(row["state_after"]))
+            recovery_view = category.startswith("RECOVERY:")
+            before_reference = (
+                str(row["failure_state"])
+                if recovery_view and row["failure_state"]
+                else str(row["state_before"])
+            )
+            after_reference = (
+                str(row["post_recovery_state"])
+                if recovery_view and row["post_recovery_state"]
+                else str(row["state_after"])
+            )
+            before = reader.image(before_reference)
+            after = reader.image(after_reference)
             if before is not None:
                 before_tile, _ = _fit_image(before, 395, 220)
                 tile.paste(before_tile, (0, 0))
@@ -250,8 +261,18 @@ def weak_class_montages(
                 after_tile, _ = _fit_image(after, 395, 220)
                 tile.paste(after_tile, (405, 0))
             draw = ImageDraw.Draw(tile)
-            draw.text((6, 224), "BEFORE", fill="black", font=font)
-            draw.text((411, 224), "AFTER", fill="black", font=font)
+            draw.text(
+                (6, 224),
+                "FAILURE STATE" if recovery_view else "BEFORE",
+                fill="black",
+                font=font,
+            )
+            draw.text(
+                (411, 224),
+                "POST-RECOVERY STATE" if recovery_view else "AFTER",
+                fill="black",
+                font=font,
+            )
             draw.text(
                 (6, 242),
                 _ellipsize(
@@ -264,7 +285,16 @@ def weak_class_montages(
             )
             draw.text(
                 (6, 260),
-                _ellipsize(row["task_description"], 110),
+                _ellipsize(
+                    (
+                        f"executed={row['executed_recovery_action']} "
+                        f"value={row['recovery_action_value']} "
+                        f"success={row['recovery_success']}"
+                    )
+                    if recovery_view
+                    else row["task_description"],
+                    110,
+                ),
                 fill="black",
                 font=font,
             )
