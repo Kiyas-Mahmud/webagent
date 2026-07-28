@@ -134,8 +134,40 @@ def proportional_stratified_subsample(
 def select_recovery_aware_gold_subset(
     records: Sequence[dict], n: int, seed: int = 42,
 ) -> list[dict]:
-    """Proportional Gold mini subset with joint task/recovery/mask coverage."""
-    return proportional_stratified_subsample(records, n, key=gold_joint_stratum, seed=seed)
+    """Select a mini subset while preserving a targeted supplement as a source.
+
+    Original-only experiments retain the previous proportional behavior. When
+    versioned supplement rows are present, a mini includes each supplement row
+    once (when capacity permits) and fills the remaining budget from original
+    Gold. This is source-aware inclusion, not duplicate oversampling.
+    """
+    if n >= len(records):
+        return list(records)
+    supplement = []
+    original = []
+    for record in records:
+        _, _, meta = _views(record)
+        source = str(meta.get("_source_dataset", "original_gold"))
+        (supplement if source != "original_gold" else original).append(record)
+    if not supplement:
+        return proportional_stratified_subsample(
+            records, n, key=gold_joint_stratum, seed=seed,
+        )
+    if len(supplement) >= n:
+        return proportional_stratified_subsample(
+            supplement, n, key=gold_joint_stratum, seed=seed,
+        )
+    selected_original = proportional_stratified_subsample(
+        original,
+        n - len(supplement),
+        key=gold_joint_stratum,
+        seed=seed,
+    )
+    selected = [*supplement, *selected_original]
+    random.Random(seed).shuffle(selected)
+    if len(selected) != n or len({id(record) for record in selected}) != n:
+        raise AssertionError("source-aware mini selection must be exact and unique")
+    return selected
 
 
 def recovery_aware_batch_indices(
@@ -224,9 +256,10 @@ def label_distribution(records: Sequence[dict]) -> dict[str, dict[str, int]]:
         "recovery_success": Counter(),
         "memory_update_flag": Counter(),
         "bbox_available": Counter(),
+        "source_dataset": Counter(),
     }
     for record in records:
-        _, labels, _ = _views(record)
+        _, labels, meta = _views(record)
         attempted = labels.get("recovery_success") is not None
         fields["failure_type"][str(labels["failure_type_4"])] += 1
         fields["action_type"][str(labels["action_type"])] += 1
@@ -237,6 +270,9 @@ def label_distribution(records: Sequence[dict]) -> dict[str, dict[str, int]]:
         fields["recovery_success"][recovery_key] += 1
         fields["memory_update_flag"][str(bool(labels.get("memory_update_flag") or False))] += 1
         fields["bbox_available"][str(labels.get("action_target_bbox") is not None)] += 1
+        fields["source_dataset"][
+            str(meta.get("_source_dataset", "original_gold"))
+        ] += 1
     return {
         field: dict(sorted(counts.items()))
         for field, counts in fields.items()

@@ -1,0 +1,22 @@
+# Recovery-v2.8: controlled RETRY/ABORT supplement integration.
+#
+# This extends the validated v2.7 architecture and selection rule. The only
+# experimental change is source-aware recovery data:
+#   - supplement train rows supervise recovery strategy + recovery success only;
+#   - original validation remains the primary checkpoint-selection source;
+#   - supplement validation is evaluated and reported separately;
+#   - the locked test split is never supplemented or read during training.
+name: Y_QWEN2VL_2B_GOLD_V2_8
+extends: backbones/qwen2vl_2b_gold_v2_7.yaml
+
+data:
+  recovery_supplement:
+    enabled: true
+    # The Kaggle sanity notebook auto-detects the extracted package and
+    # overrides this path before constructing a loader.
+    root: /kaggle/working/web_gold_40k_retry_abort_supplement_v2_kaggle
+    include_in_primary_validation: false
+
+train:
+  controlled_experiment_tag: recovery_v2_8
+  metrics_csv: results/gold_recovery_v2_8_metrics.csv

@@ -30,6 +30,14 @@ def main() -> None:
     )
     ap.add_argument("--data-root", default=None, help="override cfg.data.root (Kaggle path)")
     ap.add_argument(
+        "--supplement-root",
+        default=None,
+        help=(
+            "extracted RETRY/ABORT supplement v2 root; appends only recovery-"
+            "supervised train rows and keeps primary validation original-only"
+        ),
+    )
+    ap.add_argument(
         "--review-overlay-dir",
         default=None,
         help=(
@@ -61,6 +69,15 @@ def main() -> None:
     cfg = load_config(args.config)
     if args.data_root:
         cfg["data"]["root"] = args.data_root
+    if args.supplement_root:
+        if args.stage in {"reeval", "eval"}:
+            ap.error("--supplement-root is training/smoke-only")
+        supplement = cfg["data"].setdefault("recovery_supplement", {})
+        supplement.update({
+            "enabled": True,
+            "root": args.supplement_root,
+            "include_in_primary_validation": False,
+        })
     if args.review_overlay_dir:
         if args.stage == "eval":
             ap.error(

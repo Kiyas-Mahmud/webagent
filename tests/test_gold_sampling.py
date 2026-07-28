@@ -90,3 +90,21 @@ def test_distribution_reports_recovery_attempt_denominator():
         "REPLAN": 10,
         "RETRY": 10,
     }
+
+
+def test_source_aware_mini_includes_supplement_once_without_oversampling():
+    records = _records()
+    for record in records[-8:]:
+        record["meta"]["_source_dataset"] = "retry_abort_supplement_v2"
+
+    selected = select_recovery_aware_gold_subset(records, 32, seed=42)
+    selected_ids = {record["meta"]["sample_id"] for record in selected}
+
+    assert {
+        record["meta"]["sample_id"] for record in records[-8:]
+    }.issubset(selected_ids)
+    assert len(selected_ids) == 32
+    assert label_distribution(selected)["source_dataset"] == {
+        "original_gold": 24,
+        "retry_abort_supplement_v2": 8,
+    }

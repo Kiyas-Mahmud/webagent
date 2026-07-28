@@ -23,12 +23,13 @@ from web_agent.data.gold_sampling import (
     sqrt_inverse_frequency_weights,
 )
 from web_agent.data.review_overlay import ReviewOverlay
+from web_agent.data.recovery_supplement import load_supplement_split
 from web_agent.labels import NUM_RECOVERY, RECOVERY_STRATEGY
 from web_agent.utils.class_weights import balanced_class_weights
 
 
-def load_gold_split(cfg: dict, which: str) -> list[dict]:
-    """which in {train, val, test}. Reads cfg['data'][f'{which}_json'] under data.root."""
+def _load_original_gold_split(cfg: dict, which: str) -> list[dict]:
+    """Load one original Gold split and apply only its human-review overlay."""
     fname = cfg["data"][f"{which}_json"]
     with open(Path(cfg["data"]["root"]) / fname, encoding="utf-8") as f:
         records = json.load(f)
@@ -41,6 +42,70 @@ def load_gold_split(cfg: dict, which: str) -> list[dict]:
     return records
 
 
+def _supplement_config(cfg: dict) -> dict:
+    value = cfg.get("data", {}).get("recovery_supplement", {})
+    if value in (None, False):
+        return {}
+    if not isinstance(value, dict):
+        raise TypeError("data.recovery_supplement must be a mapping")
+    return value
+
+
+def load_gold_split_sources(cfg: dict, which: str) -> dict[str, list[dict]]:
+    """Return original and supplement rows separately for honest reporting.
+
+    The supplement never has a test split. Calling this helper for ``test``
+    therefore returns only the original locked-test rows.
+    """
+    original = _load_original_gold_split(cfg, which)
+    sources = {"original_gold": original}
+    supplement = _supplement_config(cfg)
+    if (
+        which in {"train", "val"}
+        and bool(supplement.get("enabled", False))
+    ):
+        root = supplement.get("root")
+        if not root:
+            raise ValueError(
+                "data.recovery_supplement.root is required when enabled"
+            )
+        sources["retry_abort_supplement_v2"] = load_supplement_split(root, which)
+    return sources
+
+
+def load_gold_split(cfg: dict, which: str) -> list[dict]:
+    """Load the primary train/validation/test rows.
+
+    Supplement train rows are appended for optimization. The primary validation
+    remains original-only by default so checkpoint selection stays comparable
+    with v2.7; supplement validation is available through
+    :func:`load_gold_split_sources` and must be reported separately. Test is
+    always original-only.
+    """
+    if which not in {"train", "val", "test"}:
+        raise ValueError(f"unknown Gold split: {which!r}")
+    sources = load_gold_split_sources(cfg, which)
+    records = list(sources["original_gold"])
+    supplement = _supplement_config(cfg)
+    include_supplement = (
+        which == "train"
+        or (
+            which == "val"
+            and bool(supplement.get("include_in_primary_validation", False))
+        )
+    )
+    if include_supplement:
+        records.extend(sources.get("retry_abort_supplement_v2", []))
+    return records
+
+
+def source_loss_active(record: dict, name: str) -> bool:
+    """Whether a source row is allowed to supervise one registered head."""
+    _, _, meta = view(record)
+    masks = meta.get("_loss_masks", {})
+    return float(masks.get(name, 1.0)) > 0.5
+
+
 def gold_class_weights(records, limit: int | None = None):
     """action/failtype/outcome weights via the existing balanced_class_weights.
 
@@ -49,12 +114,25 @@ def gold_class_weights(records, limit: int | None = None):
     """
     remapped = []
     for r in records:
+        active = {
+            source_loss_active(r, "action"),
+            source_loss_active(r, "failure_type"),
+            source_loss_active(r, "outcome"),
+        }
+        if len(active) != 1:
+            raise ValueError(
+                "action/failure/outcome source masks must agree for class weights"
+            )
+        if False in active:
+            continue
         _, lab, _ = view(r)   # handles both v12 nested and v8 flat
         remapped.append({
             "action_type": lab["action_type"],
             "failure_type": lab["failure_type_4"],
             "execution_outcome": lab["outcome_label"],
         })
+    if not remapped:
+        raise ValueError("no active action/failure/outcome rows for class weights")
     return balanced_class_weights(remapped, limit=limit)
 
 
@@ -66,6 +144,8 @@ def gold_recovery_class_weights(
     """Sqrt-inverse-frequency recovery weights from the rows actually trained."""
     labels = []
     for record in records:
+        if not source_loss_active(record, "recovery"):
+            continue
         _, lab, _ = view(record)
         label = RECOVERY_STRATEGY[lab["recovery_strategy"]]
         if not attempted_only or lab.get("recovery_success") is not None:

@@ -160,6 +160,24 @@ class WebAgentModel(nn.Module):
             post_fused,
             confidence_fused=pre_fused if self.causal_routing else None,
         )
+        strategy_source_pre = batch.get("strategy_source_pre")
+        if strategy_source_pre is not None:
+            strategy_source_pre = strategy_source_pre.to(
+                post_fused.device
+            ).view(-1).bool()
+        if strategy_source_pre is not None and strategy_source_pre.any():
+            pre_diagnosis_fused = adapt(
+                "diagnosis", pre_encoded["fused"]
+            )
+            pre_recovery = self.failure_head(
+                pre_diagnosis_fused,
+                confidence_fused=pre_fused if self.causal_routing else None,
+            )["recovery"]
+            failure_predictions["recovery"] = torch.where(
+                strategy_source_pre[:, None],
+                pre_recovery,
+                failure_predictions["recovery"],
+            )
         preds.update(failure_predictions)
         bbox_context = (
             torch.autocast("cuda", enabled=False)
@@ -193,7 +211,18 @@ class WebAgentModel(nn.Module):
             ))
         else:
             preds.update(self.action_head(pre_fused))
-        preds.update(self.memory_head(memory_fused))
+        memory_predictions = self.memory_head(memory_fused)
+        if strategy_source_pre is not None and strategy_source_pre.any():
+            pre_memory_fused = adapt("memory", pre_encoded["fused"])
+            pre_memory_recovery = self.memory_head(
+                pre_memory_fused
+            )["memory_recovery"]
+            memory_predictions["memory_recovery"] = torch.where(
+                strategy_source_pre[:, None],
+                pre_memory_recovery,
+                memory_predictions["memory_recovery"],
+            )
+        preds.update(memory_predictions)
         if getattr(self, "use_recovery_transitions", False):
             if "recovery_input_ids" in batch:
                 recovery_encoded = self.encode(batch, prefix="recovery_")

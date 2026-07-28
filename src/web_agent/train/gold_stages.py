@@ -21,7 +21,9 @@ from web_agent.data.gold_dataloader import (
     gold_class_weights,
     gold_recovery_class_weights,
     load_gold_split,
+    load_gold_split_sources,
     select_smoke_records,
+    source_loss_active,
     stratified_gold_subsample,
 )
 from web_agent.data.bbox_audit import (
@@ -133,6 +135,7 @@ def build_gold_components(
             str(meta.get("sample_id") or f"{meta.get('task_id', '')}:{meta.get('step_index', index)}")
             for index, record in enumerate(train_records)
             for _, _, meta in [view(record)]
+            if source_loss_active(record, "recovery_outcome")
         }
         recovery_values = [
             transition["recovery_success"]
@@ -152,8 +155,13 @@ def build_gold_components(
     needs_positive = sum(
         view(record)[1].get("recovery_success") is not None
         for record in train_records
+        if source_loss_active(record, "needs_recovery")
     )
-    needs_negative = len(train_records) - needs_positive
+    needs_rows = sum(
+        source_loss_active(record, "needs_recovery")
+        for record in train_records
+    )
+    needs_negative = needs_rows - needs_positive
     needs_scheme = cfg["loss"].get(
         "needs_recovery_weight_scheme", "exact_inverse_frequency",
     )
@@ -175,7 +183,10 @@ def build_gold_components(
         == "log_space"
     ):
         bbox_prior_report = bbox_log_size_prior(
-            train_records,
+            [
+                record for record in train_records
+                if source_loss_active(record, "bbox")
+            ],
             cfg["data"]["root"],
         )
         model.action_head.initialize_bbox_size_prior(
@@ -248,9 +259,18 @@ def run_gold_bbox_audit(cfg: dict) -> dict:
     """
     train_records = load_gold_split(cfg, "train")
     validation_records = load_gold_split(cfg, "val")
-    train_report = audit_bbox_geometry(train_records, cfg["data"]["root"])
+    train_report = audit_bbox_geometry(
+        [
+            record for record in train_records
+            if source_loss_active(record, "bbox")
+        ],
+        cfg["data"]["root"],
+    )
     validation_report = audit_bbox_geometry(
-        validation_records,
+        [
+            record for record in validation_records
+            if source_loss_active(record, "bbox")
+        ],
         cfg["data"]["root"],
     )
     split_reports = (train_report, validation_report)
@@ -580,6 +600,10 @@ def run_gold_bbox_overfit(
     if rows <= 0 or steps <= 0:
         raise ValueError("bbox overfit rows and steps must both be positive")
     all_train_records = load_gold_split(overfit_cfg, "train")
+    all_train_records = [
+        record for record in all_train_records
+        if source_loss_active(record, "bbox")
+    ]
     selected_records = _select_valid_bbox_records(
         all_train_records,
         overfit_cfg["data"]["root"],
@@ -1001,22 +1025,38 @@ def run_gold_smoke(
 ) -> dict:
     """Verify causal streams, output shapes, finite loss, backward, and weight update."""
     all_train_records = load_gold_split(cfg, "train")
-    smoke_records = select_smoke_records(all_train_records, rows, seed)
+    original_smoke_candidates = [
+        record for record in all_train_records
+        if source_loss_active(record, "action")
+    ]
+    smoke_records = select_smoke_records(
+        original_smoke_candidates, rows, seed,
+    )
+    smoke_bbox_records = [
+        record for record in smoke_records
+        if source_loss_active(record, "bbox")
+    ]
     smoke_bbox_geometry = audit_bbox_geometry(
-        smoke_records,
+        smoke_bbox_records,
         cfg["data"]["root"],
     )
     if smoke_bbox_geometry["valid_bbox_rows"] == 0:
         # Category coverage is chosen before select_smoke_records appends filler;
         # replacing the final filler row preserves that coverage.
         smoke_records[-1] = _select_valid_bbox_records(
-            all_train_records,
+            [
+                record for record in all_train_records
+                if source_loss_active(record, "bbox")
+            ],
             cfg["data"]["root"],
             1,
             seed,
         )[0]
         smoke_bbox_geometry = audit_bbox_geometry(
-            smoke_records,
+            [
+                record for record in smoke_records
+                if source_loss_active(record, "bbox")
+            ],
             cfg["data"]["root"],
         )
     components = build_gold_components(
@@ -1222,9 +1262,11 @@ def run_gold_mini(
 ) -> dict:
     """Run the controlled recovery experiment without reading the test split.
 
-    Training uses joint proportional coverage plus distribution-preserving
-    recovery-aware batches. Validation intentionally retains the legacy v14
-    failure-stratified selector so the 500-row comparison set is identical.
+    Training uses source-aware supplement inclusion, joint original-data
+    coverage, and distribution-preserving recovery-aware batches. Primary
+    validation intentionally retains the legacy v14 failure-stratified selector
+    so the 500-row comparison set is identical; supplement validation is
+    reported separately and cannot select the checkpoint.
     """
     mini_cfg = deepcopy(cfg)
     mini_cfg["train"]["epochs"] = epochs
@@ -1259,11 +1301,17 @@ def run_gold_mini(
     selected_val_records = stratified_gold_subsample(all_val_records, val_rows, seed)
     selected_bbox_geometry = {
         "train": audit_bbox_geometry(
-            selected_train_records,
+            [
+                record for record in selected_train_records
+                if source_loss_active(record, "bbox")
+            ],
             mini_cfg["data"]["root"],
         ),
         "validation": audit_bbox_geometry(
-            selected_val_records,
+            [
+                record for record in selected_val_records
+                if source_loss_active(record, "bbox")
+            ],
             mini_cfg["data"]["root"],
         ),
     }
@@ -1315,6 +1363,12 @@ def run_gold_mini(
     checkpoint_roundtrip = _verify_checkpoint_roundtrip(
         trainer, val_loader, checkpoint
     )
+    supplement_validation = _supplement_validation_report(
+        mini_cfg,
+        components.processor,
+        components.model,
+        seed=seed,
+    )
     history = result["history"]
     loss_decreased = (
         history[-1]["train_nominal_weighted_loss"]
@@ -1340,7 +1394,11 @@ def run_gold_mini(
         for batch in scheduled_batches
     )
     sampling_report = {
-        "train_selector": "joint_proportional_v1",
+        "train_selector": (
+            "source_aware_all_supplement_plus_joint_original_v1"
+            if supplement_validation["enabled"]
+            else "joint_proportional_v1"
+        ),
         "validation_selector": "legacy_failure_stratified_v14_fixed",
         "validation_comparable_to_v14": review_overlay is None,
         "comparison_requires_baseline_reevaluation_on_overlay": (
@@ -1357,6 +1415,11 @@ def run_gold_mini(
         "duplicate_train_rows_scheduled": (
             sum(len(batch) for batch in scheduled_batches)
             - len({index for batch in scheduled_batches for index in batch})
+        ),
+        "supplement_train_rows": sum(
+            view(record)[2].get("_source_dataset")
+            == "retry_abort_supplement_v2"
+            for record in selected_train_records
         ),
     }
     is_v2 = bool(mini_cfg["data"].get("recovery_transitions"))
@@ -1377,6 +1440,13 @@ def run_gold_mini(
         training_changes.append(
             "passed two-person review overlay on train and validation"
         )
+    if supplement_validation["enabled"]:
+        training_changes.extend([
+            "all accepted RETRY/ABORT supplement rows included once in the mini",
+            "supplement rows supervise only recovery strategy and recovery success",
+            "supplement strategy routed from the pre-recovery failure state",
+            "supplement validation reported separately from checkpoint selection",
+        ])
     if is_v2:
         training_changes.extend([
             "executed action added only to the post-action stream",
@@ -1457,6 +1527,21 @@ def run_gold_mini(
         "quality_gates": quality_gates,
         "train_distribution": label_distribution(selected_train_records),
         "validation_distribution": label_distribution(selected_val_records),
+        "source_validation": {
+            "primary_original_gold": {
+                "rows": len(selected_val_records),
+                "checkpoint_selection_source": True,
+                "selected_epoch_metrics": selected_history,
+            },
+            "supplement_retry_abort": supplement_validation,
+            "combined": {
+                "reported": False,
+                "reason": (
+                    "secondary combined metrics are intentionally deferred; "
+                    "source-separated validation prevents frequency mixing"
+                ),
+            },
+        },
         "bbox_geometry": selected_bbox_geometry,
         "recovery_transition_reports": {
             "train": train_loader.dataset.transition_report,
@@ -1574,6 +1659,54 @@ def run_gold_mini(
             if review_overlay is not None
             else {"enabled": False}
         ),
+    }
+
+
+def _supplement_validation_report(
+    cfg: dict,
+    processor,
+    model,
+    *,
+    seed: int,
+) -> dict:
+    """Evaluate the complete supplement validation source separately."""
+    sources = load_gold_split_sources(cfg, "val")
+    records = sources.get("retry_abort_supplement_v2", [])
+    if not records:
+        return {"enabled": False, "rows": 0}
+    loader = build_gold_dataloader(
+        cfg,
+        "val",
+        processor,
+        records=records,
+        shuffle=False,
+        num_workers=cfg["data"].get("num_workers", 2),
+        seed=seed,
+        trajectory_records=records,
+    )
+    predictions = collect_predictions(model, loader, "cuda")
+    metrics = compute_metrics(predictions)
+    diagnostics = build_diagnostics(predictions)
+    permitted_metrics = {
+        name: value
+        for name, value in metrics.items()
+        if name.startswith("strategy_attempted_")
+        or name.startswith("recovery_outcome_")
+    }
+    return {
+        "enabled": True,
+        "source": "retry_abort_supplement_v2",
+        "rows": len(records),
+        "test_rows_read": 0,
+        "metrics": permitted_metrics,
+        "diagnostics": {
+            "recovery_strategy_attempted_only": diagnostics[
+                "recovery_strategy_attempted_only"
+            ],
+            "recovery_outcome_prediction": diagnostics[
+                "recovery_outcome_prediction"
+            ],
+        },
     }
 
 

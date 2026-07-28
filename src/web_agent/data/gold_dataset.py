@@ -93,8 +93,17 @@ class GoldDataset(Dataset):
         return len(self.records)
 
     # ---- helpers ----
-    def _load_image(self, rel_path: str) -> Image.Image:
-        return Image.open(self.root / rel_path).convert("RGB")
+    def _record_root(self, meta: dict) -> Path:
+        private_root = meta.get("_data_root")
+        return Path(private_root) if private_root else self.root
+
+    def _load_image(
+        self,
+        rel_path: str,
+        *,
+        root: Path | None = None,
+    ) -> Image.Image:
+        return Image.open((root or self.root) / rel_path).convert("RGB")
 
     def _bbox(self, lab: dict, img_w: int, img_h: int):
         """Return (bbox[4] normalized, mask[1]); zeros + mask 0 when bbox is null."""
@@ -214,9 +223,17 @@ class GoldDataset(Dataset):
         has_recovery_transition: bool,
     ) -> dict:
         attempted = lab.get("recovery_success") is not None
+        configured_masks = meta.get("_loss_masks", {})
+
+        def loss_mask(name: str) -> torch.Tensor:
+            return torch.tensor(
+                [float(configured_masks.get(name, 1.0))],
+                dtype=torch.float32,
+            )
+
         return {
             "bbox": bbox,
-            "bbox_mask": bbox_mask,
+            "bbox_mask": bbox_mask * loss_mask("bbox"),
             "borrowed": torch.tensor([0.0]),
             "label_outcome": torch.tensor(EXECUTION_OUTCOME[lab["outcome_label"]]),
             "label_failtype": torch.tensor(FAILURE_TYPE[lab["failure_type_4"]]),
@@ -233,18 +250,35 @@ class GoldDataset(Dataset):
             "label_recovery_success": torch.tensor([
                 -1.0 if not has_recovery_transition else float(lab["recovery_success"])]),
             "original_task_id": meta.get("task_id", ""),
+            "source_dataset": str(meta.get("_source_dataset", "original_gold")),
+            "strategy_source_pre": torch.tensor([
+                float(bool(meta.get("_strategy_source_pre", False)))
+            ]),
+            "loss_mask_outcome": loss_mask("outcome"),
+            "loss_mask_failtype": loss_mask("failure_type"),
+            "loss_mask_action": loss_mask("action"),
+            "loss_mask_recovery": loss_mask("recovery"),
+            "loss_mask_needs_recovery": loss_mask("needs_recovery"),
+            "loss_mask_memory": loss_mask("memory"),
+            "loss_mask_confidence": loss_mask("confidence"),
+            "loss_mask_calibration": loss_mask("calibration"),
+            "loss_mask_contrastive": loss_mask("contrastive"),
+            "loss_mask_recovery_outcome": loss_mask("recovery_outcome"),
         }
 
     def __getitem__(self, idx: int) -> dict:
         rec = self.records[idx]
         inp, lab, meta = view(rec)
-        before = self._load_image(inp["state_before"])
+        record_root = self._record_root(meta)
+        before = self._load_image(inp["state_before"], root=record_root)
         img_w, img_h = before.size
         bbox, bbox_mask = self._bbox(lab, img_w, img_h)
 
         images = [before]
         if self.use_state_after and inp.get("state_after"):
-            images.append(self._load_image(inp["state_after"]))
+            images.append(self._load_image(
+                inp["state_after"], root=record_root,
+            ))
 
         sample_id = str(meta.get("sample_id") or f"{meta.get('task_id', '')}:{meta.get('step_index', idx)}")
         transition = self.recovery_transitions.get(sample_id)
@@ -265,6 +299,9 @@ class GoldDataset(Dataset):
         else:
             out = self._vlm_inputs(inp, images, phase="post")
         if transition is not None:
+            transition_root = Path(
+                transition.get("_data_root") or record_root
+            )
             recovery_inp = {
                 "task_description": transition["task_description"],
                 "website_domain": transition["website_domain"],
@@ -272,8 +309,12 @@ class GoldDataset(Dataset):
             recovery = self._vlm_inputs(
                 recovery_inp,
                 [
-                    self._load_image(transition["failure_state"]),
-                    self._load_image(transition["post_recovery_state"]),
+                    self._load_image(
+                        transition["failure_state"], root=transition_root,
+                    ),
+                    self._load_image(
+                        transition["post_recovery_state"], root=transition_root,
+                    ),
                 ],
                 phase="recovery",
                 executed_action=transition["executed_recovery_action"],

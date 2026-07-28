@@ -169,30 +169,88 @@ class CombinedLoss(nn.Module):
             return fused.sum() * 0.0                 # keep graph; 0 contribution
         return torch.stack(losses).mean()
 
+    @staticmethod
+    def _row_mask(
+        batch: dict,
+        name: str,
+        rows: int,
+        device: torch.device,
+    ) -> torch.Tensor:
+        value = batch.get(name)
+        if value is None:
+            return torch.ones(rows, dtype=torch.bool, device=device)
+        return value.to(device).view(-1) > 0.5
+
+    @staticmethod
+    def _masked_cross_entropy(
+        logits: torch.Tensor,
+        target: torch.Tensor,
+        mask: torch.Tensor,
+        *,
+        weight=None,
+        label_smoothing: float = 0.0,
+    ) -> tuple[torch.Tensor, bool]:
+        active = bool(mask.any())
+        if not active:
+            return logits.sum() * 0.0, False
+        return (
+            F.cross_entropy(
+                logits[mask],
+                target[mask],
+                weight=weight,
+                label_smoothing=label_smoothing,
+            ),
+            True,
+        )
+
     def forward(self, preds: dict, batch: dict) -> dict:
         t: dict[str, torch.Tensor] = {}
+        rows = int(batch["label_outcome"].shape[0])
+        device = preds["outcome"].device
+        active_tasks: dict[str, bool] = {}
+        outcome_mask = self._row_mask(
+            batch, "loss_mask_outcome", rows, device,
+        )
+        failtype_mask = self._row_mask(
+            batch, "loss_mask_failtype", rows, device,
+        )
+        action_mask = self._row_mask(
+            batch, "loss_mask_action", rows, device,
+        )
 
         # No label smoothing on the binary outcome head: smoothing caps the minority
         # gradient and, with class weights, helps flip the collapse instead of fixing
         # it (plan P1-B). Class weighting carries the imbalance correction here.
-        t["outcome"] = F.cross_entropy(
+        t["outcome"], active_tasks["outcome"] = self._masked_cross_entropy(
             preds["outcome"], batch["label_outcome"],
-            weight=self.outcome_w, label_smoothing=0.0)
-        t["failtype"] = F.cross_entropy(
+            outcome_mask, weight=self.outcome_w, label_smoothing=0.0,
+        )
+        t["failtype"], active_tasks["failtype"] = self._masked_cross_entropy(
             preds["failure_type"], batch["label_failtype"],
-            weight=self.failtype_w, label_smoothing=self.smoothing)
-        t["action"] = F.cross_entropy(
+            failtype_mask,
+            weight=self.failtype_w,
+            label_smoothing=self.smoothing,
+        )
+        t["action"], active_tasks["action"] = self._masked_cross_entropy(
             preds["action_type"], batch["label_action"],
-            weight=self.action_w, label_smoothing=self.smoothing)
+            action_mask,
+            weight=self.action_w,
+            label_smoothing=self.smoothing,
+        )
 
         rec_t = batch["label_recovery"]
+        recovery_loss_mask = self._row_mask(
+            batch, "loss_mask_recovery", rows, device,
+        )
         strategy_mask = (
             batch["label_needs_recovery"].view(-1) > 0
             if self.hierarchical_recovery
             else torch.ones_like(rec_t, dtype=torch.bool)
         )
+        strategy_mask = strategy_mask & recovery_loss_mask
         rec_losses = []
         strategy_active = bool(strategy_mask.any())
+        active_tasks["recovery"] = strategy_active
         if strategy_active:
             rec_losses.append(F.cross_entropy(
                 preds["recovery"][strategy_mask], rec_t[strategy_mask],
@@ -209,11 +267,18 @@ class CombinedLoss(nn.Module):
             rec_losses.append(preds["recovery"].sum() * 0.0)
         t["recovery"] = torch.stack(rec_losses).mean()
         if self.hierarchical_recovery:
-            t["needs_recovery"] = F.binary_cross_entropy_with_logits(
-                preds["needs_recovery"],
-                batch["label_needs_recovery"],
-                pos_weight=self.needs_recovery_pos_w,
+            needs_mask = self._row_mask(
+                batch, "loss_mask_needs_recovery", rows, device,
             )
+            active_tasks["needs_recovery"] = bool(needs_mask.any())
+            if active_tasks["needs_recovery"]:
+                t["needs_recovery"] = F.binary_cross_entropy_with_logits(
+                    preds["needs_recovery"][needs_mask],
+                    batch["label_needs_recovery"][needs_mask],
+                    pos_weight=self.needs_recovery_pos_w,
+                )
+            else:
+                t["needs_recovery"] = preds["needs_recovery"].sum() * 0.0
 
         # Bbox is supervised only where a real target exists.
         bbox_diagnostics = {}
@@ -312,49 +377,112 @@ class CombinedLoss(nn.Module):
             bbox_active = bool(mask.sum() > 0)
             sq = (preds["bbox"] - batch["bbox"]) ** 2
             t["bbox"] = (sq * mask).sum() / (mask.sum().clamp(min=1.0) * sq.shape[1])
+        active_tasks["bbox"] = bbox_active
 
         # with_logits is autocast(fp16)-safe; heads emit logits for these two.
-        t["memory"] = F.binary_cross_entropy_with_logits(
-            preds["memory_flag"], batch["label_memory"])
+        memory_mask = self._row_mask(
+            batch, "loss_mask_memory", rows, device,
+        )
+        active_tasks["memory"] = bool(memory_mask.any())
+        if active_tasks["memory"]:
+            t["memory"] = F.binary_cross_entropy_with_logits(
+                preds["memory_flag"][memory_mask],
+                batch["label_memory"][memory_mask],
+            )
+        else:
+            t["memory"] = preds["memory_flag"].sum() * 0.0
         # recovery_success = -1 marks "no recovery attempted" -> masked out (only the
         # rows where a recovery actually happened supervise this head). Synthetic labels
         # are 0/1, so the mask is all-ones and this equals the plain mean BCE.
         rs = batch["label_recovery_success"]
         if "recovery_row_indices" in preds:
             indices = preds["recovery_row_indices"].to(rs.device)
-            recovery_outcome_active = bool(indices.numel())
+            recovery_source_mask = self._row_mask(
+                batch, "loss_mask_recovery_outcome", rows, rs.device,
+            )
+            selected_recovery_mask = (
+                recovery_source_mask.index_select(0, indices)
+                if indices.numel()
+                else torch.zeros(0, dtype=torch.bool, device=rs.device)
+            )
+            recovery_outcome_active = bool(selected_recovery_mask.any())
             if recovery_outcome_active:
-                target = rs.index_select(0, indices)
+                target = rs.index_select(0, indices)[selected_recovery_mask]
                 t["recovery_outcome"] = F.binary_cross_entropy_with_logits(
-                    preds["recovery_outcome"], target,
+                    preds["recovery_outcome"][selected_recovery_mask], target,
                     pos_weight=self.recovery_pos_w,
                 )
             else:
                 t["recovery_outcome"] = preds["outcome"].sum() * 0.0
         else:
-            ro_mask = (rs >= 0).float()
+            ro_mask = (
+                (rs.view(-1) >= 0)
+                & self._row_mask(
+                    batch, "loss_mask_recovery_outcome", rows, rs.device,
+                )
+            )
             recovery_outcome_active = bool(ro_mask.any())
             ro_per = F.binary_cross_entropy_with_logits(
                 preds["recovery_outcome"], rs.clamp(min=0.0),
                 pos_weight=self.recovery_pos_w, reduction="none")
             t["recovery_outcome"] = (
-                (ro_per * ro_mask).sum() / ro_mask.sum().clamp(min=1.0)
+                (ro_per * ro_mask[:, None]).sum()
+                / ro_mask.sum().clamp(min=1.0)
             )
+        active_tasks["recovery_outcome"] = recovery_outcome_active
 
         conf = preds["confidence"].clamp(self.conf_lo, self.conf_hi)
-        t["confidence"] = F.mse_loss(conf, batch["label_confidence"])
+        confidence_mask = self._row_mask(
+            batch, "loss_mask_confidence", rows, device,
+        )
+        active_tasks["confidence"] = bool(confidence_mask.any())
+        if active_tasks["confidence"]:
+            t["confidence"] = F.mse_loss(
+                conf[confidence_mask],
+                batch["label_confidence"][confidence_mask],
+            )
+        else:
+            t["confidence"] = conf.sum() * 0.0
 
         # agent_confidence_before means confidence that the action will succeed.
         # Calibrate it against the observed SUCCESS target, not against whether the
         # separate outcome head happened to classify the row correctly.
         succeeded = (batch["label_outcome"] == 0).detach()
-        t["calibration"] = self._calibration(conf, succeeded)
-
-        if self.contrastive_mode == "supervised":
-            t["contrastive"] = self._supcon(preds["fused"], batch["label_outcome"])
+        calibration_mask = self._row_mask(
+            batch, "loss_mask_calibration", rows, device,
+        )
+        active_tasks["calibration"] = bool(calibration_mask.any())
+        if active_tasks["calibration"]:
+            t["calibration"] = self._calibration(
+                conf[calibration_mask],
+                succeeded[calibration_mask],
+            )
         else:
+            t["calibration"] = conf.sum() * 0.0
+
+        contrastive_mask = self._row_mask(
+            batch, "loss_mask_contrastive", rows, device,
+        )
+        active_tasks["contrastive"] = bool(contrastive_mask.any())
+        if self.contrastive_mode == "supervised":
+            t["contrastive"] = self._supcon(
+                preds["fused"][contrastive_mask],
+                batch["label_outcome"][contrastive_mask],
+            )
+        else:
+            active_task_ids = [
+                task_id
+                for task_id, active in zip(
+                    batch["original_task_id"],
+                    contrastive_mask.detach().cpu().tolist(),
+                )
+                if active
+            ]
             t["contrastive"] = self._contrastive(
-                preds["fused"], batch["label_outcome"], batch["original_task_id"])
+                preds["fused"][contrastive_mask],
+                batch["label_outcome"][contrastive_mask],
+                active_task_ids,
+            )
 
         coefficient = {
             "outcome": self.w["outcome"],
@@ -372,13 +500,10 @@ class CombinedLoss(nn.Module):
             coefficient["needs_recovery"] = self.w["needs_recovery"]
         weighted = {name: float(coefficient[name]) * t[name] for name in coefficient}
         if self.dynamic_weighting == "uncertainty":
-            active_names = set(weighted)
-            if not strategy_active:
-                active_names.discard("recovery")
-            if not bbox_active:
-                active_names.discard("bbox")
-            if not recovery_outcome_active:
-                active_names.discard("recovery_outcome")
+            active_names = {
+                name for name in weighted
+                if active_tasks.get(name, True)
+            }
             terms = []
             for name, value in weighted.items():
                 if name in self.log_vars and name in active_names:

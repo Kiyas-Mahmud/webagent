@@ -34,6 +34,20 @@ _LABEL_KEYS = (
     "label_recovery_success",
 )
 
+_OPTIONAL_ROW_MASK_DEFAULTS = {
+    "strategy_source_pre": 0.0,
+    "loss_mask_outcome": 1.0,
+    "loss_mask_failtype": 1.0,
+    "loss_mask_action": 1.0,
+    "loss_mask_recovery": 1.0,
+    "loss_mask_needs_recovery": 1.0,
+    "loss_mask_memory": 1.0,
+    "loss_mask_confidence": 1.0,
+    "loss_mask_calibration": 1.0,
+    "loss_mask_contrastive": 1.0,
+    "loss_mask_recovery_outcome": 1.0,
+}
+
 MODE_FILTERS = ("full_labels", "visual", "eval_visual", "eval_labels", "bbox")
 EVAL_SUBSPLITS = {"test_task", "test_website", "test_domain"}
 
@@ -85,7 +99,15 @@ def stratified_subsample(records: list[dict], n: int, seed: int = 42,
 def stack_labels(batch: list[dict]) -> dict:
     """Stack the label contract shared by synthetic and gold datasets."""
     out = {k: torch.stack([b[k] for b in batch]) for k in _LABEL_KEYS}
+    for key, default in _OPTIONAL_ROW_MASK_DEFAULTS.items():
+        out[key] = torch.stack([
+            row.get(key, torch.tensor([default], dtype=torch.float32))
+            for row in batch
+        ])
     out["original_task_id"] = [b["original_task_id"] for b in batch]  # str list (contrastive)
+    out["source_dataset"] = [
+        b.get("source_dataset", "unspecified") for b in batch
+    ]
     return out
 
 

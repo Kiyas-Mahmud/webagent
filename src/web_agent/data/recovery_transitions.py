@@ -31,11 +31,15 @@ def _identity(record: dict, fallback: int) -> tuple[str, int, str]:
 
 
 def build_recovery_transition_index(records: Iterable[dict]) -> tuple[dict[str, dict], dict]:
-    """Map attempted-recovery sample IDs to their next causal trajectory step.
+    """Map attempted-recovery sample IDs to causal recovery transitions.
 
-    The transition is:
+    Original Gold rows use:
       current state_after -> next row's executed action -> next row's state_after.
     The current row supplies the intended strategy and recovery_success target.
+
+    Targeted supplement rows carry ``meta._direct_recovery_transition=true`` and
+    store the complete transition in one row:
+      state_before -> this row's executed action -> state_after.
     """
     rows = list(records)
     by_task: dict[str, list[tuple[int, int, str, dict]]] = defaultdict(list)
@@ -48,6 +52,7 @@ def build_recovery_transition_index(records: Iterable[dict]) -> tuple[dict[str, 
     ambiguous_next: list[str] = []
     invalid_attempted: list[str] = []
     nonconsecutive_next: list[str] = []
+    direct_transitions = 0
     attempted = 0
     for task_rows in by_task.values():
         task_rows.sort(key=lambda item: (item[0], item[1]))
@@ -56,6 +61,49 @@ def build_recovery_transition_index(records: Iterable[dict]) -> tuple[dict[str, 
             if current_labels.get("recovery_success") is None:
                 continue
             attempted += 1
+            if current_meta.get("_direct_recovery_transition") is True:
+                if (
+                    current_labels.get("recovery_strategy") in (None, "NONE")
+                    or not current_inputs.get("state_before")
+                    or not current_inputs.get("state_after")
+                ):
+                    invalid_attempted.append(sample_id)
+                    continue
+                transitions[sample_id] = {
+                    "source_sample_id": sample_id,
+                    "recovery_sample_id": sample_id,
+                    "task_id": str(current_meta.get("task_id", "")),
+                    "source_step_index": step_index,
+                    "recovery_step_index": step_index,
+                    "failure_state": current_inputs["state_before"],
+                    "executed_recovery_action": current_labels.get(
+                        "action_type", ""
+                    ),
+                    "post_recovery_state": current_inputs["state_after"],
+                    "recovery_strategy": current_labels.get(
+                        "recovery_strategy", "NONE"
+                    ),
+                    "recovery_success": bool(
+                        current_labels["recovery_success"]
+                    ),
+                    "task_description": current_inputs.get(
+                        "task_description", ""
+                    ),
+                    "website_domain": current_inputs.get(
+                        "website_domain", ""
+                    ),
+                    "recovery_action_value": current_labels.get(
+                        "action_value", ""
+                    ),
+                    "_data_root": current_meta.get("_data_root"),
+                    "source_meta": {
+                        "step_index": current_meta.get("step_index"),
+                        "recovery_step_index": current_meta.get("step_index"),
+                        "direct_transition": True,
+                    },
+                }
+                direct_transitions += 1
+                continue
             if (
                 current_labels.get("recovery_strategy") in (None, "NONE")
                 or current_labels.get("outcome_label") not in (None, "FAILURE")
@@ -100,6 +148,8 @@ def build_recovery_transition_index(records: Iterable[dict]) -> tuple[dict[str, 
         "tasks": len(by_task),
         "attempted_recoveries": attempted,
         "proper_transitions": len(transitions),
+        "direct_transitions": direct_transitions,
+        "adjacent_transitions": len(transitions) - direct_transitions,
         "missing_next_step": len(missing_next),
         "ambiguous_next_step": len(ambiguous_next),
         "nonconsecutive_next_step": len(nonconsecutive_next),
