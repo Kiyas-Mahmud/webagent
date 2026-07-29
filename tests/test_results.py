@@ -3,7 +3,11 @@ from __future__ import annotations
 import csv
 import json
 
-from web_agent.utils.results import save_mini_diagnostics_json, save_mini_result_csv
+from web_agent.utils.results import (
+    save_mini_diagnostics_json,
+    save_mini_result_csv,
+    save_source_validation_csv,
+)
 
 
 def test_save_mini_result_csv_writes_one_row_per_epoch(tmp_path):
@@ -49,6 +53,9 @@ def test_save_mini_diagnostics_json_keeps_non_tabular_evidence(tmp_path):
         "sampling": {"duplicate_train_rows_scheduled": 0},
         "train_distribution": {"recovery_attempted": {"True": 100}},
         "validation_distribution": {"recovery_attempted": {"True": 10}},
+        "source_validation": {"supplement_retry_abort": {"rows": 194}},
+        "review_overlay": {"enabled": True},
+        "bbox_geometry": {"train": {"status": "PASS"}},
         "experiment_control": {"baseline": "kaggle-gold-v14"},
         "diagnostics": [
             {
@@ -64,6 +71,9 @@ def test_save_mini_diagnostics_json_keeps_non_tabular_evidence(tmp_path):
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["test_rows_read"] == 0
     assert payload["sampling"]["duplicate_train_rows_scheduled"] == 0
+    assert payload["source_validation"]["supplement_retry_abort"]["rows"] == 194
+    assert payload["review_overlay"]["enabled"] is True
+    assert payload["bbox_geometry"]["train"]["status"] == "PASS"
     assert payload["epochs"][0]["recovery_strategy"]["confusion_matrix"] == [
         [1, 0],
         [0, 1],
@@ -99,3 +109,40 @@ def test_save_mini_result_csv_marks_constrained_checkpoint(tmp_path):
     assert rows[1]["is_best"] == "True"
     assert rows[1]["is_selected"] == "True"
     assert rows[1]["best_checkpoint"] == "checkpoints/e4.ckpt"
+
+
+def test_save_source_validation_csv_keeps_sources_separate(tmp_path):
+    report = {
+        "source_validation": {
+            "primary_original_gold": {
+                "rows": 500,
+                "checkpoint_selection_source": True,
+                "selected_epoch_metrics": {
+                    "epoch": 4,
+                    "outcome_mcc": 0.55,
+                    "strategy_attempted_macro_f1": 0.40,
+                },
+            },
+            "supplement_retry_abort": {
+                "rows": 194,
+                "metrics": {
+                    "strategy_attempted_macro_f1": 0.62,
+                    "recovery_outcome_mcc": 0.58,
+                },
+            },
+        },
+    }
+
+    path = save_source_validation_csv(report, tmp_path / "sources.csv")
+    with path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert [row["source"] for row in rows] == [
+        "original_gold",
+        "retry_abort_supplement_v2",
+    ]
+    assert rows[0]["rows"] == "500"
+    assert rows[0]["checkpoint_selection_source"] == "True"
+    assert rows[1]["rows"] == "194"
+    assert rows[1]["checkpoint_selection_source"] == "False"
+    assert rows[1]["recovery_outcome_mcc"] == "0.58"

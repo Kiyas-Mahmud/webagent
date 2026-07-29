@@ -1510,7 +1510,12 @@ def run_gold_mini(
 
     return {
         **result,
-        "status": "PASS",
+        "status": quality_gates["status"],
+        "training_disposition": (
+            "FULL_TRAINING_PERMITTED"
+            if quality_gates["status"] == "PASS"
+            else "STOP_BEFORE_FULL_TRAINING"
+        ),
         "train_rows": len(train_loader.dataset),
         "val_rows": len(val_loader.dataset),
         "test_rows_read": 0,

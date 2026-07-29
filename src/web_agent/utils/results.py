@@ -122,6 +122,9 @@ def save_mini_diagnostics_json(report: Mapping[str, Any], path: str | Path) -> P
         "quality_gates": report.get("quality_gates", {}),
         "train_distribution": report.get("train_distribution", {}),
         "validation_distribution": report.get("validation_distribution", {}),
+        "source_validation": report.get("source_validation", {}),
+        "review_overlay": report.get("review_overlay", {}),
+        "bbox_geometry": report.get("bbox_geometry", {}),
         "experiment_control": report.get("experiment_control", {}),
         "recovery_transition_reports": report.get("recovery_transition_reports", {}),
         "recovery_class_audit": report.get("recovery_class_audit", {}),
@@ -130,4 +133,51 @@ def save_mini_diagnostics_json(report: Mapping[str, Any], path: str | Path) -> P
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return destination
+
+
+def save_source_validation_csv(
+    report: Mapping[str, Any],
+    path: str | Path,
+) -> Path:
+    """Write original and supplement validation results as separate rows."""
+    source_validation = report.get("source_validation")
+    if not isinstance(source_validation, Mapping):
+        raise ValueError("mini report has no source-separated validation")
+    original = source_validation.get("primary_original_gold", {})
+    supplement = source_validation.get("supplement_retry_abort", {})
+    if not isinstance(original, Mapping) or not isinstance(supplement, Mapping):
+        raise ValueError("mini report has invalid source validation records")
+    original_metrics = original.get("selected_epoch_metrics", {})
+    supplement_metrics = supplement.get("metrics", {})
+    if not isinstance(original_metrics, Mapping):
+        raise ValueError("original validation metrics are missing")
+    if not isinstance(supplement_metrics, Mapping):
+        raise ValueError("supplement validation metrics are missing")
+
+    rows = [
+        {
+            "source": "original_gold",
+            "rows": original.get("rows", ""),
+            "checkpoint_selection_source": True,
+            **original_metrics,
+        },
+        {
+            "source": "retry_abort_supplement_v2",
+            "rows": supplement.get("rows", ""),
+            "checkpoint_selection_source": False,
+            **supplement_metrics,
+        },
+    ]
+    fieldnames = ["source", "rows", "checkpoint_selection_source"]
+    for row in rows:
+        for name in row:
+            if name not in fieldnames:
+                fieldnames.append(name)
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
     return destination

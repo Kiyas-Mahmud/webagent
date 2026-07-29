@@ -16,7 +16,11 @@ import json
 from pathlib import Path
 
 from web_agent.config import load_config
-from web_agent.utils.results import save_mini_diagnostics_json, save_mini_result_csv
+from web_agent.utils.results import (
+    save_mini_diagnostics_json,
+    save_mini_result_csv,
+    save_source_validation_csv,
+)
 from web_agent.utils.seed import set_seed
 
 
@@ -46,6 +50,18 @@ def main() -> None:
         ),
     )
     ap.add_argument("--checkpoint", default=None)
+    ap.add_argument(
+        "--min-pixels",
+        type=int,
+        default=None,
+        help="override backbone.min_pixels for a controlled runtime profile",
+    )
+    ap.add_argument(
+        "--max-pixels",
+        type=int,
+        default=None,
+        help="override backbone.max_pixels for a controlled runtime profile",
+    )
     ap.add_argument("--train-rows", type=int, default=5_000)
     ap.add_argument("--val-rows", type=int, default=500)
     ap.add_argument("--epochs", type=int, default=5)
@@ -60,6 +76,16 @@ def main() -> None:
         help="per-class mini diagnostics, distributions, weights, and controls",
     )
     ap.add_argument(
+        "--report-json",
+        default="/kaggle/working/gold_mini_report.json",
+        help="complete machine-readable mini report",
+    )
+    ap.add_argument(
+        "--source-validation-csv",
+        default="/kaggle/working/gold_mini_source_validation.csv",
+        help="original and supplement validation metrics as separate rows",
+    )
+    ap.add_argument(
         "--reeval-json",
         default="/kaggle/working/gold_v14_reeval.json",
         help="validation-only report for a supplied historical checkpoint",
@@ -69,6 +95,13 @@ def main() -> None:
     cfg = load_config(args.config)
     if args.data_root:
         cfg["data"]["root"] = args.data_root
+    if (args.min_pixels is None) != (args.max_pixels is None):
+        ap.error("--min-pixels and --max-pixels must be supplied together")
+    if args.min_pixels is not None:
+        if args.min_pixels <= 0 or args.max_pixels < args.min_pixels:
+            ap.error("pixel bounds must satisfy 0 < min_pixels <= max_pixels")
+        cfg["backbone"]["min_pixels"] = args.min_pixels
+        cfg["backbone"]["max_pixels"] = args.max_pixels
     if args.supplement_root:
         if args.stage in {"reeval", "eval"}:
             ap.error("--supplement-root is training/smoke-only")
@@ -108,9 +141,21 @@ def main() -> None:
         )
         csv_path = save_mini_result_csv(report, args.result_csv)
         diagnostics_path = save_mini_diagnostics_json(report, args.diagnostics_json)
+        source_validation_path = save_source_validation_csv(
+            report,
+            args.source_validation_csv,
+        )
+        report_path = Path(args.report_json)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(report, indent=2),
+            encoding="utf-8",
+        )
         print(json.dumps(report, indent=2))
         print("CSV saved:", csv_path)
         print("Diagnostics saved:", diagnostics_path)
+        print("Source validation CSV saved:", source_validation_path)
+        print("Full report saved:", report_path)
         return
 
     if args.stage == "reeval":

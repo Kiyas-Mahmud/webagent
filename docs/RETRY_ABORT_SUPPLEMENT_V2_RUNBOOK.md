@@ -72,11 +72,34 @@ do not start the controlled mini.
 
 ## After PASS
 
-The next experiment is a five-epoch, 5,000-row v2.8 mini. Its 5,000 training
+After the original two-person reconciliation and overlay validation also pass,
+run all cells in:
+
+```text
+notebooks/kaggle_gold_recovery_v2_8.ipynb
+```
+
+Attach the original dataset, supplement dataset, and exactly one passed
+reconciliation output. The next experiment is a five-epoch, 5,000-row v2.8
+mini. Its 5,000 training
 rows include every accepted supplement-train row once and fill the remainder
 from original Gold using deterministic joint stratification. It selects the
 checkpoint only on original Gold validation and then reports RETRY/ABORT
 strategy and recovery-success metrics on the complete supplement validation
 source separately.
+
+Download:
+
+```text
+gold_recovery_v2_8_metrics.csv
+gold_recovery_v2_8_diagnostics.json
+gold_recovery_v2_8_report.json
+gold_recovery_v2_8_source_validation.csv
+gold_recovery_v2_8_decision.json
+```
+
+Only `status=PASS`, at least one eligible epoch, and
+`training_disposition=FULL_TRAINING_PERMITTED` allow Step 8. A completed run
+with failed gates is still a valid diagnostic result but blocks full training.
 
 The locked test split remains unavailable until the final frozen evaluation.
