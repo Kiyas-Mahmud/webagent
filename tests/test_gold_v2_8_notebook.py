@@ -41,6 +41,9 @@ def test_v2_8_notebook_is_output_free_locked_and_compiles():
     assert "TRAIN_ROWS = 5_000" in source
     assert "SUPPLEMENT_VAL_ROWS = 194" in source
     assert "include_in_primary_validation'] = False" in source
+    assert "sys.path.insert(0, str(SOURCE_ROOT))" in source
+    assert "os.environ['PYTHONPATH']" in source
+    assert "import web_agent" in source
     assert "test_rows_read" in source
     assert "source_validation" in source
     assert "FULL_TRAINING_PERMITTED" not in source
