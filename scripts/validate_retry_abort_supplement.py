@@ -28,7 +28,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--archive",
         type=Path,
-        help="original Kaggle ZIP; required for archive-level SHA-256 proof",
+        help=(
+            "original ZIP when Kaggle retains it; omitted when Kaggle mounts "
+            "the archive as already-extracted files"
+        ),
     )
     parser.add_argument("--report", type=Path, required=True)
     return parser.parse_args()
@@ -38,8 +41,12 @@ def main() -> int:
     args = parse_args()
     report = validate_supplement(args.supplement_root)
     archive_report = {
-        "status": "NOT_CHECKED",
+        "status": "NOT_AVAILABLE_KAGGLE_MOUNT_EXTRACTED",
         "expected_sha256": EXPECTED_ARCHIVE_SHA256,
+        "note": (
+            "Archive-level bytes are unavailable after Kaggle extraction; "
+            "SHA256SUMS.txt still verifies the mounted package files."
+        ),
     }
     if args.archive is not None:
         actual = sha256_file(args.archive)

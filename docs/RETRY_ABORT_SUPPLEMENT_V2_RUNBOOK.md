@@ -16,8 +16,19 @@ contrastive losses are masked for supplement rows.
 Attach:
 
 1. the existing `kiyasmahmud/web-gold-40k` dataset;
-2. the Kaggle dataset containing
-   `web_gold_40k_retry_abort_supplement_v2_kaggle.zip`.
+2. `kiyasmahmud/gold-40k-retry`.
+
+Expected Kaggle mount paths:
+
+```text
+/kaggle/input/datasets/kiyasmahmud/web-gold-40k
+/kaggle/input/datasets/kiyasmahmud/gold-40k-retry
+```
+
+Kaggle may expose the second dataset as already-extracted files instead of
+retaining `web_gold_40k_retry_abort_supplement_v2_kaggle.zip`. Both layouts are
+supported. When the ZIP is retained, its archive SHA-256 is checked. When Kaggle
+extracts it, `SHA256SUMS.txt` verifies the mounted package files instead.
 
 Use a Tesla T4. Do not use CPU or P100 for this controlled gate.
 
@@ -35,8 +46,8 @@ The notebook:
 
 1. rejects non-T4 hardware;
 2. pulls the `Code` branch;
-3. verifies the uploaded ZIP SHA-256;
-4. safely extracts only the supplement;
+3. locates either the extracted supplement or retained ZIP;
+4. verifies the ZIP hash when available and always verifies package checksums;
 5. validates 608 train rows, 194 validation rows, and 1,604 images;
 6. proves no supplement test split is read;
 7. audits 24,107 combined training rows;
