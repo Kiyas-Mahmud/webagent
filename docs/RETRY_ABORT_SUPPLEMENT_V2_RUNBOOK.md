@@ -79,9 +79,14 @@ run all cells in:
 notebooks/kaggle_gold_recovery_v2_8.ipynb
 ```
 
-Attach the original dataset, supplement dataset, and exactly one passed
-reconciliation output. The next experiment is a five-epoch, 5,000-row v2.8
-mini. Its 5,000 training
+Attach the original dataset and supplement dataset. If either reviewer requested
+a correction or exclusion, also attach exactly one passed reconciliation output.
+If both reviewers approved the checked data with no changes, the notebook
+records an explicit two-person no-change attestation instead and does not apply
+an overlay. This attestation must be reported honestly as lacking a row-level
+reconciliation ledger; it must not be described as an artifact-verified overlay.
+
+The next experiment is a five-epoch, 5,000-row v2.8 mini. Its 5,000 training
 rows include every accepted supplement-train row once and fill the remainder
 from original Gold using deterministic joint stratification. It selects the
 checkpoint only on original Gold validation and then reports RETRY/ABORT

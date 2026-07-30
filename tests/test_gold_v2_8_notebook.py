@@ -34,6 +34,10 @@ def test_v2_8_notebook_is_output_free_locked_and_compiles():
     assert "qwen2vl_2b_gold_v2_8.yaml" in source
     assert "gold-40k-retry" in source
     assert "review_reconciliation_report.json" in source
+    assert "NO_CHANGE_REVIEW_CONFIRMED = True" in source
+    assert "NO_CHANGE_REVIEWER_COUNT = 2" in source
+    assert "two_person_manual_no_change_attestation" in source
+    assert "no row-level reconciliation" in source
     assert "'--train-rows', str(TRAIN_ROWS)" in source
     assert "'--val-rows', str(ORIGINAL_VAL_ROWS)" in source
     assert "'--epochs', str(EPOCHS)" in source
