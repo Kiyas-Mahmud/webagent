@@ -250,6 +250,17 @@ def build_gold_components(
     )
 
 
+def _training_autocast_dtype(cfg: dict):
+    precision = str(cfg["optim"].get("mixed_precision", "fp16")).lower()
+    if precision == "bf16":
+        if not torch.cuda.is_bf16_supported():
+            raise RuntimeError("bf16 was requested but this GPU does not support it")
+        return torch.bfloat16
+    if precision == "fp16":
+        return torch.float16
+    raise ValueError("optim.mixed_precision must be 'fp16' or 'bf16'")
+
+
 def run_gold_bbox_audit(cfg: dict) -> dict:
     """Audit bbox geometry and decide whether training can safely continue.
 
@@ -1091,7 +1102,10 @@ def run_gold_smoke(
         ],
         weight_decay=cfg["optim"].get("weight_decay", 0.01),
     )
-    scaler = torch.amp.GradScaler("cuda")
+    autocast_dtype = _training_autocast_dtype(cfg)
+    scaler = torch.amp.GradScaler(
+        "cuda", enabled=autocast_dtype == torch.float16
+    )
     probes = {
         "bbox": model.action_head.bbox.weight,
         "strategy": model.failure_head.recovery.weight,
@@ -1125,7 +1139,7 @@ def run_gold_smoke(
     post_images = 0
     bbox_rows = 0
     for batch in loader:
-        with torch.autocast("cuda", dtype=torch.float16):
+        with torch.autocast("cuda", dtype=autocast_dtype):
             predictions = model(batch)
             device_batch = {
                 key: value.to(components.device) if torch.is_tensor(value) else value
@@ -1779,7 +1793,7 @@ def _verify_checkpoint_roundtrip(
     """Perturb critical heads/adapters, reload, and prove their logits return."""
     trainer.model.eval()
     batch = next(iter(val_loader))
-    with torch.autocast("cuda", dtype=torch.float16):
+    with torch.autocast("cuda", dtype=trainer.autocast_dtype):
         original = trainer.model(batch)
         keys = ["action_type", "bbox", "recovery", "recovery_outcome"]
         if "bbox_cxcywh" in original:
@@ -1804,7 +1818,7 @@ def _verify_checkpoint_roundtrip(
         parameter.add_(0.25)
     trainer.load_checkpoint(checkpoint, resume_training=False)
     trainer.model.eval()
-    with torch.autocast("cuda", dtype=torch.float16):
+    with torch.autocast("cuda", dtype=trainer.autocast_dtype):
         restored = trainer.model(batch)
     mismatched = [
         key for key in keys

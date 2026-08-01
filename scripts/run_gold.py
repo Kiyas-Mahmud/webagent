@@ -2,11 +2,13 @@
 
     python scripts/run_gold.py --stage smoke
     python scripts/run_gold.py --stage mini --data-root /kaggle/input/.../gold
+    python scripts/run_gold.py --stage full --data-root /workspace/data/gold
     python scripts/run_gold.py --stage reeval --checkpoint /kaggle/input/.../best.ckpt
     python scripts/run_gold.py --stage eval  --checkpoint checkpoints/Y_QWEN2VL_2B_GOLD/best_*.ckpt
 
-Smoke and mini never read the test split. The causal gold model uses state_before
-for action/bbox/confidence-before and before+after for failure/recovery/memory.
+Smoke, mini and full never read the test split. The causal gold model uses
+state_before for action/bbox/confidence-before and before+after for
+failure/recovery/memory.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ def main() -> None:
     ap.add_argument(
         "--stage",
         required=True,
-        choices=("smoke", "mini", "reeval", "eval"),
+        choices=("smoke", "mini", "full", "reeval", "eval"),
     )
     ap.add_argument("--data-root", default=None, help="override cfg.data.root (Kaggle path)")
     ap.add_argument(
@@ -50,6 +52,19 @@ def main() -> None:
         ),
     )
     ap.add_argument("--checkpoint", default=None)
+    ap.add_argument(
+        "--resume-checkpoint",
+        default=None,
+        help="resume-safe last.ckpt for --stage full",
+    )
+    ap.add_argument(
+        "--checkpoint-root",
+        default=None,
+        help="persistent checkpoint parent directory for --stage full",
+    )
+    ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--num-workers", type=int, default=None)
+    ap.add_argument("--checkpoint-every-steps", type=int, default=None)
     ap.add_argument(
         "--min-pixels",
         type=int,
@@ -92,6 +107,11 @@ def main() -> None:
     )
     args = ap.parse_args()
 
+    if args.resume_checkpoint and args.stage != "full":
+        ap.error("--resume-checkpoint is valid only with --stage full")
+    if args.checkpoint_root and args.stage != "full":
+        ap.error("--checkpoint-root is valid only with --stage full")
+
     cfg = load_config(args.config)
     if args.data_root:
         cfg["data"]["root"] = args.data_root
@@ -118,7 +138,15 @@ def main() -> None:
                 "for locked-test eval"
             )
         cfg["data"]["review_overlay_dir"] = args.review_overlay_dir
-    seed = cfg.get("seeds", [42])[0]
+    if args.num_workers is not None:
+        if args.num_workers < 0:
+            ap.error("--num-workers cannot be negative")
+        cfg["data"]["num_workers"] = args.num_workers
+    if args.checkpoint_every_steps is not None:
+        if args.checkpoint_every_steps <= 0:
+            ap.error("--checkpoint-every-steps must be positive")
+        cfg["train"]["checkpoint_every_steps"] = args.checkpoint_every_steps
+    seed = args.seed if args.seed is not None else cfg.get("seeds", [42])[0]
     set_seed(seed)
 
     from web_agent.train.gold_stages import (
@@ -141,6 +169,41 @@ def main() -> None:
         )
         csv_path = save_mini_result_csv(report, args.result_csv)
         diagnostics_path = save_mini_diagnostics_json(report, args.diagnostics_json)
+        source_validation_path = save_source_validation_csv(
+            report,
+            args.source_validation_csv,
+        )
+        report_path = Path(args.report_json)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(report, indent=2),
+            encoding="utf-8",
+        )
+        print(json.dumps(report, indent=2))
+        print("CSV saved:", csv_path)
+        print("Diagnostics saved:", diagnostics_path)
+        print("Source validation CSV saved:", source_validation_path)
+        print("Full report saved:", report_path)
+        return
+
+    if args.stage == "full":
+        if args.checkpoint_root is None:
+            ap.error("--checkpoint-root is required for the full stage")
+        from web_agent.train.gold_full import run_gold_full
+
+        report = run_gold_full(
+            cfg,
+            epochs=args.epochs,
+            seed=seed,
+            checkpoint_root=args.checkpoint_root,
+            metrics_csv=args.result_csv,
+            resume_checkpoint=args.resume_checkpoint,
+        )
+        csv_path = save_mini_result_csv(report, args.result_csv)
+        diagnostics_path = save_mini_diagnostics_json(
+            report,
+            args.diagnostics_json,
+        )
         source_validation_path = save_source_validation_csv(
             report,
             args.source_validation_csv,

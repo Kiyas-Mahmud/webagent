@@ -1,10 +1,10 @@
 """QLoRA Trainer (full-training spec). Reused by every model; the notebook drives it.
 
 - Two AdamW param groups: LoRA+adapter (lr_lora) and the 5 heads (lr_heads).
-- Cosine schedule + 10% warmup, fp16 GradScaler, grad accumulation, grad clip 1.0.
+- Cosine schedule + 10% warmup, fp16/bf16 autocast, grad accumulation, grad clip 1.0.
 - Validate every epoch; early-stop on the configured validation metric.
-- Rolling resume checkpoint every 500 steps; keep top-k epoch checkpoints.
-- Checkpoint = LoRA + adapter + 5 heads + optimizer/scheduler/scaler state.
+- Rolling resume checkpoints preserve the exact next physical batch in an epoch.
+- Checkpoint = model, loss, optimizer/scheduler/scaler, RNG, history and resume state.
 - Append all metrics to a CSV every epoch.
 """
 
@@ -371,7 +371,25 @@ class Trainer:
         self.csv_path = Path(tr.get("metrics_csv", f"results/{cfg['name']}_metrics.csv"))
         self.keep_top_k = tr.get("keep_top_k", 3)
         self.log_every = tr.get("log_every", 50)
+        self.checkpoint_every_steps = int(
+            tr.get(
+                "checkpoint_every_steps",
+                cfg.get("checkpoint_every_steps", 500),
+            )
+        )
+        if self.checkpoint_every_steps <= 0:
+            raise ValueError("checkpoint_every_steps must be positive")
         self.steps_per_epoch = math.ceil(len(train_loader) / self.accum)
+
+        precision = str(o.get("mixed_precision", "fp16")).lower()
+        if precision not in {"fp16", "bf16"}:
+            raise ValueError("optim.mixed_precision must be 'fp16' or 'bf16'")
+        if precision == "bf16" and not torch.cuda.is_bf16_supported():
+            raise RuntimeError("bf16 was requested but this GPU does not support it")
+        self.mixed_precision = precision
+        self.autocast_dtype = (
+            torch.bfloat16 if precision == "bf16" else torch.float16
+        )
 
         self.opt = torch.optim.AdamW([
             {"params": model.lora_parameters(), "lr": o["lr_lora"]},
@@ -385,23 +403,29 @@ class Trainer:
         warmup = int(total * o.get("warmup_ratio", 0.1))
         from transformers import get_cosine_schedule_with_warmup
         self.sched = get_cosine_schedule_with_warmup(self.opt, warmup, total)
-        self.scaler = torch.amp.GradScaler("cuda")
+        self.scaler = torch.amp.GradScaler(
+            "cuda", enabled=precision == "fp16"
+        )
 
         self.best: list[tuple[float, Path]] = []   # (metric, path), kept top-k
         self.epoch_checkpoints: dict[int, Path] = {}
         self.global_step = 0
         self.start_epoch = 0
+        self.resume_batch_in_epoch = 0
+        self.resume_epoch_state: dict | None = None
+        self.history: list[dict] = []
+        self.diagnostics_history: list[dict] = []
+        self.best_metric = float("-inf")
+        self.bad_epochs = 0
+        self.resumed_from: str | None = None
 
     def _train_epoch(self, epoch: int) -> dict[str, float]:
         self.model.train()
         if self.train_sampler is not None:
             self.train_sampler.set_epoch(epoch)
-        self.opt.zero_grad()
+        self.opt.zero_grad(set_to_none=True)
         t0 = time.time()
-        done = 0  # optimizer steps this epoch
-        loss_sum = 0.0
-        term_sums: dict[str, float] = {}
-        batch_count = 0
+        done = 0  # optimizer steps completed in this process for this epoch
         probe_parameters = {
             "bbox": self.model.action_head.bbox.weight,
             "strategy": self.model.failure_head.recovery.weight,
@@ -418,19 +442,55 @@ class Trainer:
             probe_parameters["grounding_adapter"] = next(
                 grounding_adapter.parameters()
             )
-        probe_before = {
-            name: parameter.detach().clone()
-            for name, parameter in probe_parameters.items()
-        }
-        first_gradient_norms: dict[str, float] = {}
+        restored = (
+            self.resume_epoch_state
+            if self.resume_epoch_state
+            and int(self.resume_epoch_state.get("epoch", -1)) == epoch
+            else None
+        )
+        if restored is not None:
+            loss_sum = float(restored["loss_sum"])
+            term_sums = {
+                str(name): float(value)
+                for name, value in restored["term_sums"].items()
+            }
+            batch_count = int(restored["batch_count"])
+            probe_before = {
+                name: restored["probe_before"][name].to(
+                    parameter.device, dtype=parameter.dtype
+                )
+                for name, parameter in probe_parameters.items()
+            }
+            first_gradient_norms = {
+                str(name): float(value)
+                for name, value in restored.get(
+                    "first_gradient_norms", {}
+                ).items()
+            }
+            print(
+                f"resuming epoch {epoch} at physical batch "
+                f"{self.resume_batch_in_epoch}/{len(self.train_loader)}",
+                flush=True,
+            )
+        else:
+            loss_sum = 0.0
+            term_sums: dict[str, float] = {}
+            batch_count = 0
+            probe_before = {
+                name: parameter.detach().clone()
+                for name, parameter in probe_parameters.items()
+            }
+            first_gradient_norms: dict[str, float] = {}
         remainder = len(self.train_loader) % self.accum
         for i, batch in enumerate(self.train_loader):
+            if i < self.resume_batch_in_epoch:
+                continue
             denominator = (
                 remainder
                 if remainder and i >= len(self.train_loader) - remainder
                 else self.accum
             )
-            with torch.autocast("cuda", dtype=torch.float16):
+            with torch.autocast("cuda", dtype=self.autocast_dtype):
                 preds = self.model(batch)
                 terms = self.loss_fn(preds, _to_device(batch, self.device))
                 loss = terms["total"] / denominator
@@ -459,18 +519,40 @@ class Trainer:
                 )
                 self.scaler.step(self.opt)
                 self.scaler.update()
-                self.opt.zero_grad()
+                self.opt.zero_grad(set_to_none=True)
                 self.sched.step()
                 self.global_step += 1
                 done += 1
-                if done % self.log_every == 0:
+                epoch_step = math.ceil((i + 1) / self.accum)
+                if epoch_step % self.log_every == 0:
                     el = time.time() - t0
-                    eta = el / done * (self.steps_per_epoch - done)
-                    print(f"epoch {epoch} | step {done}/{self.steps_per_epoch} | "
+                    remaining = max(self.steps_per_epoch - epoch_step, 0)
+                    eta = el / max(done, 1) * remaining
+                    print(f"epoch {epoch} | step {epoch_step}/{self.steps_per_epoch} | "
                           f"loss {terms['total'].item():.3f} | "
                           f"elapsed {el/60:.1f}min | ETA {eta/60:.1f}min", flush=True)
-                if self.global_step % 500 == 0:
-                    self._save(self.ckpt_dir / "last.ckpt", epoch, f1=None)
+                if self.global_step % self.checkpoint_every_steps == 0:
+                    epoch_state = {
+                        "epoch": epoch,
+                        "next_batch_index": i + 1,
+                        "loss_sum": loss_sum,
+                        "term_sums": term_sums,
+                        "batch_count": batch_count,
+                        "probe_before": {
+                            name: value.detach().cpu()
+                            for name, value in probe_before.items()
+                        },
+                        "first_gradient_norms": first_gradient_norms,
+                    }
+                    self._save(
+                        self.ckpt_dir / "last.ckpt",
+                        epoch,
+                        f1=None,
+                        batch_in_epoch=i + 1,
+                        epoch_state=epoch_state,
+                    )
+        self.resume_batch_in_epoch = 0
+        self.resume_epoch_state = None
         denominator = max(batch_count, 1)
         stats = {"train_loss": loss_sum / denominator}
         loss_weight_keys = {
@@ -513,17 +595,22 @@ class Trainer:
         return stats
 
     def fit(self) -> dict:
-        bad = 0
-        best_metric = -1.0
-        history = []
-        diagnostics_history = []
         for epoch in range(self.start_epoch, self.epochs):
+            if self.bad_epochs >= self.patience:
+                print(
+                    "resume checkpoint already satisfied the early-stop "
+                    "condition; no additional epoch will run",
+                    flush=True,
+                )
+                break
             train_stats = self._train_epoch(epoch)
             preds = collect_predictions(self.model, self.val_loader, self.device)
             m = compute_metrics(preds)
             m.update(train_stats)
-            history.append({"epoch": epoch, **m})
-            diagnostics_history.append({"epoch": epoch, **build_diagnostics(preds)})
+            self.history.append({"epoch": epoch, **m})
+            self.diagnostics_history.append(
+                {"epoch": epoch, **build_diagnostics(preds)}
+            )
             self._log_csv(epoch, m)
             print(
                 f"epoch {epoch}: train_loss={train_stats['train_loss']:.4f}  "
@@ -535,28 +622,40 @@ class Trainer:
             )
 
             metric = m[self.early_stop_metric]
-            self._maybe_keep(epoch, metric)
-            if metric > best_metric + 1e-4:
-                best_metric = metric
-                bad = 0
+            if metric > self.best_metric + 1e-4:
+                self.best_metric = metric
+                self.bad_epochs = 0
             else:
-                bad += 1
-                if bad >= self.patience:
-                    print(
-                        f"early stop at epoch {epoch} "
-                        f"(no val {self.early_stop_metric} gain for {bad})"
-                    )
-                    break
+                self.bad_epochs += 1
+            self._maybe_keep(epoch, metric)
+            self._save(
+                self.ckpt_dir / "last.ckpt",
+                epoch,
+                metric,
+                epoch_complete=True,
+            )
+            if self.bad_epochs >= self.patience:
+                print(
+                    f"early stop at epoch {epoch} "
+                    f"(no val {self.early_stop_metric} gain for "
+                    f"{self.bad_epochs})"
+                )
+                break
         return {
             "early_stop_metric": self.early_stop_metric,
-            "best_metric": best_metric,
+            "best_metric": self.best_metric,
             "checkpoints": [str(path) for _, path in self.best],
             "epoch_checkpoints": {
                 str(epoch): str(path) for epoch, path in sorted(self.epoch_checkpoints.items())
             },
-            "best_epochs": _best_epochs(history),
-            "history": history,
-            "diagnostics": diagnostics_history,
+            "best_epochs": _best_epochs(self.history),
+            "history": self.history,
+            "diagnostics": self.diagnostics_history,
+            "resume": {
+                "resumed": self.resumed_from is not None,
+                "checkpoint": self.resumed_from,
+                "exact_next_batch_restored": self.resumed_from is not None,
+            },
         }
 
     # ---- resumable checkpointing: model + optimizer/scheduler/scaler ----
@@ -576,6 +675,21 @@ class Trainer:
             "scheduler": self.sched.state_dict(),
             "scaler": self.scaler.state_dict(),
             "config": self.cfg,
+            "history": self.history,
+            "diagnostics_history": self.diagnostics_history,
+            "best": [
+                {"metric": float(metric), "path": str(path)}
+                for metric, path in self.best
+            ],
+            "epoch_checkpoints": {
+                str(epoch): str(path)
+                for epoch, path in self.epoch_checkpoints.items()
+            },
+            "early_stop_state": {
+                "best_metric": self.best_metric,
+                "bad_epochs": self.bad_epochs,
+            },
+            "mixed_precision": self.mixed_precision,
             "rng_state": {
                 "python": random.getstate(),
                 "numpy": {
@@ -592,14 +706,27 @@ class Trainer:
             },
         }
 
-    def _save(self, path: Path, epoch: int, f1, epoch_complete: bool = False) -> None:
+    def _save(
+        self,
+        path: Path,
+        epoch: int,
+        f1,
+        epoch_complete: bool = False,
+        batch_in_epoch: int = 0,
+        epoch_state: dict | None = None,
+    ) -> None:
         s = self._state()
         s["epoch"] = epoch
         s["step"] = self.global_step
         s["selection_metric"] = self.early_stop_metric
         s["selection_value"] = f1
         s["epoch_complete"] = epoch_complete
-        torch.save(s, path)
+        s["batch_in_epoch"] = batch_in_epoch
+        s["epoch_state"] = epoch_state
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        torch.save(s, temporary)
+        temporary.replace(path)
 
     def load_checkpoint(self, path: str | Path, resume_training: bool = True) -> dict:
         """Restore every trained module; optionally restore optimizer progress too."""
@@ -622,7 +749,42 @@ class Trainer:
             self.scaler.load_state_dict(checkpoint["scaler"])
             self.global_step = int(checkpoint.get("step", 0))
             epoch = int(checkpoint.get("epoch", 0))
-            self.start_epoch = epoch + int(bool(checkpoint.get("epoch_complete", False)))
+            epoch_complete = bool(checkpoint.get("epoch_complete", False))
+            self.start_epoch = epoch + int(epoch_complete)
+            self.resume_batch_in_epoch = (
+                0 if epoch_complete else int(checkpoint.get("batch_in_epoch", 0))
+            )
+            self.resume_epoch_state = (
+                None if epoch_complete else checkpoint.get("epoch_state")
+            )
+            if self.resume_batch_in_epoch and self.resume_epoch_state is None:
+                raise ValueError(
+                    "mid-epoch checkpoint lacks the partial epoch accumulator"
+                )
+            self.history = [dict(row) for row in checkpoint.get("history", [])]
+            self.diagnostics_history = [
+                dict(row)
+                for row in checkpoint.get("diagnostics_history", [])
+            ]
+            self.best = [
+                (
+                    float(item["metric"]),
+                    self.ckpt_dir / Path(item["path"]).name,
+                )
+                for item in checkpoint.get("best", [])
+            ]
+            self.epoch_checkpoints = {
+                int(saved_epoch): self.ckpt_dir / Path(saved_path).name
+                for saved_epoch, saved_path in checkpoint.get(
+                    "epoch_checkpoints", {}
+                ).items()
+            }
+            early_state = checkpoint.get("early_stop_state", {})
+            self.best_metric = float(
+                early_state.get("best_metric", float("-inf"))
+            )
+            self.bad_epochs = int(early_state.get("bad_epochs", 0))
+            self.resumed_from = str(Path(path).resolve())
             rng_state = checkpoint.get("rng_state")
             if rng_state is not None:
                 random.setstate(rng_state["python"])
@@ -645,7 +807,6 @@ class Trainer:
         if len(self.best) < self.keep_top_k or metric > min(x[0] for x in self.best):
             metric_name = self.early_stop_metric.replace("_", "-")
             path = self.ckpt_dir / f"best_e{epoch}_{metric_name}{metric:.3f}.ckpt"
-            self._save(path, epoch, metric, epoch_complete=True)
             self.epoch_checkpoints[epoch] = path
             self.best.append((metric, path))
             self.best.sort(key=lambda x: x[0], reverse=True)
@@ -655,6 +816,7 @@ class Trainer:
                     if kept_path == p:
                         del self.epoch_checkpoints[kept_epoch]
             self.best = self.best[:self.keep_top_k]
+            self._save(path, epoch, metric, epoch_complete=True)
 
     def _log_csv(self, epoch: int, m: dict) -> None:
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)

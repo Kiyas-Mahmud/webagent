@@ -249,7 +249,7 @@ class WebAgentModel(nn.Module):
             # Keep the frozen/quantized VLM in its native T4 precision, then run
             # every trainable localization component in FP32. This prevents the
             # scaled-FP16 gradient overflow observed in the v2.2 probe.
-            with torch.autocast("cuda", dtype=torch.float16):
+            with torch.autocast("cuda", dtype=self.encoder.dtype):
                 encoded = self.encoder(batch, prefix="pre_")
             with torch.autocast("cuda", enabled=False):
                 pre_encoded = self._project_encoder_output(encoded)

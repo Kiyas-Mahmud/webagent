@@ -971,3 +971,23 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   not directly comparable after corrections/exclusions. The selected v2.7 checkpoint must first
   be re-evaluated on the exact same checksummed overlay; the subsequent mini report records this
   requirement and provenance, and the CLI forbids a development overlay during locked-test eval.
+
+## 2026-08-01 - DGX full-training workflow prepared
+- Accepted the time-limited v2.8 mini only with an explicit protocol deviation: epochs 0-3
+  completed and epoch 3 passed all eight registered gates; interrupted epoch 4 is not reported as
+  a formal five-epoch completion. The first full seed remains Qwen2-VL-2B, seed 42.
+- Added a real reviewed-Gold `full` stage. It trains all 24,107 combined train rows, selects only
+  on all 7,861 original-Gold validation rows, reports all 194 RETRY/ABORT validation rows
+  separately, retains every completed epoch checkpoint, exports CSV/JSON evidence and reads zero
+  locked-test rows.
+- Strengthened `Trainer` recovery for lab interruptions. `last.ckpt` now records the exact next
+  physical batch, partial epoch accumulators, all model/loss/optimizer/scheduler/scaler states,
+  Python/NumPy/Torch RNG, completed history, early-stopping state and checkpoint lineage. Resume
+  no longer restarts an incomplete epoch from batch zero.
+- Added `notebooks/dgx_gold_full_training.ipynb` and
+  `docs/DGX_FULL_TRAINING_RUNBOOK.md`. They use immutable Hugging Face dataset revisions,
+  persistent DGX storage, automatic same-run resume, per-epoch and cross-model CSVs, source-aware
+  validation and optional explicit artifact upload.
+- Added a causal Gold v2.8 candidate config for Qwen2.5-VL-3B. Its full run remains blocked until
+  that backbone completes its own smoke and controlled mini. Dual-encoder, InternVL, ablation and
+  baseline entries remain honestly blocked because their implementations are incomplete.

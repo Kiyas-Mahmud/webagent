@@ -9,7 +9,7 @@ from typing import Any, Mapping
 
 
 def save_mini_result_csv(report: Mapping[str, Any], path: str | Path) -> Path:
-    """Write one validation/training result row per completed mini epoch.
+    """Write one validation/training result row per completed epoch.
 
     The trainer's JSON report remains the complete machine-readable artifact. This
     CSV is the compact table used for Kaggle download, manual review, and plots.
@@ -40,7 +40,7 @@ def save_mini_result_csv(report: Mapping[str, Any], path: str | Path) -> Path:
         report.get("unconstrained_best_metric", best_metric)
     )
     context = {
-        "stage": "mini",
+        "stage": report.get("stage", "mini"),
         "status": report.get("status", ""),
         "train_rows": report.get("train_rows", ""),
         "val_rows": report.get("val_rows", ""),
@@ -101,7 +101,7 @@ def save_mini_diagnostics_json(report: Mapping[str, Any], path: str | Path) -> P
     if not isinstance(diagnostics, list) or not diagnostics:
         raise ValueError("mini report has no detailed diagnostics to export")
     payload = {
-        "stage": "mini",
+        "stage": report.get("stage", "mini"),
         "status": report.get("status", ""),
         "train_rows": report.get("train_rows", ""),
         "val_rows": report.get("val_rows", ""),
