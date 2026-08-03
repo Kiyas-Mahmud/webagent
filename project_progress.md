@@ -991,3 +991,14 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Added a causal Gold v2.8 candidate config for Qwen2.5-VL-3B. Its full run remains blocked until
   that backbone completes its own smoke and controlled mini. Dual-encoder, InternVL, ablation and
   baseline entries remain honestly blocked because their implementations are incomplete.
+
+## 2026-08-03 - AIUB local-Kaggle full-run source added
+- Extended the DGX full-training notebook with an explicit `local` data-source mode for the
+  existing AIUB checkout and Kaggle-downloaded original/supplement folders. Local mode no longer
+  requires Hugging Face dataset placeholders or `HF_TOKEN`, while immutable Hugging Face mode
+  remains available.
+- The notebook recursively resolves exactly one extracted original and supplement root, reports
+  ZIP archives when extraction is incomplete, records the resolved local source in the immutable
+  run contract, and reports but never opens a locally present locked-test JSON.
+- The AIUB defaults use `/home/aiub/kiyas/webagent` for code and
+  `/home/aiub/kiyas/webagent_full` for persistent data, checkpoints, CSVs and reports.

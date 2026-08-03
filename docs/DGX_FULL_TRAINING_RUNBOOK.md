@@ -26,13 +26,35 @@ quality gates. Epoch 4 was interrupted by the Kaggle T4 quota. This is an
 explicit compute-limit protocol deviation, not a formal five-epoch completion.
 The full-run contract records that limitation.
 
-## 2. Required Hugging Face sources
+## 2. Data-source options
+
+The notebook supports two explicit modes:
+
+- `DATA_SOURCE = "local"` for datasets already downloaded from Kaggle and
+  extracted on the DGX; and
+- `DATA_SOURCE = "huggingface"` for immutable Hugging Face snapshots.
+
+For the AIUB lab checkout, the default local paths are:
+
+```text
+/home/aiub/kiyas/webagent
+/home/aiub/kiyas/webagent_full/data/original
+/home/aiub/kiyas/webagent_full/data/supplement
+```
+
+Local mode does not require `HF_TOKEN` unless completed artifacts are uploaded
+to Hugging Face. The notebook searches recursively below the two data folders,
+requires exactly one compatible extracted root for each source, and reports
+any ZIP files when extraction is still required. A locally present
+`split_test.json` is reported but never opened by the full-training pipeline.
+
+### 2.1 Required Hugging Face sources
 
 Create two private Hugging Face dataset repositories. Do not put an access
 token inside the notebook or Git repository. Export it in the lab environment
 as `HF_TOKEN`.
 
-### 2.1 Original reviewed Gold repository
+#### 2.1.1 Original reviewed Gold repository
 
 Recommended repository ID:
 
@@ -59,7 +81,7 @@ The original dataset must remain extracted. Do not upload only a ZIP: training
 needs random access to individual images, and keeping both a ZIP and its
 extracted copy doubles storage use.
 
-### 2.2 Accepted RETRY/ABORT supplement repository
+#### 2.1.2 Accepted RETRY/ABORT supplement repository
 
 Recommended repository ID:
 
@@ -84,7 +106,7 @@ Upload the complete accepted package, including every file listed by
 counts, all referenced images, identity separation, direct causal transitions,
 loss masks and original/supplement overlap before training.
 
-### 2.3 Model sources downloaded automatically
+### 2.2 Model sources downloaded automatically
 
 The notebook downloads model/processor files from these public model
 repositories when their registered model is selected:
@@ -228,14 +250,15 @@ mistaken for completed experimental evidence.
 
 ## 8. Run order
 
-1. Upload both dataset repositories and record their commit SHAs.
-2. Set `HF_TOKEN` in the DGX environment.
-3. Open `notebooks/dgx_gold_full_training.ipynb`.
-4. Edit only the configuration cell: repository IDs/revisions and persistent
-   workspace path.
-5. Keep `ACTIVE_MODEL_ID = "qwen2vl_2b_gold_v2_8"` for the first run.
-6. Run all cells.
-7. If interrupted, rerun all cells with the same settings; auto-resume will use
+1. For local mode, download and extract both Kaggle datasets below the two
+   configured local search roots. For Hugging Face mode, upload both dataset
+   repositories, record their commit SHAs and set `HF_TOKEN`.
+2. Open `notebooks/dgx_gold_full_training.ipynb`.
+3. Edit only the configuration cell. Keep `DATA_SOURCE = "local"` for the AIUB
+   Kaggle downloads, or select `"huggingface"` and set repository revisions.
+4. Keep `ACTIVE_MODEL_ID = "qwen2vl_2b_gold_v2_8"` for the first run.
+5. Run all cells.
+6. If interrupted, rerun all cells with the same settings; auto-resume will use
    `last.ckpt`.
-8. After completion, preserve the entire seed directory and review the selected
+7. After completion, preserve the entire seed directory and review the selected
    validation checkpoint before opening the locked test.

@@ -42,7 +42,13 @@ def test_dgx_full_notebook_is_locked_resume_safe_and_compiles():
     assert "source_validation.csv" in source
     assert "full_model_results.csv" in source
     assert "ignore_patterns=['split_test.json', '**/split_test.json']" in source
-    assert "assert not (ORIGINAL_ROOT / 'split_test.json').exists()" in source
+    assert "DATA_SOURCE = 'local'" in source
+    assert "LOCAL_REPOSITORY_ROOT = Path('/home/aiub/kiyas/webagent')" in source
+    assert "LOCAL_ORIGINAL_SEARCH_ROOT" in source
+    assert "LOCAL_SUPPLEMENT_SEARCH_ROOT" in source
+    assert "local_kaggle_download" in source
+    assert "Locked test JSON is present locally but will not be opened" in source
+    assert "Extract the Kaggle archive before training" in source
     assert "test_rows_read" in source
     assert "24_107" in source
     assert "7_861" in source
