@@ -34,6 +34,7 @@ def test_qwen2_gold_dgx_profile_restores_mini_pixels_and_effective_batch():
     assert cfg["optim"]["batch_size"] == 16
     assert cfg["optim"]["grad_accum"] == 2
     assert cfg["optim"]["batch_size"] * cfg["optim"]["grad_accum"] == 32
+    assert cfg["train"]["epochs"] == 10
     assert cfg["train"]["checkpoint_every_steps"] == 50
     assert cfg["train"]["execution_profile"] == "dgx_gb10_full_v1"
     assert cfg["data"]["causal_routing"] is True
@@ -52,7 +53,7 @@ def test_dgx_full_notebook_is_locked_resume_safe_and_compiles():
     )
 
     assert "ACTIVE_MODEL_ID = 'qwen2vl_2b_gold_v2_8_dgx'" in source
-    assert "MAX_EPOCHS = 15" in source
+    assert "MAX_EPOCHS = 10" in source
     assert "MIN_PIXELS = 50_176" in source
     assert "MAX_PIXELS = 200_704" in source
     assert "PHYSICAL_BATCH_SIZE = 16" in source

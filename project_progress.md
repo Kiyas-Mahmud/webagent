@@ -1079,7 +1079,8 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   not pixel-profile-equivalent to the accepted v2.8 mini.
 - Added `configs/backbones/qwen2vl_2b_gold_v2_8_dgx.yaml`. It restores the accepted mini
   pixel bounds (50,176-200,704), uses physical batch 16 with accumulation 2 to preserve
-  effective batch 32, and saves `last.ckpt` every 50 optimizer steps.
+  effective batch 32, caps the run at 10 epochs with the existing early-stopping rule, and
+  saves `last.ckpt` every 50 optimizer steps.
 - Updated `notebooks/dgx_gold_full_training.ipynb` to use a new
   `qwen2vl_2b_gold_v2_8_dgx` run directory, freeze the complete execution profile in the run
   contract, repeat the pixel bounds on the CLI, and run a fail-closed 16-row profile smoke
