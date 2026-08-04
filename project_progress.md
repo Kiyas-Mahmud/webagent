@@ -1065,3 +1065,28 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - Owner runs `notebooks/dgx_gold_full_training.ipynb` themselves with no config-cell edits.
   Model is already cached (4.2 GB) under `/home/aiub/kiyas/webagent_full/hf_cache`.
 - Smoke emits no per-step timing; epoch ETA will appear in the trainer's per-step log.
+
+## 2026-08-04 - DGX full-run runtime correction prepared
+
+- The first lab full-run attempt correctly resolved all 24,107 training rows and started
+  Qwen2-VL-2B, but epoch 0 step 50/754 took 74.4 minutes and reported 1,047.9 minutes
+  remaining. At that observed rate, one epoch would take about 18.7 hours before the
+  additional validation pass.
+- Static merged-config inspection corrected an earlier progress-note mistake: generic Gold
+  v2.8 inherits the v2.6 bbox-diagnostic override (`min_pixels: 100352`,
+  `max_pixels: 501760`), not the accepted mini's 448-square maximum. The full notebook did
+  not override those inherited values, so the first attempt was both unnecessarily slow and
+  not pixel-profile-equivalent to the accepted v2.8 mini.
+- Added `configs/backbones/qwen2vl_2b_gold_v2_8_dgx.yaml`. It restores the accepted mini
+  pixel bounds (50,176-200,704), uses physical batch 16 with accumulation 2 to preserve
+  effective batch 32, and saves `last.ckpt` every 50 optimizer steps.
+- Updated `notebooks/dgx_gold_full_training.ipynb` to use a new
+  `qwen2vl_2b_gold_v2_8_dgx` run directory, freeze the complete execution profile in the run
+  contract, repeat the pixel bounds on the CLI, and run a fail-closed 16-row profile smoke
+  before full training. The earlier high-resolution run and its artifacts are not modified
+  or eligible for automatic resume into this profile.
+- Local verification is configuration/static only because this Windows environment has no
+  CUDA runtime: 24 focused tests pass, the merged DGX profile is exactly
+  50,176-200,704 / batch 16 / accumulation 2 / checkpoint 50, the notebook has zero saved
+  outputs, and every code cell parses. The DGX smoke remains the required hardware proof
+  before the long run begins.

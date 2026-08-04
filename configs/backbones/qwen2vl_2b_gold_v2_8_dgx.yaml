@@ -1,0 +1,22 @@
+# Qwen2-VL-2B Gold v2.8 execution profile for the AIUB NVIDIA DGX Spark.
+#
+# The accepted v2.8 mini used the 224-448px pixel budget.  The generic v2.8
+# inheritance chain also carries a later bbox diagnostic override up to 501,760
+# pixels, which made the first full-run attempt take about 18.7 hours per epoch.
+# This profile restores the accepted mini pixel bounds and uses the GB10 memory
+# to increase the physical batch while preserving effective batch size 32.
+name: Y_QWEN2VL_2B_GOLD_V2_8_DGX
+extends: backbones/qwen2vl_2b_gold_v2_8.yaml
+
+backbone:
+  min_pixels: 50176
+  max_pixels: 200704
+
+optim:
+  batch_size: 16
+  grad_accum: 2
+  mixed_precision: fp16
+
+train:
+  checkpoint_every_steps: 50
+  execution_profile: dgx_gb10_full_v1

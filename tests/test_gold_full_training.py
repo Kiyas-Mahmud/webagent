@@ -24,6 +24,25 @@ def test_qwen25_gold_candidate_keeps_v2_8_causal_contract():
     )
 
 
+def test_qwen2_gold_dgx_profile_restores_mini_pixels_and_effective_batch():
+    cfg = load_config("configs/backbones/qwen2vl_2b_gold_v2_8_dgx.yaml")
+
+    assert cfg["name"] == "Y_QWEN2VL_2B_GOLD_V2_8_DGX"
+    assert cfg["backbone"]["vlm_model"] == "Qwen/Qwen2-VL-2B-Instruct"
+    assert cfg["backbone"]["min_pixels"] == 50_176
+    assert cfg["backbone"]["max_pixels"] == 200_704
+    assert cfg["optim"]["batch_size"] == 16
+    assert cfg["optim"]["grad_accum"] == 2
+    assert cfg["optim"]["batch_size"] * cfg["optim"]["grad_accum"] == 32
+    assert cfg["train"]["checkpoint_every_steps"] == 50
+    assert cfg["train"]["execution_profile"] == "dgx_gb10_full_v1"
+    assert cfg["data"]["causal_routing"] is True
+    assert cfg["data"]["recovery_transitions"] is True
+    assert cfg["train"]["quality_selection_rule"] == (
+        "all_gates_then_outcome_mcc"
+    )
+
+
 def test_dgx_full_notebook_is_locked_resume_safe_and_compiles():
     path = Path("notebooks/dgx_gold_full_training.ipynb")
     notebook = json.loads(path.read_text(encoding="utf-8"))
@@ -32,9 +51,18 @@ def test_dgx_full_notebook_is_locked_resume_safe_and_compiles():
         for cell in notebook["cells"]
     )
 
-    assert "ACTIVE_MODEL_ID = 'qwen2vl_2b_gold_v2_8'" in source
+    assert "ACTIVE_MODEL_ID = 'qwen2vl_2b_gold_v2_8_dgx'" in source
     assert "MAX_EPOCHS = 15" in source
-    assert "CHECKPOINT_EVERY_STEPS = 250" in source
+    assert "MIN_PIXELS = 50_176" in source
+    assert "MAX_PIXELS = 200_704" in source
+    assert "PHYSICAL_BATCH_SIZE = 16" in source
+    assert "GRAD_ACCUM = 2" in source
+    assert "EFFECTIVE_BATCH_SIZE = 32" in source
+    assert "CHECKPOINT_EVERY_STEPS = 50" in source
+    assert "qwen2vl_2b_gold_v2_8_dgx.yaml" in source
+    assert "profile_smoke_pass.json" in source
+    assert "--min-pixels" in source
+    assert "--max-pixels" in source
     assert "--stage', 'full'" in source
     assert "--resume-checkpoint" in source
     assert "last.ckpt" in source
