@@ -1,9 +1,9 @@
 """Unified VLM encoder -> pooled [B, D] (SPEC 4.5, the adapter path).
 
-Foundation backbone: Qwen2-VL-2B-Instruct in 4-bit QLoRA. The VLM fuses image+text
-internally, so CROSS-ATTENTION IS SKIPPED — a single adapter Linear(D->768)
-(see ../adapter.py) maps the pooled output into the shared heads. D is read from
-the model config at load (1536 for Qwen2-VL-2B).
+Official Hugging Face Qwen2/2.5-VL and InternVL-HF backbones fuse image and text
+internally, so cross-attention is skipped. A single adapter Linear(D->768)
+(see ../adapter.py) maps the pooled output into the unchanged shared heads. D
+is validated against the pinned model revision at load time.
 
 QLoRA: 4-bit base (frozen) + LoRA on q_proj/v_proj (trainable). When LoRA is
 applied the base stays frozen but the LoRA params require grad, so forward runs
@@ -20,17 +20,23 @@ import contextlib
 import torch
 import torch.nn as nn
 
-from web_agent.models.spatial import normalized_spatial_coordinates
+from web_agent.models.encoders.vlm_contract import get_vlm_contract
+from web_agent.models.spatial import (
+    normalized_fixed_square_coordinates,
+    normalized_spatial_coordinates,
+)
 
 
 class VLMEncoder(nn.Module):
     def __init__(self, cfg: dict):
         super().__init__()
-        # AutoModelForImageTextToText auto-selects the right class for any
-        # Qwen-VL (Qwen2-VL-2B, Qwen2.5-VL-3B, ...) — backbone-agnostic loader.
+        # The official Hugging Face formats for Qwen2/2.5-VL and InternVL3.5
+        # share this auto-model API. Family-specific tensor differences stay in
+        # VLMContract instead of being scattered through the encoder.
         from transformers import AutoModelForImageTextToText, BitsAndBytesConfig
 
         bb = cfg["backbone"]
+        self.contract = get_vlm_contract(cfg)
         # T4 (Turing) has no native bf16 — default to fp16; 4-bit uses its own
         # compute dtype.
         self.dtype = getattr(torch, bb.get("dtype", "float16"))
@@ -43,11 +49,18 @@ class VLMEncoder(nn.Module):
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=self.dtype,
             )
+        load_kwargs = {
+            "quantization_config": quant,
+            "dtype": self.dtype,
+            "device_map": {"": 0},
+            "revision": bb.get("revision", "main"),
+            "trust_remote_code": bool(bb.get("trust_remote_code", False)),
+            "low_cpu_mem_usage": True,
+        }
+        if bb.get("attn_implementation"):
+            load_kwargs["attn_implementation"] = bb["attn_implementation"]
         self.model = AutoModelForImageTextToText.from_pretrained(
-            bb["vlm_model"],
-            quantization_config=quant,
-            torch_dtype=self.dtype,
-            device_map={"": 0},          # 2B/3B fits a single T4
+            bb["vlm_model"], **load_kwargs,
         )
         # Qwen2.5-VL nests the LM dims under config.text_config (no top-level
         # hidden_size). Fall back across layouts to stay robust.
@@ -58,6 +71,15 @@ class VLMEncoder(nn.Module):
         )
         if self.hidden_dim is None:
             raise RuntimeError("could not resolve VLM hidden size from config")
+        expected_hidden_dim = bb.get("vlm_hidden_dim")
+        if (
+            expected_hidden_dim is not None
+            and int(expected_hidden_dim) != int(self.hidden_dim)
+        ):
+            raise RuntimeError(
+                "configured VLM hidden size does not match the downloaded "
+                f"revision: expected {expected_hidden_dim}, got {self.hidden_dim}"
+            )
 
         self.model.config.use_cache = False
         self.preserve_spatial_tokens = bool(bb.get("preserve_spatial_tokens", False))
@@ -68,6 +90,12 @@ class VLMEncoder(nn.Module):
         vision_conf = getattr(conf, "vision_config", None)
         self.spatial_merge_size = int(
             getattr(vision_conf, "spatial_merge_size", 2)
+        )
+        self.image_seq_length = int(
+            bb.get(
+                "image_seq_length",
+                getattr(conf, "image_seq_length", 0) or 0,
+            )
         )
         text_conf = getattr(conf, "text_config", None)
         self.image_token_id = (
@@ -81,6 +109,7 @@ class VLMEncoder(nn.Module):
         # tokens). "last" is the default; "mean" and "attention" are kept for the
         # pooling ablation (see docs plan P0-A).
         self.pooling = bb.get("pooling", "last")
+        self.forward_logits_to_keep = bb.get("forward_logits_to_keep")
         if self.pooling not in ("mean", "last", "attention"):
             raise ValueError(f"unknown pooling {self.pooling!r}")
         if self.pooling == "attention":
@@ -129,14 +158,22 @@ class VLMEncoder(nn.Module):
         kwargs = dict(
             input_ids=batch[f"{prefix}input_ids"].to(dev),
             attention_mask=batch[f"{prefix}attention_mask"].to(dev),
-            pixel_values=batch[f"{prefix}pixel_values"].to(dev, dtype=self.dtype),
-            image_grid_thw=batch[f"{prefix}image_grid_thw"].to(dev),
             output_hidden_states=True,
             use_cache=False,
         )
-        token_type_key = f"{prefix}mm_token_type_ids"
-        if token_type_key in batch:  # required by newer Qwen2-VL (M-RoPE)
-            kwargs["mm_token_type_ids"] = batch[token_type_key].to(dev)
+        for name in self.contract.model_input_keys:
+            if name in {"input_ids", "attention_mask"}:
+                continue
+            key = f"{prefix}{name}"
+            if key not in batch:
+                continue
+            value = batch[key].to(dev)
+            if name == "pixel_values":
+                value = value.to(dtype=self.dtype)
+            kwargs[name] = value
+        logits_to_keep = self.forward_logits_to_keep
+        if logits_to_keep is not None:
+            kwargs["logits_to_keep"] = int(logits_to_keep)
         ctx = torch.no_grad() if self._frozen else contextlib.nullcontext()
         with ctx:
             out = self.model(**kwargs)
@@ -159,11 +196,26 @@ class VLMEncoder(nn.Module):
             "spatial_mask": spatial_mask,
         }
         if self.coordinate_spatial_tokens:
-            result["spatial_coords"] = normalized_spatial_coordinates(
-                spatial_mask,
-                batch[f"{prefix}image_grid_thw"].to(dev),
-                spatial_merge_size=self.spatial_merge_size,
-            )
+            if self.contract.coordinate_mode == "qwen_grid":
+                result["spatial_coords"] = normalized_spatial_coordinates(
+                    spatial_mask,
+                    batch[f"{prefix}image_grid_thw"].to(dev),
+                    spatial_merge_size=self.spatial_merge_size,
+                )
+            elif self.contract.coordinate_mode == "fixed_square":
+                if self.image_seq_length <= 0:
+                    raise RuntimeError(
+                        "fixed-square VLM requires a positive image_seq_length"
+                    )
+                result["spatial_coords"] = normalized_fixed_square_coordinates(
+                    spatial_mask,
+                    batch[f"{prefix}image_counts"].to(dev),
+                    tokens_per_image=self.image_seq_length,
+                )
+            else:
+                raise RuntimeError(
+                    f"unsupported coordinate mode {self.contract.coordinate_mode!r}"
+                )
         return result
 
     def _pool(self, h: torch.Tensor, am: torch.Tensor) -> torch.Tensor:

@@ -73,6 +73,15 @@ After reconciliation passes,
 in-memory train/validation overlay against the mounted source before another
 controlled mini.
 
+## Current AIUB three-PC comparison
+
+Use `notebooks/dgx_three_model_comparison.ipynb` to run Qwen2-VL-2B,
+Qwen2.5-VL-7B, and InternVL3.5-8B-HF on separate 128 GB lab machines. Each
+candidate has isolated artifacts, exact-batch `last.ckpt` resume, the same
+10-epoch maximum, and original-validation-only selection. The two new
+backbones must pass their own implementation compatibility and controlled 5k
+mini gates before full training. See `docs/DGX_THREE_MODEL_COMPARISON.md`.
+
 ## Rules (non-negotiable — see docs/AGENT.md §5)
 
 - Test-first every model: SMOKE -> MINI -> FULL -> EVAL -> CHECKPOINT. Never full-train unverified code.

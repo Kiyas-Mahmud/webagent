@@ -1,5 +1,10 @@
 # DGX Spark Full-Training Runbook
 
+> For the current three-PC backbone comparison, use
+> `notebooks/dgx_three_model_comparison.ipynb` and
+> `docs/DGX_THREE_MODEL_COMPARISON.md`. This document remains the detailed
+> single-model Qwen2-VL-2B recovery/resume reference.
+
 ## 1. Purpose
 
 Use `notebooks/dgx_gold_full_training.ipynb` for the first full reviewed-Gold
@@ -17,8 +22,8 @@ The first authorized run is:
   separately and never used for checkpoint selection;
 - locked test: not mounted if possible and never read by this notebook;
 - seed: 42;
-- maximum epochs: 15, with registered early stopping;
-- checkpoint interval: every 250 optimizer steps and after every completed
+- maximum epochs: 10, with registered early stopping;
+- checkpoint interval: every 50 optimizer steps and after every completed
   epoch.
 
 The v2.8 mini completed epochs 0-3 and epoch 3 passed all eight registered
@@ -108,17 +113,18 @@ loss masks and original/supplement overlap before training.
 
 ### 2.2 Model sources downloaded automatically
 
-The notebook downloads model/processor files from these public model
-repositories when their registered model is selected:
+The current comparison notebook downloads model/processor files from these
+public model repositories when their registered candidate is selected:
 
 ```text
 Qwen/Qwen2-VL-2B-Instruct
-Qwen/Qwen2.5-VL-3B-Instruct
+Qwen/Qwen2.5-VL-7B-Instruct
+OpenGVLab/InternVL3_5-8B-HF
 ```
 
-The 3B configuration is code-ready for the same causal Gold architecture, but
-its full run is blocked until its own smoke and controlled mini pass. It must
-not inherit the 2B model's authorization.
+The 7B and 8B configurations are code-ready for the same causal Gold
+architecture, but each full run is blocked until its own compatibility and
+controlled mini gates pass. Neither inherits the 2B model's authorization.
 
 ## 3. Upload the datasets with the Hugging Face API
 
@@ -235,11 +241,12 @@ audit, quality gates, bbox denominators, transition reports and zero test reads.
 | Model | Gold implementation | Full-run status |
 | --- | --- | --- |
 | Qwen2-VL-2B | Implemented and mini-gate evidence available | Run first |
-| Qwen2.5-VL-3B | Compatible VLM config added | Smoke and mini required before full |
+| Qwen2.5-VL-7B | Official HF VLM contract implemented | Compatibility and mini required before full |
+| InternVL3.5-8B-HF | Official HF VLM contract implemented | Compatibility and mini required before full |
 | SigLIP + RoBERTa (Y1/Y2) | Dual-encoder path is still `NotImplementedError` | Blocked |
 | CLIP + RoBERTa (Y3) | Dual-encoder path is still `NotImplementedError` | Blocked |
 | Florence-2 + RoBERTa (Y7) | Encoder/fusion path is not implemented | Blocked |
-| InternVL2-2B (Y6) | Qwen-specific processor/causal stream not validated | Blocked |
+| InternVL2-2B (historical Y6 plan) | Superseded in the current three-PC screen by InternVL3.5-8B-HF | Not in this run |
 | A1-A5 ablations | Separate controlled implementations are absent | Blocked |
 | B1-B4 baselines | Separate baseline runners are incomplete | Blocked |
 

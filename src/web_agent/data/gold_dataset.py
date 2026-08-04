@@ -39,6 +39,7 @@ from web_agent.labels import (
     RECOVERY_STRATEGY,
 )
 from web_agent.data.recovery_transitions import build_recovery_transition_index
+from web_agent.models.encoders.vlm_contract import get_vlm_contract
 
 
 def view(rec: dict):
@@ -57,6 +58,7 @@ class GoldDataset(Dataset):
         self.records = records
         self.cfg = cfg
         self.processor = processor
+        self.vlm_contract = get_vlm_contract(cfg)
         self.root = Path(cfg["data"]["root"])
         self.use_state_after = bool(cfg["data"].get("use_state_after", True))
         self.causal_routing = bool(cfg["data"].get("causal_routing", False))
@@ -203,15 +205,48 @@ class GoldDataset(Dataset):
         chat = self.processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
         )
-        enc = self.processor(text=[chat], images=list(images), return_tensors="pt")
-        out = {
-            "input_ids": enc["input_ids"][0],
-            "attention_mask": enc["attention_mask"][0],
-            "pixel_values": enc["pixel_values"],
-            "image_grid_thw": enc["image_grid_thw"],     # [n_img, 3]
-        }
-        if "mm_token_type_ids" in enc:
-            out["mm_token_type_ids"] = enc["mm_token_type_ids"][0]
+        processor_kwargs = {"return_tensors": "pt"}
+        if self.vlm_contract.requires_single_patch_images:
+            crop_to_patches = self.cfg["backbone"].get("crop_to_patches")
+            if crop_to_patches is not False:
+                raise ValueError(
+                    "fixed-square bbox coordinates require "
+                    "backbone.crop_to_patches=false"
+                )
+            # InternVL otherwise creates a variable number of 448x448 crops per
+            # screenshot. The bbox head is defined on the original screenshot
+            # plane, so one processor patch per image is an explicit contract.
+            processor_kwargs["images_kwargs"] = {
+                "crop_to_patches": False,
+            }
+        enc = self.processor(
+            text=[chat],
+            images=list(images),
+            **processor_kwargs,
+        )
+        missing = [
+            key for key in self.vlm_contract.required_input_keys
+            if key not in enc
+        ]
+        if missing:
+            raise KeyError(
+                f"{self.vlm_contract.family} processor omitted required "
+                f"model inputs: {missing}; returned {sorted(enc.keys())}"
+            )
+        out = {}
+        for key in self.vlm_contract.model_input_keys:
+            if key not in enc:
+                continue
+            value = enc[key]
+            if key in self.vlm_contract.sequence_input_keys:
+                if value.ndim < 2 or value.shape[0] != 1:
+                    raise ValueError(
+                        f"processor sequence {key!r} must have a leading "
+                        f"singleton batch dimension, got {tuple(value.shape)}"
+                    )
+                value = value[0]
+            out[key] = value
+        out["image_count"] = torch.tensor([len(images)], dtype=torch.long)
         return out
 
     def _labels(

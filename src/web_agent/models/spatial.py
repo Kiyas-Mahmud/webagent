@@ -77,6 +77,55 @@ def normalized_spatial_coordinates(
     return coordinates
 
 
+def normalized_fixed_square_coordinates(
+    spatial_mask: torch.Tensor,
+    image_counts: torch.Tensor,
+    *,
+    tokens_per_image: int,
+) -> torch.Tensor:
+    """Return raster coordinates for fixed-square image-token backbones.
+
+    Hugging Face InternVL represents every image with a fixed number of image
+    placeholder tokens.  The processor may concatenate one pre-action image or
+    two post/recovery images, so the collator preserves the per-row image count
+    and this function repeats the same normalized square grid for each image.
+    """
+    if spatial_mask.ndim != 2:
+        raise ValueError("spatial_mask must have shape [batch, sequence]")
+    if image_counts.ndim not in {1, 2}:
+        raise ValueError("image_counts must have shape [batch] or [batch, 1]")
+    counts = image_counts.reshape(-1).long()
+    if counts.shape[0] != spatial_mask.shape[0]:
+        raise ValueError("image_counts must contain one value per batch row")
+    side = int(tokens_per_image ** 0.5)
+    if side <= 0 or side * side != tokens_per_image:
+        raise ValueError("tokens_per_image must be a positive perfect square")
+
+    y = (torch.arange(side, device=spatial_mask.device).float() + 0.5) / side
+    x = (torch.arange(side, device=spatial_mask.device).float() + 0.5) / side
+    yy, xx = torch.meshgrid(y, x, indexing="ij")
+    image_coordinates = torch.stack([xx, yy], dim=-1).reshape(-1, 2)
+    coordinates = torch.zeros(
+        (*spatial_mask.shape, 2),
+        dtype=torch.float32,
+        device=spatial_mask.device,
+    )
+    for row, image_count in enumerate(counts.tolist()):
+        if image_count <= 0:
+            raise ValueError("every multimodal row must contain at least one image")
+        row_coordinates = image_coordinates.repeat(image_count, 1)
+        token_positions = spatial_mask[row].bool()
+        token_count = int(token_positions.sum())
+        if token_count != row_coordinates.shape[0]:
+            raise ValueError(
+                "fixed-grid spatial-token mismatch: "
+                f"expected {row_coordinates.shape[0]} tokens for {image_count} "
+                f"images but selected {token_count}"
+            )
+        coordinates[row, token_positions] = row_coordinates
+    return coordinates
+
+
 def spatial_soft_argmax(
     attention: torch.Tensor,
     coordinates: torch.Tensor,

@@ -2,7 +2,7 @@
 # Until then, install latest compatible and freeze.
 torch
 torchvision
-transformers
+transformers>=4.57.6,<5
 accelerate
 bitsandbytes
 pillow
@@ -16,3 +16,4 @@ seaborn
 pyyaml
 wandb
 pytest
+packaging

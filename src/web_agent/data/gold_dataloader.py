@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import random
 from collections import defaultdict
+from functools import partial
 from pathlib import Path
 
 import torch
@@ -25,6 +26,7 @@ from web_agent.data.gold_sampling import (
 from web_agent.data.review_overlay import ReviewOverlay
 from web_agent.data.recovery_supplement import load_supplement_split
 from web_agent.labels import NUM_RECOVERY, RECOVERY_STRATEGY
+from web_agent.models.encoders.vlm_contract import get_vlm_contract
 from web_agent.utils.class_weights import balanced_class_weights
 
 
@@ -254,36 +256,42 @@ class RecoveryAwareBatchSampler(Sampler[list[int]]):
         return (len(self.records) + self.batch_size - 1) // self.batch_size
 
 
-def _collate_stream(batch: list[dict], prefix: str) -> dict:
+def _collate_stream(batch: list[dict], prefix: str, cfg: dict | None = None) -> dict:
+    contract = get_vlm_contract(cfg or {
+        "backbone": {"path": "vlm", "family": "qwen2_vl"}
+    })
     out = {}
-    for name in ("input_ids", "attention_mask"):
+    for name in contract.sequence_input_keys:
         key = f"{prefix}{name}"
+        if key not in batch[0]:
+            continue
         out[key] = pad_sequence(
             [row[key] for row in batch], batch_first=True, padding_value=0,
         )
-    for name in ("pixel_values", "image_grid_thw"):
+    for name in contract.concat_input_keys:
         key = f"{prefix}{name}"
+        if key not in batch[0]:
+            continue
         out[key] = torch.cat([row[key] for row in batch], dim=0)
-    token_type_key = f"{prefix}mm_token_type_ids"
-    if token_type_key in batch[0]:
-        out[token_type_key] = pad_sequence(
-            [row[token_type_key] for row in batch], batch_first=True, padding_value=0,
-        )
+    image_count_key = f"{prefix}image_count"
+    out[f"{prefix}image_counts"] = torch.cat([
+        row[image_count_key] for row in batch
+    ], dim=0)
     return out
 
 
-def causal_gold_collate(batch: list[dict]) -> dict:
+def causal_gold_collate(batch: list[dict], cfg: dict | None = None) -> dict:
     """Collate causal streams; recovery transitions stay sparse and indexed."""
     out = stack_labels(batch)
     if "label_needs_recovery" in batch[0]:
         out["label_needs_recovery"] = torch.stack([
             row["label_needs_recovery"] for row in batch
         ])
-    out.update(_collate_stream(batch, "pre_"))
-    out.update(_collate_stream(batch, "post_"))
+    out.update(_collate_stream(batch, "pre_", cfg))
+    out.update(_collate_stream(batch, "post_", cfg))
     recovery_rows = [row for row in batch if "recovery_input_ids" in row]
     if recovery_rows:
-        out.update(_collate_stream(recovery_rows, "recovery_"))
+        out.update(_collate_stream(recovery_rows, "recovery_", cfg))
         out["recovery_row_indices"] = torch.tensor([
             index for index, row in enumerate(batch) if "recovery_input_ids" in row
         ], dtype=torch.long)
@@ -312,7 +320,11 @@ def build_gold_dataloader(cfg, which, processor, records=None, limit=None,
     )
     bs = batch_size or cfg["optim"]["batch_size"]
     nw = cfg["data"].get("num_workers", 2) if num_workers is None else num_workers
-    collate = causal_gold_collate if cfg["data"].get("causal_routing") else vlm_collate
+    collate = (
+        partial(causal_gold_collate, cfg=cfg)
+        if cfg["data"].get("causal_routing")
+        else vlm_collate
+    )
     generator = torch.Generator().manual_seed(seed)
     if recovery_aware:
         if which != "train":

@@ -11,7 +11,7 @@ readme = "README.md"
 dependencies = [
     "torch",
     "torchvision",
-    "transformers",
+    "transformers>=4.57.6,<5",
     "accelerate",
     "bitsandbytes",
     "pillow",
@@ -24,6 +24,7 @@ dependencies = [
     "seaborn",
     "pyyaml",
     "wandb",
+    "packaging",
 ]
 
 [project.optional-dependencies]

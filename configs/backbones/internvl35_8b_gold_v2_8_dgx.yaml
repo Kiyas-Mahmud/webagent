@@ -1,0 +1,47 @@
+# InternVL3.5-8B-HF candidate for the reviewed Gold v2.8 comparison.
+#
+# The official Hugging Face format is used so the same unified-VLM adapter,
+# causal streams, task heads, losses, and trainer remain intact.  InternVL uses
+# fixed 448x448 image inputs with 256 image tokens per image; unlike Qwen, it
+# does not consume image_grid_thw.
+name: Y_INTERNVL35_8B_GOLD_V2_8_DGX
+extends: backbones/qwen2vl_2b_gold_v2_8.yaml
+
+backbone:
+  path: vlm
+  family: internvl_hf
+  vlm_model: OpenGVLab/InternVL3_5-8B-HF
+  revision: 3974c115d44f0e13eae8b654f680b1e561c71ae9
+  trust_remote_code: false
+  load_in_4bit: true
+  dtype: bfloat16
+  qlora: true
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  lora_target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  pooling: last
+  vlm_hidden_dim: 4096
+  processor_image_size: 448
+  # Dynamic tiling creates multiple coordinate planes for one screenshot.
+  # Keep one 448x448 processor patch so bbox tokens retain a single normalized
+  # page coordinate system and all candidates use bounded visual compute.
+  crop_to_patches: false
+  image_seq_length: 256
+  preserve_spatial_tokens: true
+  forward_logits_to_keep: 1
+  attn_implementation: sdpa
+
+optim:
+  batch_size: 4
+  grad_accum: 8
+  mixed_precision: bf16
+  lr_lora: 1.0e-4
+  lr_heads: 1.0e-3
+
+train:
+  epochs: 10
+  checkpoint_every_steps: 50
+  controlled_experiment_tag: internvl35_8b_recovery_v2_8
+  execution_profile: dgx_gb10_internvl35_8b_v1
+  metrics_csv: results/internvl35_8b_gold_v2_8_metrics.csv

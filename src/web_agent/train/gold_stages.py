@@ -92,13 +92,20 @@ def _recovery_version_at_least(experiment_tag: str, minimum_minor: int) -> bool:
 
 def build_processor(cfg: dict):
     from transformers import AutoProcessor
+    from web_agent.models.encoders.vlm_contract import get_vlm_contract
 
     backbone = cfg["backbone"]
-    return AutoProcessor.from_pretrained(
-        backbone["vlm_model"],
-        min_pixels=backbone["min_pixels"],
-        max_pixels=backbone["max_pixels"],
-    )
+    contract = get_vlm_contract(cfg)
+    kwargs = {
+        "revision": backbone.get("revision", "main"),
+        "trust_remote_code": bool(backbone.get("trust_remote_code", False)),
+    }
+    if contract.processor_uses_pixel_bounds:
+        kwargs.update({
+            "min_pixels": backbone["min_pixels"],
+            "max_pixels": backbone["max_pixels"],
+        })
+    return AutoProcessor.from_pretrained(backbone["vlm_model"], **kwargs)
 
 
 def build_gold_components(
@@ -1155,8 +1162,8 @@ def run_gold_smoke(
             first_batch = batch
             first_predictions = predictions
         processed_rows += int(batch["label_outcome"].shape[0])
-        pre_images += int(batch["pre_image_grid_thw"].shape[0])
-        post_images += int(batch["post_image_grid_thw"].shape[0])
+        pre_images += int(batch["pre_image_counts"].sum())
+        post_images += int(batch["post_image_counts"].sum())
         bbox_rows += int(batch["bbox_mask"].sum())
 
     if processed_rows != rows or first_batch is None or first_predictions is None:

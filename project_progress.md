@@ -8,6 +8,33 @@ Repo: https://github.com/Kiyas-Mahmud/webagent (branch `Code`).
 Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/FinalData`
 (70,965 labeled steps; train 38,875 / val 16,070 / test 16,020).
 
+## 2026-08-04 — three-PC DGX backbone comparison implementation
+
+- Read and reconciled the project specification, architecture, training plan,
+  implementation plan, existing Gold v2.8 data/training modules, selection
+  gates, resume implementation, and both DGX notebooks before extending the
+  VLM path.
+- Added registered 10-epoch 4-bit QLoRA candidates for
+  `Qwen/Qwen2.5-VL-7B-Instruct` and
+  `OpenGVLab/InternVL3_5-8B-HF`, while retaining Qwen2-VL-2B as the reference.
+- Generalized the VLM processor, collation, encoder inputs, hidden-size checks,
+  and spatial-coordinate construction through explicit Qwen/InternVL runtime
+  contracts. The four thesis heads, causal routing, loss masks, and selection
+  rule remain shared.
+- Disabled InternVL dynamic image tiling by contract. One source screenshot now
+  maps to one fixed 448x448 patch and one normalized bbox coordinate plane; the
+  loader fails if `crop_to_patches=false` is removed.
+- Added `notebooks/dgx_three_model_comparison.ipynb`, one isolated launch cell
+  per PC, automatic compatibility and new-backbone mini gates, exact-batch full
+  resume, source-separated validation, and a fail-closed validation-only
+  comparison exporter.
+- Added `docs/DGX_THREE_MODEL_COMPARISON.md` with the run, recovery, artifact
+  transfer, ranking, repeated-seed, and locked-test protocol.
+- Local verification covers configuration contracts, static notebook parsing,
+  Python parsing, formatting checks, and CPU-available unit tests. Actual 7B/8B
+  model loading, CUDA backward, mini acceptance, runtime, and full metrics must
+  still be established on the 128 GB lab machines; no result is claimed yet.
+
 ## Workflow (how work flows)
 - Author code in IDE (`e:/University/thesis/code`) → push to GitHub `Code`.
 - Kaggle notebook `git clone`s the package + `sys.path` import (NOT `pip install -e .`

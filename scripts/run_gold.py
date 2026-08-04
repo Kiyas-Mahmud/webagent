@@ -60,7 +60,7 @@ def main() -> None:
     ap.add_argument(
         "--checkpoint-root",
         default=None,
-        help="persistent checkpoint parent directory for --stage full",
+        help="persistent checkpoint parent directory for mini/full training",
     )
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--num-workers", type=int, default=None)
@@ -96,6 +96,11 @@ def main() -> None:
         help="complete machine-readable mini report",
     )
     ap.add_argument(
+        "--smoke-report-json",
+        default=None,
+        help="optional machine-readable report for the 16-row model smoke gate",
+    )
+    ap.add_argument(
         "--source-validation-csv",
         default="/kaggle/working/gold_mini_source_validation.csv",
         help="original and supplement validation metrics as separate rows",
@@ -109,8 +114,8 @@ def main() -> None:
 
     if args.resume_checkpoint and args.stage != "full":
         ap.error("--resume-checkpoint is valid only with --stage full")
-    if args.checkpoint_root and args.stage != "full":
-        ap.error("--checkpoint-root is valid only with --stage full")
+    if args.checkpoint_root and args.stage not in {"mini", "full"}:
+        ap.error("--checkpoint-root is valid only with mini/full training")
 
     cfg = load_config(args.config)
     if args.data_root:
@@ -146,6 +151,8 @@ def main() -> None:
         if args.checkpoint_every_steps <= 0:
             ap.error("--checkpoint-every-steps must be positive")
         cfg["train"]["checkpoint_every_steps"] = args.checkpoint_every_steps
+    if args.checkpoint_root is not None:
+        cfg["output"]["checkpoint_dir"] = args.checkpoint_root
     seed = args.seed if args.seed is not None else cfg.get("seeds", [42])[0]
     set_seed(seed)
 
@@ -156,7 +163,15 @@ def main() -> None:
     )
 
     if args.stage == "smoke":
-        print(json.dumps(run_gold_smoke(cfg, rows=16, seed=seed), indent=2))
+        report = run_gold_smoke(cfg, rows=16, seed=seed)
+        if args.smoke_report_json:
+            smoke_path = Path(args.smoke_report_json)
+            smoke_path.parent.mkdir(parents=True, exist_ok=True)
+            smoke_path.write_text(
+                json.dumps(report, indent=2), encoding="utf-8"
+            )
+            print("Smoke report saved:", smoke_path)
+        print(json.dumps(report, indent=2))
         return
 
     if args.stage == "mini":

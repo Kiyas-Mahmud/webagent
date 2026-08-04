@@ -9,6 +9,10 @@ name: Y_QWEN2VL_2B_GOLD_V2_8_DGX
 extends: backbones/qwen2vl_2b_gold_v2_8.yaml
 
 backbone:
+  family: qwen2_vl
+  revision: 895c3a49bc3fa70a340399125c650a463535e71c
+  trust_remote_code: false
+  vlm_hidden_dim: 1536
   min_pixels: 50176
   max_pixels: 200704
 
