@@ -1002,3 +1002,66 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   run contract, and reports but never opens a locally present locked-test JSON.
 - The AIUB defaults use `/home/aiub/kiyas/webagent` for code and
   `/home/aiub/kiyas/webagent_full` for persistent data, checkpoints, CSVs and reports.
+
+## 2026-08-03 - DGX Spark (GB10) runtime installed and smoke-verified
+
+- Hardware confirmed on the AIUB box: NVIDIA **GB10, sm_121, 130.7 GB unified memory, bf16
+  supported**, driver 580.159.03 / CUDA 13.0, aarch64 Ubuntu 24.04, 20 cores, 121 GB RAM,
+  3.4 TB free on `/`. This is NOT the T4 the configs were tuned for.
+- Local data verified in place: `/home/aiub/kiyas/webagent_full/data/original/final_data_set_40k`
+  (24 GB, 29,992 image dirs) and `.../supplement/web_gold_40k_retry_abort_supplement_v2_kaggle`
+  (408 MB). Raw row counts read directly: 23,499 + 608 train, 7,861 val, 194 supplement val.
+- Ran the notebook's own cell-5 gates as standalone scripts. Both `PASS`:
+  `validate_retry_abort_supplement.py` (1,604 unique images, zero train/val overlap on
+  task/trajectory/session/site/exact-image-pair) and `audit_retry_abort_multisource.py`
+  (`primary_training_rows=24107`, `primary_validation_rows=7861`,
+  `supplement_validation_rows_available_separately=194`, `test_rows_read=0`).
+  Reports written to `/home/aiub/kiyas/webagent_full/preflight/`.
+
+### Installed runtime (venv `/home/aiub/kiyas/webagent/.venv`, Python 3.12.3)
+- torch 2.13.0+cu130, torchvision 0.28.0+cu130 (from `https://download.pytorch.org/whl/cu130`,
+  aarch64 wheels). **Default PyPI has no CUDA-13 aarch64 torch — the `--index-url` is required.**
+- bitsandbytes 0.50.0, transformers 4.57.6, peft 0.20.0, accelerate 1.14.0,
+  scikit-learn 1.9.0, pandas 2.3.3, numpy 2.4.4, scipy 1.18.0, pillow 12.2.0, PyYAML 6.0.3.
+- GPU-tested, not just imported: bf16 + fp16 matmul; bnb NF4 quantize/dequantize round-trip
+  (rel-err 0.091) and `Linear4bit` forward on sm_121. `torch.cuda.get_arch_list()` ends at
+  sm_120 but sm_121 runs fine (same family).
+
+### GOTCHA - `python3.12-dev` is required on a fresh DGX box
+- torch 2.13 routes Qwen2-VL's RoPE through `torch._native.ops.bmm_outer_product.triton_impl`.
+  Triton JIT-compiles a CUDA shim with gcc; without Python headers this dies with
+  `fatal error: Python.h: No such file or directory`. There is **no eager fallback** -
+  `eager_router` calls `_dispatch(..., swallow_cond_exceptions=False)` and re-raises.
+- Fix: `sudo apt-get install -y python3.12-dev`. Verified afterwards by JIT-compiling and
+  running a real Triton kernel (triton 3.7.1, correct result).
+- Triton `@jit` functions must live in a real `.py` file; `python -c` fails with
+  "@jit functions should be defined in a Python file". Test from a file, not a heredoc.
+
+### Smoke result (`run_gold.py --stage smoke`, config v2.8) - PASS
+- Exit 0, top-level `"status": "PASS"`, `test_rows_read: 0`, 16 rows, forward batch 4,
+  594 spatial tokens/row, **peak GPU 5.95 GB of 130.7 GB**.
+- All 11 loss terms active and finite (total 1.623). All probe gradient norms nonzero,
+  including grounding_attention 0.540 and bbox 0.499.
+- The nested `"bbox_geometry": {"status": "FAIL"}` is **expected and not a regression**:
+  `audit_bbox_geometry` (`src/web_agent/data/bbox_audit.py:167`) returns FAIL if ANY invalid
+  box exists. Probe had 6 bbox rows / 4 valid / 2 invalid / 2 maskable / **0 fatal**. Only
+  `fatal_invalid_bbox_rows` blocks (raises at `bbox_audit.py:201`). Same masking behavior
+  already accepted on 2026-07-20 and 2026-07-27. Do not re-investigate this.
+
+### Notebook review findings (NOT changed - they alter the registered v2.8 protocol)
+- **Bootstrap gap:** cell 2 does `import torch` but cell 3 is what installs deps, so the
+  notebook cannot bootstrap a bare machine. Cell 3's `requirements` list also omits
+  torch/torchvision entirely. Moot now that the venv is pre-built; cell 3's pip is a
+  verified no-op that does not touch torch (dry-run checked).
+- **Still T4-sized:** `backbone.dtype: float16`, `optim.mixed_precision: fp16`,
+  `batch_size: 4`, `grad_accum: 8`, `max_pixels: 448^2`, `NUM_WORKERS: 8` of 20 cores.
+  GB10 supports bf16 and the run uses 4.5% of VRAM. Left untouched because the v2.8 gate
+  thresholds were measured under exactly these settings; changing them invalidates
+  comparison with the accepted epoch-3 evidence. This is a scientific decision for the owner.
+- Only one Jupyter kernel is registered and it is the venv. `split_test.json` is present
+  locally; the notebook correctly reports it and never opens it.
+
+### NEXT
+- Owner runs `notebooks/dgx_gold_full_training.ipynb` themselves with no config-cell edits.
+  Model is already cached (4.2 GB) under `/home/aiub/kiyas/webagent_full/hf_cache`.
+- Smoke emits no per-step timing; epoch ETA will appear in the trainer's per-step log.
