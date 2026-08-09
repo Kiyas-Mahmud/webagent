@@ -1118,3 +1118,118 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   50,176-200,704 / batch 16 / accumulation 2 / checkpoint 50, the notebook has zero saved
   outputs, and every code cell parses. The DGX smoke remains the required hardware proof
   before the long run begins.
+
+## 2026-08-06 - Fresh DGX box: venv rebuilt, GitHub remote confirmed
+
+- This is a new/reset DGX GB10 instance: no `.venv` existed, git `origin` was already
+  configured to `https://github.com/Kiyas-Mahmud/webagent.git` and branch `Code` was
+  already tracking `origin/Code` (nothing to change there; `git fetch` clean).
+- `sudo apt-get install -y python3.12-dev` (the documented Triton-JIT gotcha fix) was
+  **not** run — no passwordless sudo in this environment and the owner deferred it.
+  Torch/torchvision/bitsandbytes installed and CUDA is available, but any code path that
+  triggers Triton JIT compilation (e.g. Qwen2-VL RoPE) will hit the `Python.h` missing
+  error until this is installed manually.
+- Rebuilt `.venv` (Python 3.12.3) and reinstalled from `requirements.txt`. Matches the
+  previously verified versions: torch 2.13.0+cu130, torchvision 0.28.0+cu130 (from the
+  `cu130` aarch64 index — default PyPI has no CUDA-13 aarch64 torch), transformers 4.57.6,
+  accelerate 1.14.0, bitsandbytes 0.50.0, numpy 2.4.4. `torch.cuda.is_available()` is
+  `True`. `pip check` is clean apart from a benign `nvidia-cusparselt-cu13` platform-tag
+  warning (common on aarch64, non-blocking).
+- GOTCHA repeat: installing bare package names (`pip install transformers ...`) instead of
+  `pip install -r requirements.txt` pulled transformers 5.14.1, silently violating the
+  pinned `<5` constraint in `requirements.txt`/`pyproject.toml`. Caught immediately and
+  fixed by reinstalling via `-r requirements.txt`. Always install from the requirements
+  file, not by retyping package names.
+- Not done: git `user.name`/`user.email` (owner asked for `Kiyas-Mahmud` /
+  `kiyasmahmud00@gmail.com` to be set, but per this assistant's operating rules git config
+  is never modified by the assistant) and `python3.12-dev`. Owner needs to run both
+  manually before any Triton-dependent training/smoke run.
+- Update: owner set `git config user.name/user.email` themselves (must be run from inside
+  the repo directory — a `--global`/wrong-cwd attempt first failed with "not in a git
+  directory"). Confirmed set.
+- Update: owner declined to grant passwordless sudo; `python3.12-dev` remains **not
+  installed**. Still required before any Triton JIT path (e.g. Qwen2-VL RoPE) runs.
+
+## 2026-08-06 - `peft` missing from dependency manifests, added
+
+- Opened `notebooks/dgx_three_model_comparison.ipynb` to install whatever it needs. Its own
+  cell 2 environment gate checks `metadata.version(...)` for `peft, bitsandbytes,
+  accelerate, scikit-learn, pandas, pyyaml` alongside the pinned transformers range — but
+  `peft` was in **neither** `requirements.txt` nor `pyproject.toml`, even though
+  `src/web_agent/models/encoders/vlm.py` (LoRA config), `src/web_agent/train/trainer.py`
+  and `gold_stages.py` (peft state-dict save/load), and `scripts/run_gold.py` all import it
+  lazily. This is how the earlier `.venv` install missed it silently — no top-level import
+  triggers it, only actual training/checkpoint code paths do.
+- Installed `peft==0.20.0` (matches the version previously verified in this repo's history)
+  and added it to both `requirements.txt` (between `accelerate`/`bitsandbytes`) and
+  `pyproject.toml` `dependencies` so a fresh install won't repeat the gap.
+- Verified: notebook cell 2's exact gate logic passes (torch 2.13.0+cu130, transformers
+  4.57.6, GB10 130.7 GB, bf16 supported), and `import web_agent` plus
+  `web_agent.data.recovery_supplement`, `web_agent.config`, `web_agent.data.gold_dataloader`
+  all resolve from `src/` via the notebook's own `sys.path` bootstrap (cell 3). Did not
+  execute cells 4+ (they touch real dataset paths under `/home/aiub/kiyas/webagent_full`
+  and launch actual training subprocesses — out of scope for a dependency check).
+- Owner ran `sudo apt-get install -y python3.12-dev` themselves (confirmed installed via
+  `dpkg -l`). Verified for real, not just presence: JIT-compiled and ran an actual Triton
+  `@jit` add kernel on the GB10 GPU from a `.py` file (`triton 3.7.1`, correct result,
+  `torch.allclose` passes).
+- Installed `jupyter` + `ipykernel` (neither was present — needed to open/run the notebook
+  at all) and registered the `.venv` as a Jupyter kernel (`webagent`, alongside the
+  venv's own default `python3` kernelspec).
+- **Blocker for actually running the notebook**: this is a fully fresh machine —
+  `/home/aiub/kiyas/webagent_full/data/{original,supplement}` and
+  `/home/aiub/kiyas/webagent_comparison` (the notebook's `WORKSPACE_ROOT`) do not exist,
+  so cell 1's `assert ... .is_dir()` checks will fail immediately. No HF model cache either
+  (first run per backbone will download from HuggingFace; 3.4 TB free on `/`, so disk is
+  not a concern). Dataset acquisition is outside pip-install scope and needs the owner's
+  Kaggle-side data (see `README.md` — dataset flow goes through the Kaggle notebooks, e.g.
+  `kaggle_gold.ipynb`/`kaggle_gold_existing_data_improvement.ipynb`) to be copied onto this
+  box before cells 4+ can run.
+
+## 2026-08-09 - Mini-stage resume support added; Qwen2.5-VL-7B mini resumed for real
+
+- The Qwen2.5-VL-7B mini gate (`qwen25vl_7b_gold_v2_8_dgx`, seed 42) died mid-epoch-0 on
+  this DGX box (batch 800/1250, `epoch_complete: False`) with a fully resumable
+  `last.ckpt` on disk (optimizer/scheduler/scaler/RNG/epoch state all present), but
+  `run_gold_mini()` had no resume path at all — only `run_gold_full()` did. Every relaunch
+  was silently restarting the whole 5,000-row mini from scratch instead of picking up the
+  checkpoint that was already there.
+- Added resume support to the mini stage, mirroring the existing full-stage mechanism:
+  `run_gold_mini()` (`src/web_agent/train/gold_stages.py`) now accepts
+  `resume_checkpoint`, validates it against the exact mini config (moved
+  `_validate_resume_checkpoint` here from `gold_full.py`, which now imports it back to
+  avoid duplicating the same ~60 lines), and loads it with `resume_training=True` before
+  `trainer.fit()`. `scripts/run_gold.py` now accepts `--resume-checkpoint` for
+  `--stage mini` (previously full-only). `scripts/run_comparison_candidate.py` computes
+  the mini checkpoint directory the same way `run_gold_mini` names it
+  (`{cfg['name']}_MINI_{tag}`) and auto-passes `--resume-checkpoint` when a `last.ckpt`
+  is found there.
+- Verified before relying on it: recomputed the mini checkpoint dir path in isolation and
+  confirmed it matches the real on-disk directory; ran `_validate_resume_checkpoint`
+  against the actual interrupted checkpoint with the exact config the notebook builds
+  (including the real resolved `--supplement-root`) and got `status: PASS`, `epoch: 0`,
+  `next_batch_index: 800`, `global_step: 100`. Full test suite: 121 passed; the only 3
+  failures (two unrelated notebook-output-provenance checks, one unrelated
+  `bbox_fp32_grounding` attribute test) reproduce identically on the pre-change code via
+  `git stash`, confirming they're pre-existing and unrelated.
+- Relaunched cell 8 (`run_candidate('qwen25vl_7b_gold_v2_8_dgx', phase='auto')`); the
+  subprocess command line confirmed `--resume-checkpoint .../last.ckpt` was passed
+  automatically and it printed `resuming epoch 0 at physical batch 800/1250`.
+- GOTCHA surfaced while confirming the resumed run wasn't hung: after resuming, the
+  process is silent (no new log line, no new checkpoint) for a long stretch by design, not
+  because it's stuck. Two silent phases stack: (1) the resume loop must still iterate the
+  DataLoader for physical batches 0-799 to reach the resume point
+  (`if i < self.resume_batch_in_epoch: continue` in `trainer.py`), which pays the full
+  image-decode/VLM-preprocessing cost for those batches with zero console output and zero
+  GPU compute; (2) `log_every`/`checkpoint_every_steps` are both 50 optimizer steps, and
+  with `grad_accum=8` (`configs/backbones/qwen25vl_7b_gold_v2_8_dgx.yaml`) that's 400
+  physical batches between any print or checkpoint save. Confirmed it was actually
+  training (not hung) via `ps`/`nvidia-smi` (sustained 92-95% GPU util, single CPU-bound
+  process at ~100%), since `last.ckpt`'s mtime alone couldn't distinguish "hung" from
+  "silently working toward the next 50-step boundary." `py-spy` was installed to get an
+  exact stack trace but needs `sudo` for `ptrace`, which this box doesn't have
+  passwordless — worked around with GPU/CPU utilization evidence instead.
+- Not yet done: lowering `log_every`/`checkpoint_every_steps` for this config so future
+  resumes give faster visible feedback (proposed to the owner, not yet applied — would
+  need to be set before the *next* mini/full launch, not on the currently-running
+  process).

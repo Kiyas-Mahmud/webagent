@@ -175,7 +175,14 @@ def main() -> None:
                 "evidence—diagnose it before starting another run"
             )
         mini_root.mkdir(parents=True, exist_ok=True)
-        run([
+        mini_experiment_tag = str(
+            cfg["train"].get("controlled_experiment_tag", "recovery_v1")
+        ).upper()
+        mini_checkpoint_dir = (
+            mini_root / "checkpoints" / f"{cfg['name']}_MINI_{mini_experiment_tag}"
+        )
+        mini_last_checkpoint = mini_checkpoint_dir / "last.ckpt"
+        mini_command = [
             *common,
             "--stage", "mini",
             "--train-rows", "5000",
@@ -186,7 +193,14 @@ def main() -> None:
             "--diagnostics-json", str(mini_root / "diagnostics.json"),
             "--report-json", str(mini_report),
             "--source-validation-csv", str(mini_root / "source_validation.csv"),
-        ])
+        ]
+        if mini_last_checkpoint.is_file():
+            mini_command.extend(["--resume-checkpoint", str(mini_last_checkpoint)])
+            print(
+                "Resuming mini exact next batch from:", mini_last_checkpoint,
+                flush=True,
+            )
+        run(mini_command)
         if not read_pass(mini_report, stage="mini"):
             raise AssertionError(
                 "controlled mini failed; full training remains blocked"

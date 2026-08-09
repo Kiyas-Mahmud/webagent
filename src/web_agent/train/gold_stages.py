@@ -62,6 +62,69 @@ from web_agent.train.selection import (
     controlled_quality_gates,
     require_selected_checkpoint,
 )
+from web_agent.train.resume import sha256_file, training_signature
+
+
+def _validate_resume_checkpoint(path: str | Path, expected_cfg: dict) -> dict:
+    """Reject a ``last.ckpt`` that cannot safely continue this exact run."""
+    checkpoint_path = Path(path)
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"resume checkpoint does not exist: {checkpoint_path}")
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location="cpu",
+        weights_only=False,
+    )
+    required = {
+        "optimizer",
+        "scheduler",
+        "scaler",
+        "rng_state",
+        "config",
+        "epoch",
+        "step",
+        "epoch_complete",
+        "history",
+        "early_stop_state",
+    }
+    missing = sorted(required - set(checkpoint))
+    if missing:
+        raise ValueError(f"resume checkpoint is missing state: {missing}")
+    saved_signature = training_signature(checkpoint["config"])
+    expected_signature = training_signature(expected_cfg)
+    if saved_signature != expected_signature:
+        differing = [
+            key
+            for key in expected_signature
+            if saved_signature.get(key) != expected_signature.get(key)
+        ]
+        raise ValueError(
+            "resume checkpoint does not match this run; "
+            f"differing sections={differing}"
+        )
+    if not checkpoint["epoch_complete"]:
+        if int(checkpoint.get("batch_in_epoch", 0)) <= 0:
+            raise ValueError("mid-epoch checkpoint has no next-batch position")
+        if checkpoint.get("epoch_state") is None:
+            raise ValueError("mid-epoch checkpoint has no partial epoch state")
+    report = {
+        "status": "PASS",
+        "path": str(checkpoint_path.resolve()),
+        "sha256": sha256_file(checkpoint_path),
+        "epoch": int(checkpoint["epoch"]),
+        "epoch_complete": bool(checkpoint["epoch_complete"]),
+        "next_batch_index": int(checkpoint.get("batch_in_epoch", 0)),
+        "global_step": int(checkpoint["step"]),
+        "completed_history_epochs": [
+            int(row["epoch"]) for row in checkpoint["history"]
+        ],
+        "optimizer_restored": True,
+        "scheduler_restored": True,
+        "scaler_restored": True,
+        "rng_state_restored": True,
+    }
+    del checkpoint
+    return report
 
 
 @dataclass
@@ -1280,6 +1343,7 @@ def run_gold_mini(
     val_rows: int = 500,
     epochs: int = 5,
     seed: int = 42,
+    resume_checkpoint: str | Path | None = None,
 ) -> dict:
     """Run the controlled recovery experiment without reading the test split.
 
@@ -1288,6 +1352,10 @@ def run_gold_mini(
     validation intentionally retains the legacy v14 failure-stratified selector
     so the 500-row comparison set is identical; supplement validation is
     reported separately and cannot select the checkpoint.
+
+    ``resume_checkpoint``, when given, must be an interrupted ``last.ckpt``
+    from this exact same mini configuration; it is validated and restored
+    (optimizer/scheduler/scaler/RNG/epoch position) before training resumes.
     """
     mini_cfg = deepcopy(cfg)
     mini_cfg["train"]["epochs"] = epochs
@@ -1371,7 +1439,13 @@ def run_gold_mini(
         val_loader,
         train_sampler=train_loader.batch_sampler,
     )
+    resume_audit = None
+    if resume_checkpoint is not None:
+        resume_audit = _validate_resume_checkpoint(resume_checkpoint, mini_cfg)
+        trainer.load_checkpoint(resume_checkpoint, resume_training=True)
     result = trainer.fit()
+    if resume_audit is not None:
+        result["resume_provenance"] = resume_audit
     if not result["checkpoints"]:
         raise AssertionError("mini training did not create a checkpoint")
 

@@ -55,7 +55,7 @@ def main() -> None:
     ap.add_argument(
         "--resume-checkpoint",
         default=None,
-        help="resume-safe last.ckpt for --stage full",
+        help="resume-safe last.ckpt for --stage mini/full",
     )
     ap.add_argument(
         "--checkpoint-root",
@@ -112,8 +112,8 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    if args.resume_checkpoint and args.stage != "full":
-        ap.error("--resume-checkpoint is valid only with --stage full")
+    if args.resume_checkpoint and args.stage not in {"mini", "full"}:
+        ap.error("--resume-checkpoint is valid only with --stage mini/full")
     if args.checkpoint_root and args.stage not in {"mini", "full"}:
         ap.error("--checkpoint-root is valid only with mini/full training")
 
@@ -181,6 +181,7 @@ def main() -> None:
             val_rows=args.val_rows,
             epochs=args.epochs,
             seed=seed,
+            resume_checkpoint=args.resume_checkpoint,
         )
         csv_path = save_mini_result_csv(report, args.result_csv)
         diagnostics_path = save_mini_diagnostics_json(report, args.diagnostics_json)

@@ -26,10 +26,11 @@ from web_agent.data.recovery_transitions import recovery_class_audit
 from web_agent.data.review_overlay import ReviewOverlay
 from web_agent.train.gold_stages import (
     _supplement_validation_report,
+    _validate_resume_checkpoint,
     _verify_checkpoint_roundtrip,
     build_gold_components,
 )
-from web_agent.train.resume import sha256_file, training_signature
+from web_agent.train.resume import sha256_file
 from web_agent.train.selection import (
     controlled_quality_gates,
     require_selected_checkpoint,
@@ -54,67 +55,6 @@ def _split_hashes(cfg: dict) -> dict[str, str]:
         split: sha256_file(root / cfg["data"][f"{split}_json"])
         for split in ("train", "val")
     }
-
-
-def _validate_resume_checkpoint(path: str | Path, expected_cfg: dict) -> dict:
-    checkpoint_path = Path(path)
-    if not checkpoint_path.is_file():
-        raise FileNotFoundError(f"resume checkpoint does not exist: {checkpoint_path}")
-    checkpoint = torch.load(
-        checkpoint_path,
-        map_location="cpu",
-        weights_only=False,
-    )
-    required = {
-        "optimizer",
-        "scheduler",
-        "scaler",
-        "rng_state",
-        "config",
-        "epoch",
-        "step",
-        "epoch_complete",
-        "history",
-        "early_stop_state",
-    }
-    missing = sorted(required - set(checkpoint))
-    if missing:
-        raise ValueError(f"resume checkpoint is missing state: {missing}")
-    saved_signature = training_signature(checkpoint["config"])
-    expected_signature = training_signature(expected_cfg)
-    if saved_signature != expected_signature:
-        differing = [
-            key
-            for key in expected_signature
-            if saved_signature.get(key) != expected_signature.get(key)
-        ]
-        raise ValueError(
-            "resume checkpoint does not match this full run; "
-            f"differing sections={differing}"
-        )
-    if not checkpoint["epoch_complete"]:
-        if int(checkpoint.get("batch_in_epoch", 0)) <= 0:
-            raise ValueError("mid-epoch checkpoint has no next-batch position")
-        if checkpoint.get("epoch_state") is None:
-            raise ValueError("mid-epoch checkpoint has no partial epoch state")
-    report = {
-        "status": "PASS",
-        "path": str(checkpoint_path.resolve()),
-        "sha256": sha256_file(checkpoint_path),
-        "epoch": int(checkpoint["epoch"]),
-        "epoch_complete": bool(checkpoint["epoch_complete"]),
-        "next_batch_index": int(checkpoint.get("batch_in_epoch", 0)),
-        "global_step": int(checkpoint["step"]),
-        "completed_history_epochs": [
-            int(row["epoch"]) for row in checkpoint["history"]
-        ],
-        "optimizer_restored": True,
-        "scheduler_restored": True,
-        "scaler_restored": True,
-        "rng_state_restored": True,
-    }
-    del checkpoint
-    return report
 
 
 def run_gold_full(
