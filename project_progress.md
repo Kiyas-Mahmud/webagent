@@ -1139,3 +1139,10 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
 - `webagent_comparison/` and `webagent_full/` (the DGX data/checkpoint working directories,
   7.2 GB and 28 GB respectively, including `hf_cache/`) are plain directories, not git repos,
   and are not intended to be pushed as-is.
+- Wrote `docs/QWEN2VL_2B_GOLD_V2_8_DGX_SEED42_FULL_RESULTS.md`: full analysis of this run —
+  per-head metrics vs majority baselines, all 8 quality gates (PASS), per-epoch trend table,
+  vs-v14 comparison, the 194-row retry/abort supplement held-out check, and honest caveats
+  (21.8% invalid bbox rows masked from bbox loss/eval, weak bbox IoU/action macro-F1, rising
+  outcome_ece with training, recovery-strategy head degrading after epoch 1). Headline:
+  outcome_mcc 0.6242 at epoch 6, clear improvement over v14 on every gated metric, but no
+  locked-test number yet and only one seed/backbone so far.
