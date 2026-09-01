@@ -1118,3 +1118,24 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   50,176-200,704 / batch 16 / accumulation 2 / checkpoint 50, the notebook has zero saved
   outputs, and every code cell parses. The DGX smoke remains the required hardware proof
   before the long run begins.
+
+## 2026-09-01 - DGX full run (qwen2vl_2b_gold_v2_8_dgx, seed 42) completed - PASSED
+
+- The full 10-epoch run on the AIUB DGX (24,107 train rows, 7,861 val rows, 0 test rows read)
+  finished and passed: `FULL CANDIDATE PASSED`
+  (`webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/full/report.json`).
+- Selected epoch 6 by `outcome_mcc` (all-gates-then-outcome_mcc rule): outcome_mcc 0.6242,
+  failure_macro_f1 0.8094. failtype_macro_f1 peaks at epoch 7 (0.5713).
+- Copied the lightweight evidence (diagnostics.json, report.json, source_validation.csv,
+  epoch_metrics.csv — ~526 KB total) into
+  `results/qwen2vl_2b_gold_v2_8_dgx/seed_42/full/` and pushed to `origin/Code`, following the
+  existing results/ convention (small CSV/JSON evidence tracked in git; checkpoints are not —
+  see `.gitignore`).
+- Checkpoints (11 files, ~278 MB each, ~3 GB total) live only on the DGX box at
+  `/home/aiub/kiyas/webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/full/checkpoints/`.
+  They are gitignored (`*.ckpt`) and exceed GitHub's 100 MB per-file push limit anyway — they
+  are NOT in this push. Pull them to another machine via `scp`/`rsync` or an external store
+  (Kaggle/HF dataset, cloud drive) if needed, not git.
+- `webagent_comparison/` and `webagent_full/` (the DGX data/checkpoint working directories,
+  7.2 GB and 28 GB respectively, including `hf_cache/`) are plain directories, not git repos,
+  and are not intended to be pushed as-is.
