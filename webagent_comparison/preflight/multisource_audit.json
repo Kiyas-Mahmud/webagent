@@ -1,0 +1,83 @@
+{
+  "checkpoint_selection_validation_source": "original_gold_only",
+  "errors": [],
+  "permitted_next_action": "SUPPLEMENT_FORWARD_BACKWARD_SANITY",
+  "primary_training_rows": 24107,
+  "primary_validation_rows": 7861,
+  "schema": "retry-abort-supplement-v2-multisource-audit",
+  "splits": {
+    "train": {
+      "combined_rows": 24107,
+      "invalid_loss_masks": 0,
+      "invalid_source_tags": 0,
+      "original_rows": 23499,
+      "original_supplement_identity_overlap": {
+        "sample_id": 0,
+        "session_id": 0,
+        "task_id": 0,
+        "trajectory_id": 0
+      },
+      "supplement_direct_transitions": 608,
+      "supplement_rows": 608,
+      "supplement_strategy": {
+        "ABORT": 295,
+        "RETRY": 313
+      },
+      "transition_report": {
+        "adjacent_transitions": 0,
+        "ambiguous_next_sample_ids": [],
+        "ambiguous_next_step": 0,
+        "attempted_recoveries": 608,
+        "coverage": 1.0,
+        "direct_transitions": 608,
+        "invalid_attempted_label_contract": 0,
+        "invalid_attempted_sample_ids": [],
+        "missing_next_sample_ids": [],
+        "missing_next_step": 0,
+        "nonconsecutive_next_sample_ids": [],
+        "nonconsecutive_next_step": 0,
+        "proper_transitions": 608,
+        "rows": 608,
+        "tasks": 608
+      }
+    },
+    "val": {
+      "combined_rows": 8055,
+      "invalid_loss_masks": 0,
+      "invalid_source_tags": 0,
+      "original_rows": 7861,
+      "original_supplement_identity_overlap": {
+        "sample_id": 0,
+        "session_id": 0,
+        "task_id": 0,
+        "trajectory_id": 0
+      },
+      "supplement_direct_transitions": 194,
+      "supplement_rows": 194,
+      "supplement_strategy": {
+        "ABORT": 92,
+        "RETRY": 102
+      },
+      "transition_report": {
+        "adjacent_transitions": 0,
+        "ambiguous_next_sample_ids": [],
+        "ambiguous_next_step": 0,
+        "attempted_recoveries": 194,
+        "coverage": 1.0,
+        "direct_transitions": 194,
+        "invalid_attempted_label_contract": 0,
+        "invalid_attempted_sample_ids": [],
+        "missing_next_sample_ids": [],
+        "missing_next_step": 0,
+        "nonconsecutive_next_sample_ids": [],
+        "nonconsecutive_next_step": 0,
+        "proper_transitions": 194,
+        "rows": 194,
+        "tasks": 194
+      }
+    }
+  },
+  "status": "PASS",
+  "supplement_validation_rows_available_separately": 194,
+  "test_rows_read": 0
+}

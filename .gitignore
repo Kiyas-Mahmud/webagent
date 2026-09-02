@@ -39,3 +39,7 @@ FinalData/
 
 # local study notes - not tracked
 learn/
+
+# Exception: model-comparison run artifacts are tracked via Git LFS.
+# Must come after the *.ckpt rule above to re-include them.
+!/webagent_comparison/**/*.ckpt
