@@ -1146,3 +1146,30 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   outcome_ece with training, recovery-strategy head degrading after epoch 1). Headline:
   outcome_mcc 0.6242 at epoch 6, clear improvement over v14 on every gated metric, but no
   locked-test number yet and only one seed/backbone so far.
+
+## 2026-09-02 - Checkpoints now pushed to origin/Code via Git LFS (reverses the 2026-09-01 decision)
+
+- **This reverses the "checkpoints are NOT pushed" decision recorded in the 2026-09-01 entry
+  above.** On explicit instruction, the `webagent_comparison/` run directory was committed to
+  the repo and pushed to `origin/Code` (commit `12b6c3e`). The 2026-09-01 notes stating the
+  checkpoints "are NOT in this push" and that `webagent_comparison/` is "not intended to be
+  pushed as-is" are superseded for this run.
+- Scope pushed: all 21 non-cache files (3.0 GB) — 11 checkpoints (~278 MB each, epochs 0-9 +
+  `last.ckpt`), the four lightweight `full/` evidence files, `run_contract.json(.bak)`,
+  `model_compatibility_report.json`, both `preflight/` audits, and `environment.json`. They
+  live at `webagent_comparison/` in the repo, mirroring the DGX directory layout.
+- `hf_cache/` (4.2 GB, the Qwen2-VL-2B HuggingFace download cache) is deliberately NOT pushed —
+  it is re-downloadable from HuggingFace and would have tripled the LFS footprint for no
+  reproducibility gain.
+- Mechanics: the 100 MB per-file GitHub limit is cleared by Git LFS. `.gitattributes` tracks
+  `webagent_comparison/**/*.ckpt`; `.gitignore` gained a trailing `!/webagent_comparison/**/*.ckpt`
+  negation (it must stay *after* the repo-wide `*.ckpt` rule to take effect). The repo-wide
+  convention is otherwise unchanged: checkpoints elsewhere remain gitignored, and `results/`
+  still carries only the small CSV/JSON evidence.
+- Uploaded 3.2 GB of LFS objects. **This exceeds GitHub's 1 GB free LFS tier** — the account
+  needs a paid LFS data pack, or future pushes and clones will fail on quota. Anyone cloning
+  needs `git lfs` installed, or the `.ckpt` files arrive as pointer stubs; `git lfs pull`
+  fetches the real weights.
+- `git-lfs` was not installed on the DGX box and there is no passwordless sudo, so the v3.5.1
+  linux-arm64 standalone binary was installed to `~/.local/bin/git-lfs` (note: the box is
+  aarch64, not x86-64).
