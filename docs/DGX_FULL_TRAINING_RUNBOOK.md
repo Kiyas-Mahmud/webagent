@@ -189,9 +189,17 @@ restart. The default is `/workspace/webagent_full`.
         epoch_metrics.csv
         diagnostics.json
         full_report.json
+        resolved_config.json          # post-run export of selected checkpoint['config']
         source_validation.csv
         run_contract.json
 ```
+
+`resolved_config.json` is a post-training handoff artifact, not a reason to
+alter or restart an active run. Export the selected checkpoint's saved full
+`config` mapping as canonical JSON after validation-only selection; do not
+reconstruct it from a later checkout. The Table 2 handoff independently
+requires that mapping to equal the registered fully resolved candidate config
+and records both the file-byte and canonical-mapping SHA-256 identities.
 
 Do not place `WORKSPACE_ROOT` in an ephemeral `/tmp` directory.
 

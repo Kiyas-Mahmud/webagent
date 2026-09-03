@@ -2,11 +2,17 @@
 
 > **Read this first, every session.** Then read the four reference files listed below before writing any code. This file is the entry point; the four files are the full detail.
 
+> **Table 2 authority:** for post-training browser runtime, causal pillar
+> ordering, E0-E3 systems, recovery budgets, frozen memory, and evaluation,
+> also read `TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`. That document
+> supersedes conflicting legacy runtime text here or in the four historical
+> reference files; it does not modify the registered training experiment.
+
 ---
 
 ## 1. PROJECT IN ONE PARAGRAPH
 
-We are building a **failure-aware autonomous web agent** for an MSc thesis (AIUB, graduation Dec 2026) targeting a **Q1 journal + thesis competition**. Web agents today are trained only on successful demonstrations, so they act but cannot detect, diagnose, recover from, or remember failures. Our system learns all of this from a purpose-built **failure-augmented dataset of 70,965 labeled web-interaction steps** (derived from Mind2Web, 136 websites). The model is a **unified 4-pillar architecture** with one shared encoder feeding four task heads, trained with one combined weighted loss. The architecture is **backbone-agnostic**: it works with dual encoders (SigLIP + RoBERTa via cross-attention fusion) and with unified VLMs (Qwen2.5-VL, InternVL2 via a single adapter layer). We train the same architecture with 7 backbones, 5 ablations, and 7 baselines (19 models total), then select the **best-performing backbone as the primary model by validation results** — it is NOT pre-fixed.
+We are building a **failure-aware autonomous web agent** for an MSc thesis (AIUB, graduation Dec 2026) targeting a **Q1 journal + thesis competition**. Web agents today are trained only on successful demonstrations, so they act but cannot detect, diagnose, recover from, or remember failures. Earlier project iterations used a purpose-built **70,965-step failure-augmented corpus** derived from Mind2Web; that count is historical context, not the authority for current experiments. Current registered training and evaluation use the reviewed Gold v2.8 artifacts and their run-specific manifests. The model is a **unified 4-pillar architecture** with one shared encoder feeding four task heads, trained with one combined weighted loss. The architecture is **backbone-agnostic**: it works with dual encoders (SigLIP + RoBERTa via cross-attention fusion) and with unified VLMs (Qwen2.5-VL, InternVL2 via a single adapter layer). We train the same architecture across candidate backbones and select the **best-performing backbone as the primary model by validation results** — it is NOT pre-fixed.
 
 ---
 
@@ -29,7 +35,7 @@ The novelty is the **unified 4-pillar framework + the failure dataset**, and the
 
 ---
 
-## 4. READ THESE FOUR FILES BEFORE CODING
+## 4. READ THE CORE FILES BEFORE CODING
 
 ```
 PROJECT_SPECIFICATION.md   THE WHAT
@@ -47,6 +53,9 @@ MODEL_TRAINING_PLAN.md     TRAINING ORDER (test-first)
 IMPLEMENTATION_PLAN.md     FULL TIMELINE
    phase-by-phase from setup to paper, requirements,
    techniques, exit criteria, risk register
+
+TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md
+   canonical post-training E0-E3 browser runtime and Table 2 evaluation
 ```
 
 Always reconcile any decision against these files. If something here conflicts with them, ask the user before proceeding.
@@ -110,7 +119,12 @@ Checkpoint every 500 steps so a dead session can resume
 
 ---
 
-## 6. DATASET QUICK FACTS
+## 6. LEGACY DATASET QUICK FACTS (HISTORICAL)
+
+The figures below describe the earlier 70,965-row synthetic corpus only. They
+are retained to explain project history and must not be used as current Gold
+v2.8 corpus authority. Use the reviewed-Gold manifests and the registered DGX
+run documents for current training claims.
 
 ```
 Files:   split_train.json (38,875), split_val.json (~16k), split_test.json (~16k)

@@ -8,13 +8,41 @@
 # Checkpoints + artifacts
 /checkpoints/
 /kaggle_outputs/
+/artifacts/
+/outputs/
+/locked_benchmark_mount/
 *.ckpt
 *.pt
 *.pth
+*.safetensors
 
-# Results (keep folder structure, ignore heavy outputs)
+# Table 2 browser/runtime evidence (raw and never committed)
+/browser_profiles/
+/captures/
+/private/
+/playwright/.auth/
+*.har
+*.webm
+*.mp4
+*.mkv
+*.trace
+*.trace.zip
+**/runtime/screenshots/
+*.faiss
+*.index
+*.embeddings.npy
+embeddings.npy
+/playwright-report/
+/test-results/
+cookies*.json
+credentials*.json
+storage_state*.json
+
+# Generated results. Table 2 exports stay ignored until a separately reviewed,
+# redacted paper artifact is deliberately placed in a tracked paper location.
 results/curves/
 results/figures/
+results/table2/
 wandb/
 
 # Python
@@ -31,13 +59,16 @@ dist/
 .venv/
 venv/
 .env
+.env.*
+!.env.example
+!.env.template
 
 # local data dumps - never commit
 FinalData.zip
 *.zip
 FinalData/
 
-# local study notes - not tracked
+# Ignore new local study-note additions; existing indexed legacy notes are preserved.
 learn/
 
 # Exception: model-comparison run artifacts are tracked via Git LFS.

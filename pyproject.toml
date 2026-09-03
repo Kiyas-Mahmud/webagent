@@ -29,6 +29,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+table2 = [
+    "browsergym-core==0.14.3",
+    "browsergym-webarena==0.14.3",
+    "gymnasium==1.0.0",
+    "libwebarena==0.0.4",
+    "playwright==1.44.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

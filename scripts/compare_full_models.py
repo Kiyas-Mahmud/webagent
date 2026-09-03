@@ -137,8 +137,8 @@ def main() -> None:
         "models": ranked,
         "test_rows_read": 0,
         "next_action": (
-            "Run the selected backbone on seeds 43 and 44 before locked-test "
-            "evaluation and publication reporting."
+            "Promote the validation-selected seed-42 checkpoint to the frozen final "
+            "Table 2 campaign; do not add model seeds 43 or 44."
         ),
     }
     args.json.parent.mkdir(parents=True, exist_ok=True)

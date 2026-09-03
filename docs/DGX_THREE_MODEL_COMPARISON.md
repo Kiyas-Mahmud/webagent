@@ -136,11 +136,12 @@ eligible validation results; it does not evaluate the locked test.
 
 ## Final model decision
 
-Seed 42 is a candidate-screening comparison, not sufficient evidence for a
-paper winner. Train only the selected backbone again with seeds 43 and 44,
-using the same protocol. Report mean and standard deviation across the three
-seeds. Freeze the model and analysis plan before the single locked-test
-evaluation used for the paper.
+Use the three candidates' completed seed-42 validation packages for the
+registered validation-only comparison. Do not retrain PC-01 and do not add
+seeds 43 or 44 for Table 2. Promote the winning seed-42 checkpoint, and report
+explicitly that the paired browser experiment measures task uncertainty but
+not model-seed uncertainty. Freeze the model and analysis plan before the
+single locked-test evaluation used for the paper.
 
 Until the actual DGX compatibility gate, controlled mini, and full reports
 exist, the two new integrations are code-ready but not empirically validated.

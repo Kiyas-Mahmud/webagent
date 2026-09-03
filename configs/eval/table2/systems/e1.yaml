@@ -1,0 +1,11 @@
+schema_version: "1.0"
+system_id: E1
+display_name: Trained action and grounding, no recovery
+policy_source: selected_checkpoint
+features:
+  trained_pre_action_policy: true
+  post_action_diagnosis: false
+  recovery_controller: false
+  memory_query: false
+  memory_intervention: false
+  evaluation_memory_write: false

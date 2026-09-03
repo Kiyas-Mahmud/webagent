@@ -135,6 +135,33 @@ class WebAgentModel(nn.Module):
             result["spatial_coords"] = encoded["spatial_coords"].float()
         return result
 
+    @torch.inference_mode()
+    def memory_embedding(self, batch: dict) -> torch.Tensor:
+        """Return the post-action 768-d tensor consumed by ``memory_head``.
+
+        This is an inference-only view of the existing causal route.  It does
+        not call any prediction head, normalize the representation, or alter
+        ``forward``.  Callers must put the complete model in evaluation mode so
+        the returned tensor is exactly the deterministic memory-task-adapter
+        input used by the selected checkpoint.
+        """
+        if self.training:
+            raise RuntimeError("memory_embedding requires model.eval()")
+        if not getattr(self, "causal_routing", False):
+            raise RuntimeError(
+                "memory_embedding requires the registered causal post-action route"
+            )
+        post_encoded = self.encode(batch, prefix="post_")
+        memory_fused = self.task_adapters["memory"](post_encoded["fused"])
+        if memory_fused.ndim != 2 or memory_fused.shape[-1] != 768:
+            raise RuntimeError(
+                "memory task-adapter representation must have shape [B, 768], "
+                f"got {tuple(memory_fused.shape)}"
+            )
+        if not torch.isfinite(memory_fused).all():
+            raise RuntimeError("memory task-adapter representation is non-finite")
+        return memory_fused.detach()
+
     def forward(self, batch: dict) -> dict:
         if self.causal_routing:
             pre_encoded = self.encode(batch, prefix="pre_")

@@ -1,0 +1,11 @@
+schema_version: "1.0"
+system_id: E0
+display_name: Base selected-backbone agent
+policy_source: selected_backbone_unadapted
+features:
+  trained_pre_action_policy: false
+  post_action_diagnosis: false
+  recovery_controller: false
+  memory_query: false
+  memory_intervention: false
+  evaluation_memory_write: false

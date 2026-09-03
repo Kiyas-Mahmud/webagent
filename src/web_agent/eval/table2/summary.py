@@ -1,0 +1,1086 @@
+"""Produce guarded aggregate artifacts from a validated campaign package."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+import csv
+import io
+import json
+import os
+from pathlib import Path
+from typing import Any
+
+from .common import (
+    SCHEMA_VERSION,
+    SchemaError,
+    Table2Error,
+    atomic_write_json,
+    canonical_json_bytes,
+    read_json,
+    sha256_file,
+    sha256_json,
+    strict_bool,
+)
+from .metrics import compute_table2_metrics
+from .package_validator import (
+    DRAFT_PILOT_STATUS,
+    FINAL_READY_STATUS,
+    load_selected_analysis_records,
+    load_yaml,
+    validate_manual_adjudication_completion,
+    validate_campaign,
+    write_csv,
+)
+from .retrieval_metrics import compute_retrieval_diagnostics
+from .schedule import SYSTEM_IDS
+from .statistics import compute_clustered_ratio_contrasts, compute_paired_contrasts
+
+
+MAIN_FIELDS = (
+    "System",
+    "Task Success Rate",
+    "Recovery Success Rate",
+    "Success After Initial Failure",
+    "Avg. Browser Actions",
+    "Loop Episode Rate",
+    "Unrecovered Failure Rate",
+    "Evidence Status",
+)
+MANUAL_AUDIT_CASE_CATEGORIES = (
+    "successful_recovery",
+    "failed_recovery",
+    "memory_help",
+    "memory_harm",
+    "environment_failure",
+    "bbox_or_parameter_failure",
+    "loop",
+    "unnecessary_intervention",
+)
+
+
+def summarize_campaign(
+    campaign_dir: str | Path,
+    *,
+    results_dir: str | Path | None = None,
+    draft_pilot: bool = False,
+) -> dict[str, Any]:
+    if type(draft_pilot) is not bool:
+        raise TypeError("draft_pilot must be an exact boolean")
+    root = Path(campaign_dir).resolve()
+    aggregate = root / "aggregate"
+    aggregate.mkdir(parents=True, exist_ok=True)
+    validation = validate_campaign(root, require_complete=True, require_aggregates=False)
+    atomic_write_json(aggregate / "validation_report.json", validation.to_dict())
+    if not validation.passed:
+        _write_guarded_main_table(aggregate, publication_status=validation.publication_status)
+        raise Table2Error("campaign validation failed: " + "; ".join(validation.errors))
+
+    protocol = load_yaml(root / "frozen" / "protocol.yaml")
+    records = load_selected_analysis_records(root)
+    normal_episode_ids = {
+        str(row["episode_id"])
+        for row in records["episodes"]
+        if row.get("task_partition") == "normal"
+    }
+    recovery_episode_ids = {
+        str(row["episode_id"])
+        for row in records["episodes"]
+        if row.get("task_partition") == "recovery_diagnostic"
+    }
+    normal_episodes = [
+        row for row in records["episodes"] if str(row["episode_id"]) in normal_episode_ids
+    ]
+    recovery_episodes = [
+        row for row in records["episodes"] if str(row["episode_id"]) in recovery_episode_ids
+    ]
+    recovery_k = int(protocol["budgets"].get("recovery_at_k", 2))
+    statistics_cfg = protocol.get("statistics", {})
+    rate_inference = {
+        "bootstrap_samples": int(statistics_cfg.get("bootstrap_samples", 10_000)),
+        "confidence": float(statistics_cfg.get("confidence_level", 0.95)),
+        "bootstrap_seed": int(statistics_cfg.get("seed", 20250831)),
+    }
+    metrics = compute_table2_metrics(
+        normal_episodes,
+        recovery_attempts=[
+            row for row in records["recovery_attempts"] if str(row["episode_id"]) in normal_episode_ids
+        ],
+        failure_incidents=[
+            row for row in records["failure_incidents"] if str(row["episode_id"]) in normal_episode_ids
+        ],
+        schedule_attempts=records["schedule_attempts"],
+        recovery_k=recovery_k,
+        **rate_inference,
+    )
+    diagnostic_metrics = compute_table2_metrics(
+        recovery_episodes,
+        recovery_attempts=[
+            row for row in records["recovery_attempts"] if str(row["episode_id"]) in recovery_episode_ids
+        ],
+        failure_incidents=[
+            row for row in records["failure_incidents"] if str(row["episode_id"]) in recovery_episode_ids
+        ],
+        recovery_k=recovery_k,
+        **rate_inference,
+    )
+    retrieval = compute_retrieval_diagnostics(
+        [
+            row for row in records["memory_queries"] if str(row["episode_id"]) in normal_episode_ids
+        ]
+    )
+    diagnostic_retrieval = compute_retrieval_diagnostics(
+        [
+            row for row in records["memory_queries"] if str(row["episode_id"]) in recovery_episode_ids
+        ]
+    )
+    statistic_keys = [
+        "task_success",
+        "step_count",
+        "loop_detected",
+    ]
+    if all(row.get("task_wall_clock_seconds") is not None for row in normal_episodes):
+        statistic_keys.append("task_wall_clock_seconds")
+    if all(row.get("model_call_count") is not None for row in normal_episodes):
+        statistic_keys.append("model_call_count")
+    statistics = compute_paired_contrasts(
+        normal_episodes,
+        metric_keys=tuple(statistic_keys),
+        bootstrap_samples=int(statistics_cfg.get("bootstrap_samples", 10_000)),
+        confidence=float(statistics_cfg.get("confidence_level", 0.95)),
+        seed=int(statistics_cfg.get("seed", 20250831)),
+    )
+    ratio_rows = _ratio_statistic_rows(
+        normal_episodes,
+        recovery_attempts=[
+            row
+            for row in records["recovery_attempts"]
+            if str(row["episode_id"]) in normal_episode_ids
+        ],
+        failure_incidents=[
+            row
+            for row in records["failure_incidents"]
+            if str(row["episode_id"]) in normal_episode_ids
+        ],
+    )
+    statistics["clustered_ratio_contrasts"] = compute_clustered_ratio_contrasts(
+        ratio_rows,
+        ratio_fields={
+            "success_after_initial_failure": (
+                "saf_success_count",
+                "verified_failure_episode_count",
+            ),
+            "registered_recovery_success": (
+                "successful_recovery_attempt_count",
+                "initiated_recovery_attempt_count",
+            ),
+        },
+        bootstrap_samples=int(statistics_cfg.get("bootstrap_samples", 10_000)),
+        confidence=float(statistics_cfg.get("confidence_level", 0.95)),
+        seed=int(statistics_cfg.get("seed", 20250831)),
+    )
+    # Selection is outcome-blinded and must exist before reviewers can work.
+    # It is therefore the final permitted write before the publication gate.
+    audit_selection = build_manual_audit_selection(root, records)
+    campaign_manifest = read_json(root / "campaign_manifest.json")
+    publication_status = _summary_publication_status(
+        root,
+        campaign_manifest,
+        validation_status=validation.publication_status,
+        draft_pilot=draft_pilot,
+    )
+    diagnostic_status = (
+        publication_status
+        if campaign_manifest.get("evidence_label") == "PILOT_ONLY"
+        else "PILOT_ONLY"
+    )
+    metrics["publication_status"] = publication_status
+    metrics["headline_task_partition"] = "normal"
+    diagnostic_metrics["publication_status"] = diagnostic_status
+    diagnostic_metrics["task_partition"] = "recovery_diagnostic"
+    retrieval["publication_status"] = publication_status
+    diagnostic_retrieval["publication_status"] = diagnostic_status
+    statistics["publication_status"] = publication_status
+    metrics["paper_table_status"] = (
+        "READY" if publication_status == FINAL_READY_STATUS else "N/R"
+    )
+    atomic_write_json(aggregate / "metrics.json", metrics)
+    atomic_write_json(aggregate / "recovery_diagnostic_metrics.json", diagnostic_metrics)
+    atomic_write_json(aggregate / "retrieval_diagnostics.json", retrieval)
+    atomic_write_json(
+        aggregate / "recovery_diagnostic_retrieval.json", diagnostic_retrieval
+    )
+    atomic_write_json(aggregate / "statistics.json", statistics)
+    _write_episode_csv(aggregate, records["episodes"])
+    _write_metric_csv(aggregate, metrics)
+    _write_main_table(aggregate, metrics, publication_status)
+    _write_companion_table(aggregate, metrics, recovery_k, publication_status)
+    resolved_results_dir = _resolve_results_dir(
+        root,
+        campaign_id=str(campaign_manifest["campaign_id"]),
+        requested=results_dir,
+        draft_pilot=publication_status == DRAFT_PILOT_STATUS,
+    )
+    results_manifest = _export_results(
+        root,
+        resolved_results_dir,
+        metrics=metrics,
+        retrieval=retrieval,
+        statistics=statistics,
+        validation={**validation.to_dict(), "publication_status": publication_status},
+        audit_selection=audit_selection,
+    )
+    atomic_write_json(aggregate / "results_manifest.json", results_manifest)
+    _write_aggregate_hashes(aggregate)
+    _write_campaign_evidence_manifest(root)
+
+    final_validation = validate_campaign(root, require_complete=True, require_aggregates=True)
+    atomic_write_json(aggregate / "validation_report.json", final_validation.to_dict())
+    if not final_validation.passed:
+        raise Table2Error("aggregate package validation failed: " + "; ".join(final_validation.errors))
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "campaign_dir": str(root),
+        "publication_status": final_validation.publication_status,
+        "paper_table_status": (
+            "READY" if final_validation.publication_status == FINAL_READY_STATUS else "N/R"
+        ),
+        "aggregate_dir": str(aggregate),
+        "manual_audit_manifest": str(root / "manual_audit" / "selection_manifest.json"),
+        "results_dir": str(resolved_results_dir),
+    }
+
+
+def _summary_publication_status(
+    root: Path,
+    campaign_manifest: Mapping[str, Any],
+    *,
+    validation_status: str,
+    draft_pilot: bool,
+) -> str:
+    """Separate an explicit draft from a human-complete pilot publication."""
+
+    pilot = campaign_manifest.get("evidence_label") == "PILOT_ONLY"
+    if draft_pilot:
+        if not pilot:
+            raise Table2Error("draft_pilot is valid only for a PILOT_ONLY campaign")
+        return DRAFT_PILOT_STATUS
+    try:
+        validate_manual_adjudication_completion(root)
+    except (FileNotFoundError, OSError, TypeError, ValueError, KeyError, SchemaError) as exc:
+        boundary = "final PILOT_ONLY" if pilot else "locked-final"
+        raise Table2Error(
+            f"{boundary} summary/export requires completed, signed, hash-bound "
+            f"blinded human adjudication: {exc}"
+        ) from exc
+    return "PILOT_ONLY" if pilot else validation_status
+
+
+def _write_episode_csv(aggregate: Path, episodes: list[dict[str, Any]]) -> None:
+    fields = (
+        "block_id",
+        "episode_id",
+        "task_id",
+        "task_partition",
+        "system_id",
+        "matched_model_seed",
+        "repeat_id",
+        "task_success",
+        "loop_detected",
+        "environment_failure",
+        "step_count",
+        "executed_action_count",
+        "rejected_action_count",
+        "recovery_action_count",
+        "recovery_attempt_count",
+        "model_call_count",
+        "task_wall_clock_seconds",
+        "decision_latency_ms",
+        "provider_latency_ms",
+        "recovery_latency_ms",
+        "retrieval_latency_ms",
+        "input_token_count",
+        "output_token_count",
+        "model_parameter_count",
+        "trainable_parameter_count",
+        "peak_gpu_memory_mb",
+        "peak_system_memory_mb",
+        "memory_index_size",
+        "training_gpu_hours",
+        "verified_failure_event_count",
+        "repeated_error_events",
+    )
+    write_csv(aggregate / "episodes.csv", episodes, fields)
+
+
+def _ratio_statistic_rows(
+    episodes: list[dict[str, Any]],
+    *,
+    recovery_attempts: list[dict[str, Any]],
+    failure_incidents: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    attempts_by_episode: dict[str, list[dict[str, Any]]] = {}
+    for row in recovery_attempts:
+        attempts_by_episode.setdefault(str(row["episode_id"]), []).append(row)
+    incidents_by_episode: dict[str, list[dict[str, Any]]] = {}
+    for row in failure_incidents:
+        incidents_by_episode.setdefault(str(row["episode_id"]), []).append(row)
+    output: list[dict[str, Any]] = []
+    for episode in episodes:
+        episode_id = str(episode["episode_id"])
+        verified_failure = any(
+            strict_bool(
+                row["verified_agent_failure"],
+                context="statistics.verified_agent_failure",
+            )
+            for row in incidents_by_episode.get(episode_id, [])
+        )
+        initiated = [
+            row
+            for row in attempts_by_episode.get(episode_id, [])
+            if strict_bool(row.get("initiated", True), context="statistics.initiated")
+        ]
+        successful = sum(
+            strict_bool(
+                row["verified_failure_present"],
+                context="statistics.verified_failure_present",
+            )
+            and strict_bool(row["successful"], context="statistics.recovery_success")
+            for row in initiated
+        )
+        output.append(
+            {
+                **episode,
+                "verified_failure_episode_count": int(verified_failure),
+                "saf_success_count": int(
+                    verified_failure
+                    and strict_bool(
+                        episode["task_success"], context="statistics.task_success"
+                    )
+                ),
+                "initiated_recovery_attempt_count": len(initiated),
+                "successful_recovery_attempt_count": successful,
+            }
+        )
+    return output
+
+
+def _write_metric_csv(aggregate: Path, metrics: Mapping[str, Any]) -> None:
+    rows: list[dict[str, Any]] = []
+    for system_id in SYSTEM_IDS:
+        values = metrics["systems"][system_id]
+        row: dict[str, Any] = {
+            "system_id": system_id,
+            "publication_status": metrics["publication_status"],
+        }
+        for key, value in values.items():
+            if isinstance(value, Mapping) and "estimate" in value:
+                row[f"{key}_numerator"] = value.get("numerator")
+                row[f"{key}_denominator"] = value.get("denominator")
+                row[key] = value.get("estimate")
+                row[f"{key}_ci_low"] = value.get(
+                    "ci_low", value.get("ci95_low")
+                )
+                row[f"{key}_ci_high"] = value.get(
+                    "ci_high", value.get("ci95_high")
+                )
+                row[f"{key}_interval_method"] = value.get("interval_method")
+                row[f"{key}_n_task_clusters"] = value.get("n_task_clusters")
+            elif key == "steps":
+                row["mean_browser_actions"] = value["all"]["mean"]
+                row["median_browser_actions"] = value["all"]["median"]
+        rows.append(row)
+    fields = []
+    for row in rows:
+        for key in row:
+            if key not in fields:
+                fields.append(key)
+    write_csv(aggregate / "metrics.csv", rows, fields)
+
+
+def _write_main_table(
+    aggregate: Path,
+    metrics: Mapping[str, Any],
+    publication_status: str,
+) -> None:
+    if publication_status != FINAL_READY_STATUS:
+        _write_guarded_main_table(aggregate, publication_status=publication_status)
+        return
+    rows = []
+    for system_id in SYSTEM_IDS:
+        values = metrics["systems"][system_id]
+        rows.append(
+            {
+                "System": system_id,
+                "Task Success Rate": values["task_success_rate"]["display"],
+                "Recovery Success Rate": values["recovery_success_rate"]["display"],
+                "Success After Initial Failure": values["success_after_initial_failure"]["display"],
+                "Avg. Browser Actions": _format_number(values["steps"]["all"]["mean"]),
+                "Loop Episode Rate": values["loop_episode_rate"]["display"],
+                "Unrecovered Failure Rate": values["unrecovered_failure_rate"]["display"],
+                "Evidence Status": FINAL_READY_STATUS,
+            }
+        )
+    write_csv(aggregate / "table2_main.csv", rows, MAIN_FIELDS)
+
+
+def _write_guarded_main_table(aggregate: Path, *, publication_status: str) -> None:
+    guard = "N/R"
+    rows = []
+    for system_id in SYSTEM_IDS:
+        values = {field: guard for field in MAIN_FIELDS}
+        values["System"] = system_id
+        values["Evidence Status"] = publication_status
+        rows.append(values)
+    write_csv(aggregate / "table2_main.csv", rows, MAIN_FIELDS)
+
+
+def _write_companion_table(
+    aggregate: Path,
+    metrics: Mapping[str, Any],
+    recovery_k: int,
+    publication_status: str,
+) -> None:
+    fields = (
+        "System",
+        "Recovery@1",
+        f"Recovery@{recovery_k}",
+        "Verified-failure-only RSR",
+        "Episode recovery success rate",
+        "False-trigger rate",
+        "Unnecessary-intervention rate",
+        "Repeated-error event rate",
+        "Verified-failure incidence",
+        "Avg. recovery attempts/run",
+        "Avg. recovery attempts/failure episode",
+        "Environment failure rate",
+        "Task wall-clock seconds",
+        "Model call count",
+        "Decision latency ms",
+        "Provider latency ms",
+        "Recovery latency ms",
+        "Retrieval latency ms",
+        "Input tokens",
+        "Output tokens",
+        "Model parameters",
+        "Trainable parameters",
+        "Peak GPU memory MB",
+        "Peak system memory MB",
+        "Memory index size",
+        "Training GPU hours",
+        "Evidence Status",
+    )
+    guard = None if publication_status == FINAL_READY_STATUS else "N/R"
+    rows = []
+    for system_id in SYSTEM_IDS:
+        values = metrics["systems"][system_id]
+        rows.append(
+            {
+                "System": system_id,
+                "Recovery@1": guard or values["recovery_at_1"]["display"],
+                f"Recovery@{recovery_k}": guard or values[f"recovery_at_{recovery_k}"]["display"],
+                "Verified-failure-only RSR": guard or values["verified_failure_only_recovery_success_rate"]["display"],
+                "Episode recovery success rate": guard or values["episode_recovery_success_rate"]["display"],
+                "False-trigger rate": guard or values["false_trigger_rate"]["display"],
+                "Unnecessary-intervention rate": guard or values["unnecessary_intervention_rate"]["display"],
+                "Repeated-error event rate": guard or values["repeated_error_event_rate"]["display"],
+                "Verified-failure incidence": guard or values["verified_failure_incidence"]["display"],
+                "Avg. recovery attempts/run": guard or _format_number(
+                    values["recovery_attempts_per_episode"]["mean"]
+                ),
+                "Avg. recovery attempts/failure episode": guard or _format_number(
+                    values["recovery_attempts_per_failure_episode"]["mean"]
+                ),
+                "Environment failure rate": guard
+                or metrics["environment_failure_rate"]["by_system"][system_id]["display"],
+                "Task wall-clock seconds": guard
+                or _format_number(values["efficiency"]["task_wall_clock_seconds"]["mean"]),
+                "Model call count": guard
+                or _format_number(values["efficiency"]["model_call_count"]["mean"]),
+                "Decision latency ms": guard
+                or _format_number(values["efficiency"]["decision_latency_ms"]["mean"]),
+                "Provider latency ms": guard
+                or _format_number(values["efficiency"]["provider_latency_ms"]["mean"]),
+                "Recovery latency ms": guard
+                or _format_number(values["efficiency"]["recovery_latency_ms"]["mean"]),
+                "Retrieval latency ms": guard
+                or _format_number(values["efficiency"]["retrieval_latency_ms"]["mean"]),
+                "Input tokens": guard
+                or _format_number(values["efficiency"]["input_token_count"]["mean"]),
+                "Output tokens": guard
+                or _format_number(values["efficiency"]["output_token_count"]["mean"]),
+                "Model parameters": guard
+                or _format_number(values["efficiency"]["model_parameter_count"]["mean"]),
+                "Trainable parameters": guard
+                or _format_number(values["efficiency"]["trainable_parameter_count"]["mean"]),
+                "Peak GPU memory MB": guard
+                or _format_number(values["efficiency"]["peak_gpu_memory_mb"]["mean"]),
+                "Peak system memory MB": guard
+                or _format_number(values["efficiency"]["peak_system_memory_mb"]["mean"]),
+                "Memory index size": guard
+                or _format_number(values["efficiency"]["memory_index_size"]["mean"]),
+                "Training GPU hours": guard
+                or _format_number(values["efficiency"]["training_gpu_hours"]["mean"]),
+                "Evidence Status": publication_status,
+            }
+        )
+    write_csv(aggregate / "table2_companion.csv", rows, fields)
+
+
+def _format_number(value: Any) -> str:
+    return "N/A" if value is None else f"{float(value):.2f}"
+
+
+def build_manual_audit_selection(
+    campaign_dir: str | Path,
+    records: Mapping[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Create the deterministic, outcome-blinded post-completion audit sample."""
+
+    root = Path(campaign_dir).resolve()
+    definition = read_json(root / "frozen" / "benchmark" / "audit_manifest.json")
+    if definition.get("blinded") is not True or definition.get(
+        "selection_occurs_after_episode_completion"
+    ) is not True:
+        raise SchemaError("manual audit definition is not blinded/post-completion")
+    strata_definition = definition.get("strata")
+    if not isinstance(strata_definition, list):
+        raise SchemaError("manual audit definition lacks strata")
+    targets = {
+        str(row["name"]): int(row["target"])
+        for row in strata_definition
+        if isinstance(row, Mapping)
+    }
+    registered_names = {
+        "ordinary_success",
+        "terminal_failure",
+        "recovery",
+        "e2_e3_disagreement",
+    }
+    if set(targets) != registered_names or any(value != 5 for value in targets.values()):
+        raise SchemaError("manual audit must register four strata of five cases")
+    required_categories = definition.get("required_case_categories")
+    if not isinstance(required_categories, list) or tuple(required_categories) != (
+        MANUAL_AUDIT_CASE_CATEGORIES
+    ):
+        raise SchemaError("manual audit required case categories differ from registration")
+
+    episodes = [
+        dict(row)
+        for row in records["episodes"]
+        if str(row.get("task_partition")) == "normal"
+    ]
+    by_episode = {str(row["episode_id"]): row for row in episodes}
+    attempt_episode_ids = {
+        str(row["episode_id"]) for row in records["recovery_attempts"]
+    }
+    verified_failure_episode_ids = {
+        str(row["episode_id"])
+        for row in records["failure_incidents"]
+        if strict_bool(
+            row["verified_agent_failure"], context="audit.verified_agent_failure"
+        )
+    }
+    systems_by_block: dict[str, dict[str, dict[str, Any]]] = {}
+    for episode in episodes:
+        systems_by_block.setdefault(str(episode["block_id"]), {})[
+            str(episode["system_id"])
+        ] = episode
+    disagreement_pairs: dict[str, str] = {}
+    for systems in systems_by_block.values():
+        if "E2" not in systems or "E3" not in systems:
+            continue
+        if strict_bool(systems["E2"]["task_success"], context="audit.E2.success") != strict_bool(
+            systems["E3"]["task_success"], context="audit.E3.success"
+        ):
+            disagreement_pairs[str(systems["E3"]["episode_id"])] = str(
+                systems["E2"]["episode_id"]
+            )
+
+    categories_by_episode = _manual_audit_categories(
+        episodes,
+        recovery_attempts=records["recovery_attempts"],
+        failure_incidents=records["failure_incidents"],
+        memory_queries=records["memory_queries"],
+    )
+
+    candidates: dict[str, list[str]] = {
+        "ordinary_success": [
+            str(row["episode_id"])
+            for row in episodes
+            if strict_bool(row["task_success"], context="audit.task_success")
+            and str(row["episode_id"]) not in attempt_episode_ids
+            and str(row["episode_id"]) not in verified_failure_episode_ids
+        ],
+        "terminal_failure": [
+            str(row["episode_id"])
+            for row in episodes
+            if not strict_bool(row["task_success"], context="audit.task_success")
+        ],
+        "recovery": sorted(attempt_episode_ids.intersection(by_episode)),
+        "e2_e3_disagreement": sorted(disagreement_pairs),
+    }
+    seed = int(definition["selection_seed"])
+    campaign_id = str(read_json(root / "campaign_manifest.json")["campaign_id"])
+
+    def score(stratum: str, episode_id: str) -> str:
+        return sha256_json(
+            {
+                "algorithm": "sha256-lowest-v1",
+                "campaign_id": campaign_id,
+                "selection_seed": seed,
+                "stratum": stratum,
+                "episode_id": episode_id,
+            }
+        )
+
+    # Rare/disagreement cases claim their audit unit first.  Remaining strata
+    # never substitute for a shortfall and never duplicate a selected episode.
+    priority = (
+        "e2_e3_disagreement",
+        "recovery",
+        "terminal_failure",
+        "ordinary_success",
+    )
+    used: set[str] = set()
+    selected_by_stratum: dict[str, list[str]] = {}
+    for stratum in priority:
+        eligible = [episode for episode in set(candidates[stratum]) if episode not in used]
+        ordered = sorted(eligible, key=lambda episode: (score(stratum, episode), episode))
+        selected = ordered[: targets[stratum]]
+        selected_by_stratum[stratum] = selected
+        used.update(selected)
+
+    labeled: list[dict[str, Any]] = []
+    for stratum, selected in selected_by_stratum.items():
+        for episode_id in selected:
+            episode = by_episode[episode_id]
+            labeled.append(
+                {
+                    "episode_id": episode_id,
+                    "block_id": str(episode["block_id"]),
+                    "task_id": str(episode["task_id"]),
+                    "system_id": str(episode["system_id"]),
+                    "stratum": stratum,
+                    "task_success": strict_bool(
+                        episode["task_success"], context="audit.task_success"
+                    ),
+                    "loop_detected": strict_bool(
+                        episode["loop_detected"], context="audit.loop_detected"
+                    ),
+                    "has_verified_failure": episode_id in verified_failure_episode_ids,
+                    "has_recovery_attempt": episode_id in attempt_episode_ids,
+                    "paired_episode_id": disagreement_pairs.get(episode_id),
+                    "case_categories": sorted(categories_by_episode[episode_id]),
+                    "selection_score": score(stratum, episode_id),
+                }
+            )
+    labeled.sort(key=lambda row: (score("blinded-order", row["episode_id"]), row["episode_id"]))
+    public_selected: list[dict[str, Any]] = []
+    for index, row in enumerate(labeled, start=1):
+        audit_id = f"audit-{index:02d}"
+        row["audit_id"] = audit_id
+        public_selected.append(
+            {
+                "audit_id": audit_id,
+                "episode_id": row["episode_id"],
+                "block_id": row["block_id"],
+                "system_id": row["system_id"],
+                "artifact_path": _episode_artifact_path(
+                    root, str(row["block_id"]), str(row["system_id"])
+                ),
+            }
+        )
+
+    audit_root = root / "manual_audit"
+    sealed_root = audit_root / "sealed"
+    sealed_root.mkdir(parents=True, exist_ok=True)
+    os.chmod(sealed_root, 0o700)
+    labels_path = sealed_root / "selection_labels.json"
+    labels_payload = {
+        "schema_version": SCHEMA_VERSION,
+        "manifest_id": definition["manifest_id"],
+        "campaign_id": campaign_id,
+        "offline_sealed_labels": True,
+        "labels": labeled,
+    }
+    atomic_write_json(labels_path, labels_payload, mode=0o600)
+    strata_rows = []
+    for row in strata_definition:
+        name = str(row["name"])
+        achieved = len(selected_by_stratum[name])
+        strata_rows.append(
+            {
+                "name": name,
+                "target": targets[name],
+                "eligible_count_before_cross_stratum_deduplication": len(
+                    set(candidates[name])
+                ),
+                "selected_count": achieved,
+                "shortfall": targets[name] - achieved,
+                "substitution_allowed": False,
+            }
+        )
+    selection = {
+        "schema_version": SCHEMA_VERSION,
+        "manifest_id": definition["manifest_id"],
+        "campaign_id": campaign_id,
+        "selection_algorithm": "sha256-lowest-v1",
+        "selection_seed": seed,
+        "blinded": True,
+        "outcome_labels_location": "sealed/selection_labels.json",
+        "outcome_labels_sha256": sha256_file(labels_path),
+        "total_target": int(definition["total_target"]),
+        "selected_count": len(public_selected),
+        "total_shortfall": int(definition["total_target"]) - len(public_selected),
+        "strata": strata_rows,
+        "category_coverage": [
+            {
+                "name": category,
+                "eligible_count": sum(
+                    category in values for values in categories_by_episode.values()
+                ),
+                "selected_count": sum(
+                    category in set(row["case_categories"]) for row in labeled
+                ),
+                "status": (
+                    "NOT_APPLICABLE"
+                    if not any(
+                        category in values for values in categories_by_episode.values()
+                    )
+                    else "COVERED"
+                    if any(category in set(row["case_categories"]) for row in labeled)
+                    else "SHORTFALL_NO_SUBSTITUTION"
+                ),
+                "substitution_allowed": False,
+            }
+            for category in MANUAL_AUDIT_CASE_CATEGORIES
+        ],
+        "selected": public_selected,
+    }
+    atomic_write_json(audit_root / "selection_manifest.json", selection)
+    return selection
+
+
+def _manual_audit_categories(
+    episodes: list[dict[str, Any]],
+    *,
+    recovery_attempts: list[dict[str, Any]],
+    failure_incidents: list[dict[str, Any]],
+    memory_queries: list[dict[str, Any]],
+) -> dict[str, set[str]]:
+    """Derive only evidence-backed audit categories; never synthesize a case."""
+
+    categories = {str(row["episode_id"]): set() for row in episodes}
+    for episode in episodes:
+        episode_id = str(episode["episode_id"])
+        if strict_bool(episode["environment_failure"], context="audit.environment_failure"):
+            categories[episode_id].add("environment_failure")
+        if strict_bool(episode["loop_detected"], context="audit.loop_detected"):
+            categories[episode_id].add("loop")
+    for attempt in recovery_attempts:
+        episode_id = str(attempt.get("episode_id", ""))
+        if episode_id not in categories:
+            continue
+        successful = strict_bool(
+            attempt.get("successful", False), context="audit.recovery_successful"
+        )
+        verified_failure = strict_bool(
+            attempt.get("verified_failure_present", False),
+            context="audit.verified_failure_present",
+        )
+        categories[episode_id].add(
+            "successful_recovery" if successful else "failed_recovery"
+        )
+        if not verified_failure:
+            categories[episode_id].add("unnecessary_intervention")
+    for query in memory_queries:
+        episode_id = str(query.get("episode_id", ""))
+        if episode_id not in categories:
+            continue
+        if query.get("useful_intervention") is True:
+            categories[episode_id].add("memory_help")
+        if query.get("harmful_intervention") is True:
+            categories[episode_id].add("memory_harm")
+    failure_markers = ("BBOX", "GROUND", "TARGET", "PARAMETER", "INVALID_ACTION")
+    for incident in failure_incidents:
+        episode_id = str(incident.get("episode_id", ""))
+        if episode_id not in categories:
+            continue
+        descriptor = " ".join(
+            str(incident.get(key, ""))
+            for key in ("failure_type", "failure_kind", "diagnosis", "error_kind")
+        ).upper()
+        if any(marker in descriptor for marker in failure_markers):
+            categories[episode_id].add("bbox_or_parameter_failure")
+    return categories
+
+
+def _episode_artifact_path(root: Path, block_id: str, system_id: str) -> str:
+    matches: list[Path] = []
+    for resolution_path in (root / "paired_blocks").glob("seed_*/*/repeat_*/resolution.json"):
+        resolution = read_json(resolution_path)
+        if str(resolution.get("block_id")) != block_id or resolution.get("status") != "INCLUDED":
+            continue
+        selected = int(resolution["selected_attempt_id"])
+        matches.append(resolution_path.parent / f"rerun_{selected}" / system_id)
+    if len(matches) != 1:
+        raise SchemaError(f"manual audit episode does not resolve to one package: {block_id}/{system_id}")
+    return str(matches[0].relative_to(root))
+
+
+def _resolve_results_dir(
+    root: Path,
+    *,
+    campaign_id: str,
+    requested: str | Path | None,
+    draft_pilot: bool = False,
+) -> Path:
+    if requested is not None:
+        return Path(requested).resolve()
+    if root.parent.name == "table2" and root.parent.parent.name == "artifacts":
+        repository = root.parent.parent.parent
+    else:
+        repository = root.parent
+    destination = repository / "results" / "table2" / campaign_id
+    # Preserve immutable draft evidence while leaving the canonical campaign
+    # directory free for the later adjudication-gated PILOT_ONLY export.
+    if draft_pilot:
+        destination = destination / "draft"
+    return destination.resolve()
+
+
+def _export_results(
+    root: Path,
+    results_dir: Path,
+    *,
+    metrics: Mapping[str, Any],
+    retrieval: Mapping[str, Any],
+    statistics: Mapping[str, Any],
+    validation: Mapping[str, Any],
+    audit_selection: Mapping[str, Any],
+) -> dict[str, Any]:
+    results_dir.mkdir(parents=True, exist_ok=True)
+    campaign = read_json(root / "campaign_manifest.json")
+    publication_status = str(metrics["publication_status"])
+    pilot_summary = {
+        "schema_version": SCHEMA_VERSION,
+        "campaign_id": campaign["campaign_id"],
+        "evidence_label": campaign["evidence_label"],
+        "publication_status": publication_status,
+        "paper_table_status": metrics["paper_table_status"],
+        "headline_task_partition": "normal",
+        "normal_block_count": campaign["normal_block_count"],
+        "recovery_diagnostic_block_count": campaign["recovery_block_count"],
+        "manual_audit_selected_count": audit_selection["selected_count"],
+        "manual_audit_shortfall": audit_selection["total_shortfall"],
+        "validation_status": validation["status"],
+    }
+    _write_result_json(results_dir / "pilot_summary.json", pilot_summary)
+    _write_result_bytes(
+        results_dir / "table2_main.csv", (root / "aggregate" / "table2_main.csv").read_bytes()
+    )
+    _write_result_bytes(
+        results_dir / "table2_companion.csv",
+        (root / "aggregate" / "table2_companion.csv").read_bytes(),
+    )
+
+    contrast_rows: list[dict[str, Any]] = []
+    for contrast, metric_values in statistics["contrasts"].items():
+        for metric, values in metric_values.items():
+            if not isinstance(values, Mapping) or "estimate" not in values:
+                continue
+            contrast_rows.append(
+                {
+                    "contrast": contrast,
+                    "metric": metric,
+                    "estimate": values.get("estimate"),
+                    "ci_low": values.get("ci_low"),
+                    "ci_high": values.get("ci_high"),
+                    "absolute_change": values.get("absolute_change"),
+                    "relative_change": values.get("relative_change"),
+                    "n_clusters": values.get("n_clusters"),
+                    "publication_status": publication_status,
+                }
+            )
+    _write_result_csv(
+        results_dir / "paired_contrasts.csv",
+        contrast_rows,
+        (
+            "contrast",
+            "metric",
+            "estimate",
+            "ci_low",
+            "ci_high",
+            "absolute_change",
+            "relative_change",
+            "n_clusters",
+            "publication_status",
+        ),
+    )
+
+    retrieval_rows: list[dict[str, Any]] = []
+    for metric, values in retrieval.items():
+        if isinstance(values, Mapping) and (
+            "estimate" in values or "mean" in values
+        ):
+            retrieval_rows.append(
+                {
+                    "metric": metric,
+                    "estimate": values.get("estimate", values.get("mean")),
+                    "numerator": values.get("numerator"),
+                    "denominator": values.get(
+                        "denominator", values.get("query_denominator")
+                    ),
+                    "display": values.get("display"),
+                    "publication_status": publication_status,
+                }
+            )
+    _write_result_csv(
+        results_dir / "retrieval_metrics.csv",
+        retrieval_rows,
+        (
+            "metric",
+            "estimate",
+            "numerator",
+            "denominator",
+            "display",
+            "publication_status",
+        ),
+    )
+    _write_result_json(
+        results_dir / "statistics.json",
+        _redacted_statistics_for_results(statistics),
+    )
+    provenance = {
+        "schema_version": SCHEMA_VERSION,
+        "campaign_id": campaign["campaign_id"],
+        "publication_status": publication_status,
+        "repository_commit": campaign["repository_commit"],
+        "campaign_manifest_sha256": sha256_file(root / "campaign_manifest.json"),
+        "frozen_artifact_hashes_sha256": sha256_file(root / "artifact_hashes.json"),
+        "environment_sha256": sha256_file(root / "frozen" / "environment.json"),
+        "protocol_sha256": sha256_file(root / "frozen" / "protocol.yaml"),
+        "contains_raw_oracle_evidence": False,
+    }
+    _write_result_json(results_dir / "provenance.json", provenance)
+    names = (
+        "pilot_summary.json",
+        "table2_main.csv",
+        "table2_companion.csv",
+        "paired_contrasts.csv",
+        "retrieval_metrics.csv",
+        "statistics.json",
+        "provenance.json",
+    )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "campaign_id": campaign["campaign_id"],
+        "results_dir": str(results_dir),
+        "files": {name: sha256_file(results_dir / name) for name in names},
+        "raw_evidence_exported": False,
+    }
+
+
+def _write_result_json(path: Path, value: Mapping[str, Any]) -> None:
+    payload = (
+        json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False)
+        + "\n"
+    ).encode("utf-8")
+    _write_result_bytes(path, payload)
+
+
+def _redacted_statistics_for_results(
+    statistics: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Remove per-task identities from the small, shareable result package."""
+
+    output = json.loads(
+        json.dumps(statistics, ensure_ascii=False, allow_nan=False)
+    )
+    contrasts = output.get("contrasts", {})
+    if isinstance(contrasts, dict):
+        for metrics in contrasts.values():
+            if not isinstance(metrics, dict):
+                continue
+            task_success = metrics.get("task_success")
+            if not isinstance(task_success, dict):
+                continue
+            significance = task_success.get("task_clustered_significance")
+            if isinstance(significance, dict):
+                significance.pop("task_effects", None)
+                significance["per_task_effects_exported"] = False
+    return output
+
+
+def _write_result_csv(
+    path: Path,
+    rows: list[dict[str, Any]],
+    fieldnames: tuple[str, ...],
+) -> None:
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=list(fieldnames), extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    _write_result_bytes(path, output.getvalue().encode("utf-8"))
+
+
+def _write_result_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        if path.read_bytes() != payload:
+            raise Table2Error(f"refusing to overwrite an existing result artifact: {path}")
+        return
+    descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    try:
+        os.write(descriptor, payload)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _write_aggregate_hashes(aggregate: Path) -> None:
+    files = {
+        str(path.relative_to(aggregate)): sha256_file(path)
+        for path in sorted(aggregate.rglob("*"))
+        if path.is_file()
+        and path.name not in {"artifact_hashes.json", "validation_report.json"}
+    }
+    atomic_write_json(
+        aggregate / "artifact_hashes.json",
+        {
+            "schema_version": SCHEMA_VERSION,
+            "hash_algorithm": "sha256",
+            "excluded_mutable_files": ["validation_report.json"],
+            "files": files,
+        },
+    )
+
+
+def _write_campaign_evidence_manifest(root: Path) -> None:
+    files: dict[str, str] = {}
+    for directory_name in ("paired_blocks", "manual_audit", "aggregate"):
+        directory = root / directory_name
+        for path in sorted(directory.rglob("*")):
+            if not path.is_file():
+                continue
+            relative = str(path.relative_to(root))
+            if relative in {
+                "aggregate/validation_report.json",
+            }:
+                continue
+            files[relative] = sha256_file(path)
+    completion = root / "completion.json"
+    if completion.is_file():
+        files["completion.json"] = sha256_file(completion)
+    atomic_write_json(
+        root / "campaign_evidence_manifest.json",
+        {
+            "schema_version": SCHEMA_VERSION,
+            "hash_algorithm": "sha256",
+            "campaign_manifest_sha256": sha256_file(root / "campaign_manifest.json"),
+            "frozen_artifact_hashes_sha256": sha256_file(root / "artifact_hashes.json"),
+            "access_ledger_sha256": sha256_file(root / "access_ledger.jsonl"),
+            "deviation_ledger_sha256": sha256_file(root / "deviation_ledger.jsonl"),
+            "files": files,
+        },
+    )

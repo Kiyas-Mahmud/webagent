@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "manifest_id": "table2-blinded-audit-20-v1",
+  "evidence_label": "PILOT_ONLY",
+  "blinded": true,
+  "selection_occurs_after_episode_completion": true,
+  "selection_seed": 12022025,
+  "total_target": 20,
+  "strata": [
+    {"name": "ordinary_success", "target": 5, "selection": "lowest deterministic hash among eligible episodes"},
+    {"name": "terminal_failure", "target": 5, "selection": "lowest deterministic hash among eligible episodes"},
+    {"name": "recovery", "target": 5, "selection": "lowest deterministic hash among eligible episodes"},
+    {"name": "e2_e3_disagreement", "target": 5, "selection": "lowest deterministic hash where available; record shortfall without substitution"}
+  ],
+  "required_case_categories": [
+    "successful_recovery",
+    "failed_recovery",
+    "memory_help",
+    "memory_harm",
+    "environment_failure",
+    "bbox_or_parameter_failure",
+    "loop",
+    "unnecessary_intervention"
+  ],
+  "category_coverage_rule": "report selected and eligible counts; unavailable cases remain explicit and are never fabricated or substituted",
+  "labels_must_not_enter_runtime": true
+}

@@ -1,0 +1,22 @@
+schema_version: "1.0"
+campaign_kind: engineering_pilot
+evidence_label: PILOT_ONLY
+paper_table_status: N/R
+protocol: configs/eval/table2/protocol.yaml
+task_manifest: benchmarks/table2/pilot/task_manifest.json
+recovery_scenarios: benchmarks/table2/pilot/recovery_scenarios.json
+recovery_oracle_rules: benchmarks/table2/pilot/recovery_oracle_rules.json
+duplicate_audit_manifest: benchmarks/table2/pilot/duplicate_audit_manifest.json
+audit_manifest: benchmarks/table2/pilot/audit_manifest.json
+systems: [E0, E1, E2, E3]
+matched_seeds: [42]
+repeat_ids: [0]
+normal_task_count: 50
+normal_episode_count: 200
+recovery_scenario_count: 15
+recovery_episode_count: 60
+planned_episode_count: 260
+checkpoint_selection: validation_only
+checkpoint_path_source: campaign_manifest
+locked_test_access: forbidden
+manual_rescue: forbidden
