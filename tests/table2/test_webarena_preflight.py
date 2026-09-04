@@ -373,6 +373,68 @@ def test_campaign_preflight_binds_the_requested_public_reset_task() -> None:
         )
 
 
+def test_preflight_uses_noncontiguous_tracked_registry_membership() -> None:
+    indices = tuple(300 + ((position * 23) % 107) for position in range(50))
+    evidence = run_webarena_host_preflight(
+        service_url_map=URL_MAP,
+        version_getter=_version,
+        browser_probe=_pass_browser,
+        service_probe=_pass_service,
+        live_reset_probe=_pass_reset,
+        live_reset_task_index=indices[0],
+        registered_task_indices=indices,
+    )
+
+    assert evidence["live_reset_check"]["task_index"] == indices[0]
+    assert validate_webarena_host_preflight(
+        evidence,
+        service_url_map=URL_MAP,
+        expected_live_reset_task_index=indices[0],
+        registered_task_indices=indices,
+    ) == evidence
+    with pytest.raises(SchemaError, match="absent from the tracked public registry"):
+        run_webarena_host_preflight(
+            service_url_map=URL_MAP,
+            version_getter=_version,
+            browser_probe=_pass_browser,
+            service_probe=_pass_service,
+            live_reset_probe=_pass_reset,
+            live_reset_task_index=9999,
+            registered_task_indices=indices,
+        )
+
+
+def test_bound_preflight_accepts_registry_attested_noncontiguous_index(
+    tmp_path: Path,
+) -> None:
+    indices = tuple(500 + ((position * 29) % 109) for position in range(50))
+    evidence = run_webarena_host_preflight(
+        service_url_map=URL_MAP,
+        version_getter=_version,
+        browser_probe=_pass_browser,
+        service_probe=_pass_service,
+        live_reset_probe=_pass_reset,
+        live_reset_task_index=indices[0],
+        registered_task_indices=indices,
+    )
+    evidence_path = tmp_path / PREFLIGHT_ARTIFACT_RELATIVE_PATH
+    url_map_path = tmp_path / PREFLIGHT_SERVICE_URL_MAP_RELATIVE_PATH
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    url_map_path.write_text(json.dumps(URL_MAP), encoding="utf-8")
+    binding = build_deployment_preflight_binding(
+        evidence_path=evidence_path,
+        service_url_map_path=url_map_path,
+        deployment_topology=SINGLE_HOST_TOPOLOGY,
+        expected_live_reset_task_index=indices[0],
+    )
+
+    validated = validate_bound_deployment_preflight(
+        {PREFLIGHT_BINDING_FIELD: binding}, artifact_root=tmp_path
+    )
+
+    assert validated.binding["expected_live_reset_task_index"] == indices[0]
+
+
 @pytest.mark.parametrize(
     "field", ["action_taken", "reward_read", "evaluator_output_read"]
 )

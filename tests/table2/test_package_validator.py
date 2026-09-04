@@ -78,13 +78,16 @@ from web_agent.eval.table2.pc01_checkpoint_compatibility import _SOURCE_PATHS
 from web_agent.eval.table2.execution_guard import (
     EVALUATION_RUNNER_SCOPE,
     InfrastructureInvalidError,
+    PC01_PAGE_BROKER_SECURITY_FIELD,
     RUNNER_ATTESTATION_SCHEMA_VERSION,
+    blocked_pc01_page_broker_security_binding,
 )
 from web_agent.eval.table2 import handoff as handoff_preparer
 from web_agent.eval.table2 import package_validator as package_validator_module
 from web_agent.eval.table2 import selection_evidence as selection_evidence_module
 from web_agent.eval.table2.live_deployment import (
     LIVE_DEPLOYMENT_BINDING_FIELD,
+    build_evaluator_requirements_artifact,
     stage_pc01_live_deployment_package,
 )
 from web_agent.eval.table2.model_compatibility import (
@@ -269,8 +272,14 @@ def _fixture_joint_store_binding(
 ) -> dict[str, Any]:
     assignment = _fixture_joint_assignment_binding()
     return {
-        "schema_version": "table2-memory-joint-duplicate-evidence-binding-v2",
+        "schema_version": "table2-memory-joint-duplicate-evidence-binding-v3",
         "preparation_manifest_sha256": SHA_A,
+        "preparation_execution_receipt_status": (
+            "NOT_APPLICABLE_NONREGISTERED_SOURCE_AUTHORITY"
+        ),
+        "preparation_execution_receipt_sha256": None,
+        "preparation_executed_source_set_sha256": None,
+        "preparation_source_commit": None,
         "assignment_manifest_sha256": assignment[
             "assignment_manifest_sha256"
         ],
@@ -578,6 +587,11 @@ def _campaign_config(
             target = preparation / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("{}\n", encoding="utf-8")
+        for name in (
+            package_validator_module.P4_PREPARATION_EXECUTION_EVIDENCE_FILES
+        ):
+            target = joint_root / name
+            target.write_text("{}\n", encoding="utf-8")
         task_export = joint_root / "resolved_task_export.json"
         task_export.write_text("{}\n", encoding="utf-8")
         provenance = joint_root / "provenance_manifest.json"
@@ -732,6 +746,65 @@ def _valid_deployment_preflight(root: Path) -> dict[str, Any]:
     )
 
 
+def _fixture_page_state_task_export(environment_value: dict[str, Any]) -> dict[str, Any]:
+    registry_path = REPOSITORY_ROOT / "benchmarks/table2/pilot/task_manifest.json"
+    registry = read_json(registry_path)
+    evaluator = environment_value["evaluator"]
+    tasks: list[dict[str, Any]] = []
+    for registry_row in registry["tasks"]:
+        task_id = str(registry_row["task_id"])
+        index = int(registry_row["upstream_index"])
+        evaluator_config = {
+            "eval_types": ["url_match"],
+            "reference_answers": None,
+            "reference_url": f"https://fixture.invalid/task/{index}/done",
+            "program_html": [],
+            "url_note": "GOLD in PRED",
+        }
+        row = {
+            "task_id": task_id,
+            "upstream_index": index,
+            "benchmark_task_id": str(index),
+            "benchmark_task_version": "fixture-task-v1",
+            "instruction": f"Fixture WebArena instruction {index}",
+            "start_state": {
+                "sites": ["fixture-site"],
+                "start_url": f"https://fixture.invalid/task/{index}",
+                "require_login": False,
+                "storage_state": None,
+                "geolocation": None,
+                "require_reset": False,
+            },
+            "task_config": {
+                "task_id": index,
+                "intent": f"fixture intent {index}",
+                "eval": evaluator_config,
+            },
+            "evaluator": {
+                "evaluator_id": evaluator["evaluator_id"],
+                "evaluator_version": evaluator["evaluator_version"],
+                "config": evaluator_config,
+            },
+        }
+        row["source_content_sha256"] = sha256_json(row)
+        tasks.append(row)
+    return {
+        "schema_version": PUBLIC_PILOT_EXPORT_SCHEMA_VERSION,
+        "record_type": PUBLIC_PILOT_EXPORT_RECORD_TYPE,
+        "snapshot_id": "fixture-resolved-webarena-0-49",
+        "benchmark": "webarena",
+        "benchmark_version": environment_value["benchmark_version"],
+        "task_definition_version": "fixture-task-v1",
+        "source": {"task_source_sha256": SHA_B},
+        "site_url_map_sha256": SHA_C,
+        "resolved_task_set_sha256": sha256_json(tasks),
+        "required_task_count": 50,
+        "registry_manifest_id": registry["manifest_id"],
+        "registry_manifest_sha256": sha256_file(registry_path),
+        "tasks": tasks,
+    }
+
+
 def _valid_environment(path: Path) -> Path:
     dependency_lock = path.parent / "dependency.lock"
     dependency_lock.parent.mkdir(parents=True, exist_ok=True)
@@ -835,7 +908,7 @@ def _valid_environment(path: Path) -> Path:
             },
             "model_call_timeout_seconds": 30.0,
             "evaluator": {
-                "evaluator_id": "fixture-evaluator",
+                "evaluator_id": "measured-evaluator",
                 "evaluator_version": "v1",
                 "entrypoint": (
                     "tests.table2.test_package_validator:"
@@ -876,10 +949,17 @@ def _valid_environment(path: Path) -> Path:
             },
     }
     value[PREFLIGHT_BINDING_FIELD] = _valid_deployment_preflight(path.parent)
+    task_export = _fixture_page_state_task_export(value)
+    task_audit = build_webarena_task_interface_audit(task_export)
     live_evidence_root = path.parent / "measured-live-deployment"
     live_manifest = _write_json(
         live_evidence_root / "deployment.json",
-        _valid_live_deployment_manifest(live_evidence_root),
+        _valid_live_deployment_manifest(
+            live_evidence_root,
+            task_export=task_export,
+            task_audit=task_audit,
+            sealed_evaluator_identity=value["evaluator"],
+        ),
     )
     live_deployment = stage_pc01_live_deployment_package(
         manifest_path=live_manifest,
@@ -905,53 +985,15 @@ def _valid_resolved_task_snapshot(
         "source_sha256": evaluator["source_sha256"],
         "oracle_rules_sha256": evaluator["oracle_rules_sha256"],
     }
-    tasks = []
-    for registry_row in registry["tasks"]:
-        task_id = str(registry_row["task_id"])
-        index = int(registry_row["upstream_index"])
-        evaluator_config = {
-            "eval_types": ["url_match"],
-            "reference_url": f"https://fixture.invalid/task/{index}/done",
-        }
-        row = {
-            "task_id": task_id,
-            "upstream_index": index,
-            "benchmark_task_id": str(index),
-            "benchmark_task_version": "fixture-task-v1",
-            "instruction": f"Fixture WebArena instruction {index}",
-            "start_state": {
-                "sites": ["fixture-site"],
-                "start_url": f"https://fixture.invalid/task/{index}",
-            },
-            "task_config": {
-                "task_id": index,
-                "intent": f"fixture intent {index}",
-                "eval": evaluator_config,
-            },
-            "evaluator": {
-                "evaluator_id": evaluator["evaluator_id"],
-                "evaluator_version": evaluator["evaluator_version"],
-                "config": evaluator_config,
-            },
-        }
-        row["source_content_sha256"] = sha256_json(row)
-        tasks.append(row)
-    snapshot_id = "fixture-resolved-webarena-0-49"
-    resolved_task_set_sha256 = sha256_json(tasks)
-    task_export = {
-        "schema_version": PUBLIC_PILOT_EXPORT_SCHEMA_VERSION,
-        "record_type": PUBLIC_PILOT_EXPORT_RECORD_TYPE,
-        "snapshot_id": snapshot_id,
-        "benchmark": "webarena",
-        "benchmark_version": environment_value["benchmark_version"],
-        "task_definition_version": "fixture-task-v1",
-        "source": {"task_source_sha256": SHA_B},
-        "site_url_map_sha256": SHA_C,
-        "resolved_task_set_sha256": resolved_task_set_sha256,
-        "required_task_count": 50,
-        "tasks": tasks,
-    }
+    task_export = _fixture_page_state_task_export(environment_value)
+    tasks = task_export["tasks"]
+    snapshot_id = task_export["snapshot_id"]
+    resolved_task_set_sha256 = task_export["resolved_task_set_sha256"]
     task_interface_audit = build_webarena_task_interface_audit(task_export)
+    compile_report = build_evaluator_requirements_artifact(
+        task_export=task_export,
+        task_interface_audit=task_interface_audit,
+    )["page_state_compile_report"]
     return _write_json(
         path,
         {
@@ -974,11 +1016,19 @@ def _valid_resolved_task_snapshot(
             "upstream_export_record_type": task_export["record_type"],
             "upstream_export_content_sha256": sha256_json(task_export),
             "upstream_task_source": dict(task_export["source"]),
+            "registry_manifest_id": task_export["registry_manifest_id"],
+            "upstream_registry_manifest_sha256": task_export[
+                "registry_manifest_sha256"
+            ],
             "site_url_map_sha256": task_export["site_url_map_sha256"],
             "resolved_task_set_sha256": resolved_task_set_sha256,
             "task_action_interface_audit": task_interface_audit,
             "task_action_interface_audit_content_sha256": sha256_json(
                 task_interface_audit
+            ),
+            "page_state_evaluator_compile_report": compile_report,
+            "page_state_evaluator_compile_report_content_sha256": sha256_json(
+                compile_report
             ),
             "tasks": tasks,
         },
@@ -2665,6 +2715,11 @@ def _evaluation_registration(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
         duplicate_audit_manifest=duplicate,
         resolved_task_snapshot=resolved_tasks,
     )
+    campaign = yaml.safe_load(config.read_text(encoding="utf-8"))
+    _write_json(
+        Path(campaign["joint_duplicate_resolved_task_export"]),
+        _fixture_page_state_task_export(read_json(environment)),
+    )
     return config, environment, resolved_tasks, duplicate
 
 
@@ -3506,13 +3561,9 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
     environment = read_json(environment_path)
     evaluator = dict(environment.pop("evaluator"))
     environment.pop("dependency_lock_sha256")
+    environment.pop(LIVE_DEPLOYMENT_BINDING_FIELD)
     environment["benchmark_version"] = PINNED_BROWSERGYM_WEBARENA_VERSION
     environment["task_definition_version"] = PINNED_TASK_DEFINITION_VERSION
-    live_evidence_root = tmp_path / "live-deployment-evidence"
-    live_deployment_manifest = _write_json(
-        live_evidence_root / "deployment.json",
-        _valid_live_deployment_manifest(live_evidence_root),
-    )
 
     duplicate_input = read_json(
         REPOSITORY_ROOT / "benchmarks/table2/pilot/duplicate_audit_manifest.json"
@@ -3547,10 +3598,13 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
                 ),
                 "intent": f"Fixture WebArena instruction {index}",
                 "require_reset": False,
-                "eval": {
-                    "eval_types": ["url_match"],
-                    "reference_url": token,
-                },
+                    "eval": {
+                        "eval_types": ["url_match"],
+                        "reference_answers": None,
+                        "reference_url": token,
+                        "program_html": [],
+                        "url_note": "GOLD in PRED",
+                    },
             }
         )
     upstream_payload = json.dumps(upstream_rows, sort_keys=True).encode("utf-8")
@@ -3581,6 +3635,23 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
     task_interface_audit_path = _write_json(
         tmp_path / "webarena-task-interface-audit.json",
         task_interface_audit,
+    )
+    live_evidence_root = tmp_path / "live-deployment-evidence"
+    live_manifest_value = _valid_live_deployment_manifest(
+        live_evidence_root,
+        task_export=task_export,
+        task_audit=task_interface_audit,
+        sealed_evaluator_identity=evaluator,
+    )
+    live_manifest_value["sealed_page_broker"].update(
+        {
+            "source_relative_path": evaluator["source_relative_path"],
+            "source_sha256": evaluator["source_sha256"],
+        }
+    )
+    live_deployment_manifest = _write_json(
+        live_evidence_root / "deployment.json",
+        live_manifest_value,
     )
     authenticated_task_rows = []
     for source_row in task_export["tasks"]:
@@ -3780,6 +3851,23 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
                 ),
                 "runtime_integration_source_relative_path": source_relative,
                 "source_relative_paths": runner_source_paths,
+                "pc01_operations_provider_bootstrap": {
+                    "schema_version": "table2-pc01-provider-bootstrap-v1",
+                    "factory_entrypoint": (
+                        "tests.table2.test_live_deployment:_manifest"
+                    ),
+                    "factory_module": "tests.table2.test_live_deployment",
+                    "factory_qualname": "_manifest",
+                    "source_relative_path": "tests/table2/test_live_deployment.py",
+                    "source_sha256": sha256_file(
+                        REPOSITORY_ROOT / "tests/table2/test_live_deployment.py"
+                    ),
+                    "provider_contract_schema_version": (
+                        "table2-pc01-provider-public-contract-v1"
+                    ),
+                    "expected_provider_public_contract_sha256": "e" * 64,
+                    "source_plane": "runtime_only",
+                },
             },
         },
     )
@@ -3827,6 +3915,12 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
     assert resolved_tasks["task_action_interface_audit_file_sha256"] == (
         sha256_file(handoff_root / TASK_INTERFACE_AUDIT_RELATIVE_PATH)
     )
+    assert resolved_tasks["page_state_evaluator_compile_report"]["status"] == (
+        "COMPILED"
+    )
+    assert resolved_tasks[
+        "page_state_evaluator_compile_report_content_sha256"
+    ] == sha256_json(resolved_tasks["page_state_evaluator_compile_report"])
     assert all(
         set(row["start_state"])
         == {
@@ -3840,6 +3934,9 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
         for row in resolved_tasks["tasks"]
     )
     assert (handoff_root / "runner_attestation.json").is_file()
+    assert read_json(handoff_root / "runner_attestation.json")[
+        PC01_PAGE_BROKER_SECURITY_FIELD
+    ] == blocked_pc01_page_broker_security_binding()
     assert (handoff_root / "live_deployment/manifest.json").is_file()
     assert handoff["pc01_live_deployment"] == read_json(
         handoff_root / "environment.json"
@@ -4692,6 +4789,8 @@ def test_recall_at_five_is_unavailable_when_frozen_retrieval_depth_is_three():
         [
             {
                 "query_id": "q1",
+                "episode_id": "episode-task-1",
+                "task_id": "task-1",
                 "system_id": "E3",
                 "retrieved_ids": ["m1", "m2", "m3"],
                 "relevant_ids": ["m3", "m4"],
@@ -4724,6 +4823,8 @@ def test_registered_strategy_relevance_emits_only_strategy_hit_names_and_counts(
         [
             {
                 "query_id": "q-registered-strategy-1",
+                "episode_id": "episode-task-1",
+                "task_id": "task-1",
                 "system_id": "E3",
                 "retrieved_ids": ["m-wrong", "m-right", "m-other"],
                 "relevant_ids": ["m-right"],
@@ -4740,6 +4841,8 @@ def test_registered_strategy_relevance_emits_only_strategy_hit_names_and_counts(
             },
             {
                 "query_id": "q-registered-strategy-2",
+                "episode_id": "episode-task-2",
+                "task_id": "task-2",
                 "system_id": "E3",
                 "retrieved_ids": ["m-right", "m-wrong", "m-other"],
                 "relevant_ids": ["m-right"],

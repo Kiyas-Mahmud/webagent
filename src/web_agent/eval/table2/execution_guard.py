@@ -7,6 +7,7 @@ freezing a campaign and immediately before executing every physical block.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, fields
 import functools
 import inspect
 from pathlib import Path
@@ -25,7 +26,28 @@ from .common import (
 )
 
 
-RUNNER_ATTESTATION_SCHEMA_VERSION = "table2-evaluation-runner-attestation-v1"
+RUNNER_ATTESTATION_SCHEMA_VERSION = "table2-evaluation-runner-attestation-v2"
+PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD = "pc01_operations_provider_bootstrap"
+PC01_PROVIDER_BOOTSTRAP_SCHEMA_VERSION = "table2-pc01-provider-bootstrap-v1"
+PC01_PROVIDER_PUBLIC_CONTRACT_SCHEMA_VERSION = (
+    "table2-pc01-provider-public-contract-v1"
+)
+PC01_PROVIDER_INSTALLATION_RECEIPT_SCHEMA_VERSION = (
+    "table2-pc01-provider-installation-receipt-v1"
+)
+PC01_PROVIDER_BOUNDARY_CLAIM_SCOPE = (
+    "REVIEWED_CODE_ORACLE_FREE_DATAFLOW_ONLY"
+)
+PC01_PAGE_BROKER_SECURITY_FIELD = "pc01_page_broker_security"
+PC01_PAGE_BROKER_SECURITY_SCHEMA_VERSION = (
+    "table2-pc01-page-broker-security-v1"
+)
+PC01_PAGE_BROKER_SECURITY_CLAIM_SCOPE = (
+    "REVIEWED_CODE_DATAFLOW_ONLY_NOT_PROCESS_ISOLATION"
+)
+PC01_PAGE_BROKER_SECURITY_BLOCKED_STATUS = (
+    "BLOCKED_EXTERNAL_PROCESS_ISOLATION_REQUIRED"
+)
 EVALUATION_RUNNER_SCOPE = "FROZEN_EVALUATION_RUNNER"
 ENGINEERING_SMOKE_SCOPE = "ENGINEERING_SMOKE_ONLY"
 ENGINEERING_SMOKE_REASON = "ENGINEERING_SMOKE_ONLY"
@@ -52,6 +74,192 @@ REGISTERED_INFRASTRUCTURE_REASONS: tuple[str, ...] = (
     "ENVIRONMENT_RESET_FAILED",
     "FROZEN_DEPENDENCY_UNAVAILABLE",
 )
+
+_PC01_PROVIDER_BOOTSTRAP_FIELDS = frozenset(
+    {
+        "schema_version",
+        "factory_entrypoint",
+        "factory_module",
+        "factory_qualname",
+        "source_relative_path",
+        "source_sha256",
+        "provider_contract_schema_version",
+        "expected_provider_public_contract_sha256",
+        "source_plane",
+    }
+)
+
+
+def blocked_pc01_page_broker_security_binding() -> dict[str, Any]:
+    """Return the only broker-security claim this source can currently make.
+
+    The repository broker keeps runtime and evaluator methods on distinct typed
+    objects, but both objects and the raw live-page state exist in one importable
+    Python process.  That is a useful reviewed-code dataflow fixture; it is not
+    an enforceable confidentiality boundary.  No caller may turn this record
+    into campaign authority by changing a Boolean or attaching self-authored
+    evidence.  A future process-isolated transport requires a new registered
+    schema and independent deployment evidence.
+    """
+
+    return {
+        "schema_version": PC01_PAGE_BROKER_SECURITY_SCHEMA_VERSION,
+        "status": PC01_PAGE_BROKER_SECURITY_BLOCKED_STATUS,
+        "claim_scope": PC01_PAGE_BROKER_SECURITY_CLAIM_SCOPE,
+        "architecture": "same_process_in_memory_typed_capabilities",
+        "same_process_broker": True,
+        "kernel_process_isolation": False,
+        "runtime_process_can_import_sealed_capability": True,
+        "external_process_isolation_evidence_present": False,
+        "production_dispatch_authorized": False,
+    }
+
+
+def validate_pc01_page_broker_security_binding(value: object) -> dict[str, Any]:
+    """Validate the exact fail-closed broker-security non-claim."""
+
+    expected = blocked_pc01_page_broker_security_binding()
+    if not isinstance(value, Mapping) or dict(value) != expected:
+        raise SchemaError(
+            "PC-01 page-broker security binding must record the current "
+            "same-process, non-isolated production blocker exactly"
+        )
+    return expected
+
+
+def assert_pc01_page_broker_production_authorized(value: object) -> None:
+    """Always stop this source version before live provider/runtime dispatch."""
+
+    binding = validate_pc01_page_broker_security_binding(value)
+    if binding["production_dispatch_authorized"] is not True:
+        raise SchemaError(
+            "PC-01 live campaign is blocked: the in-process page broker is only "
+            "a reviewed-code dataflow fixture; externally evidenced process "
+            "isolation is required before any provider or browser runtime loads"
+        )
+    raise SchemaError(
+        "PC-01 page-broker authority is unsupported by this registered schema"
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class PC01ProviderInstallationReceipt:
+    """Immutable post-factory evidence for one same-process provider install.
+
+    This receipt attests only the reviewed source and dataflow boundary.  Its
+    explicit ``kernel_filesystem_sandbox=False`` field prevents the record from
+    being misread as an operating-system sandbox claim.
+    """
+
+    schema_version: str
+    record_type: str
+    status: str
+    claim_scope: str
+    same_process_factory: bool
+    kernel_filesystem_sandbox: bool
+    factory_entrypoint: str
+    factory_module: str
+    factory_qualname: str
+    factory_source_relative_path: str
+    factory_source_sha256: str
+    bootstrap_context_sha256: str
+    pre_factory_campaign_state_sha256: str
+    post_factory_campaign_state_sha256: str
+    provider_boundary_receipt_sha256: str
+    credential_public_identity_sha256: str
+    expected_provider_public_contract_sha256: str
+    actual_provider_public_contract_sha256: str
+
+    def __post_init__(self) -> None:
+        fixed = {
+            "schema_version": PC01_PROVIDER_INSTALLATION_RECEIPT_SCHEMA_VERSION,
+            "record_type": "PC01ProviderInstallationReceipt",
+            "status": "PASS",
+            "claim_scope": PC01_PROVIDER_BOUNDARY_CLAIM_SCOPE,
+            "same_process_factory": True,
+            "kernel_filesystem_sandbox": False,
+        }
+        for field_name, expected in fixed.items():
+            if getattr(self, field_name) != expected:
+                raise SchemaError(
+                    f"PC-01 provider installation receipt {field_name} mismatch"
+                )
+        if self.factory_entrypoint.count(":") != 1:
+            raise SchemaError(
+                "PC-01 provider installation factory entrypoint is malformed"
+            )
+        module_name, attribute_name = self.factory_entrypoint.split(":", 1)
+        if (
+            self.factory_module != module_name
+            or self.factory_qualname != attribute_name
+            or not module_name
+            or not attribute_name
+            or "." in attribute_name
+        ):
+            raise SchemaError(
+                "PC-01 provider installation factory identity is inconsistent"
+            )
+        relative = safe_relative_path(self.factory_source_relative_path).as_posix()
+        if relative != self.factory_source_relative_path:
+            raise SchemaError(
+                "PC-01 provider installation source path is not canonical"
+            )
+        for field_name in (
+            "factory_source_sha256",
+            "bootstrap_context_sha256",
+            "pre_factory_campaign_state_sha256",
+            "post_factory_campaign_state_sha256",
+            "provider_boundary_receipt_sha256",
+            "credential_public_identity_sha256",
+            "expected_provider_public_contract_sha256",
+            "actual_provider_public_contract_sha256",
+        ):
+            if not is_sha256(getattr(self, field_name)):
+                raise SchemaError(
+                    f"PC-01 provider installation {field_name} must be SHA-256"
+                )
+        if (
+            self.pre_factory_campaign_state_sha256
+            != self.post_factory_campaign_state_sha256
+        ):
+            raise SchemaError(
+                "PC-01 campaign authority changed during provider installation"
+            )
+        if (
+            self.expected_provider_public_contract_sha256
+            != self.actual_provider_public_contract_sha256
+        ):
+            raise SchemaError(
+                "PC-01 actual provider contract differs from frozen expectation"
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {item.name: getattr(self, item.name) for item in fields(self)}
+
+    @property
+    def receipt_sha256(self) -> str:
+        return sha256_json(self.to_dict())
+
+    @classmethod
+    def from_mapping(cls, value: object) -> "PC01ProviderInstallationReceipt":
+        if not isinstance(value, Mapping):
+            raise SchemaError("PC-01 provider installation receipt must be an object")
+        expected = {item.name for item in fields(cls)}
+        if set(value) != expected:
+            raise SchemaError(
+                "PC-01 provider installation receipt fields differ from schema"
+            )
+        return cls(**{name: value[name] for name in expected})
+
+    def validate_provider_contract(self, actual_sha256: str) -> None:
+        if (
+            not is_sha256(actual_sha256)
+            or actual_sha256 != self.actual_provider_public_contract_sha256
+            or actual_sha256 != self.expected_provider_public_contract_sha256
+        ):
+            raise SchemaError(
+                "registered provider differs from its installation receipt"
+            )
 
 
 def is_sha256(value: object) -> bool:
@@ -117,6 +325,7 @@ class InfrastructureInvalidError(Table2Error):
             f"{self.reason_code} at {self.adapter_id}:{self.operation}"
         )
 
+
     def evidence_record(
         self,
         *,
@@ -154,6 +363,63 @@ class InfrastructureInvalidError(Table2Error):
             "system_id": system_id,
             "episode_id": episode_id,
         }
+
+
+def validate_pc01_provider_bootstrap_binding(
+    value: object,
+    *,
+    repository_root: Path,
+    source_hashes: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Validate the exact runtime-only provider-factory registration."""
+
+    if not isinstance(value, Mapping) or set(value) != _PC01_PROVIDER_BOOTSTRAP_FIELDS:
+        raise SchemaError("PC-01 provider bootstrap binding fields differ from schema")
+    result = {str(key): str(item) for key, item in value.items()}
+    fixed = {
+        "schema_version": PC01_PROVIDER_BOOTSTRAP_SCHEMA_VERSION,
+        "provider_contract_schema_version": (
+            PC01_PROVIDER_PUBLIC_CONTRACT_SCHEMA_VERSION
+        ),
+        "source_plane": "runtime_only",
+    }
+    for field, expected in fixed.items():
+        if result.get(field) != expected:
+            raise SchemaError(f"PC-01 provider bootstrap {field} mismatch")
+    entrypoint = _nonempty(
+        result.get("factory_entrypoint"), field="provider factory entrypoint"
+    )
+    if entrypoint.count(":") != 1:
+        raise SchemaError("provider factory entrypoint must use module:attribute")
+    module_name, attribute_name = entrypoint.split(":", 1)
+    if (
+        result.get("factory_module") != module_name
+        or result.get("factory_qualname") != attribute_name
+        or "." in attribute_name
+    ):
+        raise SchemaError(
+            "provider factory module/qualname differs from exact entrypoint"
+        )
+    relative = safe_relative_path(result.get("source_relative_path", "")).as_posix()
+    if relative != result.get("source_relative_path"):
+        raise SchemaError("provider factory source path is not canonical")
+    root = repository_root.resolve()
+    source = (root / relative).resolve()
+    if (
+        root not in source.parents
+        or source.is_symlink()
+        or not source.is_file()
+        or not is_sha256(result.get("source_sha256"))
+        or sha256_file(source) != result.get("source_sha256")
+    ):
+        raise SchemaError("provider factory source identity differs from checkout")
+    if source_hashes is not None and source_hashes.get(relative) != result.get(
+        "source_sha256"
+    ):
+        raise SchemaError("provider factory source is absent from runner attestation")
+    if not is_sha256(result.get("expected_provider_public_contract_sha256")):
+        raise SchemaError("provider public-contract hash must be SHA-256")
+    return result
 
 
 def validate_infrastructure_evidence_record(
@@ -286,6 +552,26 @@ def validate_runner_attestation_payload(
         raise SchemaError("evaluator source is not included in frozen runner source set")
     if payload.get("source_set_sha256") != sha256_json(normalized_rows):
         raise SchemaError("runner source-set hash mismatch")
+    provider_binding = payload.get(PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD)
+    if entrypoint == PRODUCTION_RUNNER_ENTRYPOINT:
+        validate_pc01_provider_bootstrap_binding(
+            provider_binding,
+            repository_root=repository_root,
+            source_hashes={
+                row["relative_path"]: row["sha256"] for row in normalized_rows
+            },
+        )
+        validate_pc01_page_broker_security_binding(
+            payload.get(PC01_PAGE_BROKER_SECURITY_FIELD)
+        )
+    elif provider_binding is not None:
+        raise SchemaError(
+            "non-production runner attestation must not bind a PC-01 provider"
+        )
+    elif payload.get(PC01_PAGE_BROKER_SECURITY_FIELD) is not None:
+        raise SchemaError(
+            "non-production runner attestation must not claim PC-01 broker security"
+        )
     return tuple(resolved)
 
 

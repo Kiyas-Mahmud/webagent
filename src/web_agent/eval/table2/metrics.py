@@ -22,12 +22,20 @@ def rate(numerator: int, denominator: int, *, force_na: bool = False) -> dict[st
     if numerator < 0 or denominator < 0 or numerator > denominator:
         raise ValueError(f"invalid rate {numerator}/{denominator}")
     if force_na or denominator == 0:
+        reason = (
+            "metric is not applicable by registered system design"
+            if force_na
+            else "no eligible denominator observations"
+        )
         return {
             "numerator": int(numerator),
             "denominator": int(denominator),
             "estimate": None,
             "ci95_low": None,
             "ci95_high": None,
+            "interval_status": "NOT_APPLICABLE",
+            "reason": reason,
+            "ci_reason": reason,
             "display": "N/A",
         }
     estimate = numerator / denominator
@@ -137,6 +145,11 @@ def task_clustered_rate(
         "bootstrap_seed": derived_seed,
     }
     if force_na or denominator == 0:
+        reason = (
+            "metric is not applicable by registered system design"
+            if force_na
+            else "no eligible denominator observations"
+        )
         return {
             **common,
             "estimate": None,
@@ -146,6 +159,8 @@ def task_clustered_rate(
             "ci95_high": None,
             "valid_bootstrap_samples": 0,
             "interval_status": "NOT_APPLICABLE",
+            "reason": reason,
+            "ci_reason": reason,
             "display": "N/A",
         }
 
@@ -160,6 +175,7 @@ def task_clustered_rate(
             "ci95_high": None,
             "valid_bootstrap_samples": 0,
             "interval_status": "NOT_ESTIMABLE_FEWER_THAN_TWO_TASK_CLUSTERS",
+            "ci_reason": "fewer than two unique task clusters",
             "display": f"{100.0 * estimate:.2f}% ({numerator}/{denominator})",
         }
     rng = random.Random(derived_seed)
@@ -304,6 +320,7 @@ def task_clustered_mean(
         "bootstrap_seed": derived_seed,
     }
     if force_na:
+        reason = "metric is not applicable by registered system design"
         return {
             **common,
             "n": 0,
@@ -325,9 +342,12 @@ def task_clustered_mean(
             "ci95_high": None,
             "valid_bootstrap_samples": 0,
             "interval_status": "NOT_APPLICABLE",
+            "reason": reason,
+            "ci_reason": reason,
             "display": "N/A",
         }
     if not ordered:
+        reason = "no finite eligible observations"
         return {
             **common,
             "estimate": None,
@@ -337,6 +357,8 @@ def task_clustered_mean(
             "ci95_high": None,
             "valid_bootstrap_samples": 0,
             "interval_status": "NOT_APPLICABLE",
+            "reason": reason,
+            "ci_reason": reason,
             "display": "N/A",
         }
     if len(task_ids) < 2:
@@ -348,6 +370,7 @@ def task_clustered_mean(
             "ci95_high": None,
             "valid_bootstrap_samples": 0,
             "interval_status": "NOT_ESTIMABLE_FEWER_THAN_TWO_TASK_CLUSTERS",
+            "ci_reason": "fewer than two unique task clusters",
             "display": f"{descriptive['mean']:.2f} ({descriptive['total']:.2f}/{descriptive['n']})",
         }
 
@@ -587,7 +610,7 @@ def _system_metrics(
                     ),
                 }
             )
-        return task_clustered_rate(
+        result = task_clustered_rate(
             contributions,
             metric_name=metric_name,
             system_id=system_id,
@@ -596,6 +619,13 @@ def _system_metrics(
             seed=bootstrap_seed,
             force_na=force_na,
         )
+        if force_na:
+            reason = (
+                "recovery controller is disabled for E0/E1 by registered system design"
+            )
+            result["reason"] = reason
+            result["ci_reason"] = reason
+        return result
 
     def clustered_mean(
         metric_name: str,
@@ -616,7 +646,7 @@ def _system_metrics(
                     "value": measured,
                 }
             )
-        return task_clustered_mean(
+        result = task_clustered_mean(
             contributions,
             metric_name=metric_name,
             system_id=system_id,
@@ -625,6 +655,13 @@ def _system_metrics(
             seed=bootstrap_seed,
             force_na=force_na,
         )
+        if force_na:
+            reason = (
+                "recovery controller is disabled for E0/E1 by registered system design"
+            )
+            result["reason"] = reason
+            result["ci_reason"] = reason
+        return result
 
     return {
         "episode_count": len(episodes),

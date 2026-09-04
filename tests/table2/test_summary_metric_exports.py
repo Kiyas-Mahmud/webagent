@@ -11,8 +11,10 @@ from web_agent.eval.table2.statistics import (
 )
 from web_agent.eval.table2.summary import (
     PAIRED_CONTRAST_FIELDS,
+    RETRIEVAL_METRIC_FIELDS,
     _format_rate,
     _paired_contrast_rows,
+    _retrieval_metric_rows,
     _write_main_table,
     _write_metric_csv,
     _write_result_csv,
@@ -60,6 +62,7 @@ def _clustered_mean() -> dict:
         "valid_bootstrap_samples": 100,
         "interval_status": "ESTIMATED",
         "interval_method": "percentile_task_cluster_bootstrap",
+        "inference_unit": "task_id",
         "n_task_clusters": 2,
         "missing_seed_repeat_cells": 0,
     }
@@ -69,6 +72,24 @@ def test_rate_formatter_and_final_headline_include_counts_and_ci(tmp_path):
     value = _clustered_rate(3, 5, low=0.2, high=0.8)
     assert _format_rate(value) == "60.00% (3/5; 95% CI 20.00%, 80.00%)"
     assert _format_rate(_clustered_rate(0, 0)) == "N/A"
+    unavailable = {
+        **_clustered_rate(0, 0),
+        "reason": "recovery controller disabled for this system",
+    }
+    assert _format_rate(unavailable) == (
+        "N/A (0/0; recovery controller disabled for this system)"
+    )
+    one_cluster = {
+        **value,
+        "ci95_low": None,
+        "ci95_high": None,
+        "ci_low": None,
+        "ci_high": None,
+        "ci_reason": "fewer than two unique task clusters",
+    }
+    assert _format_rate(one_cluster) == (
+        "60.00% (3/5; 95% CI N/A: fewer than two unique task clusters)"
+    )
 
     systems = {}
     for system_id in SYSTEM_IDS:
@@ -96,7 +117,7 @@ def test_rate_formatter_and_final_headline_include_counts_and_ci(tmp_path):
         "60.00% (3/5; 95% CI 20.00%, 80.00%)"
     )
     assert rows[0]["Avg. Browser Actions"] == (
-        "5.00 [95% CI 3.50, 6.50; n=2]"
+        "5.00 (10.00/2; 95% CI 3.50, 6.50)"
     )
 
     _write_main_table(tmp_path, metrics, "PILOT_ONLY")
@@ -145,6 +166,60 @@ def test_metrics_csv_flattens_continuous_distribution_and_environment(tmp_path):
     assert e2["environment_failure_all_launches_numerator"] == "2"
     assert e2["environment_failure_original_launches_denominator"] == "16"
     assert e2["environment_failure_rerun_launches_denominator"] == "4"
+
+
+def test_retrieval_csv_keeps_counts_task_cluster_ci_and_na_reasons(tmp_path):
+    retrieval = {
+        "mean_reciprocal_rank": {
+            **_clustered_mean(),
+            "query_denominator": 2,
+        },
+        "strategy_hit_at_5": {
+            "numerator": None,
+            "denominator": 2,
+            "estimate": None,
+            "ci95_low": None,
+            "ci95_high": None,
+            "confidence": 0.95,
+            "interval_method": "percentile_task_cluster_bootstrap",
+            "inference_unit": "task_id",
+            "n_task_clusters": 2,
+            "valid_bootstrap_samples": 0,
+            "interval_status": "NOT_APPLICABLE_REGISTERED_DEPTH",
+            "ci_reason": "registered retrieval depth is below 5",
+            "reason": "registered retrieval depth is below 5",
+            "query_denominator": 2,
+            "available_query_count": 0,
+            "display": "N/A",
+        },
+        "query_count": 2,
+    }
+    rows = _retrieval_metric_rows(
+        retrieval,
+        publication_status="DRAFT_PILOT_ONLY",
+    )
+    _write_result_csv(
+        tmp_path / "retrieval_metrics.csv",
+        rows,
+        RETRIEVAL_METRIC_FIELDS,
+    )
+    with (tmp_path / "retrieval_metrics.csv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        exported = {row["metric"]: row for row in csv.DictReader(handle)}
+
+    mrr = exported["mean_reciprocal_rank"]
+    assert mrr["numerator"] == "10.0"
+    assert mrr["denominator"] == "2"
+    assert mrr["estimate"] == "5.0"
+    assert mrr["ci95_low"] == "3.5"
+    assert mrr["ci95_high"] == "6.5"
+    assert mrr["inference_unit"] == "task_id"
+    unavailable = exported["strategy_hit_at_5"]
+    assert unavailable["estimate"] == ""
+    assert unavailable["ci95_low"] == ""
+    assert unavailable["interval_status"] == "NOT_APPLICABLE_REGISTERED_DEPTH"
+    assert unavailable["reason"] == "registered retrieval depth is below 5"
 
 
 def _paired_rows() -> list[dict]:

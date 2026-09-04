@@ -9,6 +9,7 @@ import shutil
 import numpy as np
 import pytest
 
+import web_agent.memory.joint_duplicate_audit as joint_duplicate_module
 from web_agent.memory.joint_duplicate_audit import (
     JointDuplicateAuditError,
     build_joint_duplicate_assignment_package,
@@ -402,6 +403,33 @@ def test_joint_cli_requires_and_plumbs_source_authority():
         )
 
 
+def test_registered_assignment_rejects_preparation_without_outer_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    inputs = _fixture_inputs(tmp_path)
+    monkeypatch.setattr(
+        joint_duplicate_module,
+        "P4_REGISTERED_SOURCE_AUTHORITY_SHA256",
+        sha256_file(inputs["source_authority"]),
+    )
+    with pytest.raises(
+        JointDuplicateAuditError,
+        match="registered P4 preparation execution receipt is invalid",
+    ):
+        build_joint_duplicate_assignment_package(
+            config_path=CONFIG,
+            source_authority_path=inputs["source_authority"],
+            preparation_root=inputs["preparation"],
+            gold_train_json=inputs["gold"],
+            resolved_task_export_path=inputs["export"],
+            approved_task_registry_path=inputs["registry"],
+            recovery_scenarios_path=inputs["recovery_scenarios"],
+            duplicate_audit_registration_path=inputs["duplicate_registration"],
+            output_dir=tmp_path / "must-not-build",
+        )
+
+
 def _kwargs(inputs: dict[str, Path], package_root: Path) -> dict:
     return {
         "package_root": package_root,
@@ -426,6 +454,9 @@ def _compact_kwargs(inputs: dict[str, Path], package_root: Path) -> dict:
 
 def test_joint_assignment_detects_exact_near_and_keeps_one_namespace(tmp_path: Path):
     _, package = _build(tmp_path)
+    assert package.manifest["input_binding"][
+        "preparation_execution_receipt_status"
+    ] == "NOT_APPLICABLE_NONREGISTERED_SOURCE_AUTHORITY"
     by_id = {row["entity_id"]: row for row in package.entities}
     candidate = by_id["candidate:candidate-0"]
     exact_task = by_id["task:webarena.100"]
@@ -698,11 +729,24 @@ def _fixture_store_binding(
     provenance_path: Path,
     audit_path: Path,
 ) -> dict:
+    preparation_execution = package.manifest["input_binding"]
     return {
-        "schema_version": "table2-memory-joint-duplicate-evidence-binding-v2",
+        "schema_version": "table2-memory-joint-duplicate-evidence-binding-v3",
         "preparation_manifest_sha256": sha256_file(
             inputs["preparation"] / "preparation_manifest.json"
         ),
+        "preparation_execution_receipt_status": preparation_execution[
+            "preparation_execution_receipt_status"
+        ],
+        "preparation_execution_receipt_sha256": preparation_execution[
+            "preparation_execution_receipt_sha256"
+        ],
+        "preparation_executed_source_set_sha256": preparation_execution[
+            "preparation_executed_source_set_sha256"
+        ],
+        "preparation_source_commit": preparation_execution[
+            "preparation_source_commit"
+        ],
         "assignment_manifest_sha256": package.assignment_manifest_sha256,
         "entities_sha256": package.manifest["entities_sha256"],
         "clusters_sha256": package.manifest["clusters_sha256"],

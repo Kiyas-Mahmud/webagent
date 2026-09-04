@@ -73,6 +73,26 @@ PAIRED_CONTRAST_FIELDS = (
     "confidence",
     "publication_status",
 )
+RETRIEVAL_METRIC_FIELDS = (
+    "metric",
+    "numerator",
+    "denominator",
+    "estimate",
+    "ci95_low",
+    "ci95_high",
+    "confidence",
+    "interval_method",
+    "inference_unit",
+    "n_task_clusters",
+    "valid_bootstrap_samples",
+    "interval_status",
+    "ci_reason",
+    "reason",
+    "query_denominator",
+    "available_query_count",
+    "display",
+    "publication_status",
+)
 MANUAL_AUDIT_CASE_CATEGORIES = (
     "successful_recovery",
     "failed_recovery",
@@ -159,12 +179,18 @@ def summarize_campaign(
     retrieval = compute_retrieval_diagnostics(
         [
             row for row in records["memory_queries"] if str(row["episode_id"]) in normal_episode_ids
-        ]
+        ],
+        bootstrap_samples=rate_inference["bootstrap_samples"],
+        confidence=rate_inference["confidence"],
+        bootstrap_seed=rate_inference["bootstrap_seed"],
     )
     diagnostic_retrieval = compute_retrieval_diagnostics(
         [
             row for row in records["memory_queries"] if str(row["episode_id"]) in recovery_episode_ids
-        ]
+        ],
+        bootstrap_samples=rate_inference["bootstrap_samples"],
+        confidence=rate_inference["confidence"],
+        bootstrap_seed=rate_inference["bootstrap_seed"],
     )
     statistic_keys = [
         "task_success",
@@ -426,6 +452,8 @@ def _write_metric_csv(aggregate: Path, metrics: Mapping[str, Any]) -> None:
                 "valid_bootstrap_samples",
                 "interval_status",
                 "missing_seed_repeat_cells",
+                "reason",
+                "ci_reason",
             ):
                 if field in value:
                     row[f"{prefix}_{field}"] = value.get(field)
@@ -621,16 +649,25 @@ def _format_rate(value: Mapping[str, Any]) -> str:
 
     estimate = value.get("estimate")
     if estimate is None:
-        return "N/A"
+        reason = str(value.get("reason", "")).strip()
+        if not reason:
+            return "N/A"
+        return (
+            f"N/A ({value.get('numerator', 0)}/{value.get('denominator', 0)}; "
+            f"{reason})"
+        )
     numerator = int(value["numerator"])
     denominator = int(value["denominator"])
     low = value.get("ci95_low", value.get("ci_low"))
     high = value.get("ci95_high", value.get("ci_high"))
     point = 100.0 * float(estimate)
     if low is None or high is None:
+        reason = str(
+            value.get("ci_reason", value.get("interval_status", "not estimable"))
+        ).strip()
         return (
             f"{point:.2f}% ({numerator}/{denominator}; "
-            "95% CI not estimable)"
+            f"95% CI N/A: {reason})"
         )
     return (
         f"{point:.2f}% ({numerator}/{denominator}; 95% CI "
@@ -641,15 +678,23 @@ def _format_rate(value: Mapping[str, Any]) -> str:
 def _format_continuous(value: Mapping[str, Any]) -> str:
     estimate = value.get("estimate", value.get("mean"))
     if estimate is None:
-        return "N/A"
-    low = value.get("ci95_low")
-    high = value.get("ci95_high")
+        reason = str(value.get("reason", "")).strip()
+        return f"N/A ({reason})" if reason else "N/A"
+    low = value.get("ci95_low", value.get("ci_low"))
+    high = value.get("ci95_high", value.get("ci_high"))
     denominator = value.get("denominator", value.get("n"))
+    numerator = value.get("numerator", value.get("total"))
+    ratio = f"{float(numerator):.2f}/{int(denominator)}"
     if low is None or high is None:
-        return f"{float(estimate):.2f} (n={int(denominator)})"
+        reason = str(
+            value.get("ci_reason", value.get("interval_status", "not estimable"))
+        ).strip()
+        return (
+            f"{float(estimate):.2f} ({ratio}; 95% CI N/A: {reason})"
+        )
     return (
-        f"{float(estimate):.2f} [95% CI {float(low):.2f}, "
-        f"{float(high):.2f}; n={int(denominator)}]"
+        f"{float(estimate):.2f} ({ratio}; 95% CI {float(low):.2f}, "
+        f"{float(high):.2f})"
     )
 
 
@@ -1022,34 +1067,14 @@ def _export_results(
         PAIRED_CONTRAST_FIELDS,
     )
 
-    retrieval_rows: list[dict[str, Any]] = []
-    for metric, values in retrieval.items():
-        if isinstance(values, Mapping) and (
-            "estimate" in values or "mean" in values
-        ):
-            retrieval_rows.append(
-                {
-                    "metric": metric,
-                    "estimate": values.get("estimate", values.get("mean")),
-                    "numerator": values.get("numerator"),
-                    "denominator": values.get(
-                        "denominator", values.get("query_denominator")
-                    ),
-                    "display": values.get("display"),
-                    "publication_status": publication_status,
-                }
-            )
+    retrieval_rows = _retrieval_metric_rows(
+        retrieval,
+        publication_status=publication_status,
+    )
     _write_result_csv(
         results_dir / "retrieval_metrics.csv",
         retrieval_rows,
-        (
-            "metric",
-            "estimate",
-            "numerator",
-            "denominator",
-            "display",
-            "publication_status",
-        ),
+        RETRIEVAL_METRIC_FIELDS,
     )
     _write_result_json(
         results_dir / "statistics.json",
@@ -1088,6 +1113,48 @@ def _export_results(
         "files": {name: sha256_file(results_dir / name) for name in names},
         "raw_evidence_exported": False,
     }
+
+
+def _retrieval_metric_rows(
+    retrieval: Mapping[str, Any],
+    *,
+    publication_status: str,
+) -> list[dict[str, Any]]:
+    """Flatten retrieval metrics without dropping registered uncertainty fields."""
+
+    rows: list[dict[str, Any]] = []
+    for metric, values in retrieval.items():
+        if not isinstance(values, Mapping) or not (
+            "estimate" in values or "mean" in values
+        ):
+            continue
+        low = values.get("ci95_low", values.get("ci_low"))
+        high = values.get("ci95_high", values.get("ci_high"))
+        rows.append(
+            {
+                "metric": metric,
+                "numerator": values.get("numerator", values.get("total")),
+                "denominator": values.get(
+                    "denominator", values.get("query_denominator", values.get("n"))
+                ),
+                "estimate": values.get("estimate", values.get("mean")),
+                "ci95_low": low,
+                "ci95_high": high,
+                "confidence": values.get("confidence"),
+                "interval_method": values.get("interval_method"),
+                "inference_unit": values.get("inference_unit"),
+                "n_task_clusters": values.get("n_task_clusters"),
+                "valid_bootstrap_samples": values.get("valid_bootstrap_samples"),
+                "interval_status": values.get("interval_status"),
+                "ci_reason": values.get("ci_reason"),
+                "reason": values.get("reason"),
+                "query_denominator": values.get("query_denominator"),
+                "available_query_count": values.get("available_query_count"),
+                "display": values.get("display"),
+                "publication_status": publication_status,
+            }
+        )
+    return rows
 
 
 def _paired_contrast_rows(

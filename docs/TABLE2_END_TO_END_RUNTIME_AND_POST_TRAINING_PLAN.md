@@ -7,13 +7,20 @@
 **Plan date:** 2026-08-30
 
 **Plan status:** Core offline runtime/evidence architecture and the task/source/
-deployment-preflight gates are implemented. The pinned WebArena 0--49 source
-audit currently blocks handoff because 47 tasks require an unsupported
-assistant-answer/STOP interface. Strict live-capability package binding is now
-implemented across handoff, frozen campaign, validation, and production
-launch. Its genuine measured external evidence and the other pilot inputs are
-still unavailable. This document does not claim any live browser-evaluation
-result.
+deployment-preflight gates are implemented and the complete Table 2 suite
+passes 965 tests. The pinned WebArena 0--49 source audit currently blocks
+handoff because 47 tasks require an unsupported assistant-answer/STOP
+interface. Strict live-capability, provider-installation, evaluator, memory,
+and artifact-package binding is implemented across handoff, frozen campaign,
+validation, and production launch. Its genuine measured external evidence and
+the other pilot inputs are still unavailable. This document does not claim any
+live browser-evaluation result. A causal-boundary audit also confirmed that the
+current page broker is same-process reviewed-code engineering machinery, not an
+enforced isolation boundary: both typed capabilities remain importable in one
+interpreter. The frozen runner records that limitation and production fails
+before provider import. No live campaign may run until a separately
+authenticated process-isolated broker implementation and receipt are added
+under a new registered schema.
 
 **Scope:** Work that can proceed while DGX training runs, followed by the exact post-training evaluation sequence
 
@@ -815,11 +822,22 @@ API may simulate a later stage by supplying future inputs to an earlier one.
 
 The policy cannot verify its own success. The verifier must use the frozen
 benchmark semantics or a preregistered deterministic rule where available.
-For this pilot, runtime scoring is supplied by the source-reviewed
-`libwebarena==0.0.4` compatibility port; it is not asserted to be byte-identical
-to the pinned official WebArena upstream evaluator. Its upstream identity,
-runtime identity, compatibility delta, review, configuration, and any judge
-availability receipt are frozen as separate evidence.
+For this pilot, runtime scoring may be supplied only by an independently
+reviewed `libwebarena==0.0.4` compatibility-port release; it is not asserted to
+be byte-identical to the pinned official WebArena upstream evaluator. The
+repository's current
+`reviewed_compatibility_port_pending_external_review` implementation is local
+parity evidence only and is intentionally unpromotable, even if somebody adds
+or re-hashes a JSON file claiming `PASS`. Promotion requires a new non-pending
+implementation identity and source commit. The exact final source bytes must
+receive a final-byte parity receipt and an independent review receipt binding
+the implementation ID/version/source hash, compiler hash, exact 50-task compile
+report, upstream reference, compatibility delta, reviewer/authority identity,
+and review time. A joint digest of the exact parity/review files and those
+identities must then be pinned in a later reviewed source commit; the allowlist
+in this source version is deliberately empty. Self-hashes inside caller JSON
+are integrity fields, not external-review authentication. Those identities and
+any judge availability receipt are then frozen as separate evidence.
 
 The verifier separately reports:
 
@@ -1911,9 +1929,17 @@ Before final model selection completes:
 
 1. finalize the benchmark/task manifest;
 2. finalize oracle, budgets, metrics, logs, and analysis;
-3. freeze evaluator code/config and hashes;
-4. produce a machine-readable dry-run PASS report;
-5. record all known limitations.
+3. compile all exact 50 task evaluator configurations and freeze the compile
+   authority; the current implementation-specific report remains explicitly
+   pending and is not campaign permission;
+4. cut a new non-pending evaluator implementation identity from a clean source
+   commit, then measure parity on those exact final bytes;
+5. obtain independent external review whose receipt binds the final
+   implementation, parity, compiler, compile-authority, delta, upstream
+   reference, reviewer, authority, and timestamp hashes;
+6. freeze evaluator code/config and every bound evidence hash;
+7. produce a machine-readable dry-run PASS report and record all known
+   limitations.
 
 After this freeze, final model results must not be used to redesign the
 evaluator.
@@ -2052,26 +2078,37 @@ are separate inputs; their five shared origins must agree exactly.
 
 4. The deployment owner then supplies real evidence for exactly seven live
    capabilities and validates the
-   `table2-pc01-live-deployment-v1` manifest with
+   `table2-pc01-live-deployment-v2` manifest with
    `load_pc01_live_deployment_manifest` in
    `src/web_agent/eval/table2/live_deployment.py`. This is measured evidence,
    so no fixture or repository command fabricates it. The manifest binds the
    validation-disabled BrowserGym path, six-field start-state application,
    exclusive control, reset, live observation/action mapping, safety and fault
-   classification, recovery planning, efficiency accounting, the one-way
-   sealed-page broker, and cleanup on success, evaluator error, and runtime
-   abort. The handoff/runner source attestation must include the implementation
-   and broker sources; if the frozen campaign cannot reopen and validate the
-   manifest and every readiness file, stop before handoff.
+   classification, recovery planning, efficiency accounting, the typed
+   same-process sealed-page engineering broker, and cleanup on success,
+   evaluator error, and runtime abort. That broker demonstrates reviewed-code
+   message flow only; it is not live-campaign authority. The handoff/runner
+   source attestation must include the implementation and broker sources, plus
+   the exact blocked security non-claim. Production remains stopped until an
+   externally authenticated process-isolation implementation and receipt
+   replace that unpromotable binding. If the frozen campaign cannot reopen and
+   validate the manifest and every readiness file, stop before handoff.
 
-   The sealed evaluator evidence must call `libwebarena==0.0.4` a reviewed
-   compatibility port, not the official evaluator. It binds official upstream
-   repository/revision and source hashes separately from the runtime wheel and
-   module hashes, plus the compatibility delta, review record, evaluator
-   configuration, and response-schema evidence. The 13 fuzzy tasks require a
-   successful availability receipt for the pinned `gpt-4-1106-preview` judge
-   and its frozen decoding contract. Substitution or silent fallback is
-   forbidden.
+   The sealed evaluator evidence must call `libwebarena==0.0.4` an independently
+   reviewed compatibility port, not the official evaluator. The current
+   pending module/version cannot be promoted by editing its manifest or adding
+   a self-authored `PASS`. An approved release must use a new non-pending
+   implementation identity/source commit; run final-byte parity against the
+   pinned upstream reference; obtain independent review of those exact bytes;
+   bind the resulting parity/review receipts to the embedded 50-task compile
+   authority; and pin their joint trust-binding digest in a later reviewed
+   source commit. The current source allowlist is empty, so fully re-hashed
+   caller-authored JSON still fails. The package also binds official upstream
+   repository/revision and source hashes separately from runtime wheel/module
+   hashes, the compatibility delta, evaluator configuration, and
+   response-schema evidence. The 13 fuzzy tasks require a successful
+   availability receipt for the pinned `gpt-4-1106-preview` judge and its
+   frozen decoding contract. Substitution or silent fallback is forbidden.
 
 5. In parallel, build P4 on Kaggle where the 22 GB Gold training corpus is
    already mounted, following
@@ -2193,7 +2230,18 @@ operator-supplied fields:
   the primary production-runner source
   `src/web_agent/eval/table2/production_runner.py`, the pre-import bootstrap
   `scripts/run_table2_evaluation.py`, and the complete attested
-  runner/integration/evaluator source list.
+  runner/integration/evaluator source list;
+- `runner.pc01_operations_provider_bootstrap` containing the exact provider
+  factory `module:function`, module, qualname, repository-relative source and
+  SHA-256, `runtime_only` source plane, provider-contract schema version, and
+  expected provider public-contract SHA-256. The factory must be an exact
+  function (not a class, partial, callable object, or another function in the
+  same file). Its source must be a frozen runtime-capability source and must
+  not be shared with the sealed evaluator or same-process engineering broker.
+  This source-plane check is reviewed-code evidence, not process isolation. The
+  six live
+  capability readiness `deployment_state_sha256` values are the hashes of the
+  actual provider operation/config public states, not caller-chosen labels.
 
 Under the current blocked pilot protocol, the task export must contain exactly
 the registered upstream indices 0--49 and must reproduce from the pinned
@@ -2262,17 +2310,46 @@ PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
   --campaign-dir /secure/table2-campaigns/pilot-readiness-probe \
   --runner web_agent.eval.table2.production_runner:create_runner \
   --runner-factory \
+  --pc01-operations-provider-factory '<EXACT_FROZEN_MODULE:FUNCTION>' \
+  --pc01-credential-capability-root /secure/table2-runtime/credentials \
+  --pc01-credential-capability-id '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_ID>' \
+  --pc01-credential-capability-version '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_VERSION>' \
+  --prepare-pc01-provider-boundary-receipt /secure/table2-runtime-receipts/readiness-probe.provider-boundary.json
+PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
+  --campaign-dir /secure/table2-campaigns/pilot-readiness-probe \
+  --runner web_agent.eval.table2.production_runner:create_runner \
+  --runner-factory \
+  --pc01-operations-provider-factory '<EXACT_FROZEN_MODULE:FUNCTION>' \
+  --pc01-credential-capability-root /secure/table2-runtime/credentials \
+  --pc01-credential-capability-id '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_ID>' \
+  --pc01-credential-capability-version '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_VERSION>' \
+  --pc01-provider-boundary-receipt /secure/table2-runtime-receipts/readiness-probe.provider-boundary.json \
   --block-id '<first-normal-block-id-from-the-frozen-probe-schedule>' \
   --live-readiness-probe-for /secure/table2-campaigns/pilot-260
 PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
   --campaign-dir /secure/table2-campaigns/pilot-260 \
   --runner web_agent.eval.table2.production_runner:create_runner \
-  --runner-factory
+  --runner-factory \
+  --pc01-operations-provider-factory '<EXACT_FROZEN_MODULE:FUNCTION>' \
+  --pc01-credential-capability-root /secure/table2-runtime/credentials \
+  --pc01-credential-capability-id '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_ID>' \
+  --pc01-credential-capability-version '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_VERSION>' \
+  --prepare-pc01-provider-boundary-receipt /secure/table2-runtime-receipts/pilot-260.provider-boundary.json
+PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
+  --campaign-dir /secure/table2-campaigns/pilot-260 \
+  --runner web_agent.eval.table2.production_runner:create_runner \
+  --runner-factory \
+  --pc01-operations-provider-factory '<EXACT_FROZEN_MODULE:FUNCTION>' \
+  --pc01-credential-capability-root /secure/table2-runtime/credentials \
+  --pc01-credential-capability-id '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_ID>' \
+  --pc01-credential-capability-version '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_VERSION>' \
+  --pc01-provider-boundary-receipt /secure/table2-runtime-receipts/pilot-260.provider-boundary.json
 PYTHONPATH=src python3 scripts/validate_table2_artifacts.py \
   --campaign-dir /secure/table2-campaigns/pilot-260
 PYTHONPATH=src python3 scripts/summarize_table2.py \
   --campaign-dir /secure/table2-campaigns/pilot-260 \
-  --results-dir /secure/table2-results/pilot-260
+  --results-dir /secure/table2-results/pilot-260 \
+  --draft-pilot
 PYTHONPATH=src python3 scripts/validate_table2_artifacts.py \
   --campaign-dir /secure/table2-campaigns/pilot-260 --require-aggregates
 ```
@@ -2283,6 +2360,39 @@ normal block ID from the frozen probe schedule and must produce the exact
 three-entry target-local receipt package described in
 `docs/TABLE2_LIVE_MATCHED_READINESS_RUNBOOK.md`; the target command fails before
 browser reset if that evidence is absent or changed.
+
+Every angle-bracketed provider/credential value above is a required external
+deployment input; this repository does not claim that any such implementation,
+credential capability, or receipt already exists. The tracked preparation mode
+validates the complete frozen campaign, locked-mount absence, clean source,
+live deployment and exact factory identity, then writes the deterministic
+provider-boundary receipt without importing or invoking the factory. A separate
+receipt is required for the probe and target because it binds that campaign's
+immutable state. The receipt's scope is
+`REVIEWED_CODE_ORACLE_FREE_DATAFLOW_ONLY`: it records a same-process factory and
+`kernel_filesystem_sandbox: false`. It proves which typed data the reviewed
+entrypoint is passed; it is not a sandbox or a hostile-code security claim.
+It also cannot repair the separate page-broker gap: this source version records
+`BLOCKED_EXTERNAL_PROCESS_ISOLATION_REQUIRED`, and both provider-boundary
+preparation and campaign execution stop before importing the provider factory.
+The commands above document the future sequence only; they are intentionally
+non-runnable until a separately authenticated process-isolated broker contract
+is implemented and preregistered.
+The credential capability root must be an existing non-symlink tree that is
+disjoint in both directions from the campaign and repository; filesystem root,
+campaign/source ancestors or descendants, and symlinked leaf/parent components
+are rejected. Boundary-receipt preparation never overwrites different existing
+evidence: identical bytes are reused, otherwise preparation fails.
+
+After factory return, the CLI repeats the full authority preflight and freezes a
+typed `PC01ProviderInstallationReceipt` containing the expected and actual
+provider public-contract hashes, exact factory/source identity, bootstrap and
+pre/post campaign-state hashes, boundary-receipt hash, and only a hash of the
+credential public identity. The provider registry requires and revalidates that
+receipt. Before `ProductionTable2Runner` or any block is constructed, the CLI
+appends it as the hash-chained `pc01_provider_installation` access-ledger event;
+package validation rejects any `episode_task_load` that lacks or precedes this
+event. No credential root or secret is serialized.
 
 The `--runner` value must equal the attested `runner_entrypoint`; the runner
 factory must report the exact loaded runtime identity. Before importing the
@@ -2779,6 +2889,8 @@ environment rather than collapsed into one failure bucket.
 - [x] Deterministic fixture and 15-scenario recovery smokes PASS
 - [x] Production evaluation runner and live-evidence revalidation gates
 - [x] Portable matched E0--E3 live-readiness receipt and dispatch guard
+- [x] Same-process broker limitation frozen as reviewed-code engineering evidence; production blocked before provider import
+- [ ] Separately authenticated process-isolated page broker and deployment receipt
 - [ ] Isolated live first-normal-block readiness probe PASS and target-local receipt frozen
 - [ ] Selected-checkpoint WebArena compatibility smoke PASS
 - [ ] Checkpoint, memory, and measured environment attestations frozen
@@ -2825,7 +2937,8 @@ Table 2 is complete only when all of the following are true:
     versioned and hashed.
 12. No final result was used to tune the model or evaluator.
 
-The success criterion is not a universal accuracy target. The required Q1
-evidence is a reproducible and statistically supported improvement under the
-registered contrasts and mechanism controls, with all four pillars operational
-and intact.
+The success criterion is not a universal accuracy target and does not require
+a positive result. The required Q1 evidence is a reproducible, preregistered
+paired estimate under the registered contrasts and mechanism controls, with
+uncertainty, costs, negative or null findings, and pillar-specific limitations
+reported honestly while all four pillars remain operational and intact.

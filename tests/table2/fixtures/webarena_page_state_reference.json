@@ -1,0 +1,481 @@
+{
+  "schema_version": "table2-webarena-page-state-reference-v1",
+  "classification": "generated_pinned_upstream_executable_reference",
+  "implementation_classification": "reviewed_compatibility_port_pending_external_review",
+  "reference_role": "local_compatibility_parity_only_not_external_review",
+  "provenance": {
+    "generator_source_sha256": "25de141c4940f3b1fb3d8da93e46305b10e296eb11ce0f20b1b92ad57cae5204",
+    "python_version": "3.12.14",
+    "libwebarena_version": "0.0.4",
+    "playwright_version": "1.44.0",
+    "chromium_version": "125.0.6422.26",
+    "chromium_executable_name": "chrome",
+    "chromium_executable_sha256": "4a44e3dd7367f709128e58da3e3f3a7c8bc3ebcb32dd2aadcbcb53424280c97e",
+    "wheel_sha256": "9ebee3b4371502c4f0f7e727a72e5846235d6750d420db9a3b8a168107654feb",
+    "wheel_member_sha256": {
+      "webarena/test.raw.json": "7b50386fd69163dbc05d615d834df4c6ed2c35596e97a1b10d17451c02537652",
+      "webarena/evaluation_harness/evaluators.py": "eaa0532bcc97576b86fe3c666a0e538a8b0c41e5fa425edb6db2b32fb05a8186",
+      "webarena/evaluation_harness/helper_functions.py": "7ac7b1b7095aab758d93c3aa8a14769bb1fa5c8a94a3454066be624747834398"
+    },
+    "installed_evaluator_source_matches_wheel": true,
+    "imported_evaluator_path_name": "evaluators.py",
+    "imported_evaluator_source_sha256": "eaa0532bcc97576b86fe3c666a0e538a8b0c41e5fa425edb6db2b32fb05a8186"
+  },
+  "cases": [
+    {
+      "case_id": "url_scheme_trailing_slash_and_extra_query",
+      "source": {
+        "kind": "synthetic_edge_case_specification_v1"
+      },
+      "config": {
+        "eval_types": [
+          "url_match"
+        ],
+        "reference_answers": null,
+        "reference_url": "http://shop.test/catalog/items/?q=usb+wifi",
+        "program_html": [],
+        "url_note": "GOLD in PRED"
+      },
+      "page": {
+        "url": "https://shop.test/catalog/items/?q=usb+wifi&sort=price",
+        "content": "<html></html>",
+        "dom": {}
+      },
+      "expected_vector": [
+        true
+      ],
+      "expected_combined_score": 1.0
+    },
+    {
+      "case_id": "url_or_reference_query_union",
+      "source": {
+        "kind": "synthetic_edge_case_specification_v1"
+      },
+      "config": {
+        "eval_types": [
+          "url_match"
+        ],
+        "reference_answers": null,
+        "reference_url": "https://map.test/search?query=parking |OR| https://map.test/search?query=garage",
+        "program_html": [],
+        "url_note": "GOLD in PRED"
+      },
+      "page": {
+        "url": "https://map.test/search?query=garage",
+        "content": "<html></html>",
+        "dom": {}
+      },
+      "expected_vector": [
+        true
+      ],
+      "expected_combined_score": 1.0
+    },
+    {
+      "case_id": "url_missing_required_query_value",
+      "source": {
+        "kind": "synthetic_edge_case_specification_v1"
+      },
+      "config": {
+        "eval_types": [
+          "url_match"
+        ],
+        "reference_answers": null,
+        "reference_url": "https://shop.test/search?q=chairs&order=price",
+        "program_html": [],
+        "url_note": "GOLD in PRED"
+      },
+      "page": {
+        "url": "https://shop.test/search?q=chairs&order=name",
+        "content": "<html></html>",
+        "dom": {}
+      },
+      "expected_vector": [
+        false
+      ],
+      "expected_combined_score": 0.0
+    },
+    {
+      "case_id": "url_base_substring_rule",
+      "source": {
+        "kind": "synthetic_edge_case_specification_v1"
+      },
+      "config": {
+        "eval_types": [
+          "url_match"
+        ],
+        "reference_answers": null,
+        "reference_url": "https://shop.test/catalog",
+        "program_html": [],
+        "url_note": "GOLD in PRED"
+      },
+      "page": {
+        "url": "https://shop.test/catalogue/items",
+        "content": "<html></html>",
+        "dom": {}
+      },
+      "expected_vector": [
+        true
+      ],
+      "expected_combined_score": 1.0
+    },
+    {
+      "case_id": "exact_pinned_task_758_program_html",
+      "source": {
+        "kind": "exact_pinned_task_eval",
+        "task_index": 758,
+        "task_record_sha256": "90dd8db178107f6d970b7eb4f42e92e7ebaf7cc684c67912bb34dcad66af28da",
+        "upstream_eval_config_sha256": "3010b3cfb41c918fef88b3650719913481b82ff5063d1ce72ae5d39142f65d51",
+        "resolved_eval_config_sha256": "3010b3cfb41c918fef88b3650719913481b82ff5063d1ce72ae5d39142f65d51",
+        "note": "Includes the exact upstream route_from/route_to locators; Chromium accepts their omitted closing square bracket."
+      },
+      "config": {
+        "eval_types": [
+          "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": "",
+        "program_html": [
+          {
+            "url": "last",
+            "locator": "document.querySelector(\"div#content select.routing_engines\").selectedIndex",
+            "required_contents": {
+              "exact_match": "1"
+            }
+          },
+          {
+            "url": "last",
+            "locator": "document.querySelector('[name=\"route_from\"').value",
+            "required_contents": {
+              "must_include": [
+                "New York"
+              ]
+            }
+          },
+          {
+            "url": "last",
+            "locator": "document.querySelector('[name=\"route_to\"').value",
+            "required_contents": {
+              "must_include": [
+                "Portland",
+                "Maine"
+              ]
+            }
+          }
+        ]
+      },
+      "page": {
+        "url": "https://map.test/directions",
+        "content": "<div id='content'><select class='routing_engines'><option>car</option><option selected>walk</option></select><input name='route_from' value='New York, New York'><input name='route_to' value='Portland, Cumberland County, Maine'></div>",
+        "dom": {
+          "div#content select.routing_engines|selectedIndex": 1,
+          "[name=\"route_from\"|value": "New York, New York",
+          "[name=\"route_to\"|value": "Portland, Cumberland County, Maine"
+        }
+      },
+      "expected_vector": [
+        true,
+        true,
+        true
+      ],
+      "expected_combined_score": 1.0
+    },
+    {
+      "case_id": "exact_pinned_task_758_partial_failure",
+      "source": {
+        "kind": "exact_pinned_task_eval",
+        "task_index": 758,
+        "task_record_sha256": "90dd8db178107f6d970b7eb4f42e92e7ebaf7cc684c67912bb34dcad66af28da",
+        "upstream_eval_config_sha256": "3010b3cfb41c918fef88b3650719913481b82ff5063d1ce72ae5d39142f65d51",
+        "resolved_eval_config_sha256": "3010b3cfb41c918fef88b3650719913481b82ff5063d1ce72ae5d39142f65d51",
+        "note": "Exact task evaluator with one deliberately unsatisfied target."
+      },
+      "config": {
+        "eval_types": [
+          "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": "",
+        "program_html": [
+          {
+            "url": "last",
+            "locator": "document.querySelector(\"div#content select.routing_engines\").selectedIndex",
+            "required_contents": {
+              "exact_match": "1"
+            }
+          },
+          {
+            "url": "last",
+            "locator": "document.querySelector('[name=\"route_from\"').value",
+            "required_contents": {
+              "must_include": [
+                "New York"
+              ]
+            }
+          },
+          {
+            "url": "last",
+            "locator": "document.querySelector('[name=\"route_to\"').value",
+            "required_contents": {
+              "must_include": [
+                "Portland",
+                "Maine"
+              ]
+            }
+          }
+        ]
+      },
+      "page": {
+        "url": "https://map.test/directions",
+        "content": "<div id='content'><select class='routing_engines'><option>car</option><option selected>walk</option></select><input name='route_from' value='New York, New York'><input name='route_to' value='Boston, Massachusetts'></div>",
+        "dom": {
+          "div#content select.routing_engines|selectedIndex": 1,
+          "[name=\"route_from\"|value": "New York, New York",
+          "[name=\"route_to\"|value": "Boston, Massachusetts"
+        }
+      },
+      "expected_vector": [
+        true,
+        true,
+        false
+      ],
+      "expected_combined_score": 0.0
+    },
+    {
+      "case_id": "exact_pinned_task_369_sidebar_outer_text",
+      "source": {
+        "kind": "exact_pinned_task_eval",
+        "task_index": 369,
+        "task_record_sha256": "13f7c758a25358341d2fc0d543833a962e1772745c67636cb65b890f7608fe0e",
+        "upstream_eval_config_sha256": "b29050bd116e60acb4061515320d919b25e0e4fc8bc5396960a96fd6d3113570",
+        "resolved_eval_config_sha256": "b29050bd116e60acb4061515320d919b25e0e4fc8bc5396960a96fd6d3113570",
+        "note": "Exact upstream page-state evaluator configuration."
+      },
+      "config": {
+        "eval_types": [
+          "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": null,
+        "program_html": [
+          {
+            "url": "last",
+            "locator": "document.querySelector('[id=\"sidebar_content\"').outerText",
+            "required_contents": {
+              "must_include": [
+                "Carnegie Music Hall"
+              ]
+            }
+          }
+        ]
+      },
+      "page": {
+        "url": "https://map.test/place/369",
+        "content": "<aside id='sidebar_content'>Carnegie Music Hall</aside>",
+        "dom": {
+          "[id=\"sidebar_content\"|outerText": "Carnegie Music Hall"
+        }
+      },
+      "expected_vector": [
+        true
+      ],
+      "expected_combined_score": 1.0
+    },
+    {
+      "case_id": "resolved_pinned_task_676_url_and_filter",
+      "source": {
+        "kind": "exact_pinned_task_eval",
+        "task_index": 676,
+        "task_record_sha256": "904d7b9660e48c7feec355ae73db37a25d200dcc72d52f85984e7740f31e8f32",
+        "upstream_eval_config_sha256": "adb6fa6476c5b8bf4c99f3ceda95d7d5b7a2615d20c94c4b62ad6f78b1498e31",
+        "resolved_eval_config_sha256": "671528a8aded9be3a7fb1dd086ce01dce88b41342f6276b7b1a38dfe1a5b86b5",
+        "note": "Exact upstream evaluator after deterministic replacement of __SHOPPING_ADMIN__ with a credential-free fixture origin."
+      },
+      "config": {
+        "eval_types": [
+          "url_match",
+          "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": "https://admin.test/sales/order/",
+        "program_html": [
+          {
+            "url": "last",
+            "locator": "document.querySelector(\"div.admin__data-grid-filters-current\").outerText",
+            "required_contents": {
+              "must_include": [
+                "Suspected Fraud"
+              ]
+            }
+          }
+        ],
+        "url_note": "GOLD in PRED"
+      },
+      "page": {
+        "url": "https://admin.test/sales/order/123",
+        "content": "<div class='admin__data-grid-filters-current'>Suspected Fraud</div>",
+        "dom": {
+          "div.admin__data-grid-filters-current|outerText": "Suspected Fraud"
+        }
+      },
+      "expected_vector": [
+        true,
+        true
+      ],
+      "expected_combined_score": 1.0
+    },
+    {
+      "case_id": "resolved_pinned_task_704_report_dates",
+      "source": {
+        "kind": "exact_pinned_task_eval",
+        "task_index": 704,
+        "task_record_sha256": "824bfee2df1be5e77c063eefabe152e2981429fed6a60d075cba40e8061f22da",
+        "upstream_eval_config_sha256": "4e0a645827fb52be2885b9ef2b552af5078bc97696dbdd7281df08355a68718e",
+        "resolved_eval_config_sha256": "47d105b73e071328e284ede6419412063a6a4b1aa1576421d1a08d53681cb775",
+        "note": "Exact upstream evaluator after deterministic replacement of __SHOPPING_ADMIN__ with a credential-free fixture origin."
+      },
+      "config": {
+        "eval_types": [
+          "url_match",
+          "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": "https://admin.test/reports/report_sales/sales",
+        "program_html": [
+          {
+            "url": "last",
+            "locator": "document.querySelector('[id=\"sales_report_from\"').value",
+            "required_contents": {
+              "exact_match": "2/1/23"
+            }
+          },
+          {
+            "url": "last",
+            "locator": "document.querySelector('[id=\"sales_report_to\"').value",
+            "required_contents": {
+              "exact_match": "2/28/23"
+            }
+          }
+        ],
+        "url_note": "GOLD in PRED"
+      },
+      "page": {
+        "url": "https://admin.test/reports/report_sales/sales",
+        "content": "<input id='sales_report_from' value='2/1/23'><input id='sales_report_to' value='2/28/23'>",
+        "dom": {
+          "[id=\"sales_report_from\"|value": "2/1/23",
+          "[id=\"sales_report_to\"|value": "2/28/23"
+        }
+      },
+      "expected_vector": [
+        true,
+        true,
+        true
+      ],
+      "expected_combined_score": 1.0
+    },
+    {
+      "case_id": "html_or_must_include",
+      "source": {
+        "kind": "synthetic_edge_case_specification_v1"
+      },
+      "config": {
+        "eval_types": [
+          "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": null,
+        "program_html": [
+          {
+            "url": "last",
+            "locator": "document.querySelector(\"main\").outerText",
+            "required_contents": {
+              "must_include": [
+                "Portland |OR| Augusta",
+                "Maine"
+              ]
+            }
+          }
+        ]
+      },
+      "page": {
+        "url": "https://map.test/place",
+        "content": "<main>Portland, Cumberland County, Maine</main>",
+        "dom": {
+          "main|outerText": "Portland, Cumberland County, Maine"
+        }
+      },
+      "expected_vector": [
+        true
+      ],
+      "expected_combined_score": 1.0
+    },
+    {
+      "case_id": "html_full_page_unescape_and_clean_quotes",
+      "source": {
+        "kind": "synthetic_edge_case_specification_v1"
+      },
+      "config": {
+        "eval_types": [
+          "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": "",
+        "program_html": [
+          {
+            "url": "last",
+            "locator": "",
+            "required_contents": {
+              "must_include": [
+                "Tom & Jerry"
+              ]
+            }
+          }
+        ]
+      },
+      "page": {
+        "url": "https://shop.test/item",
+        "content": "<main>'Tom &amp; Jerry'</main>",
+        "dom": {}
+      },
+      "expected_vector": [
+        true
+      ],
+      "expected_combined_score": 1.0
+    },
+    {
+      "case_id": "html_invalid_css_scores_false_upstream",
+      "source": {
+        "kind": "synthetic_edge_case_specification_v1",
+        "note": "Pinned upstream catches the querySelector exception and scores an empty selected value."
+      },
+      "config": {
+        "eval_types": [
+          "program_html"
+        ],
+        "reference_answers": null,
+        "reference_url": null,
+        "program_html": [
+          {
+            "url": "last",
+            "locator": "document.querySelector(\"??\").outerText",
+            "required_contents": {
+              "must_include": [
+                "never"
+              ]
+            }
+          }
+        ]
+      },
+      "page": {
+        "url": "https://shop.test/item",
+        "content": "<main>never</main>",
+        "dom": {}
+      },
+      "expected_vector": [
+        false
+      ],
+      "expected_combined_score": 0.0
+    }
+  ],
+  "payload_sha256": "1481cd503a788f5cd79d106e2d09c1866a55ffd695370e0f9e556efb2f3580ef"
+}

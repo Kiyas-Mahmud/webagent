@@ -48,9 +48,13 @@ from web_agent.eval.table2.common import (
     read_json,
     safe_relative_path,
     sha256_file,
+    sha256_json,
 )
 from web_agent.eval.table2.execution_guard import (
     InfrastructureInvalidError,
+    PC01_PAGE_BROKER_SECURITY_FIELD,
+    PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD,
+    assert_pc01_page_broker_production_authorized,
     assert_clean_git_checkout,
     attested_source_hashes,
     validate_attested_callable_source,
@@ -64,6 +68,7 @@ from web_agent.eval.table2.live_deployment import (
     LIVE_DEPLOYMENT_BINDING_FIELD,
     ValidatedPC01LiveDeployment,
     validate_bound_pc01_live_deployment,
+    validate_evaluator_requirements_resolved_snapshot_binding,
 )
 from web_agent.eval.table2.package_validator import (
     MODEL_EVIDENCE_ROLES,
@@ -73,6 +78,7 @@ from web_agent.eval.table2.package_validator import (
     PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH,
     _validate_pc01_checkpoint_compatibility_readiness,
     _validate_model_evidence_bundle,
+    require_pc01_provider_installation_ledger,
     validate_campaign,
 )
 from web_agent.eval.table2.resolved_config import (
@@ -160,9 +166,345 @@ _OPTIONAL_EFFICIENCY_FIELDS = frozenset(
     }
 )
 
+RUNTIME_CAPABILITY_AUTHORITY_SCHEMA_VERSION = (
+    "table2-pc01-runtime-capability-authority-v1"
+)
+RUNTIME_LIVE_CAPABILITY_IDS = (
+    "deterministic_reset",
+    "exclusive_input_audit",
+    "oracle_blind_browser_mapping",
+    "action_safety_fault_classification",
+    "recovery_action_planner",
+    "efficiency_measurement",
+)
+_RUNTIME_CAPABILITY_IDENTITY_FIELDS = frozenset(
+    {
+        "capability_id",
+        "implementation_id",
+        "implementation_version",
+        "source_relative_path",
+        "source_sha256",
+        "deployment_state_sha256",
+        "readiness_evidence_sha256",
+        "runtime_return_contract",
+    }
+)
+_RUNTIME_CONTEXT_IDENTITY_FIELDS = frozenset(
+    {
+        "checkpoint_systems",
+        "selected_checkpoint_by_seed",
+        "e0_unadapted_backbone_by_seed",
+        "parameter_provider",
+        "memory_by_seed",
+        "environment",
+        "runtime_integration",
+        "validation_selection_evidence",
+        PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD,
+    }
+)
+_RUNTIME_CONTEXT_ENVIRONMENT_FIELDS = frozenset(
+    {
+        "benchmark",
+        "benchmark_version",
+        "benchmark_revision",
+        "task_definition_version",
+        "browser",
+        "browser_version",
+        "playwright_version",
+        "controller_version",
+        "environment_adapter_id",
+        "environment_adapter_version",
+        "environment_state_digester",
+        "infrastructure_classifier",
+        "page_settle_policy",
+        "manual_rescue_guard",
+        "container_digest",
+        "dependency_lock_sha256",
+        "dependency_lock_relative_path",
+        "viewport",
+    }
+)
+
 
 class ProductionRunnerError(Table2Error):
     """A frozen production binding is absent, inconsistent, or unsafe."""
+
+
+def _require_runtime_sha256(value: object, *, field: str) -> str:
+    if type(value) is not str or len(value) != 64 or any(
+        character not in "0123456789abcdef" for character in value
+    ):
+        raise ProductionRunnerError(f"{field} must be a lowercase SHA-256")
+    return value
+
+
+def runtime_context_identity(
+    attested_runtime_identity: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Project the full runner attestation onto the oracle-blind runtime plane.
+
+    The runner attestation legitimately authenticates the sealed evaluator and
+    the resolved task package.  The model integration does not need either, so
+    neither their records nor the live-deployment package binding are copied
+    into ``FrozenRuntimeContext``.  An explicit allow-list makes a newly added
+    attestation field fail closed instead of silently crossing the boundary.
+    """
+
+    if not isinstance(attested_runtime_identity, Mapping):
+        raise ProductionRunnerError("runner attestation runtime identity is malformed")
+    unexpected = set(attested_runtime_identity) - (
+        _RUNTIME_CONTEXT_IDENTITY_FIELDS | {"evaluator", "resolved_task_snapshot"}
+    )
+    if unexpected:
+        raise ProductionRunnerError(
+            "runner attestation has unclassified runtime/sealed identity fields: "
+            f"{sorted(unexpected)}"
+        )
+    result = {
+        key: value
+        for key, value in attested_runtime_identity.items()
+        if key in _RUNTIME_CONTEXT_IDENTITY_FIELDS
+    }
+    environment = result.get("environment")
+    if isinstance(environment, Mapping):
+        unexpected_environment = set(environment) - (
+            _RUNTIME_CONTEXT_ENVIRONMENT_FIELDS
+            | {"manifest_sha256", LIVE_DEPLOYMENT_BINDING_FIELD}
+        )
+        if unexpected_environment:
+            raise ProductionRunnerError(
+                "runner environment has unclassified runtime/sealed fields: "
+                f"{sorted(unexpected_environment)}"
+            )
+        result["environment"] = {
+            key: value
+            for key, value in environment.items()
+            if key in _RUNTIME_CONTEXT_ENVIRONMENT_FIELDS
+        }
+    elif environment is not None:
+        raise ProductionRunnerError("runner runtime environment identity is malformed")
+    # Produce a detached JSON value before it is handed to deployment code.
+    projected = json.loads(json.dumps(result, sort_keys=True))
+    try:
+        assert_oracle_blind_mapping(
+            projected,
+            location="frozen_runtime_context.runtime_identity",
+        )
+    except ValueError as exc:
+        raise ProductionRunnerError(
+            "runtime identity projection contains sealed/oracle data"
+        ) from exc
+    return projected
+
+
+def validate_runtime_capability_authority(
+    value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate the evaluator-free authority presented to live runtime code."""
+
+    if not isinstance(value, Mapping) or set(value) != {
+        "schema_version",
+        "deployment_preflight_binding_sha256",
+        "expected_provider_public_contract_sha256",
+        "capabilities",
+        "capability_set_sha256",
+    }:
+        raise ProductionRunnerError(
+            "runtime capability authority has extra/missing fields"
+        )
+    if value.get("schema_version") != RUNTIME_CAPABILITY_AUTHORITY_SCHEMA_VERSION:
+        raise ProductionRunnerError("runtime capability authority version changed")
+    _require_runtime_sha256(
+        value.get("deployment_preflight_binding_sha256"),
+        field="runtime capability authority deployment-preflight identity",
+    )
+    _require_runtime_sha256(
+        value.get("expected_provider_public_contract_sha256"),
+        field="runtime capability authority provider public contract",
+    )
+    capabilities = value.get("capabilities")
+    if not isinstance(capabilities, Mapping) or set(capabilities) != set(
+        RUNTIME_LIVE_CAPABILITY_IDS
+    ):
+        raise ProductionRunnerError(
+            "runtime capability authority must contain the six runtime capabilities"
+        )
+    normalized: dict[str, dict[str, Any]] = {}
+    for capability_id in RUNTIME_LIVE_CAPABILITY_IDS:
+        row = capabilities[capability_id]
+        if not isinstance(row, Mapping) or set(row) != _RUNTIME_CAPABILITY_IDENTITY_FIELDS:
+            raise ProductionRunnerError(
+                f"runtime capability authority row is malformed: {capability_id}"
+            )
+        item = dict(row)
+        if item.get("capability_id") != capability_id:
+            raise ProductionRunnerError(
+                f"runtime capability authority ID differs: {capability_id}"
+            )
+        for field in (
+            "implementation_id",
+            "implementation_version",
+            "source_relative_path",
+            "runtime_return_contract",
+        ):
+            if type(item.get(field)) is not str or not str(item[field]).strip():
+                raise ProductionRunnerError(
+                    f"runtime capability authority lacks {capability_id}.{field}"
+                )
+        relative = safe_relative_path(str(item["source_relative_path"])).as_posix()
+        if relative != item["source_relative_path"]:
+            raise ProductionRunnerError(
+                f"runtime capability authority source path is not canonical: {capability_id}"
+            )
+        for field in (
+            "source_sha256",
+            "deployment_state_sha256",
+            "readiness_evidence_sha256",
+        ):
+            _require_runtime_sha256(
+                item.get(field),
+                field=f"runtime capability {capability_id}.{field}",
+            )
+        normalized[capability_id] = item
+    ordered_rows = [normalized[item] for item in RUNTIME_LIVE_CAPABILITY_IDS]
+    if sha256_json(ordered_rows) != value.get("capability_set_sha256"):
+        raise ProductionRunnerError(
+            "runtime capability authority capability-set hash differs"
+        )
+    result = {
+        "schema_version": RUNTIME_CAPABILITY_AUTHORITY_SCHEMA_VERSION,
+        "deployment_preflight_binding_sha256": str(
+            value["deployment_preflight_binding_sha256"]
+        ),
+        "expected_provider_public_contract_sha256": str(
+            value["expected_provider_public_contract_sha256"]
+        ),
+        "capabilities": normalized,
+        "capability_set_sha256": sha256_json(ordered_rows),
+    }
+    try:
+        assert_oracle_blind_mapping(
+            result,
+            location="frozen_runtime_context.runtime_capability_authority",
+        )
+    except ValueError as exc:
+        raise ProductionRunnerError(
+            "runtime capability authority contains sealed/oracle data"
+        ) from exc
+    return result
+
+
+def runtime_deployment_preflight_view(deployment_preflight: Any) -> dict[str, Any]:
+    """Project validated preflight evidence onto a path/content-free runtime view."""
+
+    binding = getattr(deployment_preflight, "binding", None)
+    evidence = getattr(deployment_preflight, "evidence", None)
+    urls = getattr(deployment_preflight, "service_url_map", None)
+    if (
+        not isinstance(binding, Mapping)
+        or not isinstance(evidence, Mapping)
+        or not isinstance(urls, Mapping)
+    ):
+        raise ProductionRunnerError("validated deployment preflight is malformed")
+    required = (
+        "schema_version",
+        "deployment_topology",
+        "validator_contract",
+        "expected_live_reset_task_index",
+        "preflight_content_sha256",
+        "service_url_map_content_sha256",
+        "expected_dgx_model_runtime_identity_sha256",
+        "expected_bridge_identity_sha256",
+    )
+    if any(key not in binding for key in required):
+        raise ProductionRunnerError("deployment preflight lacks runtime view fields")
+    view = {
+        "schema_version": "table2-pc01-runtime-preflight-view-v1",
+        "source_binding_sha256": sha256_json(dict(binding)),
+        "deployment_topology": binding["deployment_topology"],
+        "validator_contract": binding["validator_contract"],
+        "expected_live_reset_task_index": binding[
+            "expected_live_reset_task_index"
+        ],
+        "preflight_content_sha256": binding["preflight_content_sha256"],
+        "service_url_map_content_sha256": binding[
+            "service_url_map_content_sha256"
+        ],
+        # Split-host identities remain commitments only.  Their content, and
+        # therefore any model/bridge path within it, never reaches a provider.
+        "expected_dgx_runtime_identity_sha256": binding[
+            "expected_dgx_model_runtime_identity_sha256"
+        ],
+        "expected_bridge_identity_sha256": binding[
+            "expected_bridge_identity_sha256"
+        ],
+        "preflight_status": evidence.get("status"),
+    }
+    if view["preflight_status"] != "PASS":
+        raise ProductionRunnerError("deployment preflight runtime view did not pass")
+    if sha256_json(dict(urls)) != view["service_url_map_content_sha256"]:
+        raise ProductionRunnerError("deployment preflight runtime URL commitment differs")
+    try:
+        assert_oracle_blind_mapping(view, location="provider_bootstrap.preflight_view")
+    except ValueError as exc:
+        raise ProductionRunnerError(
+            "deployment preflight runtime view contains sealed/oracle data"
+        ) from exc
+    return json.loads(json.dumps(view, sort_keys=True))
+
+
+def build_runtime_capability_authority(
+    live_deployment: ValidatedPC01LiveDeployment,
+    deployment_preflight: Any,
+    *,
+    expected_provider_public_contract_sha256: str,
+) -> dict[str, Any]:
+    """Derive six runtime identities from already-validated frozen evidence."""
+
+    capabilities = live_deployment.manifest.get("capabilities")
+    if not isinstance(capabilities, Mapping):
+        raise ProductionRunnerError("live deployment capabilities are malformed")
+    rows: dict[str, dict[str, Any]] = {}
+    for capability_id in RUNTIME_LIVE_CAPABILITY_IDS:
+        capability = capabilities.get(capability_id)
+        if not isinstance(capability, Mapping):
+            raise ProductionRunnerError(
+                f"live deployment lacks runtime capability: {capability_id}"
+            )
+        readiness_relative = safe_relative_path(
+            str(capability.get("readiness_evidence_path") or "")
+        )
+        readiness_path = live_deployment.package_root / readiness_relative
+        readiness = read_json(readiness_path)
+        if sha256_file(readiness_path) != capability.get("readiness_evidence_sha256"):
+            raise ProductionRunnerError(
+                f"runtime capability readiness bytes changed: {capability_id}"
+            )
+        rows[capability_id] = {
+            "capability_id": capability_id,
+            "implementation_id": capability.get("implementation_id"),
+            "implementation_version": capability.get("implementation_version"),
+            "source_relative_path": capability.get("source_relative_path"),
+            "source_sha256": capability.get("source_sha256"),
+            "deployment_state_sha256": readiness.get("deployment_state_sha256"),
+            "readiness_evidence_sha256": capability.get(
+                "readiness_evidence_sha256"
+            ),
+            "runtime_return_contract": capability.get("runtime_return_contract"),
+        }
+    preflight_view = runtime_deployment_preflight_view(deployment_preflight)
+    ordered_rows = [rows[item] for item in RUNTIME_LIVE_CAPABILITY_IDS]
+    return validate_runtime_capability_authority(
+        {
+            "schema_version": RUNTIME_CAPABILITY_AUTHORITY_SCHEMA_VERSION,
+            "deployment_preflight_binding_sha256": sha256_json(preflight_view),
+            "expected_provider_public_contract_sha256": (
+                expected_provider_public_contract_sha256
+            ),
+            "capabilities": rows,
+            "capability_set_sha256": sha256_json(ordered_rows),
+        }
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +522,31 @@ class FrozenRuntimeContext:
     model_payload_paths: Mapping[int, Mapping[str, Path]]
     model_evidence_paths: Mapping[int, Mapping[str, Path]]
     runtime_identity: Mapping[str, Any]
+    runtime_capability_authority: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        if {"evaluator", "resolved_task_snapshot"} & set(self.runtime_identity):
+            raise ValueError(
+                "frozen runtime identity must exclude evaluator/task-snapshot metadata"
+            )
+        environment = self.runtime_identity.get("environment")
+        if isinstance(environment, Mapping) and (
+            LIVE_DEPLOYMENT_BINDING_FIELD in environment
+            or "manifest_sha256" in environment
+        ):
+            raise ValueError(
+                "frozen runtime identity must exclude sealed live-package metadata"
+            )
+        try:
+            assert_oracle_blind_mapping(
+                self.runtime_identity,
+                location="frozen_runtime_context.runtime_identity",
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "frozen runtime identity must contain no sealed/oracle data"
+            ) from exc
+        validate_runtime_capability_authority(self.runtime_capability_authority)
 
 
 BeginMeasurement = Callable[[TaskSpecification, SystemID], Any]
@@ -333,8 +700,9 @@ class SealedEvaluatorBinding:
     snapshot; it must write full transition evidence directly to its captured
     sealed sink and return only ``OpaqueTerminalSignal``.  The typed state
     digester in the runtime binding commits the live environment immediately
-    before and after that call. The final writer has the same one-way rule for
-    episode-level evidence.
+    before and after that call. The final writer has the same opaque-return
+    interface rule for episode-level evidence. These are reviewed-code
+    dataflow constraints; they do not assert process isolation.
     """
 
     benchmark_version: str
@@ -360,7 +728,9 @@ class SealedEvaluatorBinding:
             if not callable(getattr(self, name)):
                 raise TypeError(f"sealed evaluator binding {name} must be callable")
         if not self.frozen or self.oracle_labels_exposed_to_runtime:
-            raise ValueError("sealed evaluator binding must be frozen and one-way")
+            raise ValueError(
+                "sealed evaluator binding must be frozen and opaque-return only"
+            )
 
 
 RuntimeEpisodeFactory = Callable[
@@ -449,12 +819,31 @@ class ProductionTable2Runner:
                 "a later final campaign requires its own preregistered freeze"
             )
         self.attestation = read_json(self.root / "frozen" / "runner_attestation.json")
+        try:
+            assert_pc01_page_broker_production_authorized(
+                self.attestation.get(PC01_PAGE_BROKER_SECURITY_FIELD)
+            )
+        except SchemaError as exc:
+            raise ProductionRunnerError(
+                f"production page-broker isolation gate failed: {exc}"
+            ) from exc
         if self.attestation.get("runner_entrypoint") != PRODUCTION_RUNNER_ENTRYPOINT:
             raise ProductionRunnerError(
                 "campaign is not attested to the canonical production runner entrypoint"
             )
         if self.manifest.get("runner_entrypoint") != PRODUCTION_RUNNER_ENTRYPOINT:
             raise ProductionRunnerError("campaign/production runner entrypoint mismatch")
+        try:
+            self.provider_installation_receipt = (
+                require_pc01_provider_installation_ledger(
+                    self.root,
+                    self.manifest,
+                )
+            )
+        except (OSError, ValueError, SchemaError) as exc:
+            raise ProductionRunnerError(
+                f"production provider installation evidence failed: {exc}"
+            ) from exc
 
         # The CLI constructs a runner before CampaignRunner performs its own
         # execution guard.  Verify the source set here as well, before importing
@@ -544,15 +933,6 @@ class ProductionTable2Runner:
         runtime_identity = self.attestation.get("runtime_identity")
         if not isinstance(runtime_identity, Mapping):
             raise ProductionRunnerError("runner attestation runtime identity is malformed")
-        context = FrozenRuntimeContext(
-            model_manifest_paths={
-                seed: self.root / "frozen" / "models" / f"seed_{seed}.json"
-                for seed in self.model_manifests
-            },
-            model_payload_paths=payload_paths,
-            model_evidence_paths=evidence_paths,
-            runtime_identity=dict(runtime_identity),
-        )
         integration_spec = str(self.manifest.get("runtime_integration_entrypoint") or "")
         if integration_spec != self.attestation.get("runtime_integration_entrypoint"):
             raise ProductionRunnerError(
@@ -563,6 +943,42 @@ class ProductionTable2Runner:
         self._assert_clean_source_checkout()
         self._assert_locked_mount_absent()
         self.live_deployment = self._revalidate_live_deployment()
+        try:
+            validate_evaluator_requirements_resolved_snapshot_binding(
+                self.live_deployment.evaluator_requirements,
+                task_export=read_json(
+                    self.root
+                    / "frozen"
+                    / "joint_duplicate_evidence"
+                    / "resolved_task_export.json"
+                ),
+                resolved_task_snapshot=read_json(task_snapshot),
+            )
+        except (OSError, ValueError, SchemaError) as exc:
+            raise ProductionRunnerError(
+                "production evaluator/task authority binding failed: "
+                f"{exc}"
+            ) from exc
+        runtime_identity_projection = runtime_context_identity(runtime_identity)
+        runtime_capability_authority = build_runtime_capability_authority(
+            self.live_deployment,
+            self.deployment_preflight,
+            expected_provider_public_contract_sha256=str(
+                self.attestation[PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD][
+                    "expected_provider_public_contract_sha256"
+                ]
+            ),
+        )
+        context = FrozenRuntimeContext(
+            model_manifest_paths={
+                seed: self.root / "frozen" / "models" / f"seed_{seed}.json"
+                for seed in self.model_manifests
+            },
+            model_payload_paths=payload_paths,
+            model_evidence_paths=evidence_paths,
+            runtime_identity=runtime_identity_projection,
+            runtime_capability_authority=runtime_capability_authority,
+        )
         integration_factory = load_entrypoint(integration_spec)
         if not callable(integration_factory):
             raise ProductionRunnerError("runtime integration entrypoint is not callable")
@@ -581,9 +997,10 @@ class ProductionTable2Runner:
             raise ProductionRunnerError(
                 "runtime integration must return exact EvaluationRuntimeBinding"
             )
-        if dict(integration.runtime_identity) != dict(runtime_identity):
+        if dict(integration.runtime_identity) != runtime_identity_projection:
             raise ProductionRunnerError(
-                "integration-reported runtime identity differs from attestation"
+                "integration-reported runtime identity differs from runtime-only "
+                "attestation projection"
             )
         expected_seeds = set(self.model_manifests)
         if set(integration.seed_bindings) != expected_seeds:
@@ -830,7 +1247,10 @@ class ProductionTable2Runner:
     def evaluation_runner_attestation(self) -> Mapping[str, Any]:
         """Return identities verified against actual loaded backend objects."""
 
-        return dict(self.integration.runtime_identity)
+        # CampaignRunner compares this with the complete runner attestation,
+        # including the separately loaded sealed evaluator.  The integration
+        # itself receives and reports only the runtime-plane projection.
+        return dict(self.attestation["runtime_identity"])
 
     def run(
         self,

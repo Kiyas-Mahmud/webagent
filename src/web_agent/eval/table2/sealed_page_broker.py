@@ -1,4 +1,4 @@
-"""One-way live-page capability split for the sealed WebArena evaluator.
+"""Typed same-process page-flow fixture for the sealed WebArena evaluator.
 
 Runtime code may publish a page handle but has no evaluation method.  Sealed
 evaluator code may evaluate a published handle but has no publication method
@@ -14,10 +14,14 @@ all six upstream WebArena start-state fields were applied by a custom wrapper;
 ``GenericWebArenaTask`` is explicitly noncompliant because it ignores the
 registered ``storage_state`` and ``require_reset`` semantics.
 
-This is a source-attested capability boundary, not a Python security sandbox.
-The production runner must still attest both integration sources. Bound
-checks must leave the page digest unchanged because the policy may continue;
-the final evaluator may perform its registered HTML navigation only after the
+This is a reviewed-code API/dataflow separation, not a confidentiality or
+process boundary.  A Python participant in the same interpreter can import the
+other capability or introspect private state.  Consequently this implementation
+is unpromotable engineering evidence and the canonical live runner fails before
+provider import.  A future production broker must use a separately authenticated
+process-isolated transport and evidence schema.  Bound checks still require the
+page digest to remain unchanged because the policy may continue; the final
+fixture evaluator may perform its registered HTML navigation only after the
 adapter-close request, immediately before unconditional cleanup.
 """
 
@@ -692,7 +696,7 @@ def create_one_way_sealed_page_broker() -> tuple[
     RuntimePagePublisher,
     SealedPageEvaluatorCapability,
 ]:
-    """Create disjoint runtime/evaluator capabilities over one private state."""
+    """Create typed fixture capabilities over one same-process private state."""
 
     state = _OneWayPageBrokerState()
     return RuntimePagePublisher(state), SealedPageEvaluatorCapability(state)

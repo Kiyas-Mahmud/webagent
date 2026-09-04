@@ -64,7 +64,10 @@ def _fixture_inputs(
     root: Path,
     *,
     incompatible_task: bool = False,
+    task_indices: tuple[int, ...] | None = None,
 ) -> dict[str, Any]:
+    indices = task_indices if task_indices is not None else tuple(range(50))
+    assert len(indices) == 50 and len(set(indices)) == 50
     registry = _write_json(
         root / "pilot-task-registry.json",
         {
@@ -78,20 +81,20 @@ def _fixture_inputs(
             "locked_test_content": False,
             "tasks": [
                 {"task_id": f"webarena.{index}", "upstream_index": index}
-                for index in range(50)
+                for index in indices
             ],
         },
     )
     url_map = _write_json(root / "task-url-map.json", URL_MAP)
     tokens = sorted(URL_MAP)
     source_rows: list[dict[str, Any]] = []
-    for index in range(50):
-        token = tokens[index % len(tokens)]
+    for position, index in enumerate(indices):
+        token = tokens[position % len(tokens)]
         evaluator = {
             "eval_types": ["url_match"],
             "reference_url": f"{token}/result/{index}",
         }
-        if incompatible_task and index == 0:
+        if incompatible_task and position == 0:
             evaluator = {
                 "eval_types": ["string_match"],
                 "reference_answers": {"exact_match": "fixture-answer"},
@@ -231,6 +234,21 @@ def test_p4_build_prerequisite_accepts_exact_external_fixture(tmp_path: Path) ->
         "VALIDATION_ONLY_EXTERNAL_EVIDENCE_NOT_AUTHORED"
     )
     assert result.report()["validation_rows_read"] == 0
+
+
+def test_p4_prerequisite_accepts_exact_noncontiguous_registry_order(
+    tmp_path: Path,
+) -> None:
+    indices = tuple(200 + ((position * 19) % 103) for position in range(50))
+    inputs = _fixture_inputs(tmp_path, task_indices=indices)
+
+    result = validate_p4_build_prerequisites(**inputs)
+
+    export = json.loads(
+        inputs["resolved_task_export_path"].read_text(encoding="utf-8")
+    )
+    assert [row["upstream_index"] for row in export["tasks"]] == list(indices)
+    assert result.verified_task_count == 50
 
 
 def test_prebuild_bindings_equal_campaign_handoff_bindings(tmp_path: Path) -> None:

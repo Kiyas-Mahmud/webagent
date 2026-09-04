@@ -1,4 +1,4 @@
-"""Export the pinned public WebArena 0--49 task set for Table 2 handoff."""
+"""Export the pinned ordered public WebArena task set for Table 2 handoff."""
 
 from __future__ import annotations
 

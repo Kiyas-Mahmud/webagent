@@ -23,10 +23,11 @@ from .common import (
     sha256_file,
     sha256_json,
 )
+from .public_task_registry import PUBLIC_DEVELOPMENT_TASK_COUNT
 
 
-LIVE_DEPLOYMENT_SCHEMA_VERSION = "table2-pc01-live-deployment-v1"
-LIVE_CAPABILITY_EVIDENCE_SCHEMA_VERSION = "table2-live-capability-evidence-v1"
+LIVE_DEPLOYMENT_SCHEMA_VERSION = "table2-pc01-live-deployment-v2"
+LIVE_CAPABILITY_EVIDENCE_SCHEMA_VERSION = "table2-live-capability-evidence-v2"
 LIVE_DEPLOYMENT_RECORD_TYPE = "PC01LiveDeploymentCapabilityManifest"
 LIVE_CAPABILITY_EVIDENCE_RECORD_TYPE = "PC01LiveCapabilityReadinessEvidence"
 LIVE_DEPLOYMENT_BINDING_SCHEMA_VERSION = "table2-live-deployment-binding-v1"
@@ -62,14 +63,31 @@ PINNED_WEBARENA_JUDGE_DECODING: Mapping[str, Any] = {
     "top_p": 1.0,
     "context_length": 0,
 }
-PINNED_WEBARENA_JUDGE_TASK_COUNT = 13
-PINNED_WEBARENA_JUDGE_TASK_SET_SHA256 = (
-    "e69ac4c48dfddb0ccf4473261be0772e33302edf2065e502b0e65e9b3b7dcb14"
+EVALUATOR_REQUIREMENTS_SCHEMA_VERSION = (
+    "table2-webarena-evaluator-requirements-v2"
 )
-PINNED_WEBARENA_STRING_MATCH_TASK_COUNT = 47
-PINNED_WEBARENA_STRING_MATCH_TASK_SET_SHA256 = (
-    "c7f57c3c48d1c5b1d2f1c269c1a39b218efdca8ccb3767167ae669adf6e333de"
+EVALUATOR_REQUIREMENTS_RECORD_TYPE = "WebArenaEvaluatorRequirements"
+EVALUATOR_REQUIREMENTS_DERIVATION_CONTRACT = (
+    "resolved-task-export-plus-interface-audit-and-page-state-compile-v2"
 )
+COMPATIBILITY_REVIEW_SCHEMA_VERSION = (
+    "table2-webarena-compatibility-port-review-v2"
+)
+# This source-attested allowlist is the trust anchor for external evaluator
+# review.  A review/parity package is campaign-ready only after an independent
+# reviewer has supplied the final bytes and a later reviewed source commit has
+# pinned the resulting binding digest here.  Self-hashes inside caller-supplied
+# JSON are integrity fields, not authentication.  No external review has yet
+# been registered, so the current compatibility port deliberately remains
+# unpromotable.
+EXTERNAL_EVALUATOR_REVIEW_TRUST_AUTHORITY_VERSION = (
+    "table2-external-evaluator-review-binding-allowlist-v1"
+)
+PINNED_EXTERNAL_EVALUATOR_REVIEW_BINDING_SHA256S: frozenset[str] = frozenset()
+JUDGE_API_NOT_APPLICABLE = "NOT_APPLICABLE_NO_JUDGE_REQUIRED_TASKS"
+PAGE_STATE_EVALUATOR_TYPES = frozenset({"url_match", "program_html"})
+STRING_MATCH_EVALUATOR_TYPE = "string_match"
+JUDGE_ANSWER_MODE = "fuzzy_match"
 UPSTREAM_WEBARENA_START_STATE_FIELDS = (
     "sites",
     "start_url",
@@ -138,7 +156,9 @@ REQUIRED_CAPABILITY_CLAIMS: Mapping[str, Mapping[str, Any]] = {
         "oracle_inputs_observed": False,
     },
     "sealed_webarena_evaluator": {
-        "evaluator_label": "source-reviewed-libwebarena-compatibility-port",
+        "evaluator_label": (
+            "independently-reviewed-libwebarena-compatibility-port"
+        ),
         "exact_official_source": False,
         "compatibility_review_required": True,
         "write_only_sealed_capability": True,
@@ -217,10 +237,16 @@ _SEALED_EVALUATOR_PROVENANCE_FIELDS = frozenset(
         "byte_identical_to_upstream",
         "compatibility_delta_evidence_path",
         "compatibility_delta_sha256",
+        "upstream_parity_reference_evidence_path",
+        "upstream_parity_reference_sha256",
+        "compatibility_parity_evidence_path",
+        "compatibility_parity_sha256",
         "compatibility_review_evidence_path",
         "compatibility_review_sha256",
         "evaluator_configuration_evidence_path",
         "evaluator_configuration_sha256",
+        "evaluator_requirements_evidence_path",
+        "evaluator_requirements_sha256",
         "judge_model_id",
         "judge_prompt_source_sha256",
         "judge_decoding_parameters",
@@ -237,6 +263,124 @@ _SEALED_EVALUATOR_PROVENANCE_FIELDS = frozenset(
         "runtime_fallback_allowed",
         "unavailable_task_policy",
         "judge_outputs_returned_to_runtime",
+    }
+)
+_EVALUATOR_REQUIREMENTS_FIELDS = frozenset(
+    {
+        "schema_version",
+        "record_type",
+        "derivation_contract",
+        "registry_manifest_id",
+        "registry_manifest_sha256",
+        "resolved_task_set_sha256",
+        "task_export_content_sha256",
+        "task_interface_audit_content_sha256",
+        "task_count",
+        "tasks",
+        "ordered_task_ids_sha256",
+        "evaluator_types",
+        "judge_required",
+        "string_match",
+        "interface_compatible",
+        "interface_audit_status",
+        "page_state_compile_report",
+        "page_state_compile_report_content_sha256",
+    }
+)
+_EVALUATOR_REQUIREMENT_TASK_FIELDS = frozenset(
+    {"task_id", "upstream_index", "evaluator_types", "answer_matching_modes"}
+)
+_EVALUATOR_TYPE_REQUIREMENT_FIELDS = frozenset(
+    {"evaluator_type", "task_count", "task_ids", "task_id_set_sha256"}
+)
+_TASK_SET_REQUIREMENT_FIELDS = frozenset(
+    {"task_count", "task_ids", "task_id_set_sha256"}
+)
+_PAGE_STATE_COMPILE_REPORT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "record_type",
+        "compile_contract",
+        "status",
+        "all_exact_task_configs_compiled",
+        "external_independent_review_required",
+        "campaign_authority",
+        "task_count",
+        "criterion_count",
+        "evaluator_id",
+        "evaluator_version",
+        "compiler_source_relative_path",
+        "compiler_source_sha256",
+        "exact_task_projection_sha256",
+        "implementation_specific_report_status",
+        "implementation_specific_compile_report",
+        "implementation_specific_compile_report_content_sha256",
+        "tasks",
+        "report_sha256",
+    }
+)
+_PAGE_STATE_COMPILE_TASK_FIELDS = frozenset(
+    {
+        "position",
+        "task_id",
+        "upstream_index",
+        "benchmark_task_id",
+        "task_projection_sha256",
+        "evaluator_config_sha256",
+        "eval_types",
+        "criterion_count",
+    }
+)
+_COMPATIBILITY_REVIEW_FIELDS = frozenset(
+    {
+        "schema_version",
+        "record_type",
+        "status",
+        "review_scope",
+        "evaluator_access_mode",
+        "state_mutation_permitted",
+        "evaluator_remapping_permitted",
+        "task_outcomes_observed_before_freeze",
+        "registry_manifest_sha256",
+        "resolved_task_set_sha256",
+        "evaluator_requirements_sha256",
+        "page_state_compile_report_content_sha256",
+        "page_state_compiler_source_sha256",
+        "implementation_id",
+        "implementation_version",
+        "implementation_source_sha256",
+        "implementation_classification",
+        "compatibility_delta_sha256",
+        "compatibility_parity_sha256",
+        "review_authority_id",
+        "review_authority_type",
+        "reviewer_id",
+        "reviewer_organization",
+        "reviewer_role",
+        "reviewer_independent_of_implementation",
+        "reviewer_independent_of_campaign_execution",
+        "reviewed_at_utc",
+        "review_statement_sha256",
+    }
+)
+_FINAL_BYTE_PARITY_FIELDS = frozenset(
+    {
+        "schema_version",
+        "record_type",
+        "status",
+        "parity_scope",
+        "implementation_id",
+        "implementation_version",
+        "implementation_source_sha256",
+        "page_state_compiler_source_sha256",
+        "upstream_reference_sha256",
+        "case_count",
+        "all_cases_matched",
+        "state_mutation_observed",
+        "oracle_output_returned_to_runtime",
+        "task_outcomes_observed",
+        "measured_at_utc",
+        "parity_statement_sha256",
     }
 )
 _BOUNDARY_FIELDS = frozenset(
@@ -312,6 +456,7 @@ class ValidatedPC01LiveDeployment:
 
     binding: dict[str, Any]
     manifest: dict[str, Any]
+    evaluator_requirements: dict[str, Any]
     package_root: Path
     package_files: tuple[Path, ...]
     capability_source_files: tuple[Path, ...]
@@ -339,6 +484,537 @@ def _nonzero_sha256(value: object, *, field: str) -> str:
     if digest == "0" * 64:
         raise SchemaError(f"{field} cannot be an empty SHA-256 sentinel")
     return digest
+
+
+def _task_set_requirement(task_ids: list[str]) -> dict[str, Any]:
+    canonical_ids = sorted(task_ids)
+    if len(canonical_ids) != len(set(canonical_ids)):
+        raise SchemaError("evaluator requirement task IDs must be unique")
+    return {
+        "task_count": len(canonical_ids),
+        "task_ids": canonical_ids,
+        "task_id_set_sha256": sha256_json(canonical_ids),
+    }
+
+
+def _derived_evaluator_aggregates(
+    task_rows: list[Mapping[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any], bool]:
+    by_type: dict[str, list[str]] = {}
+    judge_ids: list[str] = []
+    for position, row in enumerate(task_rows):
+        if set(row) != _EVALUATOR_REQUIREMENT_TASK_FIELDS:
+            raise SchemaError(
+                f"evaluator requirement task {position} fields differ from schema"
+            )
+        task_id = row.get("task_id")
+        upstream_index = row.get("upstream_index")
+        evaluator_types = row.get("evaluator_types")
+        answer_modes = row.get("answer_matching_modes")
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise SchemaError(f"evaluator requirement task {position} lacks a task ID")
+        if type(upstream_index) is not int or upstream_index < 0:
+            raise SchemaError(
+                f"evaluator requirement task {position} has an invalid upstream index"
+            )
+        if (
+            not isinstance(evaluator_types, list)
+            or not evaluator_types
+            or any(not isinstance(item, str) or not item for item in evaluator_types)
+            or evaluator_types != sorted(set(evaluator_types))
+        ):
+            raise SchemaError(
+                f"evaluator requirement task {position} has invalid evaluator types"
+            )
+        if (
+            not isinstance(answer_modes, list)
+            or any(not isinstance(item, str) or not item for item in answer_modes)
+            or answer_modes != sorted(set(answer_modes))
+        ):
+            raise SchemaError(
+                f"evaluator requirement task {position} has invalid answer modes"
+            )
+        if answer_modes and STRING_MATCH_EVALUATOR_TYPE not in evaluator_types:
+            raise SchemaError(
+                f"evaluator requirement task {position} has answer modes without "
+                "string_match"
+            )
+        for evaluator_type in evaluator_types:
+            by_type.setdefault(evaluator_type, []).append(task_id)
+        if JUDGE_ANSWER_MODE in answer_modes:
+            judge_ids.append(task_id)
+
+    evaluator_requirements = [
+        {
+            "evaluator_type": evaluator_type,
+            **_task_set_requirement(by_type[evaluator_type]),
+        }
+        for evaluator_type in sorted(by_type)
+    ]
+    string_match = _task_set_requirement(
+        by_type.get(STRING_MATCH_EVALUATOR_TYPE, [])
+    )
+    judge_required = _task_set_requirement(judge_ids)
+    interface_compatible = (
+        set(by_type).issubset(PAGE_STATE_EVALUATOR_TYPES)
+        and not string_match["task_count"]
+        and not judge_required["task_count"]
+    )
+    return (
+        evaluator_requirements,
+        judge_required,
+        string_match,
+        interface_compatible,
+    )
+
+
+def validate_evaluator_requirements_artifact(
+    value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate all evaluator counts and task-set hashes from per-task rows."""
+
+    if not isinstance(value, Mapping) or set(value) != _EVALUATOR_REQUIREMENTS_FIELDS:
+        raise SchemaError("evaluator requirements schema has extra/missing fields")
+    result = dict(value)
+    fixed = {
+        "schema_version": EVALUATOR_REQUIREMENTS_SCHEMA_VERSION,
+        "record_type": EVALUATOR_REQUIREMENTS_RECORD_TYPE,
+        "derivation_contract": EVALUATOR_REQUIREMENTS_DERIVATION_CONTRACT,
+        "task_count": PUBLIC_DEVELOPMENT_TASK_COUNT,
+    }
+    for field, expected in fixed.items():
+        if not _exact_json_equal(result.get(field), expected):
+            raise SchemaError(f"evaluator requirements {field} mismatch")
+    registry_id = result.get("registry_manifest_id")
+    if not isinstance(registry_id, str) or not registry_id.strip():
+        raise SchemaError("evaluator requirements lack active registry identity")
+    for field in (
+        "registry_manifest_sha256",
+        "resolved_task_set_sha256",
+        "task_export_content_sha256",
+        "task_interface_audit_content_sha256",
+    ):
+        _nonzero_sha256(result.get(field), field=f"evaluator_requirements.{field}")
+
+    tasks = result.get("tasks")
+    if (
+        not isinstance(tasks, list)
+        or len(tasks) != PUBLIC_DEVELOPMENT_TASK_COUNT
+        or not all(isinstance(row, Mapping) for row in tasks)
+    ):
+        raise SchemaError("evaluator requirements must contain exactly 50 task rows")
+    task_ids = [str(row.get("task_id") or "") for row in tasks]
+    upstream_indices = [row.get("upstream_index") for row in tasks]
+    if (
+        any(not task_id for task_id in task_ids)
+        or len(task_ids) != len(set(task_ids))
+        or len(upstream_indices) != len(set(upstream_indices))
+    ):
+        raise SchemaError("evaluator requirement ordered task identities are invalid")
+    if result.get("ordered_task_ids_sha256") != sha256_json(task_ids):
+        raise SchemaError("evaluator requirements ordered task-ID hash mismatch")
+
+    (
+        expected_types,
+        expected_judge,
+        expected_string,
+        expected_compatible,
+    ) = _derived_evaluator_aggregates(tasks)
+    supplied_types = result.get("evaluator_types")
+    if not isinstance(supplied_types, list) or not all(
+        isinstance(row, Mapping) and set(row) == _EVALUATOR_TYPE_REQUIREMENT_FIELDS
+        for row in supplied_types
+    ):
+        raise SchemaError("evaluator type requirements schema is invalid")
+    for label, supplied, expected in (
+        ("evaluator types", supplied_types, expected_types),
+        ("judge-required", result.get("judge_required"), expected_judge),
+        ("string-match", result.get("string_match"), expected_string),
+    ):
+        if label != "evaluator types" and (
+            not isinstance(supplied, Mapping)
+            or set(supplied) != _TASK_SET_REQUIREMENT_FIELDS
+        ):
+            raise SchemaError(f"{label} evaluator requirement schema is invalid")
+        if not _exact_json_equal(supplied, expected):
+            raise SchemaError(
+                f"{label} counts or task-ID set hashes differ from task rows"
+            )
+    if result.get("interface_compatible") is not expected_compatible:
+        raise SchemaError("evaluator requirements interface compatibility mismatch")
+    expected_status = "PASS" if expected_compatible else "FAIL"
+    if result.get("interface_audit_status") != expected_status:
+        raise SchemaError("evaluator requirements interface audit status mismatch")
+    compile_report = result.get("page_state_compile_report")
+    compile_sha256 = result.get("page_state_compile_report_content_sha256")
+    if expected_compatible:
+        if (
+            not isinstance(compile_report, Mapping)
+            or set(compile_report) != _PAGE_STATE_COMPILE_REPORT_FIELDS
+        ):
+            raise SchemaError(
+                "compatible evaluator requirements lack the embedded 50-task "
+                "page-state compile report"
+            )
+        unsigned = dict(compile_report)
+        report_sha256 = unsigned.pop("report_sha256", None)
+        if report_sha256 != sha256_json(unsigned):
+            raise SchemaError("embedded page-state compile report hash mismatch")
+        if compile_sha256 != sha256_json(compile_report):
+            raise SchemaError(
+                "embedded page-state compile report content hash mismatch"
+            )
+        if (
+            compile_report.get("schema_version")
+            != "table2-webarena-page-state-compile-authority-v1"
+            or compile_report.get("record_type")
+            != "WebArenaPageStateEvaluatorCompileAuthority"
+            or compile_report.get("compile_contract")
+            != "strict-read-only-page-state-config-compiler-exact-50-v1"
+            or compile_report.get("task_count") != PUBLIC_DEVELOPMENT_TASK_COUNT
+            or compile_report.get("status") != "COMPILED"
+            or compile_report.get("all_exact_task_configs_compiled") is not True
+            or compile_report.get("external_independent_review_required") is not True
+            or compile_report.get("campaign_authority") is not False
+        ):
+            raise SchemaError(
+                "embedded page-state compile report makes an invalid readiness claim"
+            )
+        _nonzero_sha256(
+            compile_report.get("compiler_source_sha256"),
+            field="page_state_compile_report.compiler_source_sha256",
+        )
+        _nonzero_sha256(
+            compile_report.get("exact_task_projection_sha256"),
+            field="page_state_compile_report.exact_task_projection_sha256",
+        )
+        if compile_report.get("compiler_source_relative_path") != (
+            "src/web_agent/eval/table2/webarena_page_state_evaluator.py"
+        ):
+            raise SchemaError("page-state compile report compiler path mismatch")
+        report_tasks = compile_report.get("tasks")
+        if (
+            not isinstance(report_tasks, list)
+            or len(report_tasks) != PUBLIC_DEVELOPMENT_TASK_COUNT
+            or not all(
+                isinstance(row, Mapping)
+                and set(row) == _PAGE_STATE_COMPILE_TASK_FIELDS
+                for row in report_tasks
+            )
+            or [row.get("task_id") for row in report_tasks] != task_ids
+            or [row.get("position") for row in report_tasks]
+            != list(range(PUBLIC_DEVELOPMENT_TASK_COUNT))
+        ):
+            raise SchemaError(
+                "embedded page-state compile report task identities differ"
+            )
+        for position, row in enumerate(report_tasks):
+            for field in ("task_projection_sha256", "evaluator_config_sha256"):
+                _nonzero_sha256(
+                    row.get(field),
+                    field=f"page_state_compile_report.tasks[{position}].{field}",
+                )
+            if type(row.get("criterion_count")) is not int or row[
+                "criterion_count"
+            ] <= 0:
+                raise SchemaError(
+                    "page-state compile report criterion counts must be positive"
+                )
+            requirement_row = tasks[position]
+            if (
+                row.get("upstream_index")
+                != requirement_row.get("upstream_index")
+                or row.get("eval_types")
+                != requirement_row.get("evaluator_types")
+            ):
+                raise SchemaError(
+                    "page-state compile report differs from evaluator "
+                    f"requirements at task position {position}"
+                )
+        if compile_report.get("criterion_count") != sum(
+            int(row["criterion_count"]) for row in report_tasks
+        ):
+            raise SchemaError("page-state compile report criterion total mismatch")
+        for field in ("evaluator_id", "evaluator_version"):
+            value = compile_report.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise SchemaError(
+                    f"page_state_compile_report.{field} must be nonempty text"
+                )
+        implementation_status = compile_report.get(
+            "implementation_specific_report_status"
+        )
+        implementation_report = compile_report.get(
+            "implementation_specific_compile_report"
+        )
+        implementation_report_sha256 = compile_report.get(
+            "implementation_specific_compile_report_content_sha256"
+        )
+        if implementation_status == "BOUND_PENDING_EXTERNAL_REVIEW_INPUT":
+            if (
+                not isinstance(implementation_report, Mapping)
+                or implementation_report_sha256
+                != sha256_json(implementation_report)
+                or implementation_report.get("campaign_ready") is not False
+                or implementation_report.get("external_review_status")
+                != "PENDING"
+            ):
+                raise SchemaError(
+                    "implementation-specific compile report lost its pending "
+                    "review semantics"
+                )
+        elif implementation_status == (
+            "NOT_APPLICABLE_DIFFERENT_EVALUATOR_IDENTITY"
+        ):
+            if implementation_report is not None or (
+                implementation_report_sha256 is not None
+            ):
+                raise SchemaError(
+                    "non-applicable implementation-specific compile report "
+                    "must be null"
+                )
+        else:
+            raise SchemaError(
+                "page-state compile report has an unregistered implementation "
+                "binding status"
+            )
+    elif compile_report is not None or compile_sha256 is not None:
+        raise SchemaError(
+            "interface-incompatible evaluator requirements cannot claim a "
+            "page-state compile report"
+        )
+    return result
+
+
+def build_evaluator_requirements_artifact(
+    *,
+    task_export: Mapping[str, Any],
+    task_interface_audit: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Derive evaluator requirements from an exact export/audit pair."""
+
+    from .task_interface_audit import validate_webarena_task_interface_audit
+
+    audit = validate_webarena_task_interface_audit(
+        task_interface_audit,
+        task_export=task_export,
+    )
+    task_rows = task_export.get("tasks")
+    audit_rows = audit.get("tasks")
+    if (
+        not isinstance(task_rows, list)
+        or not isinstance(audit_rows, list)
+        or len(task_rows) != PUBLIC_DEVELOPMENT_TASK_COUNT
+        or len(audit_rows) != PUBLIC_DEVELOPMENT_TASK_COUNT
+    ):
+        raise SchemaError("evaluator requirements require the exact 50-task export")
+    if task_export.get("resolved_task_set_sha256") != sha256_json(task_rows):
+        raise SchemaError("evaluator requirements task-export hash mismatch")
+    registry_id = task_export.get("registry_manifest_id")
+    if not isinstance(registry_id, str) or not registry_id.strip():
+        raise SchemaError("task export lacks active registry identity")
+    registry_sha256 = _nonzero_sha256(
+        task_export.get("registry_manifest_sha256"),
+        field="task_export.registry_manifest_sha256",
+    )
+
+    tasks: list[dict[str, Any]] = []
+    for position, (task, audit_row) in enumerate(
+        zip(task_rows, audit_rows, strict=True)
+    ):
+        if (
+            not isinstance(task, Mapping)
+            or not isinstance(audit_row, Mapping)
+            or task.get("task_id") != audit_row.get("task_id")
+            or task.get("upstream_index") != audit_row.get("upstream_index")
+        ):
+            raise SchemaError(
+                f"evaluator requirements export/audit identity mismatch at {position}"
+            )
+        raw_types = audit_row.get("eval_types")
+        raw_modes = audit_row.get("answer_matching_modes")
+        if not isinstance(raw_types, list) or not isinstance(raw_modes, list):
+            raise SchemaError(
+                f"evaluator requirements audit row {position} is incomplete"
+            )
+        tasks.append(
+            {
+                "task_id": str(task["task_id"]),
+                "upstream_index": int(task["upstream_index"]),
+                "evaluator_types": sorted(str(item) for item in raw_types),
+                "answer_matching_modes": sorted(str(item) for item in raw_modes),
+            }
+        )
+    evaluator_types, judge_required, string_match, compatible = (
+        _derived_evaluator_aggregates(tasks)
+    )
+    expected_status = "PASS" if compatible else "FAIL"
+    if audit.get("status") != expected_status or audit.get("handoff_eligible") is not compatible:
+        raise SchemaError(
+            "task-interface audit status differs from derived evaluator requirements"
+        )
+    compile_report: dict[str, Any] | None = None
+    compile_report_sha256: str | None = None
+    if compatible:
+        from .task_interface_audit import build_page_state_compile_authority
+
+        compile_report = build_page_state_compile_authority(
+            [dict(row) for row in task_rows]
+        )
+        compile_report_sha256 = sha256_json(compile_report)
+
+    artifact = {
+        "schema_version": EVALUATOR_REQUIREMENTS_SCHEMA_VERSION,
+        "record_type": EVALUATOR_REQUIREMENTS_RECORD_TYPE,
+        "derivation_contract": EVALUATOR_REQUIREMENTS_DERIVATION_CONTRACT,
+        "registry_manifest_id": registry_id.strip(),
+        "registry_manifest_sha256": registry_sha256,
+        "resolved_task_set_sha256": str(task_export["resolved_task_set_sha256"]),
+        "task_export_content_sha256": sha256_json(task_export),
+        "task_interface_audit_content_sha256": sha256_json(audit),
+        "task_count": len(tasks),
+        "tasks": tasks,
+        "ordered_task_ids_sha256": sha256_json(
+            [row["task_id"] for row in tasks]
+        ),
+        "evaluator_types": evaluator_types,
+        "judge_required": judge_required,
+        "string_match": string_match,
+        "interface_compatible": compatible,
+        "interface_audit_status": expected_status,
+        "page_state_compile_report": compile_report,
+        "page_state_compile_report_content_sha256": compile_report_sha256,
+    }
+    return validate_evaluator_requirements_artifact(artifact)
+
+
+def validate_evaluator_requirements_derivation(
+    value: Mapping[str, Any],
+    *,
+    task_export: Mapping[str, Any],
+    task_interface_audit: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Recompute an artifact from its export/audit authorities exactly."""
+
+    validated = validate_evaluator_requirements_artifact(value)
+    expected = build_evaluator_requirements_artifact(
+        task_export=task_export,
+        task_interface_audit=task_interface_audit,
+    )
+    if not _exact_json_equal(validated, expected):
+        raise SchemaError(
+            "evaluator requirements differ from exact task-export/interface-audit "
+            "derivation"
+        )
+    return validated
+
+
+def validate_evaluator_requirements_resolved_snapshot_binding(
+    value: Mapping[str, Any],
+    *,
+    task_export: Mapping[str, Any],
+    resolved_task_snapshot: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind evaluator requirements to the exact frozen task snapshot.
+
+    A self-consistent requirements artifact is not sufficient campaign
+    authority: its claimed export hashes could describe a different 50-task
+    set.  Reopen the independently authenticated export, reproduce the
+    snapshot's embedded interface audit from its task rows, and require the
+    evaluator-relevant task content to be byte-for-byte equivalent before
+    accepting the derivation.
+    """
+
+    from .task_interface_audit import validate_resolved_task_interface_binding
+
+    if not isinstance(task_export, Mapping):
+        raise SchemaError("evaluator requirements task export must be a mapping")
+    if not isinstance(resolved_task_snapshot, Mapping):
+        raise SchemaError(
+            "evaluator requirements resolved task snapshot must be a mapping"
+        )
+    if sha256_json(task_export) != resolved_task_snapshot.get(
+        "upstream_export_content_sha256"
+    ):
+        raise SchemaError(
+            "evaluator requirements task export differs from the frozen "
+            "resolved-task authority"
+        )
+    identity_fields = (
+        ("snapshot_id", "snapshot_id"),
+        ("resolved_task_set_sha256", "resolved_task_set_sha256"),
+        ("registry_manifest_id", "registry_manifest_id"),
+        ("registry_manifest_sha256", "upstream_registry_manifest_sha256"),
+    )
+    for export_field, snapshot_field in identity_fields:
+        if task_export.get(export_field) != resolved_task_snapshot.get(
+            snapshot_field
+        ):
+            raise SchemaError(
+                "evaluator requirements task export identity differs from "
+                f"resolved snapshot: {export_field}"
+            )
+
+    export_rows = task_export.get("tasks")
+    snapshot_rows = resolved_task_snapshot.get("tasks")
+    if (
+        not isinstance(export_rows, list)
+        or not isinstance(snapshot_rows, list)
+        or len(export_rows) != PUBLIC_DEVELOPMENT_TASK_COUNT
+        or len(snapshot_rows) != PUBLIC_DEVELOPMENT_TASK_COUNT
+    ):
+        raise SchemaError(
+            "evaluator requirements snapshot binding requires exactly 50 task rows"
+        )
+    relevant_fields = (
+        "task_id",
+        "upstream_index",
+        "benchmark_task_id",
+        "task_config",
+        "evaluator",
+    )
+    for position, (export_row, snapshot_row) in enumerate(
+        zip(export_rows, snapshot_rows, strict=True)
+    ):
+        if not isinstance(export_row, Mapping) or not isinstance(
+            snapshot_row, Mapping
+        ):
+            raise SchemaError(
+                f"evaluator requirements task row {position} is malformed"
+            )
+        for field in relevant_fields:
+            if not _exact_json_equal(
+                export_row.get(field), snapshot_row.get(field)
+            ):
+                raise SchemaError(
+                    "evaluator requirements task export differs from resolved "
+                    f"snapshot at row {position}: {field}"
+                )
+
+    audit = validate_resolved_task_interface_binding(resolved_task_snapshot)
+    validated = validate_evaluator_requirements_derivation(
+        value,
+        task_export=task_export,
+        task_interface_audit=audit,
+    )
+    if not _exact_json_equal(
+        validated.get("page_state_compile_report"),
+        resolved_task_snapshot.get("page_state_evaluator_compile_report"),
+    ):
+        raise SchemaError(
+            "evaluator requirements and resolved snapshot carry different "
+            "page-state compile authorities"
+        )
+    if validated.get(
+        "page_state_compile_report_content_sha256"
+    ) != resolved_task_snapshot.get(
+        "page_state_evaluator_compile_report_content_sha256"
+    ):
+        raise SchemaError(
+            "evaluator requirements and resolved snapshot compile-report "
+            "hashes differ"
+        )
+    return validated
 
 
 def _measured_text(value: object, *, field: str) -> str:
@@ -453,16 +1129,289 @@ def _validate_judge_availability_receipt(
     _parse_measured_at(value.get("measured_at_utc"), field="judge_api.measured_at_utc")
 
 
+def _validate_local_compatibility_parity(path: Path) -> dict[str, Any]:
+    """Validate the pinned local parity input without treating it as review."""
+
+    value = read_json(path)
+    if not isinstance(value, Mapping):
+        raise SchemaError("compatibility parity evidence must be a JSON object")
+    exact = {
+        "schema_version": "table2-webarena-page-state-reference-v1",
+        "classification": "generated_pinned_upstream_executable_reference",
+        "implementation_classification": (
+            "reviewed_compatibility_port_pending_external_review"
+        ),
+        "reference_role": "local_compatibility_parity_only_not_external_review",
+    }
+    for field, expected in exact.items():
+        if not _exact_json_equal(value.get(field), expected):
+            raise SchemaError(f"compatibility parity evidence {field} mismatch")
+    unsigned = dict(value)
+    payload_sha256 = unsigned.pop("payload_sha256", None)
+    if payload_sha256 != sha256_json(unsigned):
+        raise SchemaError("compatibility parity evidence payload hash mismatch")
+    provenance = value.get("provenance")
+    if not isinstance(provenance, Mapping):
+        raise SchemaError("compatibility parity evidence lacks provenance")
+    if (
+        provenance.get("wheel_sha256") != PINNED_LIBWEBARENA_WHEEL_SHA256
+        or provenance.get("libwebarena_version") != PINNED_LIBWEBARENA_VERSION
+        or provenance.get("installed_evaluator_source_matches_wheel") is not True
+    ):
+        raise SchemaError(
+            "compatibility parity evidence differs from the pinned libwebarena "
+            "reference"
+        )
+    cases = value.get("cases")
+    if not isinstance(cases, list) or not cases:
+        raise SchemaError("compatibility parity evidence contains no cases")
+    return dict(value)
+
+
+def _validate_final_byte_compatibility_parity(
+    path: Path,
+    *,
+    capability_identity: Mapping[str, Any],
+    page_state_compiler_source_sha256: str | None,
+    upstream_reference_sha256: str,
+) -> dict[str, Any]:
+    """Require measured parity evidence for the exact reviewed source bytes."""
+
+    value = read_json(path)
+    if not isinstance(value, Mapping) or set(value) != _FINAL_BYTE_PARITY_FIELDS:
+        raise SchemaError(
+            "final-byte compatibility parity schema has extra/missing fields"
+        )
+    exact = {
+        "schema_version": "table2-webarena-final-byte-parity-v1",
+        "record_type": "WebArenaEvaluatorFinalByteParityReceipt",
+        "status": "PASS",
+        "parity_scope": "FINAL_EVALUATOR_BYTES_AGAINST_PINNED_REFERENCE",
+        "implementation_id": capability_identity["implementation_id"],
+        "implementation_version": capability_identity[
+            "implementation_version"
+        ],
+        "implementation_source_sha256": capability_identity["source_sha256"],
+        "page_state_compiler_source_sha256": (
+            page_state_compiler_source_sha256
+        ),
+        "upstream_reference_sha256": upstream_reference_sha256,
+        "case_count": 12,
+        "all_cases_matched": True,
+        "state_mutation_observed": False,
+        "oracle_output_returned_to_runtime": False,
+        "task_outcomes_observed": False,
+    }
+    for field, expected in exact.items():
+        if not _exact_json_equal(value.get(field), expected):
+            raise SchemaError(f"final-byte compatibility parity {field} mismatch")
+    _parse_measured_at(
+        value.get("measured_at_utc"),
+        field="final_byte_parity.measured_at_utc",
+    )
+    unsigned = dict(value)
+    statement_sha256 = unsigned.pop("parity_statement_sha256", None)
+    if statement_sha256 != sha256_json(unsigned):
+        raise SchemaError("final-byte compatibility parity statement hash mismatch")
+    return dict(value)
+
+
+def _validate_compatibility_review(
+    path: Path,
+    *,
+    evaluator_requirements: Mapping[str, Any],
+    evaluator_requirements_sha256: str,
+    capability_identity: Mapping[str, Any],
+    implementation_classification: str,
+    compatibility_delta_sha256: str,
+    compatibility_parity_sha256: str,
+) -> dict[str, Any]:
+    value = read_json(path)
+    if set(value) != _COMPATIBILITY_REVIEW_FIELDS:
+        raise SchemaError(
+            "evaluator compatibility-port review schema has extra/missing fields"
+        )
+    compile_report = evaluator_requirements.get("page_state_compile_report")
+    compile_report_sha256 = evaluator_requirements.get(
+        "page_state_compile_report_content_sha256"
+    )
+    compiler_source_sha256 = (
+        compile_report.get("compiler_source_sha256")
+        if isinstance(compile_report, Mapping)
+        else None
+    )
+    if isinstance(compile_report, Mapping) and (
+        compile_report.get("evaluator_id")
+        != capability_identity.get("implementation_id")
+        or compile_report.get("evaluator_version")
+        != capability_identity.get("implementation_version")
+    ):
+        raise SchemaError(
+            "compatibility review compile report and evaluator capability "
+            "identity differ"
+        )
+    expected = {
+        "schema_version": COMPATIBILITY_REVIEW_SCHEMA_VERSION,
+        "record_type": "WebArenaEvaluatorCompatibilityPortReview",
+        "status": "PASS",
+        "review_scope": "READ_ONLY_SEALED_EVALUATOR_COMPATIBILITY_PORT",
+        "evaluator_access_mode": "READ_ONLY_SEALED",
+        "state_mutation_permitted": False,
+        "evaluator_remapping_permitted": False,
+        "task_outcomes_observed_before_freeze": False,
+        "registry_manifest_sha256": evaluator_requirements[
+            "registry_manifest_sha256"
+        ],
+        "resolved_task_set_sha256": evaluator_requirements[
+            "resolved_task_set_sha256"
+        ],
+        "evaluator_requirements_sha256": evaluator_requirements_sha256,
+        "page_state_compile_report_content_sha256": compile_report_sha256,
+        "page_state_compiler_source_sha256": compiler_source_sha256,
+        "implementation_id": capability_identity["implementation_id"],
+        "implementation_version": capability_identity[
+            "implementation_version"
+        ],
+        "implementation_source_sha256": capability_identity["source_sha256"],
+        "implementation_classification": implementation_classification,
+        "compatibility_delta_sha256": compatibility_delta_sha256,
+        "compatibility_parity_sha256": compatibility_parity_sha256,
+        "review_authority_type": "INDEPENDENT_EXTERNAL_TECHNICAL_REVIEW",
+        "reviewer_independent_of_implementation": True,
+        "reviewer_independent_of_campaign_execution": True,
+    }
+    for field, expected_value in expected.items():
+        if not _exact_json_equal(value.get(field), expected_value):
+            raise SchemaError(
+                "evaluator compatibility-port review is not the registered "
+                f"independent, read-only, outcome-blind review: {field}"
+            )
+    for field in (
+        "review_authority_id",
+        "reviewer_id",
+        "reviewer_organization",
+        "reviewer_role",
+    ):
+        _measured_text(value.get(field), field=f"compatibility_review.{field}")
+    if value["reviewer_id"] == value["implementation_id"]:
+        raise SchemaError(
+            "compatibility reviewer cannot be the evaluator implementation"
+        )
+    if value["review_authority_id"] == value["implementation_id"]:
+        raise SchemaError(
+            "compatibility review authority cannot be the evaluator implementation"
+        )
+    _parse_measured_at(
+        value.get("reviewed_at_utc"), field="compatibility_review.reviewed_at_utc"
+    )
+    unsigned = dict(value)
+    statement_sha256 = unsigned.pop("review_statement_sha256", None)
+    if statement_sha256 != sha256_json(unsigned):
+        raise SchemaError("compatibility review statement hash mismatch")
+    return dict(value)
+
+
+def _external_review_trust_binding_sha256(
+    *,
+    review_receipt: Mapping[str, Any],
+    review_file_sha256: str,
+    parity_receipt: Mapping[str, Any],
+    parity_file_sha256: str,
+) -> str:
+    """Commit the exact externally reviewed bytes and asserted authority.
+
+    The two receipt-local statement hashes remain useful tamper checks, but
+    they are trivially recomputable by the artifact author.  This additional
+    digest has authority only when it is present in the source-tracked
+    allowlist above, which must be updated in a reviewed commit after the
+    independent evidence exists.
+    """
+
+    return sha256_json(
+        {
+            "trust_authority_version": (
+                EXTERNAL_EVALUATOR_REVIEW_TRUST_AUTHORITY_VERSION
+            ),
+            "review_file_sha256": _sha256(
+                review_file_sha256,
+                field="external-review file",
+            ),
+            "review_statement_sha256": _sha256(
+                review_receipt.get("review_statement_sha256"),
+                field="external-review statement",
+            ),
+            "parity_file_sha256": _sha256(
+                parity_file_sha256,
+                field="final-byte parity file",
+            ),
+            "parity_statement_sha256": _sha256(
+                parity_receipt.get("parity_statement_sha256"),
+                field="final-byte parity statement",
+            ),
+            "implementation_id": review_receipt.get("implementation_id"),
+            "implementation_version": review_receipt.get(
+                "implementation_version"
+            ),
+            "implementation_source_sha256": review_receipt.get(
+                "implementation_source_sha256"
+            ),
+            "review_authority_id": review_receipt.get("review_authority_id"),
+            "reviewer_id": review_receipt.get("reviewer_id"),
+            "reviewed_at_utc": review_receipt.get("reviewed_at_utc"),
+            "parity_measured_at_utc": parity_receipt.get("measured_at_utc"),
+        }
+    )
+
+
+def _require_pinned_external_review_authority(
+    *,
+    review_receipt: Mapping[str, Any],
+    review_file_sha256: str,
+    parity_receipt: Mapping[str, Any],
+    parity_file_sha256: str,
+) -> str:
+    """Reject caller-authored review claims absent a tracked trust anchor."""
+
+    binding_sha256 = _external_review_trust_binding_sha256(
+        review_receipt=review_receipt,
+        review_file_sha256=review_file_sha256,
+        parity_receipt=parity_receipt,
+        parity_file_sha256=parity_file_sha256,
+    )
+    if binding_sha256 not in PINNED_EXTERNAL_EVALUATOR_REVIEW_BINDING_SHA256S:
+        raise SchemaError(
+            "external evaluator review/parity evidence is not authenticated by "
+            "the source-tracked trust authority; self-hashed caller JSON cannot "
+            "promote a compatibility port"
+        )
+    return binding_sha256
+
+
 def _validate_evaluator_provenance(
     value: object,
     *,
     evidence_root: Path,
+    capability_identity: Mapping[str, Any],
 ) -> dict[str, Any]:
     if not isinstance(value, Mapping) or set(value) != _SEALED_EVALUATOR_PROVENANCE_FIELDS:
         raise SchemaError(
             "sealed WebArena evaluator provenance schema has extra/missing fields"
         )
     provenance = dict(value)
+    requirements_path = _evidence_artifact(
+        evidence_root,
+        provenance,
+        path_field="evaluator_requirements_evidence_path",
+        sha256_field="evaluator_requirements_sha256",
+    )
+    requirements = validate_evaluator_requirements_artifact(
+        read_json(requirements_path)
+    )
+    requirements_sha256 = sha256_file(requirements_path)
+    judge_required = requirements["judge_required"]
+    string_match = requirements["string_match"]
+    judge_count = int(judge_required["task_count"])
+
     exact = {
         "upstream_repository": PINNED_UPSTREAM_WEBARENA_REPOSITORY,
         "upstream_revision": PINNED_UPSTREAM_WEBARENA_REVISION,
@@ -472,25 +1421,19 @@ def _validate_evaluator_provenance(
         "runtime_distribution_version": PINNED_LIBWEBARENA_VERSION,
         "runtime_distribution_sha256": PINNED_LIBWEBARENA_WHEEL_SHA256,
         "runtime_evaluator_module": "webarena.evaluation_harness.evaluators",
-        "implementation_classification": "reviewed_compatibility_port",
+        "implementation_classification": "externally_reviewed_compatibility_port",
         "byte_identical_to_upstream": False,
-        "judge_model_id": PINNED_WEBARENA_JUDGE_MODEL_ID,
-        "judge_prompt_source_sha256": PINNED_UPSTREAM_JUDGE_SOURCE_SHA256,
-        "judge_decoding_parameters": dict(PINNED_WEBARENA_JUDGE_DECODING),
-        "judge_required_task_count": PINNED_WEBARENA_JUDGE_TASK_COUNT,
-        "judge_required_task_set_sha256": (
-            PINNED_WEBARENA_JUDGE_TASK_SET_SHA256
-        ),
-        "string_match_task_count": PINNED_WEBARENA_STRING_MATCH_TASK_COUNT,
-        "string_match_task_set_sha256": (
-            PINNED_WEBARENA_STRING_MATCH_TASK_SET_SHA256
-        ),
-        "judge_api_preflight_status": "PASS",
+        "evaluator_requirements_sha256": requirements_sha256,
+        "judge_required_task_count": judge_count,
+        "judge_required_task_set_sha256": judge_required[
+            "task_id_set_sha256"
+        ],
+        "string_match_task_count": string_match["task_count"],
+        "string_match_task_set_sha256": string_match[
+            "task_id_set_sha256"
+        ],
         "judge_model_substitution_allowed": False,
         "runtime_fallback_allowed": False,
-        "unavailable_task_policy": (
-            "preregistered_exclusion_or_disclosed_evaluator_change_before_outcomes"
-        ),
         "judge_outputs_returned_to_runtime": 0,
     }
     for field, expected in exact.items():
@@ -503,41 +1446,138 @@ def _validate_evaluator_provenance(
         path_field="runtime_evaluator_module_evidence_path",
         sha256_field="runtime_evaluator_module_sha256",
     )
-    _evidence_artifact(
-        evidence_root,
-        provenance,
-        path_field="runtime_judge_module_evidence_path",
-        sha256_field="runtime_judge_module_sha256",
-    )
     if sha256_file(runtime_module) == PINNED_UPSTREAM_EVALUATORS_SHA256:
         raise SchemaError(
             "libwebarena evaluator was labelled a compatibility port but is byte-identical"
         )
-    for stem in (
-        "compatibility_delta",
-        "compatibility_review",
-        "evaluator_configuration",
-        "judge_api_response_schema",
+    delta_path = _evidence_artifact(
+        evidence_root,
+        provenance,
+        path_field="compatibility_delta_evidence_path",
+        sha256_field="compatibility_delta_sha256",
+    )
+    upstream_reference_path = _evidence_artifact(
+        evidence_root,
+        provenance,
+        path_field="upstream_parity_reference_evidence_path",
+        sha256_field="upstream_parity_reference_sha256",
+    )
+    _validate_local_compatibility_parity(upstream_reference_path)
+    parity_path = _evidence_artifact(
+        evidence_root,
+        provenance,
+        path_field="compatibility_parity_evidence_path",
+        sha256_field="compatibility_parity_sha256",
+    )
+    compile_report = requirements.get("page_state_compile_report")
+    compiler_source_sha256 = (
+        str(compile_report.get("compiler_source_sha256"))
+        if isinstance(compile_report, Mapping)
+        else None
+    )
+    parity_receipt = _validate_final_byte_compatibility_parity(
+        parity_path,
+        capability_identity=capability_identity,
+        page_state_compiler_source_sha256=compiler_source_sha256,
+        upstream_reference_sha256=sha256_file(upstream_reference_path),
+    )
+    review_path = _evidence_artifact(
+        evidence_root,
+        provenance,
+        path_field="compatibility_review_evidence_path",
+        sha256_field="compatibility_review_sha256",
+    )
+    review_receipt = _validate_compatibility_review(
+        review_path,
+        evaluator_requirements=requirements,
+        evaluator_requirements_sha256=requirements_sha256,
+        capability_identity=capability_identity,
+        implementation_classification=str(
+            provenance["implementation_classification"]
+        ),
+        compatibility_delta_sha256=sha256_file(delta_path),
+        compatibility_parity_sha256=sha256_file(parity_path),
+    )
+    if _parse_measured_at(
+        review_receipt["reviewed_at_utc"],
+        field="compatibility_review.reviewed_at_utc",
+    ) < _parse_measured_at(
+        parity_receipt["measured_at_utc"],
+        field="final_byte_parity.measured_at_utc",
     ):
+        raise SchemaError(
+            "independent compatibility review predates final-byte parity evidence"
+        )
+    _require_pinned_external_review_authority(
+        review_receipt=review_receipt,
+        review_file_sha256=sha256_file(review_path),
+        parity_receipt=parity_receipt,
+        parity_file_sha256=sha256_file(parity_path),
+    )
+    _evidence_artifact(
+        evidence_root,
+        provenance,
+        path_field="evaluator_configuration_evidence_path",
+        sha256_field="evaluator_configuration_sha256",
+    )
+
+    if judge_count > 0:
+        conditional = {
+            "judge_model_id": PINNED_WEBARENA_JUDGE_MODEL_ID,
+            "judge_prompt_source_sha256": PINNED_UPSTREAM_JUDGE_SOURCE_SHA256,
+            "judge_decoding_parameters": dict(PINNED_WEBARENA_JUDGE_DECODING),
+            "judge_api_preflight_status": "PASS",
+            "unavailable_task_policy": (
+                "preregistered_exclusion_or_disclosed_evaluator_change_before_outcomes"
+            ),
+        }
+        for field, expected in conditional.items():
+            if not _exact_json_equal(provenance.get(field), expected):
+                raise SchemaError(f"sealed WebArena evaluator provenance {field} mismatch")
         _evidence_artifact(
             evidence_root,
             provenance,
-            path_field=f"{stem}_evidence_path",
-            sha256_field=f"{stem}_sha256",
+            path_field="runtime_judge_module_evidence_path",
+            sha256_field="runtime_judge_module_sha256",
         )
-    receipt_path = _evidence_artifact(
-        evidence_root,
-        provenance,
-        path_field="judge_api_availability_receipt_evidence_path",
-        sha256_field="judge_api_availability_receipt_sha256",
-    )
-    _validate_judge_availability_receipt(
-        receipt_path,
-        response_schema_sha256=_nonzero_sha256(
-            provenance.get("judge_api_response_schema_sha256"),
-            field="judge_api_response_schema_sha256",
-        ),
-    )
+        _evidence_artifact(
+            evidence_root,
+            provenance,
+            path_field="judge_api_response_schema_evidence_path",
+            sha256_field="judge_api_response_schema_sha256",
+        )
+        receipt_path = _evidence_artifact(
+            evidence_root,
+            provenance,
+            path_field="judge_api_availability_receipt_evidence_path",
+            sha256_field="judge_api_availability_receipt_sha256",
+        )
+        _validate_judge_availability_receipt(
+            receipt_path,
+            response_schema_sha256=_nonzero_sha256(
+                provenance.get("judge_api_response_schema_sha256"),
+                field="judge_api_response_schema_sha256",
+            ),
+        )
+    else:
+        not_applicable = {
+            "runtime_judge_module_evidence_path": None,
+            "runtime_judge_module_sha256": None,
+            "judge_model_id": None,
+            "judge_prompt_source_sha256": None,
+            "judge_decoding_parameters": None,
+            "judge_api_response_schema_evidence_path": None,
+            "judge_api_response_schema_sha256": None,
+            "judge_api_availability_receipt_evidence_path": None,
+            "judge_api_availability_receipt_sha256": None,
+            "judge_api_preflight_status": "NOT_APPLICABLE",
+            "unavailable_task_policy": JUDGE_API_NOT_APPLICABLE,
+        }
+        for field, expected in not_applicable.items():
+            if not _exact_json_equal(provenance.get(field), expected):
+                raise SchemaError(
+                    f"zero-judge evaluator provenance requires {field}={expected!r}"
+                )
     return provenance
 
 
@@ -604,12 +1644,77 @@ def _validate_broker(
     return result
 
 
+def _capability_source_identity(
+    value: object,
+    *,
+    field: str,
+) -> tuple[str, str]:
+    """Return one canonical, hash-authenticated source-plane identity."""
+
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{field} source identity is malformed")
+    supplied_relative = value.get("source_relative_path")
+    relative = safe_relative_path(str(supplied_relative or "")).as_posix()
+    if supplied_relative != relative:
+        raise SchemaError(f"{field}.source_relative_path is not canonical")
+    digest = _sha256(
+        value.get("source_sha256"),
+        field=f"{field}.source_sha256",
+    )
+    return relative, digest
+
+
+def validate_live_capability_source_plane_disjointness(
+    value: Mapping[str, Any],
+) -> None:
+    """Keep every runtime capability outside sealed and broker source planes.
+
+    Source authority is represented by its canonical repository path together
+    with its authenticated bytes.  Reusing either the path or the bytes would
+    make the purported runtime/sealed split ambiguous, so both aliases fail
+    closed.  Runtime capabilities may share a runtime-only implementation with
+    one another; this check protects the two forbidden planes only.
+    """
+
+    capabilities = value.get("capabilities")
+    broker = value.get("sealed_page_broker")
+    if not isinstance(capabilities, Mapping) or not isinstance(broker, Mapping):
+        raise SchemaError("live deployment capability source planes are malformed")
+    sealed = capabilities.get("sealed_webarena_evaluator")
+    sealed_identity = _capability_source_identity(
+        sealed,
+        field="sealed_webarena_evaluator",
+    )
+    broker_identity = _capability_source_identity(
+        broker,
+        field="sealed_page_broker",
+    )
+    forbidden_paths = {sealed_identity[0], broker_identity[0]}
+    forbidden_hashes = {sealed_identity[1], broker_identity[1]}
+    for capability_id in sorted(
+        set(REQUIRED_LIVE_CAPABILITIES) - {"sealed_webarena_evaluator"}
+    ):
+        runtime_identity = _capability_source_identity(
+            capabilities.get(capability_id),
+            field=capability_id,
+        )
+        if (
+            runtime_identity[0] in forbidden_paths
+            or runtime_identity[1] in forbidden_hashes
+        ):
+            raise SchemaError(
+                "runtime capability source plane overlaps the sealed evaluator "
+                f"or broker: {capability_id}"
+            )
+
+
 def _validate_readiness_evidence(
     path: Path,
     *,
     capability_id: str,
     source_sha256: str,
     evidence_root: Path,
+    capability_identity: Mapping[str, Any],
 ) -> dict[str, Any]:
     value = read_json(path)
     if set(value) != _EVIDENCE_FIELDS:
@@ -639,7 +1744,11 @@ def _validate_readiness_evidence(
         raise SchemaError(f"{capability_id} readiness claims differ from registration")
     provenance = value.get("provenance")
     if capability_id == "sealed_webarena_evaluator":
-        _validate_evaluator_provenance(provenance, evidence_root=evidence_root)
+        _validate_evaluator_provenance(
+            provenance,
+            evidence_root=evidence_root,
+            capability_identity=capability_identity,
+        )
     elif not _exact_json_equal(provenance, {}):
         raise SchemaError(f"{capability_id} cannot claim evaluator provenance")
     return value
@@ -713,6 +1822,14 @@ def validate_pc01_live_deployment_manifest(
             item.get("implementation_version"),
             field=f"{capability_id}.implementation_version",
         )
+        if capability_id == "sealed_webarena_evaluator" and (
+            "pending" in str(item.get("implementation_version")).casefold()
+            or "pending" in str(item.get("implementation_id")).casefold()
+        ):
+            raise SchemaError(
+                "sealed evaluator pending external-review identity is not "
+                "campaign-ready"
+            )
         source_sha256 = _sha256(
             item.get("source_sha256"), field=f"{capability_id}.source_sha256"
         )
@@ -722,6 +1839,19 @@ def validate_pc01_live_deployment_manifest(
             source_sha256,
             field=capability_id,
         )
+        if (
+            capability_id == "sealed_webarena_evaluator"
+            and item.get("source_relative_path")
+            == "src/web_agent/eval/table2/webarena_page_state_evaluator.py"
+        ):
+            from .webarena_page_state_evaluator import EVALUATOR_VERSION
+
+            if "pending_external_review" in EVALUATOR_VERSION.casefold():
+                raise SchemaError(
+                    "the repository page-state evaluator implementation remains "
+                    "pending independent external review and cannot be promoted "
+                    "by a manifest PASS"
+                )
         readiness = _evidence_path(
             evidence,
             item.get("readiness_evidence_path"),
@@ -737,9 +1867,11 @@ def validate_pc01_live_deployment_manifest(
             capability_id=capability_id,
             source_sha256=source_sha256,
             evidence_root=evidence,
+            capability_identity=item,
         )
         validated[capability_id] = item
     manifest["capabilities"] = validated
+    validate_live_capability_source_plane_disjointness(manifest)
     return manifest
 
 
@@ -758,6 +1890,55 @@ def load_pc01_live_deployment_manifest(
         repository_root=repository_root,
         evidence_root=(source.parent if evidence_root is None else evidence_root),
     )
+
+
+def load_pc01_live_deployment_evaluator_requirements(
+    manifest: Mapping[str, Any],
+    *,
+    evidence_root: str | Path,
+) -> dict[str, Any]:
+    """Reopen and validate the evaluator requirements bound by a manifest.
+
+    The returned artifact is suitable for
+    :func:`validate_evaluator_requirements_derivation` against the authenticated
+    task export and interface audit used by a downstream handoff. Claimed
+    counts and hashes are never returned without revalidating the complete
+    sealed-evaluator provenance and the referenced artifact bytes.
+    """
+
+    capabilities = manifest.get("capabilities")
+    if not isinstance(capabilities, Mapping):
+        raise SchemaError("live deployment capabilities are absent")
+    evaluator = capabilities.get("sealed_webarena_evaluator")
+    if not isinstance(evaluator, Mapping):
+        raise SchemaError("sealed WebArena evaluator capability is absent")
+    root = Path(evidence_root).resolve()
+    readiness_path = _evidence_path(
+        root,
+        evaluator.get("readiness_evidence_path"),
+        field="sealed_webarena_evaluator.readiness_evidence_path",
+    )
+    if sha256_file(readiness_path) != _sha256(
+        evaluator.get("readiness_evidence_sha256"),
+        field="sealed_webarena_evaluator.readiness_evidence_sha256",
+    ):
+        raise SchemaError("sealed_webarena_evaluator readiness evidence hash differs")
+    readiness = read_json(readiness_path)
+    provenance = readiness.get("provenance")
+    _validate_evaluator_provenance(
+        provenance,
+        evidence_root=root,
+        capability_identity=evaluator,
+    )
+    if not isinstance(provenance, Mapping):  # pragma: no cover - guarded above
+        raise SchemaError("sealed evaluator provenance is absent")
+    requirements_path = _evidence_artifact(
+        root,
+        provenance,
+        path_field="evaluator_requirements_evidence_path",
+        sha256_field="evaluator_requirements_sha256",
+    )
+    return validate_evaluator_requirements_artifact(read_json(requirements_path))
 
 
 def _referenced_evidence_relative_paths(
@@ -790,12 +1971,12 @@ def _referenced_evidence_relative_paths(
             raise SchemaError("sealed evaluator provenance is absent")
         for stem in (
             "runtime_evaluator_module",
-            "runtime_judge_module",
             "compatibility_delta",
+            "upstream_parity_reference",
+            "compatibility_parity",
             "compatibility_review",
             "evaluator_configuration",
-            "judge_api_response_schema",
-            "judge_api_availability_receipt",
+            "evaluator_requirements",
         ):
             artifact = _evidence_artifact(
                 evidence_root,
@@ -805,6 +1986,29 @@ def _referenced_evidence_relative_paths(
             )
             artifact_relative = artifact.relative_to(evidence_root)
             referenced[artifact_relative.as_posix()] = artifact_relative
+        requirements_path = _evidence_artifact(
+            evidence_root,
+            provenance,
+            path_field="evaluator_requirements_evidence_path",
+            sha256_field="evaluator_requirements_sha256",
+        )
+        requirements = validate_evaluator_requirements_artifact(
+            read_json(requirements_path)
+        )
+        if int(requirements["judge_required"]["task_count"]) > 0:
+            for stem in (
+                "runtime_judge_module",
+                "judge_api_response_schema",
+                "judge_api_availability_receipt",
+            ):
+                artifact = _evidence_artifact(
+                    evidence_root,
+                    provenance,
+                    path_field=f"{stem}_evidence_path",
+                    sha256_field=f"{stem}_sha256",
+                )
+                artifact_relative = artifact.relative_to(evidence_root)
+                referenced[artifact_relative.as_posix()] = artifact_relative
     if "manifest.json" in referenced:
         raise SchemaError(
             "live readiness evidence cannot collide with the staged manifest path"
@@ -1009,9 +2213,14 @@ def validate_pc01_live_deployment_binding(
         (Path(repository_root).resolve() / row["relative_path"]).resolve()
         for row in expected["capability_source_files"]
     )
+    evaluator_requirements = load_pc01_live_deployment_evaluator_requirements(
+        manifest,
+        evidence_root=package_root,
+    )
     return ValidatedPC01LiveDeployment(
         binding=expected,
         manifest=manifest,
+        evaluator_requirements=evaluator_requirements,
         package_root=package_root,
         package_files=tuple(
             package_root / str(row["relative_path"])
@@ -1032,8 +2241,36 @@ def validate_bound_pc01_live_deployment(
     value = environment.get(LIVE_DEPLOYMENT_BINDING_FIELD)
     if not isinstance(value, Mapping):
         raise SchemaError("environment lacks a bound PC-01 live-deployment package")
-    return validate_pc01_live_deployment_binding(
+    validated = validate_pc01_live_deployment_binding(
         value,
         artifact_root=artifact_root,
         repository_root=repository_root,
     )
+    evaluator = environment.get("evaluator")
+    if not isinstance(evaluator, Mapping):
+        raise SchemaError(
+            "environment lacks the evaluator identity bound to live deployment"
+        )
+    capabilities = validated.manifest.get("capabilities")
+    sealed = (
+        capabilities.get("sealed_webarena_evaluator")
+        if isinstance(capabilities, Mapping)
+        else None
+    )
+    if not isinstance(sealed, Mapping):
+        raise SchemaError("live deployment lacks its sealed evaluator capability")
+    identity_fields = (
+        ("evaluator_id", "implementation_id"),
+        ("evaluator_version", "implementation_version"),
+        ("source_relative_path", "source_relative_path"),
+        ("source_sha256", "source_sha256"),
+    )
+    for environment_field, capability_field in identity_fields:
+        if not _exact_json_equal(
+            evaluator.get(environment_field), sealed.get(capability_field)
+        ):
+            raise SchemaError(
+                "environment evaluator differs from live sealed-evaluator "
+                f"capability: {environment_field}"
+            )
+    return validated

@@ -154,6 +154,10 @@ memory:
   e3_writes: forbidden
 
 verification:
+  # This names the pinned WebArena scoring rules/configuration, not a claim
+  # that our sealed compatibility-port source is the upstream evaluator.
+  # Production remains blocked until that port passes exact final-byte parity
+  # and independent external review.
   final_success_source: official_webarena_evaluator
   recovery_evidence_sources:
     - verified_normal_task_failure_incidents

@@ -71,7 +71,18 @@ drop browser tasks to make that audit pass.
 
 ## 1. Prepare the train-only review queue
 
-Run on the host with the extracted training data and referenced state images:
+For the two registered Kaggle datasets, the tracked CPU-only wrapper in
+[`TABLE2_P4_KAGGLE_PREPARE_ONLY.md`](TABLE2_P4_KAGGLE_PREPARE_ONLY.md) resolves
+the permitted mount layouts, invokes this section's authenticated preparation
+and validation operations, and emits a hash-bound execution receipt. It stops
+at `REVIEW_REQUIRED`; it does not perform any operation from Section 2 or 3.
+For the registered PC-01 source authority, the wrapper is mandatory: a direct
+`prepare_table2_p4.py audit-candidates` output without the wrapper's clean-
+commit execution receipt is not accepted by the joint audit or store builder.
+
+The following command documents the underlying operation for local/synthetic
+diagnostics only. For registered evidence, run the wrapper command in the
+linked prepare-only document instead:
 
 ```bash
 PYTHONPATH=src python scripts/prepare_table2_p4.py audit-candidates \
@@ -137,7 +148,7 @@ Validate after any transfer:
 
 ```bash
 PYTHONPATH=src python scripts/prepare_table2_p4.py validate-preparation \
-  --package-dir /kaggle/working/table2/p4-preparation-<dataset-hash>
+  --package-dir /kaggle/working/table2-p4-prepare-only-v1/preparation
 ```
 
 The validator rechecks file hashes, exact schemas, deterministic queue IDs,
@@ -161,7 +172,7 @@ joint duplicate assignments on Kaggle:
 PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py build-assignments \
   --config configs/eval/table2/joint_duplicate_audit_v1.json \
   --source-authority configs/eval/table2/p4_source_authority_v1.json \
-  --preparation-package /kaggle/working/table2/p4-preparation-<dataset-hash> \
+  --preparation-package /kaggle/working/table2-p4-prepare-only-v1/preparation \
   --gold-train-json /kaggle/input/web-gold-40k/split_train.json \
   --supplement-train-json /kaggle/input/gold-40k-retry/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
@@ -184,13 +195,20 @@ zero-read ledger are frozen in the package. The registered 15 recovery
 diagnostic rows are copied without alteration and remain
 `SYNTHETIC_DIAGNOSTIC_ONLY`.
 
+For the registered source authority, this command also revalidates the outer
+prepare-only execution receipt against the exact tracked source bytes. Its
+receipt hash, executed-source-set hash, and full source commit become part of
+the assignment namespace/input binding. Keep the receipt and sidecar in the
+parent directory of `preparation/`; copying only the six inner files is an
+incomplete evidence package.
+
 Revalidate the package from all source bytes after transfer:
 
 ```bash
 PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py validate-assignments \
   --config configs/eval/table2/joint_duplicate_audit_v1.json \
   --source-authority configs/eval/table2/p4_source_authority_v1.json \
-  --preparation-package /kaggle/working/table2/p4-preparation-<dataset-hash> \
+  --preparation-package /kaggle/working/table2-p4-prepare-only-v1/preparation \
   --gold-train-json /kaggle/input/web-gold-40k/split_train.json \
   --supplement-train-json /kaggle/input/gold-40k-retry/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
@@ -231,7 +249,7 @@ to the exact preparation queue before invoking the GPU builder:
 
 ```bash
 PYTHONPATH=src python scripts/prepare_table2_p4.py validate-provenance \
-  --package-dir /kaggle/working/table2/p4-preparation-<dataset-hash> \
+  --package-dir /kaggle/working/table2-p4-prepare-only-v1/preparation \
   --provenance-manifest /kaggle/working/table2/evidence/table2-memory-provenance-v1.json
 ```
 
@@ -250,7 +268,7 @@ Finalize only after that validation passes:
 PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py finalize-audit \
   --config configs/eval/table2/joint_duplicate_audit_v1.json \
   --source-authority configs/eval/table2/p4_source_authority_v1.json \
-  --preparation-package /kaggle/working/table2/p4-preparation-<dataset-hash> \
+  --preparation-package /kaggle/working/table2-p4-prepare-only-v1/preparation \
   --gold-train-json /kaggle/input/web-gold-40k/split_train.json \
   --supplement-train-json /kaggle/input/gold-40k-retry/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
@@ -300,7 +318,7 @@ PYTHONPATH=src python scripts/build_table2_memory.py \
   --joint-assignment-package /kaggle/working/table2/evidence/joint-duplicate-assignments \
   --joint-audit-config configs/eval/table2/joint_duplicate_audit_v1.json \
   --p4-source-authority configs/eval/table2/p4_source_authority_v1.json \
-  --p4-preparation-package /kaggle/working/table2/p4-preparation-<dataset-hash> \
+  --p4-preparation-package /kaggle/working/table2-p4-prepare-only-v1/preparation \
   --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
   --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest.json \
   --protocol-config configs/eval/table2/protocol.yaml \

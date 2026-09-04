@@ -34,7 +34,11 @@ from web_agent.eval.table2.execution_guard import (
     EVALUATION_CLI_SOURCE_RELATIVE_PATH,
     EVALUATION_RUNNER_SCOPE,
     FROZEN_DEPENDENCY_LOCK_RELATIVE_PATH,
+    PC01_PAGE_BROKER_SECURITY_FIELD,
+    PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD,
     RUNNER_ATTESTATION_SCHEMA_VERSION,
+    blocked_pc01_page_broker_security_binding,
+    validate_pc01_provider_bootstrap_binding,
     validate_runner_attestation_payload,
 )
 from web_agent.eval.table2.locked_mount_preflight import (
@@ -46,12 +50,19 @@ from web_agent.eval.table2.live_deployment import (
     LIVE_DEPLOYMENT_BINDING_FIELD,
     ValidatedPC01LiveDeployment,
     stage_pc01_live_deployment_package,
+    validate_evaluator_requirements_resolved_snapshot_binding,
+    validate_live_capability_source_plane_disjointness,
 )
 from web_agent.eval.table2.selection_evidence import stage_selection_evidence
 from web_agent.eval.table2.task_interface_audit import (
     TASK_INTERFACE_AUDIT_RELATIVE_PATH,
+    build_page_state_compile_authority,
     require_webarena_task_interface_compatible,
+    validate_page_state_compile_authority,
     validate_webarena_task_interface_audit,
+)
+from web_agent.eval.table2.public_task_registry import (
+    load_public_development_task_registry,
 )
 from web_agent.eval.table2.webarena_export import (
     PINNED_TASK_SOURCE_SHA256,
@@ -87,6 +98,7 @@ from web_agent.eval.table2.package_validator import (
     JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH,
     JOINT_DUPLICATE_AUDIT_REGISTRATION_RELATIVE_PATH,
     P4_PREPARATION_EVIDENCE_FILES,
+    P4_PREPARATION_EXECUTION_EVIDENCE_FILES,
     P4_SOURCE_AUTHORITY_RELATIVE_PATH,
     PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD,
     PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH,
@@ -120,6 +132,11 @@ from web_agent.memory.joint_duplicate_audit import (
     JointDuplicateAuditError,
     validate_compact_joint_duplicate_evidence,
 )
+from web_agent.memory.kaggle_prepare_only import (
+    EXECUTED_SOURCE_RELATIVE_PATHS,
+    PREPARE_ONLY_CONFIG_RELATIVE,
+    locate_prepare_only_execution_receipt,
+)
 
 
 INPUT_SCHEMA_VERSION = "table2-handoff-input-v1"
@@ -135,6 +152,22 @@ _TASK_TO_SERVICE_URL_KEYS = {
     "__GITLAB__": "WA_GITLAB",
     "__MAP__": "WA_MAP",
 }
+
+
+def _validate_handoff_live_capability_source_planes(
+    live_deployment: ValidatedPC01LiveDeployment,
+) -> None:
+    """Reassert runtime/sealed source separation at the handoff boundary."""
+
+    try:
+        validate_live_capability_source_plane_disjointness(
+            live_deployment.manifest
+        )
+    except SchemaError as exc:
+        raise SchemaError(
+            "handoff live-deployment capability source planes are not disjoint: "
+            f"{exc}"
+        ) from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -263,6 +296,7 @@ def _build_environment(
     expected_bridge_identity: Mapping[str, Any] | None,
     live_deployment_manifest_source: Path,
     live_deployment_evidence_root: Path,
+    expected_live_reset_task_index: int,
 ) -> tuple[Path, Path, ValidatedPC01LiveDeployment]:
     raw = spec.get("environment")
     evaluator_spec = spec.get("evaluator")
@@ -366,7 +400,7 @@ def _build_environment(
         evidence_path=webarena_host_preflight_source,
         service_url_map_path=webarena_service_url_map_source,
         deployment_topology=deployment_topology,
-        expected_live_reset_task_index=0,
+        expected_live_reset_task_index=expected_live_reset_task_index,
         expected_dgx_model_runtime_identity=expected_dgx_model_runtime_identity,
         expected_bridge_identity=expected_bridge_identity,
     )
@@ -393,7 +427,7 @@ def _build_environment(
         evidence_path=staged_preflight,
         service_url_map_path=staged_url_map,
         deployment_topology=deployment_topology,
-        expected_live_reset_task_index=0,
+        expected_live_reset_task_index=expected_live_reset_task_index,
         expected_dgx_model_runtime_identity=expected_dgx_model_runtime_identity,
         expected_bridge_identity=expected_bridge_identity,
     )
@@ -411,6 +445,10 @@ def _build_environment(
         repository_root=repo,
         destination_artifact_root=output_path.parent,
     )
+    # Reassert the plane boundary at the handoff trust transition.  The staged
+    # package validator already enforces it; this explicit handoff check keeps
+    # later refactors from silently turning that guarantee into an assumption.
+    _validate_handoff_live_capability_source_planes(live_deployment)
     _computed_field(
         environment,
         LIVE_DEPLOYMENT_BINDING_FIELD,
@@ -457,6 +495,7 @@ def _build_resolved_tasks(
     registry_path: Path,
     environment_path: Path,
     duplicate_output_path: Path,
+    evaluator_requirements: Mapping[str, Any],
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     registry_metadata, registry_rows = _load_task_manifest(registry_path)
     submitted_export = read_json(export_path)
@@ -528,16 +567,35 @@ def _build_resolved_tasks(
         "source_sha256": evaluator["source_sha256"],
         "oracle_rules_sha256": evaluator["oracle_rules_sha256"],
     }
+    expected_registry_identity = [
+        (
+            str(row.get("task_id") or "").strip(),
+            row.get("upstream_index"),
+            str(
+                row.get("benchmark_task_id", row.get("upstream_index"))
+            ).strip(),
+        )
+        for row in registry_rows
+    ]
+    observed_export_identity = [
+        (
+            str(row.get("task_id") or "").strip(),
+            row.get("upstream_index"),
+            str(row.get("benchmark_task_id") or "").strip(),
+        )
+        for row in export_rows
+    ]
+    if observed_export_identity != expected_registry_identity:
+        raise SchemaError(
+            "task export identities or order differ from tracked registry"
+        )
+
     by_index: dict[int, Mapping[str, Any]] = {}
     for row in export_rows:
         index = row.get("upstream_index")
         if type(index) is not int or index in by_index:
             raise SchemaError("task export upstream indices must be unique integers")
         by_index[index] = row
-    expected_indices = {int(row["upstream_index"]) for row in registry_rows}
-    if set(by_index) != expected_indices:
-        raise SchemaError("task export indices differ from tracked 0--49 registry")
-
     tasks: list[dict[str, Any]] = []
     content_fields = (
         "task_id",
@@ -597,6 +655,22 @@ def _build_resolved_tasks(
         )
         tasks.append(row)
 
+    page_state_compile_report = build_page_state_compile_authority(tasks)
+    validate_page_state_compile_authority(
+        page_state_compile_report,
+        task_rows=tasks,
+    )
+    if (
+        page_state_compile_report.get("evaluator_id")
+        != evaluator_identity["evaluator_id"]
+        or page_state_compile_report.get("evaluator_version")
+        != evaluator_identity["evaluator_version"]
+    ):
+        raise SchemaError(
+            "page-state compile authority evaluator identity differs from "
+            "the frozen environment"
+        )
+
     snapshot = {
         "schema_version": SCHEMA_VERSION,
         "record_type": "ResolvedWebArenaTaskSnapshot",
@@ -620,6 +694,10 @@ def _build_resolved_tasks(
         "task_action_interface_audit_content_sha256": sha256_json(
             task_interface_audit
         ),
+        "page_state_evaluator_compile_report": page_state_compile_report,
+        "page_state_evaluator_compile_report_content_sha256": sha256_json(
+            page_state_compile_report
+        ),
         "selection_rule": export["selection_rule"],
         "registry_manifest_id": export["registry_manifest_id"],
         "upstream_registry_manifest_sha256": export[
@@ -639,6 +717,11 @@ def _build_resolved_tasks(
     }
     if not snapshot["snapshot_id"]:
         raise SchemaError("resolved_task_export requires an explicit snapshot_id")
+    validate_evaluator_requirements_resolved_snapshot_binding(
+        evaluator_requirements,
+        task_export=export,
+        resolved_task_snapshot=snapshot,
+    )
     atomic_write_json(output_path, snapshot)
     return _validate_resolved_task_snapshot(
         output_path,
@@ -917,6 +1000,16 @@ def prepare_handoff(
     )
     requires_pc01_checkpoint_compatibility = pilot_only
     registry_path = _resolve_input(repo, campaign["task_manifest"])
+    active_task_registry = (
+        load_public_development_task_registry(registry_path)
+        if pilot_only
+        else None
+    )
+    expected_live_reset_task_index = (
+        active_task_registry.ordered_upstream_indices[0]
+        if active_task_registry is not None
+        else 0
+    )
     recovery_source = _resolve_input(repo, campaign["recovery_scenarios"])
     matched_seeds = [int(seed) for seed in campaign.get("matched_seeds", [])]
     if matched_seeds != [42]:
@@ -986,7 +1079,7 @@ def prepare_handoff(
         evidence_path=host_preflight_path,
         service_url_map_path=service_url_map_path,
         deployment_topology=deployment_topology,
-        expected_live_reset_task_index=0,
+        expected_live_reset_task_index=expected_live_reset_task_index,
         expected_dgx_model_runtime_identity=expected_dgx_identity,
         expected_bridge_identity=expected_bridge_identity,
     )
@@ -1024,6 +1117,7 @@ def prepare_handoff(
         expected_bridge_identity=expected_bridge_identity,
         live_deployment_manifest_source=live_deployment_manifest_source,
         live_deployment_evidence_root=live_deployment_evidence_root,
+        expected_live_reset_task_index=expected_live_reset_task_index,
     )
     duplicate_path = output / "duplicate_audit.json"
     export_path = _spec_path(
@@ -1044,6 +1138,7 @@ def prepare_handoff(
         registry_path=registry_path,
         environment_path=environment_path,
         duplicate_output_path=duplicate_path,
+        evaluator_requirements=live_deployment.evaluator_requirements,
     )
     task_snapshot_path = output / "resolved_tasks.json"
     duplicate_input_source = _spec_path(
@@ -1085,6 +1180,14 @@ def prepare_handoff(
         raise SchemaError(
             f"handoff compact joint duplicate evidence is invalid: {exc}"
         ) from exc
+    try:
+        preparation_receipt_source, preparation_receipt_sidecar_source = (
+            locate_prepare_only_execution_receipt(joint_preparation_source)
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        raise SchemaError(
+            f"handoff P4 preparation execution receipt is invalid: {exc}"
+        ) from exc
     joint_evidence_root = output / "joint_duplicate_evidence"
     for name in JOINT_DUPLICATE_ASSIGNMENT_FILES:
         _copy_exact(
@@ -1096,6 +1199,12 @@ def prepare_handoff(
             joint_preparation_source / name,
             joint_evidence_root / "preparation" / name,
         )
+    for source, name in zip(
+        (preparation_receipt_source, preparation_receipt_sidecar_source),
+        P4_PREPARATION_EXECUTION_EVIDENCE_FILES,
+        strict=True,
+    ):
+        _copy_exact(source, joint_evidence_root / name)
     _copy_exact(
         export_path,
         joint_evidence_root / "resolved_task_export.json",
@@ -1109,12 +1218,16 @@ def prepare_handoff(
         joint_evidence_root / "provenance_manifest.json",
     )
     tracked_evidence_root = joint_evidence_root / "tracked_repository"
-    for relative in (
-        JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH,
-        P4_SOURCE_AUTHORITY_RELATIVE_PATH,
-        Path(AUDIT_TOOL_SOURCE_RELATIVE_PATH),
-        *(Path(value) for value in AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS),
-        JOINT_DUPLICATE_AUDIT_REGISTRATION_RELATIVE_PATH,
+    for relative in dict.fromkeys(
+        (
+            JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH,
+            P4_SOURCE_AUTHORITY_RELATIVE_PATH,
+            Path(AUDIT_TOOL_SOURCE_RELATIVE_PATH),
+            *(Path(value) for value in AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS),
+            *(Path(value) for value in EXECUTED_SOURCE_RELATIVE_PATHS),
+            Path(PREPARE_ONLY_CONFIG_RELATIVE),
+            JOINT_DUPLICATE_AUDIT_REGISTRATION_RELATIVE_PATH,
+        )
     ):
         _copy_exact(repo / relative, tracked_evidence_root / relative)
 
@@ -1291,6 +1404,13 @@ def prepare_handoff(
         runner_spec.get("runtime_integration_source_relative_path"),
         field="runner.runtime_integration_source_relative_path",
     )
+    provider_bootstrap_value = runner_spec.get(
+        PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD
+    )
+    if not isinstance(provider_bootstrap_value, Mapping):
+        raise SchemaError(
+            "runner requires a frozen PC-01 operations-provider bootstrap"
+        )
     source_values = runner_spec.get("source_relative_paths")
     if not isinstance(source_values, list) or not source_values:
         raise SchemaError("runner.source_relative_paths must be a non-empty array")
@@ -1340,6 +1460,34 @@ def prepare_handoff(
         source_rows.append(
             {"relative_path": relative, "sha256": sha256_file(source_paths[relative])}
         )
+    provider_bootstrap = validate_pc01_provider_bootstrap_binding(
+        provider_bootstrap_value,
+        repository_root=repo,
+        source_hashes={row["relative_path"]: row["sha256"] for row in source_rows},
+    )
+    capabilities = live_deployment.manifest.get("capabilities")
+    broker = live_deployment.manifest.get("sealed_page_broker")
+    if not isinstance(capabilities, Mapping) or not isinstance(broker, Mapping):
+        raise SchemaError("live deployment capability planes are malformed")
+    _validate_handoff_live_capability_source_planes(live_deployment)
+    runtime_source_paths = {
+        str(row.get("source_relative_path") or "")
+        for capability_id, row in capabilities.items()
+        if capability_id != "sealed_webarena_evaluator" and isinstance(row, Mapping)
+    }
+    forbidden_provider_sources = {
+        str(capabilities["sealed_webarena_evaluator"].get("source_relative_path") or ""),
+        str(broker.get("source_relative_path") or ""),
+    }
+    provider_source_relative = provider_bootstrap["source_relative_path"]
+    if (
+        provider_source_relative not in runtime_source_paths
+        or provider_source_relative in forbidden_provider_sources
+    ):
+        raise SchemaError(
+            "PC-01 provider factory source must be runtime-only, never sealed, "
+            "broker, or shared-plane"
+        )
     integration_identity = {
         "entrypoint": integration_entrypoint,
         "source_relative_path": integration_relative,
@@ -1366,6 +1514,10 @@ def prepare_handoff(
         "attestation_scope": EVALUATION_RUNNER_SCOPE,
         "runner_entrypoint": runner_entrypoint,
         "runtime_integration_entrypoint": integration_entrypoint,
+        PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD: provider_bootstrap,
+        PC01_PAGE_BROKER_SECURITY_FIELD: (
+            blocked_pc01_page_broker_security_binding()
+        ),
         "repository_commit": commit,
         "primary_source_relative_path": primary_relative,
         "source_files": source_rows,

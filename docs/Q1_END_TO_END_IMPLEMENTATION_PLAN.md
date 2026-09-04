@@ -1617,7 +1617,9 @@ following exist:
 - reproducible code/config/commit/checkpoint identifiers;
 - honest statement of unsupported or negative results.
 
-The final success criterion is not a universal 90% number. The required
-evidence is a reproducible, statistically supported improvement of the complete
-agent over controlled same-protocol baselines, combined with strong
-class-balanced component diagnostics and transparent limitations.
+The final success criterion is not a universal 90% number and does not require
+a positive result. The required evidence is a reproducible, preregistered
+estimate of the complete agent against controlled same-protocol baselines,
+with uncertainty, costs, null or negative findings, class-balanced component
+diagnostics, and transparent limitations reported without outcome-driven
+redesign.

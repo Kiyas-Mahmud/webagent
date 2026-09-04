@@ -37,7 +37,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help=(
-            "content-complete WebArena task export bound to the tracked 0--49 "
+            "content-complete WebArena task export bound to the tracked ordered "
             "registry (required outside ENGINEERING_SMOKE_ONLY mode)"
         ),
     )

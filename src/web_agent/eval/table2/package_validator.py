@@ -51,6 +51,12 @@ from web_agent.memory.eligibility import (
     is_explicitly_non_admitted,
 )
 from web_agent.memory.manifest import ELIGIBILITY_POLICY_VERSION, canonical_sha256
+from web_agent.memory.kaggle_prepare_only import (
+    EXECUTED_SOURCE_RELATIVE_PATHS,
+    PREPARE_ONLY_CONFIG_RELATIVE,
+    PREPARATION_EXECUTION_RECEIPT_VALIDATED,
+    locate_prepare_only_execution_receipt,
+)
 from web_agent.memory.preparation import (
     P4_REGISTERED_SOURCE_AUTHORITY_SHA256,
     P4PreparationError,
@@ -80,9 +86,14 @@ from .execution_guard import (
     ENGINEERING_SMOKE_SCOPE,
     EVALUATION_RUNNER_SCOPE,
     FROZEN_DEPENDENCY_LOCK_RELATIVE_PATH,
+    PC01_PAGE_BROKER_SECURITY_FIELD,
+    PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD,
+    PC01ProviderInstallationReceipt,
+    PRODUCTION_RUNNER_ENTRYPOINT,
     validate_dependency_lock_for_environment,
     validate_frozen_dependency_lock,
     validate_infrastructure_evidence_record,
+    validate_pc01_page_broker_security_binding,
     validate_analysis_source_identity,
     validate_runner_attestation_payload,
 )
@@ -102,6 +113,7 @@ from .live_deployment import (
     LIVE_DEPLOYMENT_BINDING_FIELD,
     ValidatedPC01LiveDeployment,
     validate_bound_pc01_live_deployment,
+    validate_evaluator_requirements_resolved_snapshot_binding,
 )
 from .live_compatibility import (
     LIVE_COMPATIBILITY_RELATIVE_PATH,
@@ -244,10 +256,13 @@ FROZEN_MEMORY_STORE_FILES = (
     "threshold_calibration.json",
 )
 JOINT_DUPLICATE_EVIDENCE_BINDING_SCHEMA_VERSION = (
-    "table2-memory-joint-duplicate-evidence-binding-v2"
+    "table2-memory-joint-duplicate-evidence-binding-v3"
 )
 P4_SOURCE_AUTHORITY_RELATIVE_PATH = Path(
     "configs/eval/table2/p4_source_authority_v1.json"
+)
+_CANONICAL_P4_REGISTERED_SOURCE_AUTHORITY_SHA256 = (
+    P4_REGISTERED_SOURCE_AUTHORITY_SHA256
 )
 JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH = Path(
     "configs/eval/table2/joint_duplicate_audit_v1.json"
@@ -275,6 +290,10 @@ P4_PREPARATION_EVIDENCE_FILES = (
     "preparation_manifest.json",
     "preparation_manifest.sha256",
 )
+P4_PREPARATION_EXECUTION_EVIDENCE_FILES = (
+    "execution_receipt.json",
+    "execution_receipt.sha256",
+)
 REGISTERED_RECOVERY_LOW_LEVEL_ACTION_LIMITS = {
     "RETRY": 1,
     "REPLAN": 1,
@@ -291,6 +310,7 @@ EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS: tuple[str, ...] = tuple(
             "src/web_agent/eval/table2/handoff.py",
             "src/web_agent/eval/table2/handoff_authority.py",
             "src/web_agent/eval/table2/task_interface_audit.py",
+            "src/web_agent/eval/table2/webarena_page_state_evaluator.py",
         )
     )
 )
@@ -851,6 +871,19 @@ def freeze_campaign(
         )
         task_source = resolved_task_source
         source_reads.append(("resolved_normal_task_snapshot", resolved_task_source))
+    if deployment_preflight is not None and pilot_only:
+        first_registered_index = registry_records[0].get("upstream_index")
+        if (
+            type(first_registered_index) is not int
+            or deployment_preflight.binding.get(
+                "expected_live_reset_task_index"
+            )
+            != first_registered_index
+        ):
+            raise SchemaError(
+                "WebArena deployment preflight did not reset the first task in "
+                "exact tracked-registry order"
+            )
     if not pilot_only:
         validate_locked_final_pilot_exclusion(
             task_records,
@@ -978,6 +1011,26 @@ def freeze_campaign(
                 if path.is_symlink() or not path.is_file():
                     raise SchemaError(f"{label} package lacks {name}")
                 source_reads.append((f"{label}:{name}", path))
+        try:
+            preparation_receipt_source, preparation_receipt_sidecar_source = (
+                locate_prepare_only_execution_receipt(joint_preparation_source)
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            raise SchemaError(
+                f"P4 preparation lacks its source-attested execution receipt: {exc}"
+            ) from exc
+        source_reads.extend(
+            (
+                (
+                    "p4_preparation:execution_receipt.json",
+                    preparation_receipt_source,
+                ),
+                (
+                    "p4_preparation:execution_receipt.sha256",
+                    preparation_receipt_sidecar_source,
+                ),
+            )
+        )
         for label, path in (
             ("joint_duplicate_resolved_task_export", joint_task_export_source),
             (
@@ -1002,7 +1055,6 @@ def freeze_campaign(
             if path.is_symlink() or not path.is_file():
                 raise SchemaError(f"{label} is missing or symlinked")
             source_reads.append((label, path))
-
     prompt_sources = {
         "parameter_provider_v1.txt": _resolve_input(
             repo, protocol["parameter_provider"]["prompt"]
@@ -1208,7 +1260,6 @@ def freeze_campaign(
             provenance_manifest_path=joint_provenance_source,
         )
     )
-
     runner_attestation_source: Path | None = None
     runner_source_files: tuple[Path, ...] = ()
     runtime_integration: dict[str, str] = {}
@@ -1422,6 +1473,19 @@ def freeze_campaign(
             source = handoff_manifest_source.parent / relative
             _reject_locked_mount_path(source, repo, protocol, pilot_only=pilot_only)
             source_reads.append((f"evaluation_handoff_inventory:{relative}", source))
+        if (
+            live_deployment is None
+            or resolved_task_source is None
+            or joint_task_export_source is None
+        ):
+            raise SchemaError(
+                "evaluation handoff lacks live deployment or resolved tasks"
+            )
+        validate_evaluator_requirements_resolved_snapshot_binding(
+            live_deployment.evaluator_requirements,
+            task_export=read_json(joint_task_export_source),
+            resolved_task_snapshot=read_json(resolved_task_source),
+        )
     source_reads.extend((f"selected_model_manifest:seed_{seed}", path) for seed, path in model_by_seed.items())
     for seed, manifest_path in memory_by_seed.items():
         for name in FROZEN_MEMORY_STORE_FILES:
@@ -1579,6 +1643,15 @@ def freeze_campaign(
                     joint_destination / "preparation" / name,
                 )
             )
+        for source, name in zip(
+            (
+                preparation_receipt_source,
+                preparation_receipt_sidecar_source,
+            ),
+            P4_PREPARATION_EXECUTION_EVIDENCE_FILES,
+            strict=True,
+        ):
+            copied.append(copy_freeze_input(source, joint_destination / name))
         copied.extend(
             (
                 copy_freeze_input(
@@ -1617,6 +1690,24 @@ def freeze_campaign(
                         joint_destination / "tracked_repository" / relative,
                     )
                     for relative in AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS
+                ),
+                *(
+                    copy_freeze_input(
+                        repo / relative,
+                        joint_destination / "tracked_repository" / relative,
+                    )
+                    for relative in EXECUTED_SOURCE_RELATIVE_PATHS
+                    if relative
+                    not in {
+                        AUDIT_TOOL_SOURCE_RELATIVE_PATH,
+                        *AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS,
+                    }
+                ),
+                copy_freeze_input(
+                    repo / PREPARE_ONLY_CONFIG_RELATIVE,
+                    joint_destination
+                    / "tracked_repository"
+                    / PREPARE_ONLY_CONFIG_RELATIVE,
                 ),
                 copy_freeze_input(
                     joint_registration_source,
@@ -2514,6 +2605,15 @@ def _validate_campaign_core(
                 registry_tasks=registry_records,
                 environment_path=root / "frozen" / "environment.json",
             )
+            validate_evaluator_requirements_resolved_snapshot_binding(
+                live_deployment.evaluator_requirements,
+                task_export=read_json(
+                    root
+                    / JOINT_DUPLICATE_EVIDENCE_RELATIVE_PATH
+                    / "resolved_task_export.json"
+                ),
+                resolved_task_snapshot=read_json(task_candidates[0]),
+            )
         _validate_task_boundary(
             task_records,
             campaign_config,
@@ -2521,6 +2621,19 @@ def _validate_campaign_core(
             metadata=task_metadata,
             pilot_only=pilot,
         )
+        if str(manifest.get("campaign_mode")) != "smoke" and pilot:
+            first_registered_index = registry_records[0].get("upstream_index")
+            if (
+                type(first_registered_index) is not int
+                or deployment_preflight.binding.get(
+                    "expected_live_reset_task_index"
+                )
+                != first_registered_index
+            ):
+                raise SchemaError(
+                    "frozen WebArena deployment preflight did not reset the "
+                    "first task in exact tracked-registry order"
+                )
         if not pilot:
             validate_locked_final_pilot_exclusion(
                 task_records,
@@ -2641,6 +2754,11 @@ def _validate_campaign_core(
             root,
             manifest,
             protocol=protocol,
+        )
+        _validate_pc01_provider_installation_ledger(
+            root,
+            manifest,
+            access_records=access_records,
         )
         configured_duplicate = str(campaign_config.get("duplicate_audit_manifest", ""))
         if str(task_metadata.get("duplicate_audit_manifest")) != configured_duplicate:
@@ -2828,6 +2946,162 @@ def _validate_episode_access_ledger(
             "episode task-load ledger does not match physical launches: "
             f"missing={missing[:3]}, extra={extra[:3]}"
         )
+
+
+def _provider_campaign_state_sha256(root: Path) -> str:
+    """Recompute the static campaign authority bound before/after the factory."""
+
+    paths = (
+        root / "campaign_manifest.json",
+        root / "frozen/runner_attestation.json",
+        root / "frozen/environment.json",
+        root / "frozen/protocol.yaml",
+    )
+    return hashlib.sha256(
+        "".join(f"{path.name}:{sha256_file(path)}\n" for path in paths).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
+def _validate_pc01_provider_installation_ledger(
+    root: Path,
+    manifest: Mapping[str, Any],
+    *,
+    access_records: Sequence[Mapping[str, Any]],
+) -> None:
+    """Authenticate the durable provider receipt before any episode task read."""
+
+    installation_rows = [
+        (index, record)
+        for index, record in enumerate(access_records)
+        if str(record.get("event_type") or "") == "pc01_provider_installation"
+    ]
+    task_load_indices = [
+        index
+        for index, record in enumerate(access_records)
+        if str(record.get("event_type") or "") == "episode_task_load"
+    ]
+    canonical_pc01 = (
+        str(manifest.get("campaign_mode")) == "evaluation"
+        and str(manifest.get("runner_entrypoint")) == PRODUCTION_RUNNER_ENTRYPOINT
+    )
+    if not canonical_pc01:
+        if installation_rows:
+            raise SchemaError(
+                "non-PC-01 campaign contains a provider installation receipt"
+            )
+        return
+    if task_load_indices and not installation_rows:
+        raise SchemaError(
+            "PC-01 episode task load precedes required provider installation receipt"
+        )
+    if installation_rows and task_load_indices:
+        if installation_rows[0][0] >= task_load_indices[0]:
+            raise SchemaError(
+                "PC-01 provider installation receipt must precede episode_task_load"
+            )
+    if not installation_rows:
+        # A newly frozen, otherwise-unstarted campaign is intentionally valid so
+        # the production CLI can perform its pre-factory validation.  The first
+        # task load makes the receipt mandatory.
+        return
+
+    attestation = read_json(root / "frozen/runner_attestation.json")
+    binding = attestation.get(PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD)
+    if not isinstance(binding, Mapping):
+        raise SchemaError("PC-01 provider bootstrap binding is absent")
+    expected_contract = str(
+        binding.get("expected_provider_public_contract_sha256") or ""
+    )
+    campaign_state = _provider_campaign_state_sha256(root)
+    expected_factory = {
+        "factory_entrypoint": str(binding.get("factory_entrypoint") or ""),
+        "factory_module": str(binding.get("factory_module") or ""),
+        "factory_qualname": str(binding.get("factory_qualname") or ""),
+        "factory_source_relative_path": str(
+            binding.get("source_relative_path") or ""
+        ),
+        "factory_source_sha256": str(binding.get("source_sha256") or ""),
+    }
+    for _, record in installation_rows:
+        payload = record.get("payload")
+        if not isinstance(payload, Mapping) or set(payload) != {
+            "installation_receipt",
+            "installation_receipt_sha256",
+            "locked_test_content",
+        }:
+            raise SchemaError(
+                "PC-01 provider installation ledger payload differs from schema"
+            )
+        if strict_bool(
+            payload["locked_test_content"],
+            context="provider_installation.locked_test_content",
+        ):
+            raise SchemaError(
+                "PC-01 provider installation receipt cannot read locked content"
+            )
+        receipt = PC01ProviderInstallationReceipt.from_mapping(
+            payload["installation_receipt"]
+        )
+        if payload["installation_receipt_sha256"] != receipt.receipt_sha256:
+            raise SchemaError(
+                "PC-01 provider installation receipt hash mismatch"
+            )
+        for field_name, expected in expected_factory.items():
+            if getattr(receipt, field_name) != expected:
+                raise SchemaError(
+                    f"PC-01 provider installation {field_name} differs from handoff"
+                )
+        if (
+            receipt.expected_provider_public_contract_sha256 != expected_contract
+            or receipt.actual_provider_public_contract_sha256 != expected_contract
+        ):
+            raise SchemaError(
+                "PC-01 actual provider contract differs from frozen expectation"
+            )
+        if (
+            receipt.pre_factory_campaign_state_sha256 != campaign_state
+            or receipt.post_factory_campaign_state_sha256 != campaign_state
+        ):
+            raise SchemaError(
+                "PC-01 provider installation campaign authority hash mismatch"
+            )
+
+
+def require_pc01_provider_installation_ledger(
+    root: str | Path,
+    manifest: Mapping[str, Any] | None = None,
+) -> PC01ProviderInstallationReceipt:
+    """Require a durable valid installation event before runner construction."""
+
+    campaign_root = Path(root).resolve()
+    campaign_manifest = (
+        read_json(campaign_root / "campaign_manifest.json")
+        if manifest is None
+        else dict(manifest)
+    )
+    records = read_jsonl(campaign_root / "access_ledger.jsonl")
+    _validate_pc01_provider_installation_ledger(
+        campaign_root,
+        campaign_manifest,
+        access_records=records,
+    )
+    matching = [
+        record
+        for record in records
+        if str(record.get("event_type") or "") == "pc01_provider_installation"
+    ]
+    if not matching:
+        raise SchemaError(
+            "production runner requires a provider installation ledger receipt"
+        )
+    payload = matching[-1].get("payload")
+    if not isinstance(payload, Mapping):  # pragma: no cover - checked above
+        raise SchemaError("provider installation ledger payload is absent")
+    return PC01ProviderInstallationReceipt.from_mapping(
+        payload["installation_receipt"]
+    )
 
 
 def _validate_campaign_provider_fairness(
@@ -5300,11 +5574,7 @@ def _validate_final_evidence(
                     f"resolved_attempt_index: {incident_id}"
                 )
             continue
-        if len(successful_indices) > 1:
-            raise SchemaError(
-                f"sealed incident has multiple successful recovery attempts: {incident_id}"
-            )
-        expected_resolved = len(successful_indices) == 1
+        expected_resolved = bool(successful_indices)
         if resolved is not expected_resolved:
             raise SchemaError(
                 "sealed incident resolved status differs from linked recovery "
@@ -5317,12 +5587,7 @@ def _validate_final_evidence(
                     f"resolved_attempt_index: {incident_id}"
                 )
             continue
-        successful_index = successful_indices[0]
-        if successful_index != attempt_count:
-            raise SchemaError(
-                "runtime contains a recovery attempt after the incident was "
-                f"verified resolved: {incident_id}"
-            )
+        successful_index = min(successful_indices)
         if declared_index != successful_index:
             raise SchemaError(
                 "sealed incident resolved_attempt_index differs from the linked "
@@ -6452,8 +6717,18 @@ def _validate_recomputed_aggregate_outputs(
         recovery_k=recovery_k,
         **rate_inference,
     )
-    retrieval = compute_retrieval_diagnostics(normal_queries)
-    diagnostic_retrieval = compute_retrieval_diagnostics(recovery_queries)
+    retrieval = compute_retrieval_diagnostics(
+        normal_queries,
+        bootstrap_samples=bootstrap_samples,
+        confidence=confidence,
+        bootstrap_seed=bootstrap_seed,
+    )
+    diagnostic_retrieval = compute_retrieval_diagnostics(
+        recovery_queries,
+        bootstrap_samples=bootstrap_samples,
+        confidence=confidence,
+        bootstrap_seed=bootstrap_seed,
+    )
 
     statistic_keys = ["task_success", "step_count", "loop_detected"]
     if all(row.get("task_wall_clock_seconds") is not None for row in normal_episodes):
@@ -7670,7 +7945,7 @@ def _validate_resolved_task_snapshot(
     registry_tasks: Sequence[Mapping[str, Any]],
     environment_path: Path,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Validate full WebArena task content against the tracked 0--49 registry."""
+    """Validate full WebArena task content against the tracked ordered registry."""
 
     metadata, rows = _load_task_manifest(path)
     expected_metadata = {
@@ -7707,15 +7982,24 @@ def _validate_resolved_task_snapshot(
         raise SchemaError("resolved task snapshot evaluator identity is not frozen environment identity")
 
     registry_identity = [
-        (str(row.get("task_id", "")), row.get("upstream_index"))
+        (
+            str(row.get("task_id", "")),
+            row.get("upstream_index"),
+            str(row.get("benchmark_task_id", row.get("upstream_index", ""))),
+        )
         for row in registry_tasks
     ]
     resolved_identity = [
-        (str(row.get("task_id", "")), row.get("upstream_index")) for row in rows
+        (
+            str(row.get("task_id", "")),
+            row.get("upstream_index"),
+            str(row.get("benchmark_task_id", "")),
+        )
+        for row in rows
     ]
     if resolved_identity != registry_identity:
         raise SchemaError(
-            "resolved task snapshot must preserve the tracked WebArena 0--49 registry order"
+            "resolved task snapshot must preserve the tracked WebArena registry order"
         )
     if len(rows) != 50:
         raise SchemaError("resolved pilot task snapshot must contain exactly 50 tasks")
@@ -8123,6 +8407,20 @@ def _validate_registered_joint_duplicate_memory_bindings(
         )
 
     common: dict[str, Any] | None = None
+    assignment_input_binding = assignment_package.manifest.get("input_binding")
+    if not isinstance(assignment_input_binding, Mapping):
+        raise SchemaError("joint assignment lacks its preparation input binding")
+    preparation_receipt_status = assignment_input_binding.get(
+        "preparation_execution_receipt_status"
+    )
+    if (
+        sha256_file(tracked_source_authority)
+        == _CANONICAL_P4_REGISTERED_SOURCE_AUTHORITY_SHA256
+        and preparation_receipt_status != PREPARATION_EXECUTION_RECEIPT_VALIDATED
+    ):
+        raise SchemaError(
+            "joint assignment lacks a validated registered preparation receipt"
+        )
     for seed, manifest_path in sorted(memory_by_seed.items()):
         memory = read_json(manifest_path)
         if memory.get("model_seed") != seed:
@@ -8157,6 +8455,16 @@ def _validate_registered_joint_duplicate_memory_bindings(
             "duplicate_cluster_namespace": audit_namespace,
             "preparation_manifest_sha256": sha256_file(
                 preparation_manifest_path
+            ),
+            "preparation_execution_receipt_status": preparation_receipt_status,
+            "preparation_execution_receipt_sha256": assignment_input_binding.get(
+                "preparation_execution_receipt_sha256"
+            ),
+            "preparation_executed_source_set_sha256": assignment_input_binding.get(
+                "preparation_executed_source_set_sha256"
+            ),
+            "preparation_source_commit": assignment_input_binding.get(
+                "preparation_source_commit"
             ),
             "recovery_scenarios_sha256": sha256_file(
                 registered_recovery_scenarios_path
@@ -8707,6 +9015,14 @@ def _validate_frozen_runner_attestation(
             )
     if attestation.get("source_set_sha256") != sha256_json(normalized):
         raise SchemaError("frozen runner source-set hash mismatch")
+    if attestation.get("runner_entrypoint") == PRODUCTION_RUNNER_ENTRYPOINT:
+        validate_pc01_page_broker_security_binding(
+            attestation.get(PC01_PAGE_BROKER_SECURITY_FIELD)
+        )
+    elif attestation.get(PC01_PAGE_BROKER_SECURITY_FIELD) is not None:
+        raise SchemaError(
+            "non-production runner attestation must not claim PC-01 broker security"
+        )
 
 
 def _payload_sha256(path: Path) -> str:

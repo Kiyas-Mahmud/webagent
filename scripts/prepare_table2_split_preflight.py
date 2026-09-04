@@ -17,7 +17,13 @@ from web_agent.eval.table2.split_deployment_preflight import (
     build_split_deployment_preflight,
     validate_split_deployment_preflight,
 )
+from web_agent.eval.table2.public_task_registry import (
+    load_public_development_task_registry,
+)
 from web_agent.eval.table2.webarena_preflight import load_service_url_map
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _authority_arguments(parser: argparse.ArgumentParser) -> None:
@@ -40,10 +46,15 @@ def _authority_arguments(parser: argparse.ArgumentParser) -> None:
         help="separate frozen expected oracle-blind bridge-identity JSON",
     )
     parser.add_argument(
+        "--task-registry",
+        type=Path,
+        default=REPOSITORY_ROOT / "benchmarks/table2/pilot/task_manifest.json",
+        help="tracked ordered 50-task public-development registry",
+    )
+    parser.add_argument(
         "--live-reset-task-index",
         type=int,
-        default=0,
-        help="public WebArena reset task bound by the local-host PASS (default: 0)",
+        help="must equal the first upstream index in the tracked task registry",
     )
 
 
@@ -126,6 +137,17 @@ def main(argv: Sequence[str] | None = None) -> None:
             f"refusing to overwrite split preflight evidence: {args.output}"
         )
     service_urls = load_service_url_map(args.service_url_map)
+    task_registry = load_public_development_task_registry(args.task_registry)
+    first_registered_index = task_registry.ordered_upstream_indices[0]
+    live_reset_task_index = (
+        first_registered_index
+        if args.live_reset_task_index is None
+        else args.live_reset_task_index
+    )
+    if live_reset_task_index != first_registered_index:
+        raise SchemaError(
+            "split preflight must bind the first task in exact tracked registry order"
+        )
     expected_dgx = read_json(args.expected_dgx_runtime_identity)
     expected_bridge = read_json(args.expected_bridge_identity)
 
@@ -146,12 +168,12 @@ def main(argv: Sequence[str] | None = None) -> None:
             dgx_model_runtime_identity=read_json(args.dgx_runtime_identity),
             bridge_identity=read_json(args.bridge_identity),
             exchanges=_read_exchange_array(args.exchanges),
-            expected_live_reset_task_index=args.live_reset_task_index,
+            expected_live_reset_task_index=live_reset_task_index,
         )
         value = validate_split_deployment_preflight(
             value,
             service_url_map=service_urls,
-            expected_live_reset_task_index=args.live_reset_task_index,
+            expected_live_reset_task_index=live_reset_task_index,
             expected_dgx_model_runtime_identity=expected_dgx,
             expected_bridge_identity=expected_bridge,
         )
@@ -172,7 +194,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         value = validate_split_deployment_preflight(
             read_json(artifact),
             service_url_map=service_urls,
-            expected_live_reset_task_index=args.live_reset_task_index,
+            expected_live_reset_task_index=live_reset_task_index,
             expected_dgx_model_runtime_identity=expected_dgx,
             expected_bridge_identity=expected_bridge,
         )

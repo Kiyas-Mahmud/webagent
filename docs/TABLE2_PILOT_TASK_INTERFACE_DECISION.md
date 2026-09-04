@@ -16,44 +16,64 @@ indices 44--46 are page-state URL tasks compatible with the current P3
 contract. Silently translating, dropping, or auto-answering the other tasks
 would change the experiment and could falsely inflate E0--E3 results.
 
-## Option A — page-state replacement set (recommended)
+## Option A — page-state replacement set requiring reset proof (recommended)
 
 Approve an outcome-blind set of 50 public tasks whose official evaluators use
 page state (`url_match` and/or `program_html`) and therefore remain executable
-through the existing six P3 browser actions. The set preserves the original
-site quotas:
+through the existing six P3 browser actions. The first proposal preserved the
+original site quotas by including Reddit upvote/subscribe tasks 404--406 and
+595--596. That proposal is withdrawn: those tasks persistently change shared
+site state, while the pinned public task records provide no task-level reset.
+Using them in a matched E0--E3 block could let an earlier system change a later
+system's start state.
+
+The revised proposal excludes persistent content/account mutations. Because
+the pinned release has no page-state-scored, non-mutating Reddit task, the five
+Reddit slots are redistributed before any model outcome is observed: two to
+Map, two to Shopping Admin, and one to Shopping. This is a task-interface and
+state-isolation decision, not a result-based choice:
 
 | Site | Count |
 | --- | ---: |
 | GitLab | 3 |
-| Map | 18 |
-| Reddit | 5 |
-| Shopping | 9 |
-| Shopping Admin | 15 |
+| Map | 20 |
+| Reddit | 0 |
+| Shopping | 10 |
+| Shopping Admin | 17 |
 
-Proposed upstream indices, in frozen order:
+Proposed upstream indices, in candidate order (not registered or frozen):
 
 ```text
-102, 156, 157, 158, 238, 258, 260, 269, 274, 283,
-284, 298, 324, 356, 369, 370, 371, 372, 373, 374,
-375, 377, 378, 379, 380, 404, 405, 406, 595, 596,
-676, 677, 678, 679, 704, 705, 706, 707, 709, 710,
-711, 712, 757, 758, 761, 762, 763, 764, 765, 766
+102, 156, 157, 158, 159, 238, 258, 260, 269, 274,
+283, 284, 298, 324, 356, 369, 370, 371, 372, 373,
+374, 375, 377, 378, 379, 380, 381, 676, 677, 678,
+679, 680, 704, 705, 706, 707, 708, 709, 710, 711,
+712, 757, 758, 761, 762, 763, 764, 765, 766, 767
 ```
 
-Forty-five tasks are read-only. Reddit tasks 404, 405, 406, 595, and 596 make
-bounded upvote/subscribe changes. They may be admitted only after reset parity
-and the registered second safety review pass. If either check fails, task
-eligibility must be resolved before execution without looking at any model
-outcome.
+All 50 tasks are navigation, search, filtering, preview, lookup, directions, or
+report-view tasks and are selected to avoid persistent account/content
+mutation. Before registration, the deployment-level safety review must still
+verify this classification from the complete upstream task and evaluator
+configuration and prove identical reset fingerprints across E0--E3. A failed
+classification or reset check stops registration; it does not authorize a
+silent task substitution.
 
 Approval consequences:
 
 - both the historical 0--49 set and this replacement set become permanent
-  development exclusions from the later final campaign;
+  development exclusions from the later final campaign, which requires a
+  separate active-50 registry and combined 100-task exclusion authority;
 - the full content export, start states, evaluator configurations, safety
   evidence, exact interface audit, and joint Gold/WebArena duplicate audit
   must be regenerated and frozen before the pilot;
+- every exact evaluator config must pass the frozen 50-row compile authority,
+  but compilation alone is not evaluator approval. The repository's current
+  `reviewed_compatibility_port_pending_external_review` identity is
+  intentionally non-runnable; a new non-pending release/source commit needs a
+  final-byte parity receipt and independent review receipt bound to the exact
+  implementation, compiler, compile report, upstream reference, reviewer,
+  authority, and timestamp hashes;
 - no pilot result is created merely by approving the registry.
 
 ## Option B — add an answer/termination interface

@@ -215,6 +215,10 @@ def build_frozen_store(
     expected_binding_fields = {
         "schema_version",
         "preparation_manifest_sha256",
+        "preparation_execution_receipt_status",
+        "preparation_execution_receipt_sha256",
+        "preparation_executed_source_set_sha256",
+        "preparation_source_commit",
         "assignment_manifest_sha256",
         "entities_sha256",
         "clusters_sha256",
@@ -234,16 +238,66 @@ def build_frozen_store(
             "joint duplicate-audit binding fields differ from schema"
         )
     if joint_duplicate_audit_binding.get("schema_version") != (
-        "table2-memory-joint-duplicate-evidence-binding-v2"
+        "table2-memory-joint-duplicate-evidence-binding-v3"
     ):
         raise MemoryBuildError("unsupported joint duplicate-audit binding")
     for field in expected_binding_fields - {
         "schema_version",
         "duplicate_cluster_namespace",
+        "preparation_execution_receipt_status",
+        "preparation_execution_receipt_sha256",
+        "preparation_executed_source_set_sha256",
+        "preparation_source_commit",
     }:
         require_sha256(
             joint_duplicate_audit_binding.get(field),
             field=f"joint_duplicate_audit_binding.{field}",
+        )
+    preparation_receipt_status = joint_duplicate_audit_binding.get(
+        "preparation_execution_receipt_status"
+    )
+    if preparation_receipt_status == (
+        "VALIDATED_REGISTERED_KAGGLE_PREPARE_ONLY_RECEIPT"
+    ):
+        for field in (
+            "preparation_execution_receipt_sha256",
+            "preparation_executed_source_set_sha256",
+        ):
+            require_sha256(
+                joint_duplicate_audit_binding.get(field),
+                field=f"joint_duplicate_audit_binding.{field}",
+            )
+        source_commit = joint_duplicate_audit_binding.get(
+            "preparation_source_commit"
+        )
+        if (
+            type(source_commit) is not str
+            or len(source_commit) != 40
+            or any(
+                character not in "0123456789abcdef"
+                for character in source_commit
+            )
+        ):
+            raise MemoryBuildError(
+                "joint duplicate-audit binding has an invalid preparation source commit"
+            )
+    elif preparation_receipt_status == (
+        "NOT_APPLICABLE_NONREGISTERED_SOURCE_AUTHORITY"
+    ):
+        if any(
+            joint_duplicate_audit_binding.get(field) is not None
+            for field in (
+                "preparation_execution_receipt_sha256",
+                "preparation_executed_source_set_sha256",
+                "preparation_source_commit",
+            )
+        ):
+            raise MemoryBuildError(
+                "nonregistered preparation cannot claim Kaggle execution evidence"
+            )
+    else:
+        raise MemoryBuildError(
+            "joint duplicate-audit binding has an invalid preparation receipt status"
         )
     if joint_duplicate_audit_binding.get(
         "provenance_manifest_sha256"

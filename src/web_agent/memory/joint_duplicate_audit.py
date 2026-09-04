@@ -29,8 +29,15 @@ from urllib.parse import urlsplit
 
 from web_agent.eval.table2.common import canonical_json_bytes
 from web_agent.memory.eligibility import ProvenanceManifest
+from web_agent.memory.kaggle_prepare_only import (
+    KaggleP4PrepareOnlyError,
+    PREPARATION_EXECUTION_RECEIPT_NOT_APPLICABLE,
+    PREPARATION_EXECUTION_RECEIPT_VALIDATED,
+    validate_prepare_only_execution_receipt,
+)
 from web_agent.memory.manifest import ManifestError, sha256_file
 from web_agent.memory.preparation import (
+    P4_REGISTERED_SOURCE_AUTHORITY_SHA256,
     P4_SOURCE_AUTHORITY_FILE_NAME,
     P4PreparationError,
     validate_p4_preparation_package,
@@ -58,7 +65,7 @@ from web_agent.runtime.duplicate_audit import (
 
 AUDIT_CONFIG_SCHEMA_VERSION = "table2-joint-duplicate-audit-config-v1"
 ASSIGNMENT_PACKAGE_SCHEMA_VERSION = (
-    "table2-joint-duplicate-assignment-package-v3"
+    "table2-joint-duplicate-assignment-package-v4"
 )
 ASSIGNMENT_ENTITIES_SCHEMA_VERSION = (
     "table2-joint-duplicate-assignment-entity-v2"
@@ -1144,6 +1151,55 @@ def _cluster_entities(
     return entities, cluster_payload
 
 
+def _preparation_execution_binding(
+    *,
+    preparation_root: Path,
+    source_authority_path: Path,
+    repository_root: Path,
+) -> dict[str, Any]:
+    """Bind registered Kaggle preparation to its source-attested receipt.
+
+    Synthetic/nonregistered authorities remain usable for unit fixtures, but
+    are explicitly marked non-applicable and cannot masquerade as production
+    Kaggle evidence.
+    """
+
+    if sha256_file(source_authority_path) != P4_REGISTERED_SOURCE_AUTHORITY_SHA256:
+        return {
+            "preparation_execution_receipt_status": (
+                PREPARATION_EXECUTION_RECEIPT_NOT_APPLICABLE
+            ),
+            "preparation_execution_receipt_sha256": None,
+            "preparation_executed_source_set_sha256": None,
+            "preparation_source_commit": None,
+        }
+    try:
+        validated = validate_prepare_only_execution_receipt(
+            preparation_root=preparation_root,
+            repository_root=repository_root,
+            # A linked Git worktree has a regular `.git` file rather than a
+            # directory.  The validator uses `git rev-parse`/`git status` and
+            # must verify exact clean HEAD for both layouts without exception.
+            require_clean_git_checkout=True,
+        )
+    except (KaggleP4PrepareOnlyError, OSError, TypeError, ValueError) as error:
+        raise JointDuplicateAuditError(
+            f"registered P4 preparation execution receipt is invalid: {error}"
+        ) from error
+    return {
+        "preparation_execution_receipt_status": (
+            PREPARATION_EXECUTION_RECEIPT_VALIDATED
+        ),
+        "preparation_execution_receipt_sha256": validated[
+            "execution_receipt_sha256"
+        ],
+        "preparation_executed_source_set_sha256": validated[
+            "executed_source_set_sha256"
+        ],
+        "preparation_source_commit": validated["source_commit"],
+    }
+
+
 def _compute_assignment(
     *,
     config_path: Path,
@@ -1195,6 +1251,11 @@ def _compute_assignment(
     )
     input_binding = {
         "preparation_manifest_sha256": preparation_manifest_sha256,
+        **_preparation_execution_binding(
+            preparation_root=package.root,
+            source_authority_path=Path(source_authority_path),
+            repository_root=Path(config_path).resolve().parents[3],
+        ),
         "preparation_records_sha256": package.manifest["records_sha256"],
         "review_queue_sha256": package.manifest["review_queue_sha256"],
         "source_authority_sha256": package.manifest[
@@ -1666,6 +1727,11 @@ def validate_compact_joint_duplicate_evidence(
     input_binding = {
         "preparation_manifest_sha256": sha256_file(
             preparation.root / "preparation_manifest.json"
+        ),
+        **_preparation_execution_binding(
+            preparation_root=preparation.root,
+            source_authority_path=source_authority,
+            repository_root=Path(config_path).resolve().parents[3],
         ),
         "preparation_records_sha256": preparation.manifest["records_sha256"],
         "review_queue_sha256": preparation.manifest["review_queue_sha256"],

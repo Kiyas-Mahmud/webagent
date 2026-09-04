@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import functools
 import json
+import sys
 from dataclasses import fields
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,10 +16,16 @@ from web_agent.eval.table2 import execution_guard
 from web_agent.eval.table2.common import SchemaError, sha256_file, sha256_json
 from web_agent.eval.table2.execution_guard import (
     EVALUATION_RUNNER_SCOPE,
+    PC01_PAGE_BROKER_SECURITY_BLOCKED_STATUS,
+    PC01_PAGE_BROKER_SECURITY_CLAIM_SCOPE,
+    PC01_PAGE_BROKER_SECURITY_FIELD,
     PRODUCTION_RUNNER_ENTRYPOINT,
     RUNNER_ATTESTATION_SCHEMA_VERSION,
+    assert_pc01_page_broker_production_authorized,
     assert_clean_git_checkout,
+    blocked_pc01_page_broker_security_binding,
     validate_attested_callable_source,
+    validate_pc01_page_broker_security_binding,
     validate_runner_attestation_payload,
 )
 from web_agent.eval.table2.live_deployment import (
@@ -34,12 +42,17 @@ from web_agent.eval.table2.production_runner import (
     FrozenRuntimeContext,
     ProductionRunnerError,
     ProductionTable2Runner,
+    RUNTIME_CAPABILITY_AUTHORITY_SCHEMA_VERSION,
+    RUNTIME_LIVE_CAPABILITY_IDS,
     WebArenaRuntimeBinding,
     _ActiveWebArenaSession,
     _load_processor_contract,
     _normal_task_specification,
     _validated_efficiency,
+    build_runtime_capability_authority,
     create_runner,
+    runtime_context_identity,
+    validate_runtime_capability_authority,
 )
 from web_agent.runtime.contracts import (
     OpaqueTerminalSignal,
@@ -55,6 +68,7 @@ from web_agent.runtime.state_reset import (
     CallableEpisodeStateResetter,
 )
 from tests.table2.test_live_deployment import (
+    _bound_environment as _live_deployment_environment,
     _manifest as _valid_live_deployment_manifest,
 )
 from tests.table2.test_package_validator import _valid_model_manifest
@@ -221,6 +235,7 @@ def test_policy_integration_context_has_no_task_memory_or_sealed_capability() ->
         "model_payload_paths",
         "model_evidence_paths",
         "runtime_identity",
+        "runtime_capability_authority",
     }
     assert not names & {
         "campaign_dir",
@@ -228,7 +243,105 @@ def test_policy_integration_context_has_no_task_memory_or_sealed_capability() ->
         "memory_store_paths",
         "sealed_root",
         "verifier_sink",
+        "sealed_evaluator",
     }
+
+
+def test_runtime_context_identity_removes_sealed_and_task_snapshot_metadata() -> None:
+    projected = runtime_context_identity(
+        {
+            "checkpoint_systems": ["E1", "E2", "E3"],
+            "environment": {
+                "manifest_sha256": "a" * 64,
+                "benchmark": "webarena",
+                "benchmark_version": "0.14.3",
+                LIVE_DEPLOYMENT_BINDING_FIELD: {
+                    "manifest_sha256": "b" * 64,
+                },
+            },
+            "evaluator": {
+                "evaluator_id": "sealed-webarena",
+                "source_sha256": "c" * 64,
+            },
+            "resolved_task_snapshot": {
+                "sha256": "d" * 64,
+                "record_type": "contains-sealed-config",
+            },
+        }
+    )
+    assert projected == {
+        "checkpoint_systems": ["E1", "E2", "E3"],
+        "environment": {
+            "benchmark": "webarena",
+            "benchmark_version": "0.14.3",
+        },
+    }
+    assert "sealed" not in json.dumps(projected, sort_keys=True).lower()
+
+
+def test_runtime_capability_authority_is_six_runtime_rows_only(
+    tmp_path: Path,
+) -> None:
+    repository_root = Path(__file__).resolve().parents[2]
+    evidence_root = tmp_path / "measured"
+    manifest_path = evidence_root / "deployment.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(_valid_live_deployment_manifest(evidence_root), sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    staged = stage_pc01_live_deployment_package(
+        manifest_path=manifest_path,
+        evidence_root=evidence_root,
+        repository_root=repository_root,
+        destination_artifact_root=tmp_path / "frozen",
+    )
+    service_urls = {
+        "WA_SHOPPING": "http://shopping.test",
+        "WA_SHOPPING_ADMIN": "http://shopping-admin.test",
+        "WA_REDDIT": "http://reddit.test",
+        "WA_GITLAB": "http://gitlab.test",
+        "WA_WIKIPEDIA": "http://wikipedia.test",
+        "WA_MAP": "http://map.test",
+        "WA_HOMEPAGE": "http://homepage.test",
+    }
+    preflight = SimpleNamespace(
+        binding={
+            "schema_version": "fixture-binding-v1",
+            "deployment_topology": "SINGLE_DGX_HOST",
+            "validator_contract": "fixture-validator-v1",
+            "expected_live_reset_task_index": 0,
+            "preflight_content_sha256": "a" * 64,
+            "service_url_map_content_sha256": sha256_json(service_urls),
+            "expected_dgx_model_runtime_identity_sha256": None,
+            "expected_bridge_identity_sha256": None,
+        },
+        evidence={"status": "PASS"},
+        service_url_map=service_urls,
+    )
+    authority = build_runtime_capability_authority(
+        staged,
+        preflight,
+        expected_provider_public_contract_sha256="f" * 64,
+    )
+    assert authority["schema_version"] == RUNTIME_CAPABILITY_AUTHORITY_SCHEMA_VERSION
+    assert tuple(authority["capabilities"]) == RUNTIME_LIVE_CAPABILITY_IDS
+    assert "sealed_webarena_evaluator" not in authority["capabilities"]
+    assert authority["expected_provider_public_contract_sha256"] == "f" * 64
+    assert validate_runtime_capability_authority(authority) == authority
+    for capability_id, row in authority["capabilities"].items():
+        readiness = json.loads(
+            (
+                staged.package_root
+                / staged.manifest["capabilities"][capability_id][
+                    "readiness_evidence_path"
+                ]
+            ).read_text(encoding="utf-8")
+        )
+        assert row["deployment_state_sha256"] == readiness[
+            "deployment_state_sha256"
+        ]
 
 
 def test_production_runner_reopens_frozen_model_evidence(
@@ -680,6 +793,682 @@ def test_evaluation_cli_bootstrap_closes_source_and_dependency_bytes(
         )
 
 
+def _wrong_pc01_provider_factory(bootstrap_context: object) -> object:
+    assert bootstrap_context is not None
+    return object()
+
+
+def _alternate_pc01_provider_factory(bootstrap_context: object) -> object:
+    assert bootstrap_context is not None
+    return object()
+
+
+class _CallableProviderFactory:
+    def __init__(self) -> None:
+        self.captured = {"oracle_success": True, "evaluator_path": "/sealed"}
+
+    def __call__(self, bootstrap_context: object) -> object:
+        del bootstrap_context
+        return object()
+
+
+_PARTIAL_PROVIDER_FACTORY = functools.partial(_wrong_pc01_provider_factory)
+_CALLABLE_PROVIDER_FACTORY = _CallableProviderFactory()
+
+
+def test_pc01_cli_requires_explicit_same_process_provider_factory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = SimpleNamespace(
+        campaign_dir=tmp_path,
+        runner=evaluation_cli.PC01_PRODUCTION_RUNNER_ENTRYPOINT,
+        runner_factory=True,
+        pc01_operations_provider_factory=None,
+        block_id=None,
+        maximum_blocks=None,
+        live_readiness_probe_for=None,
+    )
+    monkeypatch.setattr(evaluation_cli, "parse_args", lambda: args)
+    monkeypatch.setattr(
+        evaluation_cli,
+        "_bootstrap_verify_evaluation_source",
+        lambda *unused_args, **unused_kwargs: None,
+    )
+    with pytest.raises(ValueError, match="explicit.*provider-factory"):
+        evaluation_cli.main()
+
+
+def test_pc01_cli_provider_factory_must_return_exact_attested_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository_root = Path(__file__).resolve().parents[2]
+    relative = Path(__file__).resolve().relative_to(repository_root).as_posix()
+    row = {"relative_path": relative, "sha256": sha256_file(Path(__file__))}
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    credential_root = tmp_path / "credentials"
+    credential_root.mkdir()
+    isolation = tmp_path / "isolation.json"
+    isolation.write_text("{}", encoding="utf-8")
+    binding = {
+        "factory_entrypoint": (
+            "tests.table2.test_production_runner:_wrong_pc01_provider_factory"
+        ),
+        "factory_module": "tests.table2.test_production_runner",
+        "factory_qualname": "_wrong_pc01_provider_factory",
+        "source_relative_path": relative,
+        "source_sha256": row["sha256"],
+    }
+    monkeypatch.setattr(
+        evaluation_cli,
+        "_preflight_pc01_provider_install",
+        lambda *unused_args, **unused_kwargs: evaluation_cli._ProviderInstallPreflight(
+            context=object(),
+            binding=binding,
+            source_hashes={relative: row["sha256"]},
+            campaign_state_sha256="a" * 64,
+        ),
+    )
+    monkeypatch.setattr(
+        evaluation_cli,
+        "_validate_pc01_provider_boundary_receipt",
+        lambda *unused_args, **unused_kwargs: None,
+    )
+    with pytest.raises(RuntimeError, match="wrong exact type"):
+        evaluation_cli._install_pc01_operations_provider(
+            campaign,
+            provider_factory_entrypoint=binding["factory_entrypoint"],
+            credential_capability_root=credential_root,
+            credential_capability_id="fixture-credentials",
+            credential_capability_version="v1",
+            provider_boundary_receipt=isolation,
+        )
+
+
+def _provider_factory_binding(function_name: str) -> dict[str, str]:
+    repository_root = Path(__file__).resolve().parents[2]
+    relative = Path(__file__).resolve().relative_to(repository_root).as_posix()
+    return {
+        "schema_version": "table2-pc01-provider-bootstrap-v1",
+        "factory_entrypoint": (
+            f"tests.table2.test_production_runner:{function_name}"
+        ),
+        "factory_module": "tests.table2.test_production_runner",
+        "factory_qualname": function_name,
+        "source_relative_path": relative,
+        "source_sha256": sha256_file(Path(__file__).resolve()),
+        "provider_contract_schema_version": (
+            "table2-pc01-provider-public-contract-v1"
+        ),
+        "expected_provider_public_contract_sha256": "e" * 64,
+        "source_plane": "runtime_only",
+    }
+
+
+def test_provider_factory_entrypoint_must_equal_frozen_identity() -> None:
+    binding = _provider_factory_binding("_wrong_pc01_provider_factory")
+    with pytest.raises(RuntimeError, match="entrypoint differs from frozen"):
+        evaluation_cli._load_exact_provider_factory(
+            "tests.table2.test_production_runner:_alternate_pc01_provider_factory",
+            binding=binding,
+            source_hashes={
+                binding["source_relative_path"]: binding["source_sha256"]
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "function_name",
+    ("_PARTIAL_PROVIDER_FACTORY", "_CALLABLE_PROVIDER_FACTORY", "_CallableProviderFactory"),
+)
+def test_provider_factory_rejects_partial_class_and_callable_objects(
+    function_name: str,
+) -> None:
+    binding = _provider_factory_binding(function_name)
+    with pytest.raises(RuntimeError, match="exact function"):
+        evaluation_cli._load_exact_provider_factory(
+            binding["factory_entrypoint"],
+            binding=binding,
+            source_hashes={
+                binding["source_relative_path"]: binding["source_sha256"]
+            },
+        )
+
+
+@pytest.mark.parametrize("forbidden_plane", ("sealed", "broker"))
+def test_provider_factory_source_cannot_be_sealed_or_broker_plane(
+    forbidden_plane: str,
+) -> None:
+    binding = _provider_factory_binding("_wrong_pc01_provider_factory")
+    other_source = {
+        "source_relative_path": "src/web_agent/eval/table2/production_runner.py",
+        "source_sha256": sha256_file(
+            Path(__file__).resolve().parents[2]
+            / "src/web_agent/eval/table2/production_runner.py"
+        ),
+    }
+    provider_source = {
+        "source_relative_path": binding["source_relative_path"],
+        "source_sha256": binding["source_sha256"],
+    }
+    sealed = provider_source if forbidden_plane == "sealed" else other_source
+    broker = provider_source if forbidden_plane == "broker" else other_source
+    deployment = SimpleNamespace(
+        manifest={
+            "capabilities": {
+                "deterministic_reset": {
+                    **provider_source,
+                    "capability_id": "deterministic_reset",
+                },
+                "sealed_webarena_evaluator": {
+                    **sealed,
+                    "capability_id": "sealed_webarena_evaluator",
+                },
+            },
+            "sealed_page_broker": broker,
+        }
+    )
+    with pytest.raises(RuntimeError, match="never sealed, broker, or shared-plane"):
+        evaluation_cli._validate_provider_source_plane(
+            provider_binding=binding,
+            validated_live=deployment,
+        )
+
+
+def test_locked_mount_and_campaign_validation_precede_factory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"factory_load": 0}
+
+    def reject_preflight(*_args, **_kwargs):
+        raise RuntimeError("locked mount or campaign mismatch")
+
+    def load_factory(*_args, **_kwargs):
+        calls["factory_load"] += 1
+        return _wrong_pc01_provider_factory
+
+    monkeypatch.setattr(
+        evaluation_cli, "_preflight_pc01_provider_install", reject_preflight
+    )
+    monkeypatch.setattr(evaluation_cli, "_load_exact_provider_factory", load_factory)
+    with pytest.raises(RuntimeError, match="locked mount or campaign mismatch"):
+        evaluation_cli._install_pc01_operations_provider(
+            tmp_path / "campaign",
+            provider_factory_entrypoint=(
+                "tests.table2.test_production_runner:_wrong_pc01_provider_factory"
+            ),
+            credential_capability_root=tmp_path / "credentials",
+            credential_capability_id="fixture-credentials",
+            credential_capability_version="v1",
+            provider_boundary_receipt=tmp_path / "boundary.json",
+        )
+    assert calls["factory_load"] == 0
+
+
+def test_same_process_page_broker_binding_is_truthful_and_unpromotable() -> None:
+    binding = blocked_pc01_page_broker_security_binding()
+    assert binding == {
+        "schema_version": "table2-pc01-page-broker-security-v1",
+        "status": PC01_PAGE_BROKER_SECURITY_BLOCKED_STATUS,
+        "claim_scope": PC01_PAGE_BROKER_SECURITY_CLAIM_SCOPE,
+        "architecture": "same_process_in_memory_typed_capabilities",
+        "same_process_broker": True,
+        "kernel_process_isolation": False,
+        "runtime_process_can_import_sealed_capability": True,
+        "external_process_isolation_evidence_present": False,
+        "production_dispatch_authorized": False,
+    }
+    assert validate_pc01_page_broker_security_binding(binding) == binding
+    with pytest.raises(SchemaError, match="externally evidenced process isolation"):
+        assert_pc01_page_broker_production_authorized(binding)
+
+    forged = dict(binding)
+    forged["production_dispatch_authorized"] = True
+    with pytest.raises(SchemaError, match="non-isolated production blocker"):
+        validate_pc01_page_broker_security_binding(forged)
+
+
+def test_process_isolation_block_prevents_adversarial_provider_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"factory_load": 0}
+
+    def blocked_preflight(*_args, **_kwargs):
+        # A malicious provider could import the sealed evaluator accessor as a
+        # module side effect. The production gate must fire before its module is
+        # resolved or executed at all.
+        assert_pc01_page_broker_production_authorized(
+            blocked_pc01_page_broker_security_binding()
+        )
+
+    def adversarial_factory_load(*_args, **_kwargs):
+        calls["factory_load"] += 1
+        from web_agent.eval.table2.live_page_broker_assembly import (
+            process_sealed_page_evaluator_capability,
+        )
+
+        process_sealed_page_evaluator_capability()
+        return _wrong_pc01_provider_factory
+
+    monkeypatch.setattr(
+        evaluation_cli, "_preflight_pc01_provider_install", blocked_preflight
+    )
+    monkeypatch.setattr(
+        evaluation_cli, "_load_exact_provider_factory", adversarial_factory_load
+    )
+    with pytest.raises(SchemaError, match="externally evidenced process isolation"):
+        evaluation_cli._install_pc01_operations_provider(
+            tmp_path / "campaign",
+            provider_factory_entrypoint=(
+                "tests.table2.test_production_runner:_wrong_pc01_provider_factory"
+            ),
+            credential_capability_root=tmp_path / "credentials",
+            credential_capability_id="fixture-credentials",
+            credential_capability_version="v1",
+            provider_boundary_receipt=tmp_path / "boundary.json",
+        )
+    assert calls["factory_load"] == 0
+
+
+def test_canonical_bootstrap_records_broker_block_before_package_import() -> None:
+    attestation = {
+        PC01_PAGE_BROKER_SECURITY_FIELD: blocked_pc01_page_broker_security_binding()
+    }
+    with pytest.raises(RuntimeError, match="blocked before provider import"):
+        evaluation_cli._bootstrap_assert_pc01_page_broker_isolation(attestation)
+
+
+def test_direct_preflight_cannot_import_or_use_sealed_broker_capability(
+    tmp_path: Path,
+) -> None:
+    """An isolated direct caller stops before either broker plane is imported."""
+
+    frozen = tmp_path / "frozen"
+    frozen.mkdir()
+    (frozen / "runner_attestation.json").write_text(
+        json.dumps(
+            {
+                PC01_PAGE_BROKER_SECURITY_FIELD: (
+                    blocked_pc01_page_broker_security_binding()
+                )
+            }
+        ),
+        encoding="utf-8",
+    )
+    repository_root = Path(__file__).resolve().parents[2]
+    probe = """
+import sys
+from pathlib import Path
+from scripts import run_table2_evaluation as cli
+
+try:
+    cli._preflight_pc01_provider_install(
+        Path(sys.argv[1]),
+        credential_capability_root=Path(sys.argv[1]) / "credentials",
+        credential_capability_id="adversarial",
+        credential_capability_version="v1",
+    )
+except RuntimeError as exc:
+    assert "blocked before provider import" in str(exc)
+else:
+    raise AssertionError("blocked broker preflight unexpectedly returned")
+
+for forbidden in (
+    "web_agent.runtime.pc01_live_integration",
+    "web_agent.eval.table2.live_page_broker_assembly",
+    "web_agent.eval.table2.sealed_page_broker",
+):
+    assert forbidden not in sys.modules, forbidden
+"""
+    completed = evaluation_cli.subprocess.run(
+        [sys.executable, "-c", probe, str(tmp_path)],
+        cwd=repository_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def _typed_bootstrap_fixture(tmp_path: Path):
+    from tests.table2.test_pc01_live_integration import (
+        SERVICE_URLS,
+        _provider_and_context,
+    )
+    from web_agent.runtime import pc01_live_integration as pc01_live
+
+    provider, runtime_context, _ = _provider_and_context(tmp_path)
+    preflight_view = {
+        "schema_version": "table2-pc01-runtime-preflight-view-v1",
+        "source_binding_sha256": "1" * 64,
+        "deployment_topology": "SINGLE_DGX_HOST",
+        "validator_contract": "fixture-validator-v1",
+        "expected_live_reset_task_index": 0,
+        "preflight_content_sha256": "2" * 64,
+        "service_url_map_content_sha256": sha256_json(SERVICE_URLS),
+        "expected_dgx_runtime_identity_sha256": None,
+        "expected_bridge_identity_sha256": None,
+        "preflight_status": "PASS",
+    }
+    authority = dict(runtime_context.runtime_capability_authority)
+    authority["deployment_preflight_binding_sha256"] = sha256_json(preflight_view)
+    context = pc01_live.PC01ProviderBootstrapContext(
+        schema_version=pc01_live.PC01_PROVIDER_BOOTSTRAP_SCHEMA_VERSION,
+        protocol_id="table2-pc01-pilot-v1",
+        model_seed=42,
+        repository_commit="a" * 40,
+        runtime_identity_sha256=provider.expected_runtime_identity_sha256,
+        runtime_capability_authority=authority,
+        runtime_environment={"benchmark": "webarena", "version": "0.14.3"},
+        deployment_preflight_view=preflight_view,
+        service_url_map=SERVICE_URLS,
+        credential_capability=provider.credential_capability,
+    )
+    binding = _provider_factory_binding("_wrong_pc01_provider_factory")
+    binding["expected_provider_public_contract_sha256"] = (
+        provider.public_contract_sha256
+    )
+    return context, binding, provider
+
+
+def test_provider_factory_receives_oracle_free_typed_bootstrap_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from web_agent.runtime.pc01_live_integration import PC01ProviderBootstrapContext
+
+    context, binding, _ = _typed_bootstrap_fixture(tmp_path)
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    boundary = tmp_path / "boundary.json"
+    boundary.write_text("{}", encoding="utf-8")
+    captured: list[object] = []
+
+    def capture(value):
+        captured.append(value)
+        return object()
+
+    monkeypatch.setattr(
+        evaluation_cli,
+        "_preflight_pc01_provider_install",
+        lambda *unused_args, **unused_kwargs: evaluation_cli._ProviderInstallPreflight(
+            context=context,
+            binding=binding,
+            source_hashes={
+                binding["source_relative_path"]: binding["source_sha256"]
+            },
+            campaign_state_sha256="b" * 64,
+        ),
+    )
+    monkeypatch.setattr(
+        evaluation_cli,
+        "_validate_pc01_provider_boundary_receipt",
+        lambda *unused_args, **unused_kwargs: {},
+    )
+    monkeypatch.setattr(
+        evaluation_cli, "_load_exact_provider_factory", lambda *_args, **_kwargs: capture
+    )
+    with pytest.raises(RuntimeError, match="wrong exact type"):
+        evaluation_cli._install_pc01_operations_provider(
+            campaign,
+            provider_factory_entrypoint=binding["factory_entrypoint"],
+            credential_capability_root=tmp_path,
+            credential_capability_id="fixture",
+            credential_capability_version="v1",
+            provider_boundary_receipt=boundary,
+        )
+    assert len(captured) == 1
+    assert type(captured[0]) is PC01ProviderBootstrapContext
+    serialized = json.dumps(
+        evaluation_cli._bootstrap_context_identity(captured[0]), sort_keys=True
+    ).lower()
+    assert str(campaign) not in serialized
+    assert not any(
+        token in serialized
+        for token in (
+            "evaluator_path",
+            "memory_path",
+            "model_path",
+            "sealed_path",
+            "oracle_success",
+        )
+    )
+
+
+def test_provider_boundary_receipt_is_generated_and_scope_honest(
+    tmp_path: Path,
+) -> None:
+    context, binding, _ = _typed_bootstrap_fixture(tmp_path)
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    preflight = evaluation_cli._ProviderInstallPreflight(
+        context=context,
+        binding=binding,
+        source_hashes={binding["source_relative_path"]: binding["source_sha256"]},
+        campaign_state_sha256="b" * 64,
+    )
+    output = evaluation_cli._write_pc01_provider_boundary_receipt(
+        tmp_path / "external/boundary.json",
+        campaign_root=campaign,
+        preflight=preflight,
+    )
+    receipt = evaluation_cli._validate_pc01_provider_boundary_receipt(
+        output,
+        campaign_root=campaign,
+        preflight=preflight,
+    )
+    assert receipt["claim_scope"] == "REVIEWED_CODE_ORACLE_FREE_DATAFLOW_ONLY"
+    assert receipt["kernel_filesystem_sandbox"] is False
+    assert receipt["campaign_directory_argument_passed"] is False
+    original_bytes = output.read_bytes()
+    assert evaluation_cli._write_pc01_provider_boundary_receipt(
+        output,
+        campaign_root=campaign,
+        preflight=preflight,
+    ) == output
+    assert output.read_bytes() == original_bytes
+    output.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="immutable evidence"):
+        evaluation_cli._write_pc01_provider_boundary_receipt(
+            output,
+            campaign_root=campaign,
+            preflight=preflight,
+        )
+
+
+@pytest.mark.parametrize(
+    "candidate_kind", ("filesystem_root", "campaign_parent", "repo_parent")
+)
+def test_credential_capability_rejects_broad_or_overlapping_roots(
+    tmp_path: Path,
+    candidate_kind: str,
+) -> None:
+    from web_agent.runtime.pc01_live_integration import (
+        PC01LiveIntegrationError,
+        validate_external_credential_capability_root,
+    )
+
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    repository = Path(__file__).resolve().parents[2]
+    candidates = {
+        "filesystem_root": Path("/"),
+        "campaign_parent": campaign.parent,
+        "repo_parent": repository.parent,
+    }
+    with pytest.raises(PC01LiveIntegrationError, match="root|tree-disjoint"):
+        validate_external_credential_capability_root(
+            candidates[candidate_kind],
+            forbidden_roots=(campaign, repository),
+        )
+
+
+@pytest.mark.parametrize("symlink_kind", ("leaf", "parent"))
+def test_credential_capability_rejects_symlink_leaf_and_parent(
+    tmp_path: Path,
+    symlink_kind: str,
+) -> None:
+    from web_agent.runtime.pc01_live_integration import (
+        PC01LiveIntegrationError,
+        validate_external_credential_capability_root,
+    )
+
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    real_parent = tmp_path / "real_external"
+    credentials = real_parent / "credentials"
+    credentials.mkdir(parents=True)
+    if symlink_kind == "leaf":
+        candidate = tmp_path / "credential_link"
+        candidate.symlink_to(credentials, target_is_directory=True)
+    else:
+        linked_parent = tmp_path / "external_parent_link"
+        linked_parent.symlink_to(real_parent, target_is_directory=True)
+        candidate = linked_parent / "credentials"
+    with pytest.raises(PC01LiveIntegrationError, match="symlink"):
+        validate_external_credential_capability_root(
+            candidate,
+            forbidden_roots=(campaign, Path(__file__).resolve().parents[2]),
+        )
+
+
+@pytest.mark.parametrize("symlink_kind", ("leaf", "parent"))
+def test_provider_boundary_receipt_rejects_symlink_leaf_and_parent(
+    tmp_path: Path,
+    symlink_kind: str,
+) -> None:
+    context, binding, _ = _typed_bootstrap_fixture(tmp_path)
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    preflight = evaluation_cli._ProviderInstallPreflight(
+        context=context,
+        binding=binding,
+        source_hashes={binding["source_relative_path"]: binding["source_sha256"]},
+        campaign_state_sha256="b" * 64,
+    )
+    real = evaluation_cli._write_pc01_provider_boundary_receipt(
+        tmp_path / "external/real.json",
+        campaign_root=campaign,
+        preflight=preflight,
+    )
+    if symlink_kind == "leaf":
+        candidate = tmp_path / "receipt_link.json"
+        candidate.symlink_to(real)
+    else:
+        parent_link = tmp_path / "receipt_parent_link"
+        parent_link.symlink_to(real.parent, target_is_directory=True)
+        candidate = parent_link / real.name
+    with pytest.raises(RuntimeError, match="symlink"):
+        evaluation_cli._validate_pc01_provider_boundary_receipt(
+            candidate,
+            campaign_root=campaign,
+            preflight=preflight,
+        )
+
+
+@pytest.mark.parametrize("symlink_kind", ("leaf", "parent"))
+def test_provider_boundary_receipt_write_rejects_symlink_leaf_and_parent(
+    tmp_path: Path,
+    symlink_kind: str,
+) -> None:
+    context, binding, _ = _typed_bootstrap_fixture(tmp_path)
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    preflight = evaluation_cli._ProviderInstallPreflight(
+        context=context,
+        binding=binding,
+        source_hashes={binding["source_relative_path"]: binding["source_sha256"]},
+        campaign_state_sha256="b" * 64,
+    )
+    real_parent = tmp_path / "real_output_parent"
+    real_parent.mkdir()
+    if symlink_kind == "leaf":
+        real_target = real_parent / "existing.json"
+        real_target.write_text("{}", encoding="utf-8")
+        candidate = tmp_path / "output_link.json"
+        candidate.symlink_to(real_target)
+    else:
+        parent_link = tmp_path / "output_parent_link"
+        parent_link.symlink_to(real_parent, target_is_directory=True)
+        candidate = parent_link / "boundary.json"
+    with pytest.raises(RuntimeError, match="symlink"):
+        evaluation_cli._write_pc01_provider_boundary_receipt(
+            candidate,
+            campaign_root=campaign,
+            preflight=preflight,
+        )
+
+
+def test_provider_installation_receipt_is_registered_and_hash_chain_logged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from web_agent.eval.table2.common import read_jsonl
+    from web_agent.runtime import pc01_live_integration as pc01_live
+
+    context, binding, provider = _typed_bootstrap_fixture(tmp_path)
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    boundary = tmp_path / "boundary.json"
+    boundary.write_text("{}\n", encoding="utf-8")
+    preflight = evaluation_cli._ProviderInstallPreflight(
+        context=context,
+        binding=binding,
+        source_hashes={binding["source_relative_path"]: binding["source_sha256"]},
+        campaign_state_sha256="b" * 64,
+    )
+    monkeypatch.setattr(
+        pc01_live, "_OPERATIONS_REGISTRY", pc01_live._ImmutableOperationsRegistry()
+    )
+    monkeypatch.setattr(
+        pc01_live,
+        "validate_provider_public_contract",
+        lambda *unused_args, **unused_kwargs: {},
+    )
+    monkeypatch.setattr(
+        evaluation_cli,
+        "_preflight_pc01_provider_install",
+        lambda *unused_args, **unused_kwargs: preflight,
+    )
+    monkeypatch.setattr(
+        evaluation_cli,
+        "_validate_pc01_provider_boundary_receipt",
+        lambda *unused_args, **unused_kwargs: {},
+    )
+
+    def factory(_bootstrap):
+        return provider
+
+    monkeypatch.setattr(
+        evaluation_cli,
+        "_load_exact_provider_factory",
+        lambda *unused_args, **unused_kwargs: factory,
+    )
+    receipt = evaluation_cli._install_pc01_operations_provider(
+        campaign,
+        provider_factory_entrypoint=binding["factory_entrypoint"],
+        credential_capability_root=tmp_path,
+        credential_capability_id="fixture",
+        credential_capability_version="v1",
+        provider_boundary_receipt=boundary,
+    )
+    assert receipt.actual_provider_public_contract_sha256 == (
+        provider.public_contract_sha256
+    )
+    assert pc01_live._OPERATIONS_REGISTRY.require_installation_receipt() == receipt
+    records = read_jsonl(campaign / "access_ledger.jsonl")
+    assert [record["event_type"] for record in records] == [
+        "pc01_provider_installation"
+    ]
+    payload = records[0]["payload"]
+    assert payload["installation_receipt_sha256"] == receipt.receipt_sha256
+    assert str(tmp_path) not in json.dumps(payload, sort_keys=True)
+
+
 def test_production_attestation_must_include_preimport_cli_source() -> None:
     repository_root = Path(__file__).resolve().parents[2]
     production_relative = "src/web_agent/eval/table2/production_runner.py"
@@ -748,7 +1537,7 @@ def test_production_runner_reopens_live_capability_bytes_before_launch(
     runner = object.__new__(ProductionTable2Runner)
     runner.root = campaign_root
     runner.repository_root = repository_root
-    runner.environment = {LIVE_DEPLOYMENT_BINDING_FIELD: staged.binding}
+    runner.environment = _live_deployment_environment(staged)
     runner.manifest = {LIVE_DEPLOYMENT_BINDING_FIELD: staged.binding}
     runner._attested_source_hashes = {
         str(row["relative_path"]): str(row["sha256"])

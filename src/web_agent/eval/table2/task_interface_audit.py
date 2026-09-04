@@ -17,11 +17,18 @@ from typing import Any
 
 from web_agent.runtime.contracts import ActionType
 
-from .common import SchemaError, atomic_write_json, require_keys, sha256_json
+from .common import (
+    SchemaError,
+    atomic_write_json,
+    require_keys,
+    sha256_file,
+    sha256_json,
+)
 from .webarena_export import (
     PUBLIC_PILOT_EXPORT_RECORD_TYPE,
     PUBLIC_PILOT_EXPORT_SCHEMA_VERSION,
 )
+from .public_task_registry import PUBLIC_DEVELOPMENT_TASK_COUNT
 
 
 TASK_INTERFACE_AUDIT_SCHEMA_VERSION = (
@@ -45,6 +52,51 @@ PAGE_STATE_EVALUATORS = frozenset({"url_match", "program_html"})
 _ANSWER_REQUIRED = "ASSISTANT_ANSWER_REQUIRED"
 _PAGE_STATE_ONLY = "PAGE_STATE_ONLY"
 _UNSUPPORTED = "UNSUPPORTED_EVALUATOR_TYPE"
+_AUDIT_SCOPE = "EXACT_ORDERED_TRACKED_WEBARENA_PUBLIC_DEVELOPMENT_REGISTRY"
+PAGE_STATE_COMPILE_AUTHORITY_SCHEMA_VERSION = (
+    "table2-webarena-page-state-compile-authority-v1"
+)
+PAGE_STATE_COMPILE_AUTHORITY_RECORD_TYPE = (
+    "WebArenaPageStateEvaluatorCompileAuthority"
+)
+PAGE_STATE_COMPILE_CONTRACT = (
+    "strict-read-only-page-state-config-compiler-exact-50-v1"
+)
+
+
+def _validate_ordered_task_identities(
+    rows: list[Mapping[str, Any]], *, context: str
+) -> None:
+    """Reject incomplete or ambiguous order without assuming contiguous IDs."""
+
+    if len(rows) != PUBLIC_DEVELOPMENT_TASK_COUNT:
+        raise SchemaError(f"{context} requires exactly 50 registered tasks")
+    indices: set[int] = set()
+    task_ids: set[str] = set()
+    benchmark_task_ids: set[str] = set()
+    for position, row in enumerate(rows):
+        upstream_index = row.get("upstream_index")
+        task_id = row.get("task_id")
+        benchmark_task_id = row.get("benchmark_task_id")
+        if type(upstream_index) is not int or upstream_index < 0:
+            raise SchemaError(
+                f"{context} task {position} has an invalid upstream index"
+            )
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise SchemaError(f"{context} task {position} lacks a task ID")
+        if not isinstance(benchmark_task_id, str) or not benchmark_task_id.strip():
+            raise SchemaError(
+                f"{context} task {position} lacks a benchmark task identity"
+            )
+        if (
+            upstream_index in indices
+            or task_id in task_ids
+            or benchmark_task_id in benchmark_task_ids
+        ):
+            raise SchemaError(f"{context} repeats a stable task identity")
+        indices.add(upstream_index)
+        task_ids.add(task_id)
+        benchmark_task_ids.add(benchmark_task_id)
 
 
 def _action_interface_contract() -> dict[str, Any]:
@@ -98,11 +150,11 @@ def _export_rows(task_export: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     rows = task_export.get("tasks")
     if not isinstance(rows, list) or not all(isinstance(row, Mapping) for row in rows):
         raise SchemaError("task-interface audit requires an array of task objects")
-    if task_export.get("required_task_count") != 50 or len(rows) != 50:
-        raise SchemaError("task-interface audit requires the exact public 0--49 task set")
-    indices = [row.get("upstream_index") for row in rows]
-    if indices != list(range(50)):
-        raise SchemaError("task-interface audit requires tasks in exact index 0--49 order")
+    if task_export.get("required_task_count") != PUBLIC_DEVELOPMENT_TASK_COUNT:
+        raise SchemaError(
+            "task-interface audit requires exactly 50 registered public tasks"
+        )
+    _validate_ordered_task_identities(rows, context="task-interface audit")
     if task_export.get("resolved_task_set_sha256") != sha256_json(rows):
         raise SchemaError("task-interface audit task-set hash does not match task rows")
     return rows
@@ -177,6 +229,211 @@ def _task_audit(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _compile_projection(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the evaluator-relevant task bytes shared by export/snapshot rows."""
+
+    return {
+        key: row[key]
+        for key in (
+            "task_id",
+            "upstream_index",
+            "benchmark_task_id",
+            "benchmark_task_version",
+            "instruction",
+            "start_state",
+            "task_config",
+            "evaluator",
+        )
+    }
+
+
+def build_page_state_compile_authority(
+    task_rows: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Compile the exact 50 page-state configs and bind compiler source bytes.
+
+    This is the identity-neutral handoff binding.  When the rows use the
+    repository's current pending evaluator identity, it also embeds the
+    implementation-specific ``build_page_state_evaluator_compile_report``
+    output and checks that both reports agree.  That nested report remains a
+    local parity/review input, while this outer report binds the exact task
+    projection across export, handoff, and freeze.  Neither report grants
+    campaign readiness; an independently authored review receipt is separate
+    and mandatory.
+    """
+
+    if not isinstance(task_rows, list) or not all(
+        isinstance(row, Mapping) for row in task_rows
+    ):
+        raise SchemaError("page-state compile authority requires task mappings")
+    _validate_ordered_task_identities(
+        task_rows, context="page-state compile authority"
+    )
+
+    # Kept local to avoid making the evaluator/runtime dependency part of the
+    # module import graph.  The source digest below makes the exact compiler
+    # bytes part of the frozen scientific authority.
+    from . import webarena_page_state_evaluator as compiler_module
+
+    compiler_path = Path(__file__).resolve().with_name(
+        "webarena_page_state_evaluator.py"
+    )
+    if Path(compiler_module.__file__).resolve() != compiler_path:
+        raise SchemaError(
+            "page-state compiler import does not resolve to the sibling "
+            "attested source module"
+        )
+    compiled_rows: list[dict[str, Any]] = []
+    evaluator_identities: set[tuple[str, str]] = set()
+    criterion_count = 0
+    projections: list[dict[str, Any]] = []
+    for position, raw_row in enumerate(task_rows):
+        row = dict(raw_row)
+        audit_row = _task_audit(row)
+        if not audit_row["compatible"]:
+            raise SchemaError(
+                "page-state compile authority cannot compile an interface-"
+                f"incompatible task at position {position}"
+            )
+        evaluator = row.get("evaluator")
+        task_config = row.get("task_config")
+        if not isinstance(evaluator, Mapping) or not isinstance(
+            task_config, Mapping
+        ):
+            raise SchemaError(
+                f"page-state compile task {position} lacks evaluator content"
+            )
+        config = evaluator.get("config")
+        if not isinstance(config, Mapping) or task_config.get("eval") != config:
+            raise SchemaError(
+                f"page-state compile task {position} evaluator config differs"
+            )
+        evaluator_id = evaluator.get("evaluator_id")
+        evaluator_version = evaluator.get("evaluator_version")
+        if (
+            not isinstance(evaluator_id, str)
+            or not evaluator_id.strip()
+            or not isinstance(evaluator_version, str)
+            or not evaluator_version.strip()
+        ):
+            raise SchemaError(
+                f"page-state compile task {position} lacks evaluator identity"
+            )
+        evaluator_identities.add((evaluator_id, evaluator_version))
+        try:
+            compiled = compiler_module.compile_page_state_evaluator_config(config)
+        except compiler_module.WebArenaPageStateEvaluatorError as exc:
+            raise SchemaError(
+                "page-state evaluator rejected exact task config at position "
+                f"{position}: {exc}"
+            ) from exc
+        projection = _compile_projection(row)
+        projections.append(projection)
+        criterion_count += compiled.criterion_count
+        compiled_rows.append(
+            {
+                "position": position,
+                "task_id": str(row["task_id"]),
+                "upstream_index": row["upstream_index"],
+                "benchmark_task_id": str(row["benchmark_task_id"]),
+                "task_projection_sha256": sha256_json(projection),
+                "evaluator_config_sha256": compiled.config_sha256,
+                "eval_types": list(compiled.eval_types),
+                "criterion_count": compiled.criterion_count,
+            }
+        )
+    if len(evaluator_identities) != 1:
+        raise SchemaError(
+            "page-state compile authority requires one evaluator identity"
+        )
+    evaluator_id, evaluator_version = next(iter(evaluator_identities))
+    implementation_report: dict[str, Any] | None = None
+    implementation_report_sha256: str | None = None
+    implementation_report_status = "NOT_APPLICABLE_DIFFERENT_EVALUATOR_IDENTITY"
+    if (
+        evaluator_id == compiler_module.EVALUATOR_ID
+        and evaluator_version == compiler_module.EVALUATOR_VERSION
+    ):
+        implementation_report = (
+            compiler_module.build_page_state_evaluator_compile_report(projections)
+        )
+        compiler_module.validate_page_state_evaluator_compile_report(
+            implementation_report,
+            task_rows=projections,
+        )
+        implementation_rows = implementation_report.get("tasks")
+        if not isinstance(implementation_rows, list) or len(
+            implementation_rows
+        ) != len(compiled_rows):
+            raise SchemaError(
+                "implementation-specific page-state compile report has an "
+                "invalid task count"
+            )
+        for generic, specific in zip(
+            compiled_rows, implementation_rows, strict=True
+        ):
+            for field in (
+                "position",
+                "task_id",
+                "upstream_index",
+                "benchmark_task_id",
+                "evaluator_config_sha256",
+                "eval_types",
+                "criterion_count",
+            ):
+                if generic[field] != specific.get(field):
+                    raise SchemaError(
+                        "generic and implementation-specific compile reports "
+                        f"disagree at {generic['task_id']}: {field}"
+                    )
+        implementation_report_sha256 = sha256_json(implementation_report)
+        implementation_report_status = "BOUND_PENDING_EXTERNAL_REVIEW_INPUT"
+    payload = {
+        "schema_version": PAGE_STATE_COMPILE_AUTHORITY_SCHEMA_VERSION,
+        "record_type": PAGE_STATE_COMPILE_AUTHORITY_RECORD_TYPE,
+        "compile_contract": PAGE_STATE_COMPILE_CONTRACT,
+        "status": "COMPILED",
+        "all_exact_task_configs_compiled": True,
+        "external_independent_review_required": True,
+        "campaign_authority": False,
+        "task_count": len(compiled_rows),
+        "criterion_count": criterion_count,
+        "evaluator_id": evaluator_id,
+        "evaluator_version": evaluator_version,
+        "compiler_source_relative_path": (
+            "src/web_agent/eval/table2/webarena_page_state_evaluator.py"
+        ),
+        "compiler_source_sha256": sha256_file(compiler_path),
+        "exact_task_projection_sha256": sha256_json(projections),
+        "implementation_specific_report_status": implementation_report_status,
+        "implementation_specific_compile_report": implementation_report,
+        "implementation_specific_compile_report_content_sha256": (
+            implementation_report_sha256
+        ),
+        "tasks": compiled_rows,
+    }
+    payload["report_sha256"] = sha256_json(payload)
+    return payload
+
+
+def validate_page_state_compile_authority(
+    value: Mapping[str, Any],
+    *,
+    task_rows: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Recompile every exact row and require byte-equivalent authority."""
+
+    if not isinstance(value, Mapping):
+        raise SchemaError("page-state compile authority must be a mapping")
+    expected = build_page_state_compile_authority(task_rows)
+    if dict(value) != expected:
+        raise SchemaError(
+            "page-state compile authority differs from exact 50-task "
+            "recompilation"
+        )
+    return expected
+
+
 def build_webarena_task_interface_audit(
     task_export: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -212,7 +469,7 @@ def build_webarena_task_interface_audit(
     return {
         "schema_version": TASK_INTERFACE_AUDIT_SCHEMA_VERSION,
         "record_type": TASK_INTERFACE_AUDIT_RECORD_TYPE,
-        "audit_scope": "EXACT_RESOLVED_WEBARENA_PUBLIC_INDICES_0_49",
+        "audit_scope": _AUDIT_SCOPE,
         "status": "PASS" if incompatible_count == 0 else "FAIL",
         "handoff_eligible": incompatible_count == 0,
         "action_interface": _action_interface_contract(),
@@ -281,6 +538,8 @@ def validate_resolved_task_interface_binding(
             "resolved_task_set_sha256",
             "task_action_interface_audit",
             "task_action_interface_audit_content_sha256",
+            "page_state_evaluator_compile_report",
+            "page_state_evaluator_compile_report_content_sha256",
             "tasks",
         ),
         context="resolved task interface binding",
@@ -288,6 +547,9 @@ def validate_resolved_task_interface_binding(
     rows = resolved_snapshot.get("tasks")
     if not isinstance(rows, list) or not all(isinstance(row, Mapping) for row in rows):
         raise SchemaError("resolved task interface binding requires task mappings")
+    _validate_ordered_task_identities(
+        rows, context="resolved task interface binding"
+    )
     audit = resolved_snapshot.get("task_action_interface_audit")
     if not isinstance(audit, Mapping):
         raise SchemaError("resolved task snapshot lacks its interface audit")
@@ -316,7 +578,7 @@ def validate_resolved_task_interface_binding(
     expected = {
         "schema_version": TASK_INTERFACE_AUDIT_SCHEMA_VERSION,
         "record_type": TASK_INTERFACE_AUDIT_RECORD_TYPE,
-        "audit_scope": "EXACT_RESOLVED_WEBARENA_PUBLIC_INDICES_0_49",
+        "audit_scope": _AUDIT_SCOPE,
         "status": "PASS" if incompatible_count == 0 else "FAIL",
         "handoff_eligible": incompatible_count == 0,
         "action_interface": _action_interface_contract(),
@@ -356,6 +618,30 @@ def validate_resolved_task_interface_binding(
         audit
     ):
         raise SchemaError("resolved task-interface audit content hash differs")
+    compile_report = resolved_snapshot.get(
+        "page_state_evaluator_compile_report"
+    )
+    compile_report_sha256 = resolved_snapshot.get(
+        "page_state_evaluator_compile_report_content_sha256"
+    )
+    if expected["handoff_eligible"]:
+        if not isinstance(compile_report, Mapping):
+            raise SchemaError(
+                "resolved task snapshot lacks its page-state compile report"
+            )
+        validate_page_state_compile_authority(
+            compile_report,
+            task_rows=[dict(row) for row in rows],
+        )
+        if compile_report_sha256 != sha256_json(compile_report):
+            raise SchemaError(
+                "resolved page-state compile report content hash differs"
+            )
+    elif compile_report is not None or compile_report_sha256 is not None:
+        raise SchemaError(
+            "interface-incompatible resolved tasks cannot claim a page-state "
+            "compile report"
+        )
     return dict(audit)
 
 

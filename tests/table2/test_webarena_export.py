@@ -16,6 +16,9 @@ from web_agent.eval.table2.common import (
 )
 from web_agent.eval.table2 import handoff as handoff_preparer
 from web_agent.eval.table2.production_runner import _normal_task_specification
+from web_agent.eval.table2.live_deployment import (
+    build_evaluator_requirements_artifact,
+)
 from web_agent.eval.table2.task_interface_audit import (
     PC01_BROWSER_ACTIONS,
     build_webarena_task_interface_audit,
@@ -179,6 +182,184 @@ def test_export_is_exactly_registered_public_0_to_49_and_pilot_only(
     )
 
 
+def test_noncontiguous_registry_order_drives_export_and_structural_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Synthetic only: deliberately non-contiguous and non-sorted so a hidden
+    # range(50) or sorted(registry_indices) implementation cannot pass.
+    indices = tuple(100 + ((position * 17) % 101) for position in range(50))
+    registry_value = {
+        "schema_version": "1.0",
+        "manifest_id": "synthetic-noncontiguous-public-dev-50",
+        "benchmark": "webarena",
+        "partition": "development",
+        "registration_status": "FROZEN_DEVELOPMENT_EXCLUSION",
+        "selection_rule": "synthetic exact declared order",
+        "required_task_count": 50,
+        "final_paper_evaluation_eligible": False,
+        "locked_test_content": False,
+        "tasks": [
+            {
+                "task_id": f"synthetic.webarena.{position}",
+                "upstream_index": upstream_index,
+                "benchmark_task_id": f"upstream:{upstream_index}",
+            }
+            for position, upstream_index in enumerate(indices)
+        ],
+    }
+    registry = tmp_path / "noncontiguous-registry.json"
+    registry.write_text(json.dumps(registry_value), encoding="utf-8")
+
+    # The selected task set intentionally has no Reddit task.  The operator's
+    # complete URL authority still contains Reddit, but selected-source token
+    # coverage is the authenticated subset actually used by these 50 tasks.
+    tokens = sorted(set(URL_MAP) - {"__REDDIT__"})
+    source_rows = []
+    for position, upstream_index in enumerate(reversed(indices)):
+        token = tokens[position % len(tokens)]
+        source_rows.append(
+            {
+                "sites": [token.strip("_").casefold()],
+                "task_id": upstream_index,
+                "require_login": True,
+                "storage_state": f"./.auth/site_{upstream_index}_state.json",
+                "start_url": f"{token}/start/{upstream_index}",
+                "geolocation": None,
+                "intent": f"Synthetic public task {upstream_index}",
+                "require_reset": False,
+                    "eval": {
+                        "eval_types": ["url_match"],
+                        "reference_answers": None,
+                        "reference_url": f"{token}/done/{upstream_index}",
+                        "program_html": [],
+                        "url_note": "GOLD in PRED",
+                    },
+            }
+        )
+    payload = json.dumps(source_rows, sort_keys=True).encode("utf-8")
+    source = tmp_path / "noncontiguous-test.raw.json"
+    source.write_bytes(payload)
+    digest = sha256_bytes(payload)
+
+    export = build_public_pilot_task_export(
+        source=source,
+        registry_path=registry,
+        site_url_map=URL_MAP,
+        snapshot_id="synthetic-noncontiguous-fixture",
+        benchmark_version=PINNED_BROWSERGYM_WEBARENA_VERSION,
+        task_definition_version=PINNED_TASK_DEFINITION_VERSION,
+        evaluator_id="official-webarena-fixture",
+        evaluator_version="fixture-v1",
+        expected_source_sha256=digest,
+        authorized_raw_json_sha256=digest,
+    )
+
+    assert [row["upstream_index"] for row in export["tasks"]] == list(indices)
+    assert [row["task_id"] for row in export["tasks"]] == [
+        row["task_id"] for row in registry_value["tasks"]
+    ]
+    assert [row["benchmark_task_id"] for row in export["tasks"]] == [
+        row["benchmark_task_id"] for row in registry_value["tasks"]
+    ]
+    assert all(
+        "reddit" not in row["task_config"]["sites"] for row in export["tasks"]
+    )
+    audit = build_webarena_task_interface_audit(export)
+    assert audit["status"] == "PASS"
+    assert audit["compatible_task_count"] == 50
+    assert [row["upstream_index"] for row in audit["tasks"]] == list(indices)
+    assert validate_public_pilot_task_export(
+        export,
+        source=source,
+        registry_path=registry,
+        site_url_map=URL_MAP,
+        expected_source_sha256=digest,
+        authorized_raw_json_sha256=digest,
+    ) == export
+
+    export_path = tmp_path / "noncontiguous-export.json"
+    export_path.write_text(json.dumps(export), encoding="utf-8")
+    audit_path = tmp_path / "noncontiguous-interface-audit.json"
+    audit_path.write_text(json.dumps(audit), encoding="utf-8")
+    url_map_path = tmp_path / "noncontiguous-url-map.json"
+    url_map_path.write_text(json.dumps(URL_MAP), encoding="utf-8")
+    environment_path = tmp_path / "noncontiguous-environment.json"
+    environment_path.write_text(
+        json.dumps(
+            {
+                "benchmark": "webarena",
+                "benchmark_version": PINNED_BROWSERGYM_WEBARENA_VERSION,
+                "task_definition_version": PINNED_TASK_DEFINITION_VERSION,
+                "evaluator": {
+                    "evaluator_id": "official-webarena-fixture",
+                    "evaluator_version": "fixture-v1",
+                    "source_relative_path": "fixture/evaluator.py",
+                    "source_sha256": "a" * 64,
+                    "oracle_rules_sha256": "b" * 64,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    handoff_root = tmp_path / "handoff"
+    handoff_root.mkdir()
+    monkeypatch.setattr(handoff_preparer, "PINNED_TASK_SOURCE_SHA256", digest)
+    _, resolved_rows = handoff_preparer._build_resolved_tasks(
+        export_path=export_path,
+        upstream_task_source_path=source,
+        site_url_map_path=url_map_path,
+        authorized_raw_task_source_sha256=digest,
+        task_interface_audit_path=audit_path,
+        output_path=handoff_root / "resolved_tasks.json",
+        registry_path=registry,
+        environment_path=environment_path,
+        duplicate_output_path=handoff_root / "duplicate_audit.json",
+        evaluator_requirements=build_evaluator_requirements_artifact(
+            task_export=export,
+            task_interface_audit=audit,
+        ),
+    )
+    assert [row["upstream_index"] for row in resolved_rows] == list(indices)
+
+    wrong_order = json.loads(json.dumps(export))
+    wrong_order["tasks"][0], wrong_order["tasks"][1] = (
+        wrong_order["tasks"][1],
+        wrong_order["tasks"][0],
+    )
+    wrong_order["resolved_task_set_sha256"] = sha256_json(wrong_order["tasks"])
+    with pytest.raises(SchemaError, match="exact tracked-registry order"):
+        validate_public_pilot_task_export(
+            wrong_order,
+            source=source,
+            registry_path=registry,
+            site_url_map=URL_MAP,
+            expected_source_sha256=digest,
+            authorized_raw_json_sha256=digest,
+        )
+
+    unknown_registry_value = json.loads(json.dumps(registry_value))
+    unknown_registry_value["tasks"][-1]["upstream_index"] = 9999
+    unknown_registry_value["tasks"][-1]["benchmark_task_id"] = "upstream:9999"
+    unknown_registry = tmp_path / "unknown-index-registry.json"
+    unknown_registry.write_text(
+        json.dumps(unknown_registry_value), encoding="utf-8"
+    )
+    with pytest.raises(SchemaError, match="lacks registered tasks: \\[9999\\]"):
+        build_public_pilot_task_export(
+            source=source,
+            registry_path=unknown_registry,
+            site_url_map=URL_MAP,
+            snapshot_id="synthetic-missing-index-fixture",
+            benchmark_version=PINNED_BROWSERGYM_WEBARENA_VERSION,
+            task_definition_version=PINNED_TASK_DEFINITION_VERSION,
+            evaluator_id="official-webarena-fixture",
+            evaluator_version="fixture-v1",
+            expected_source_sha256=digest,
+            authorized_raw_json_sha256=digest,
+        )
+
+
 def test_handoff_validation_rebuilds_export_from_upstream_bytes(tmp_path: Path) -> None:
     source, digest = _source(tmp_path / "test.raw.json")
     registry = _registry(tmp_path / "registry.json")
@@ -316,6 +497,8 @@ def test_resolved_snapshot_recomputes_and_cannot_forge_interface_pass(
         "resolved_task_set_sha256": export["resolved_task_set_sha256"],
         "task_action_interface_audit": audit,
         "task_action_interface_audit_content_sha256": sha256_json(audit),
+        "page_state_evaluator_compile_report": None,
+        "page_state_evaluator_compile_report_content_sha256": None,
         "tasks": export["tasks"],
     }
     assert validate_resolved_task_interface_binding(snapshot) == audit
@@ -402,6 +585,10 @@ def test_handoff_task_builder_rejects_incompatible_audit_without_task_dropping(
             registry_path=registry,
             environment_path=tmp_path / "must-not-be-reached.json",
             duplicate_output_path=tmp_path / "handoff/duplicate_audit.json",
+            evaluator_requirements=build_evaluator_requirements_artifact(
+                task_export=export,
+                task_interface_audit=build_webarena_task_interface_audit(export),
+            ),
         )
     assert not (tmp_path / "handoff/resolved_tasks.json").exists()
 

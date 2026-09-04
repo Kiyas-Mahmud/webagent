@@ -114,18 +114,22 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   Before the pilot can continue, the user must approve and preregister either
   a 50-task page-state-compatible public development registry or a justified
   answer/termination interface as a material P3/protocol change.
-- An outcome-blind replacement candidate has been audited but not frozen:
-  50 page-state-scored public tasks preserving the original site quotas, with
-  zero `string_match`/reference-answer evaluators. Forty-five are read-only;
-  five bounded Reddit mutations require proven reset parity and a second
-  blinded safety review. Approving it would permanently exclude both the
-  historical 0--49 set and the replacement 50 from final evaluation.
-  Its exact indices and approval consequences are preserved in
-  `docs/TABLE2_PILOT_TASK_INTERFACE_DECISION.md`; that document is proposal
-  evidence only and is not a campaign input.
+- An outcome-blind replacement candidate has been source-screened but not
+  frozen: 50 page-state-scored public tasks selected to avoid persistent
+  mutations, with zero `string_match`/reference-answer evaluators. The earlier
+  five mutating Reddit
+  candidates were withdrawn because the pinned task records provide no
+  task-level reset; their five slots were redistributed before outcomes to Map
+  (+2), Shopping (+1), and Shopping Admin (+2). Approving this revised option
+  would permanently exclude both the historical 0--49 set and the replacement
+  50 from final evaluation. Its exact indices and approval consequences are
+  preserved in `docs/TABLE2_PILOT_TASK_INTERFACE_DECISION.md`. Live deployment
+  safety classification and identical reset-fingerprint evidence are still
+  required before registration; that document is proposal evidence only and
+  is not a campaign input.
 - Added a strict live-deployment evidence contract for seven operational
   capabilities, the validation-disabled BrowserGym execution boundary, and a
-  one-way sealed-page broker. Runtime scoring must identify
+  typed same-process sealed-page broker fixture. Runtime scoring must identify
   `libwebarena==0.0.4` as a reviewed compatibility port rather than as the
   byte-identical official evaluator. It requires separate official-upstream
   and runtime hashes, compatibility delta/review/configuration evidence, and a
@@ -145,9 +149,10 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   wrapper. It applies all six frozen start-state fields, exposes only causal
   visible controls and SELECT options, maps only the six registered P3 browser
   actions, runs `pre_step -> execute_python_code -> post_step(validate=False)`,
-  publishes pages one-way to the sealed evaluator, and records typed cleanup
-  receipts on success and abort paths. No external BrowserGym/WebArena run has
-  been performed on this host.
+  publishes pages through the typed same-process broker fixture, and records
+  cleanup receipts on success and abort paths. This is message-flow behavior,
+  not an isolation claim. No external BrowserGym/WebArena run has been
+  performed on this host.
 - Added an exact evaluation-handoff consumption boundary. Campaign and handoff
   roots must be disjoint; every staged argument is authenticated before,
   during, and after copy; the selected evidence manifest must occupy its
@@ -164,6 +169,28 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   requires unlaunched system directories to stay exactly empty, and rejects
   hidden files/directories/symlinks. This gate has not run; no live receipt or
   browser result is claimed.
+- Added exact PC-01 provider bootstrap and post-installation evidence. The
+  factory receives only a typed, deep-frozen oracle-free context after clean
+  source, campaign, locked-mount, deployment, and source-plane checks. The
+  credential capability is tree-disjoint from campaign/source and rejects
+  symlink components. A typed receipt binds the actual and expected provider
+  hashes and is appended to the hash-chained access ledger before runner
+  construction; direct unreceipted registration, late/missing/tampered ledger
+  evidence, and runtime/evaluator/broker source sharing fail closed. This is a
+  reviewed-code dataflow attestation and explicitly not a kernel sandbox.
+- A subsequent causal-boundary audit found that the tracked live-page broker is
+  also same-process: runtime and sealed-evaluator accessors are importable in
+  one interpreter. Its typed split is now explicitly engineering evidence, not
+  an isolation claim. Runner attestations freeze
+  `BLOCKED_EXTERNAL_PROCESS_ISOLATION_REQUIRED`; the canonical CLI and direct
+  production runner stop before provider/runtime dispatch. No live readiness
+  block or 260-episode pilot can start until a separately authenticated
+  process-isolated broker implementation and receipt are registered. No such
+  external evidence is claimed here.
+- External evaluator review/parity receipts now also require a joint trust
+  digest pinned in reviewed source. Their internal self-hashes cannot establish
+  independent authorship. This commit's allowlist is intentionally empty, so
+  even a fully re-hashed caller-authored `PASS` remains unpromotable.
 - Action-parameter and controller evidence now records every deterministic and
   frozen-base fallback attempt, stage and total latency, the exact native
   command digest, safety binding, execution timestamps/status, and interrupted
@@ -173,14 +200,24 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   incidents in the 200 ordinary WebArena episodes. The 60 controlled recovery
   episodes remain separately reported mechanism diagnostics and are not pooled
   into headline WebArena rates.
-- Current integrated verification is **788/788 Table 2 tests passing**. The three
+- Added standalone P2 companion diagnostics for neutral-image and neutral-text
+  sensitivity, executed-action removal, post-state swap, and mismatched
+  action/post-state controls. They replay the pre-action call after post-action
+  inference and remain offline, source-attested, `N/R`, and unable to alter a
+  Table 2 row, recovery trigger, or memory operation. No DGX diagnostic values
+  are claimed yet.
+- Retrieval diagnostics and headline continuous metrics now carry registered
+  task-cluster bootstrap confidence intervals with numerator, denominator,
+  estimate, inference unit, cluster count, method, and explicit undefined
+  reasons. E0/E1 recovery remains `N/A` by design.
+- Current integrated verification is **965/965 Table 2 tests passing**. The three
   deterministic artifact-producing smokes also pass: six-action E0--E3 success
   chain, P1/P4 failure-memory intervention, and all 15 recovery scenarios x
   E0--E3 (60 diagnostic episodes). The authenticated WebArena export/audit was
   replayed from the pinned wheel and again reported 50 tasks, 47 incompatible,
   3 compatible, and 13 fuzzy-judge tasks. Python compilation and every new
   Table 2 CLI help path pass.
-- The full repository run reports **909 passing, 4 failing, 2 warnings**. The
+- The full repository run reports **1,086 passing, 4 failing, 2 warnings**. The
   four failures are the same pre-existing, out-of-scope checks: historical
   v2.3/v2.5 notebook stage literals, saved output in the historical v2.7 resume
   notebook, and a legacy model unit test that bypasses initialization and lacks

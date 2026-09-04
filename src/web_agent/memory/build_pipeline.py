@@ -27,6 +27,10 @@ from web_agent.eval.table2.task_interface_audit import (
     require_webarena_task_interface_compatible,
     validate_webarena_task_interface_audit,
 )
+from web_agent.eval.table2.public_task_registry import (
+    PublicDevelopmentTaskRegistry,
+    load_public_development_task_registry,
+)
 from web_agent.eval.table2.webarena_export import (
     PINNED_TASK_SOURCE_SHA256,
     load_url_map,
@@ -61,6 +65,9 @@ from web_agent.memory.joint_duplicate_audit import (
     validate_final_joint_duplicate_audit,
     validate_joint_duplicate_assignment_package,
 )
+from web_agent.memory.kaggle_prepare_only import (
+    PREPARATION_EXECUTION_RECEIPT_VALIDATED,
+)
 from web_agent.memory.preparation import (
     P4_REGISTERED_SOURCE_AUTHORITY_SHA256,
     reconstruct_p4_selection_from_preparation,
@@ -94,6 +101,10 @@ class P4BuildPrerequisiteValidation:
     duplicate_cluster_namespace_id: str
     verified_task_count: int
     preparation_manifest_sha256: str | None = None
+    preparation_execution_receipt_status: str | None = None
+    preparation_execution_receipt_sha256: str | None = None
+    preparation_executed_source_set_sha256: str | None = None
+    preparation_source_commit: str | None = None
     joint_assignment_manifest_sha256: str | None = None
     joint_assignment_entities_sha256: str | None = None
     joint_assignment_clusters_sha256: str | None = None
@@ -128,6 +139,16 @@ class P4BuildPrerequisiteValidation:
     def registered_duplicate_evidence_binding(self) -> dict[str, Any] | None:
         values = {
             "preparation_manifest_sha256": self.preparation_manifest_sha256,
+            "preparation_execution_receipt_status": (
+                self.preparation_execution_receipt_status
+            ),
+            "preparation_execution_receipt_sha256": (
+                self.preparation_execution_receipt_sha256
+            ),
+            "preparation_executed_source_set_sha256": (
+                self.preparation_executed_source_set_sha256
+            ),
+            "preparation_source_commit": self.preparation_source_commit,
             "assignment_manifest_sha256": self.joint_assignment_manifest_sha256,
             "entities_sha256": self.joint_assignment_entities_sha256,
             "clusters_sha256": self.joint_assignment_clusters_sha256,
@@ -144,7 +165,7 @@ class P4BuildPrerequisiteValidation:
         if any(value is None for value in values.values()):
             raise ValueError("registered joint duplicate-evidence binding is partial")
         return {
-            "schema_version": "table2-memory-joint-duplicate-evidence-binding-v2",
+            "schema_version": "table2-memory-joint-duplicate-evidence-binding-v3",
             **values,
             "final_duplicate_audit_sha256": self.duplicate_audit_sha256,
             "provenance_manifest_sha256": self.provenance_manifest_sha256,
@@ -333,7 +354,11 @@ def _load_nonsymlink_json(path: Path, *, artifact: str) -> dict[str, Any]:
     return _load_json_object(path)
 
 
-def _validate_pilot_export_boundary(task_export: Mapping[str, Any]) -> None:
+def _validate_pilot_export_boundary(
+    task_export: Mapping[str, Any],
+    *,
+    registry: PublicDevelopmentTaskRegistry,
+) -> None:
     expected = {
         "benchmark": "webarena",
         "partition": "development",
@@ -356,16 +381,29 @@ def _validate_pilot_export_boundary(task_export: Mapping[str, Any]) -> None:
     rows = task_export.get("tasks")
     if not isinstance(rows, list) or len(rows) != _PILOT_TASK_COUNT:
         raise ValueError("resolved WebArena pilot export must contain exactly 50 tasks")
-    task_ids = [str(row.get("task_id") or "").strip() for row in rows]
-    if any(not task_id for task_id in task_ids) or len(task_ids) != len(
-        set(task_ids)
-    ):
-        raise ValueError("resolved WebArena pilot task IDs must be non-empty and unique")
-    indices = [row.get("upstream_index") for row in rows]
-    if indices != list(range(_PILOT_TASK_COUNT)):
-        raise ValueError(
-            "resolved WebArena pilot tasks must remain in approved index order 0--49"
+    observed_identity = [
+        (
+            str(row.get("task_id") or "").strip(),
+            row.get("upstream_index"),
+            str(row.get("benchmark_task_id") or "").strip(),
         )
+        for row in rows
+    ]
+    expected_identity = [
+        (task.task_id, task.upstream_index, task.benchmark_task_id)
+        for task in registry.tasks
+    ]
+    if observed_identity != expected_identity:
+        raise ValueError(
+            "resolved WebArena pilot tasks must preserve the exact approved "
+            "registry identities and order"
+        )
+    if task_export.get("registry_manifest_id") != registry.manifest_id:
+        raise ValueError("resolved WebArena pilot registry identity mismatch")
+    if task_export.get("registry_manifest_sha256") != registry.registry_sha256:
+        raise ValueError("resolved WebArena pilot registry hash mismatch")
+    if task_export.get("selection_rule") != registry.selection_rule:
+        raise ValueError("resolved WebArena pilot registry selection rule mismatch")
     require_sha256(
         task_export.get("resolved_task_set_sha256"),
         field="resolved_task_export.resolved_task_set_sha256",
@@ -427,7 +465,7 @@ def validate_p4_build_prerequisites(
         export_path,
         artifact="resolved WebArena task export",
     )
-    _load_nonsymlink_json(registry_path, artifact="WebArena task registry")
+    registry = load_public_development_task_registry(registry_path)
     _load_nonsymlink_json(url_map_path, artifact="WebArena site URL map")
     task_export = validate_public_pilot_task_export(
         submitted_export,
@@ -437,7 +475,7 @@ def validate_p4_build_prerequisites(
         expected_source_sha256=expected_task_source_sha256,
         authorized_raw_json_sha256=authorized_raw_task_source_sha256,
     )
-    _validate_pilot_export_boundary(task_export)
+    _validate_pilot_export_boundary(task_export, registry=registry)
     task_rows = task_export["tasks"]
     task_ids = [str(row["task_id"]) for row in task_rows]
 
@@ -629,11 +667,45 @@ def validate_registered_p4_build_prerequisites(
         raise ValueError(
             "registered assignment and validated provenance use different namespaces"
         )
+    preparation_execution = assignment.manifest.get("input_binding")
+    if not isinstance(preparation_execution, Mapping):
+        raise ValueError("registered assignment lacks its preparation input binding")
+    if preparation_execution.get("preparation_execution_receipt_status") != (
+        PREPARATION_EXECUTION_RECEIPT_VALIDATED
+    ):
+        raise ValueError(
+            "registered assignment lacks a validated Kaggle preparation receipt"
+        )
+    for field in (
+        "preparation_execution_receipt_sha256",
+        "preparation_executed_source_set_sha256",
+    ):
+        require_sha256(
+            preparation_execution.get(field),
+            field=f"assignment.input_binding.{field}",
+        )
+    source_commit = preparation_execution.get("preparation_source_commit")
+    if (
+        type(source_commit) is not str
+        or len(source_commit) != 40
+        or any(character not in "0123456789abcdef" for character in source_commit)
+    ):
+        raise ValueError("registered assignment has an invalid preparation source commit")
     return replace(
         base,
         preparation_manifest_sha256=sha256_file(
             Path(p4_preparation_package_path) / "preparation_manifest.json"
         ),
+        preparation_execution_receipt_status=(
+            PREPARATION_EXECUTION_RECEIPT_VALIDATED
+        ),
+        preparation_execution_receipt_sha256=str(
+            preparation_execution["preparation_execution_receipt_sha256"]
+        ),
+        preparation_executed_source_set_sha256=str(
+            preparation_execution["preparation_executed_source_set_sha256"]
+        ),
+        preparation_source_commit=source_commit,
         joint_assignment_manifest_sha256=assignment.assignment_manifest_sha256,
         joint_assignment_entities_sha256=str(
             assignment.manifest["entities_sha256"]

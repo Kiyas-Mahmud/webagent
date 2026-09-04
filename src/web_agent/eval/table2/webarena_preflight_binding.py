@@ -184,7 +184,7 @@ def validate_bound_deployment_preflight(
     if binding.get("validator_contract") != PREFLIGHT_VALIDATOR_CONTRACT:
         raise SchemaError("WebArena deployment-preflight validator contract changed")
     reset_index = binding.get("expected_live_reset_task_index")
-    if type(reset_index) is not int or reset_index not in range(50):
+    if type(reset_index) is not int or reset_index < 0:
         raise SchemaError("bound WebArena live-reset task index is invalid")
     if binding.get("preflight_artifact_path") != PREFLIGHT_ARTIFACT_RELATIVE_PATH:
         raise SchemaError("bound WebArena preflight artifact path changed")

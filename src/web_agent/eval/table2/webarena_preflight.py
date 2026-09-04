@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from importlib import metadata
 import platform
@@ -50,6 +50,24 @@ PackageVersionGetter = Callable[[str], str]
 BrowserProbe = Callable[[], Mapping[str, Any]]
 ServiceProbe = Callable[[str], Mapping[str, Any]]
 LiveResetProbe = Callable[[int], Mapping[str, Any]]
+
+
+def _validate_registered_task_indices(
+    value: Sequence[int] | None,
+) -> tuple[int, ...] | None:
+    if value is None:
+        return None
+    indices = tuple(value)
+    if (
+        len(indices) != 50
+        or any(type(index) is not int or index < 0 for index in indices)
+        or len(set(indices)) != len(indices)
+    ):
+        raise SchemaError(
+            "preflight registered task indices must be exactly 50 unique "
+            "nonnegative integers in tracked order"
+        )
+    return indices
 
 
 def _probe_passed(value: Mapping[str, Any]) -> bool:
@@ -114,6 +132,7 @@ def validate_webarena_host_preflight(
     *,
     service_url_map: Mapping[str, Any],
     expected_live_reset_task_index: int | None = None,
+    registered_task_indices: Sequence[int] | None = None,
 ) -> dict[str, Any]:
     """Validate campaign-eligible host evidence without trusting PASS labels.
 
@@ -321,9 +340,25 @@ def validate_webarena_host_preflight(
         },
         context="preflight live_reset_check",
     )
+    registered_indices = _validate_registered_task_indices(
+        registered_task_indices
+    )
     task_index = live_reset.get("task_index")
-    if type(task_index) is not int or task_index not in range(50):
-        raise SchemaError("preflight live-reset task must be public index 0--49")
+    if type(task_index) is not int or task_index < 0:
+        raise SchemaError("preflight live-reset task index is invalid")
+    if registered_indices is not None and task_index not in registered_indices:
+        raise SchemaError(
+            "preflight live-reset task is absent from the tracked public registry"
+        )
+    # Preserve the original standalone 0--49 guard for callers that supply
+    # neither an exact registry nor an externally bound expected task.  Active
+    # campaign paths always supply one of those authorities.
+    if (
+        registered_indices is None
+        and expected_live_reset_task_index is None
+        and task_index not in range(50)
+    ):
+        raise SchemaError("preflight live-reset task requires registry authority")
     if (
         expected_live_reset_task_index is not None
         and task_index != expected_live_reset_task_index
@@ -462,10 +497,8 @@ def probe_service(base_url: str, *, timeout_seconds: float = 10.0) -> dict[str, 
 def probe_live_reset(task_index: int = 0) -> dict[str, Any]:
     """Reset one public task and close it without taking an action or reading reward."""
 
-    if type(task_index) is not int or task_index not in range(50):
-        raise SchemaError(
-            "live-reset preflight task must be a public index from 0 to 49"
-        )
+    if type(task_index) is not int or task_index < 0:
+        raise SchemaError("live-reset preflight task index must be nonnegative")
     environment = None
     try:
         # Importing the benchmark registers its exact Gymnasium task IDs.
@@ -519,10 +552,25 @@ def run_webarena_host_preflight(
     live_reset_probe: LiveResetProbe = probe_live_reset,
     run_live_reset: bool = True,
     live_reset_task_index: int = 0,
+    registered_task_indices: Sequence[int] | None = None,
 ) -> dict[str, Any]:
     """Measure whether one host can own both browser and model campaign planes."""
 
     urls = registered_service_url_map(service_url_map)
+    registered_indices = _validate_registered_task_indices(
+        registered_task_indices
+    )
+    if type(live_reset_task_index) is not int or live_reset_task_index < 0:
+        raise SchemaError("live-reset preflight task index must be nonnegative")
+    if (
+        registered_indices is not None
+        and live_reset_task_index not in registered_indices
+    ):
+        raise SchemaError(
+            "live-reset preflight task is absent from the tracked public registry"
+        )
+    if registered_indices is None and live_reset_task_index not in range(50):
+        raise SchemaError("live-reset preflight task requires registry authority")
     packages = inspect_pinned_packages(version_getter)
     browser = dict(browser_probe())
     if "status" not in browser:
@@ -599,5 +647,6 @@ def run_webarena_host_preflight(
             report,
             service_url_map=urls,
             expected_live_reset_task_index=live_reset_task_index,
+            registered_task_indices=registered_indices,
         )
     return report

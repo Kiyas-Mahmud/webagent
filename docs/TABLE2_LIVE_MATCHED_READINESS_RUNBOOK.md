@@ -19,6 +19,17 @@ Engineering smoke campaigns do not require this receipt. A final campaign
 must not contain or use the provisional PC-01 receipt; final readiness follows
 the later validation-only PC-01/PC-02/PC-03 selection and final freeze.
 
+**Current hard blocker:** the tracked page broker is an in-process typed
+engineering fixture. Runtime and sealed-evaluator accessors are importable in
+the same interpreter, so it supplies reviewed-code message-flow evidence only,
+not enforceable isolation. The handoff freezes this truth as
+`BLOCKED_EXTERNAL_PROCESS_ISOLATION_REQUIRED`; the canonical bootstrap stops
+before importing the provider factory. Consequently none of the commands below
+can authorize or start a live campaign in this source version. They document
+the post-isolation sequence for use only after a separately authenticated
+process-isolated broker implementation and receipt are preregistered under a
+new schema. A self-authored Boolean or receipt cannot lift this block.
+
 ## Freeze prerequisites
 
 Freeze the target pilot and a separate readiness-probe clone from the same
@@ -44,7 +55,46 @@ symlinked, or different from both the frozen source and current clean source.
 This requirement must be added to the handoff source list before freezing; it
 is intentionally not inferred after freeze.
 
-## Running the isolated probe
+The handoff runner record must also freeze
+`pc01_operations_provider_bootstrap`: the exact provider factory entrypoint,
+module, qualname, source path/SHA-256, runtime-only source plane, provider
+contract schema, and expected public-contract SHA-256. The provider source may
+not be shared with the sealed evaluator or page broker. The factory and the
+external credential capability are deployment inputs; the repository does not
+invent them or claim they are already available.
+
+The credential capability must name one existing directory whose unresolved
+leaf and every parent component are non-symlinks. It must be tree-disjoint in
+both directions from the campaign and source checkout: `/`, either tree, a
+descendant, or an ancestor such as the campaign/source parent is rejected.
+
+After a future registered process-isolation implementation replaces the
+current blocker, generate the probe's provider-boundary receipt with the
+tracked CLI. The command below documents that later deterministic preparation;
+in the current source version it fails closed at the page-broker gate:
+
+```bash
+PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
+  --campaign-dir /secure/table2-pc01-readiness-probe \
+  --runner web_agent.eval.table2.production_runner:create_runner \
+  --runner-factory \
+  --pc01-operations-provider-factory '<EXACT_FROZEN_MODULE:FUNCTION>' \
+  --pc01-credential-capability-root /secure/table2-runtime/credentials \
+  --pc01-credential-capability-id '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_ID>' \
+  --pc01-credential-capability-version '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_VERSION>' \
+  --prepare-pc01-provider-boundary-receipt /secure/table2-runtime-receipts/readiness-probe.provider-boundary.json
+```
+
+The receipt attests only the reviewed-code, oracle-free dataflow boundary. It
+explicitly records that the factory is same-process and that no kernel
+filesystem sandbox is claimed. It verifies that no campaign directory, model,
+memory, task, evaluator or sealed-artifact path/content is passed to the
+factory; only the external non-secret credential capability is path-bearing.
+Preparation is immutable: an existing byte-identical receipt is accepted
+without rewrite, while any different existing file fails closed. Creation uses
+an exclusive same-directory temporary file followed by atomic replacement.
+
+## Future post-isolation probe sequence
 
 Find the first row whose `task_partition` is `normal` in the probe's frozen
 `schedule/schedule.jsonl`. Pass that exact `block_id`:
@@ -54,9 +104,24 @@ PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
   --campaign-dir /secure/table2-pc01-readiness-probe \
   --runner web_agent.eval.table2.production_runner:create_runner \
   --runner-factory \
+  --pc01-operations-provider-factory '<EXACT_FROZEN_MODULE:FUNCTION>' \
+  --pc01-credential-capability-root /secure/table2-runtime/credentials \
+  --pc01-credential-capability-id '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_ID>' \
+  --pc01-credential-capability-version '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_VERSION>' \
+  --pc01-provider-boundary-receipt /secure/table2-runtime-receipts/readiness-probe.provider-boundary.json \
   --block-id '<first-normal-block-id>' \
   --live-readiness-probe-for /secure/table2-pc01-pilot-260
 ```
+
+After the exact factory returns, the CLI repeats campaign/live authority
+checks, derives the actual provider public-contract hash, and creates a typed
+`PC01ProviderInstallationReceipt`. It registers that receipt with the provider
+and appends the complete path-free receipt as a hash-chained
+`pc01_provider_installation` access-ledger event before constructing
+`ProductionTable2Runner`. Direct provider registration or runner construction
+without this event fails. The receipt includes only hashes for the external
+credential identity and boundary receipt; it never serializes credential paths
+or secret material.
 
 The command refuses recovery blocks, later normal blocks, multiple blocks, and
 `--maximum-blocks`. In the selected included attempt, all E0–E3 systems must
@@ -107,13 +172,28 @@ links, writable evidence files, or replacement names invalidate the gate.
 
 ## Starting or resuming the 260-episode pilot
 
-Run the target normally after the receipt exists:
+Generate the target campaign's own provider-boundary receipt, then run after
+both the boundary receipt and matched-readiness receipt exist:
 
 ```bash
 PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
   --campaign-dir /secure/table2-pc01-pilot-260 \
   --runner web_agent.eval.table2.production_runner:create_runner \
-  --runner-factory
+  --runner-factory \
+  --pc01-operations-provider-factory '<EXACT_FROZEN_MODULE:FUNCTION>' \
+  --pc01-credential-capability-root /secure/table2-runtime/credentials \
+  --pc01-credential-capability-id '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_ID>' \
+  --pc01-credential-capability-version '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_VERSION>' \
+  --prepare-pc01-provider-boundary-receipt /secure/table2-runtime-receipts/pilot-260.provider-boundary.json
+PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
+  --campaign-dir /secure/table2-pc01-pilot-260 \
+  --runner web_agent.eval.table2.production_runner:create_runner \
+  --runner-factory \
+  --pc01-operations-provider-factory '<EXACT_FROZEN_MODULE:FUNCTION>' \
+  --pc01-credential-capability-root /secure/table2-runtime/credentials \
+  --pc01-credential-capability-id '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_ID>' \
+  --pc01-credential-capability-version '<REGISTERED_EXTERNAL_CREDENTIAL_CAPABILITY_VERSION>' \
+  --pc01-provider-boundary-receipt /secure/table2-runtime-receipts/pilot-260.provider-boundary.json
 ```
 
 `CampaignRunner` reopens the receipt, its SHA sidecar, the target-local sealed

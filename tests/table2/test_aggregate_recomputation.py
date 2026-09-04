@@ -70,7 +70,7 @@ def _install_deterministic_recomputation_stubs(
     monkeypatch.setattr(
         validator,
         "compute_retrieval_diagnostics",
-        lambda queries: {
+        lambda queries, **_kwargs: {
             "schema_version": "table2.v1",
             "query_count": len(list(queries)),
             "estimate": 0.75,

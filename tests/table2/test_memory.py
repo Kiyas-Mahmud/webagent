@@ -77,8 +77,14 @@ JOINT_DUPLICATE_NAMESPACE = {
     "audit_tool_source_sha256": SHA_C,
 }
 JOINT_DUPLICATE_BINDING = {
-    "schema_version": "table2-memory-joint-duplicate-evidence-binding-v2",
+    "schema_version": "table2-memory-joint-duplicate-evidence-binding-v3",
     "preparation_manifest_sha256": SHA_A,
+    "preparation_execution_receipt_status": (
+        "NOT_APPLICABLE_NONREGISTERED_SOURCE_AUTHORITY"
+    ),
+    "preparation_execution_receipt_sha256": None,
+    "preparation_executed_source_set_sha256": None,
+    "preparation_source_commit": None,
     "assignment_manifest_sha256": SHA_B,
     "entities_sha256": SHA_C,
     "clusters_sha256": SHA_A,

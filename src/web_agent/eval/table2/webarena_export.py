@@ -1,8 +1,8 @@
-"""Build the sealed WebArena 0--49 development-task export.
+"""Build the sealed, ordered WebArena development-task export.
 
 This module deliberately has no BrowserGym, Playwright, or model dependency.
 It reads the pinned upstream task-definition bytes, checks them against the
-permanent development-task registry, resolves only registered site URL
+tracked active development-task registry, resolves only registered site URL
 placeholders, and writes the complete task/evaluator records expected by the
 Table 2 handoff preparer.  Runtime code receives a separate oracle-blind
 projection in :mod:`web_agent.eval.table2.production_runner`.
@@ -26,7 +26,10 @@ from .common import (
     sha256_file,
     sha256_json,
 )
-from .pilot_task_exclusion import load_pilot_task_exclusion_authority
+from .public_task_registry import (
+    PUBLIC_DEVELOPMENT_TASK_COUNT,
+    load_public_development_task_registry,
+)
 
 
 PINNED_BROWSERGYM_WEBARENA_VERSION = "0.14.3"
@@ -335,7 +338,7 @@ def build_public_pilot_task_export(
         if "unknown" in value.casefold() or _URL_TOKEN.search(value):
             raise SchemaError(f"{context} must be a measured, non-placeholder identity")
 
-    authority = load_pilot_task_exclusion_authority(registry_path)
+    authority = load_public_development_task_registry(registry_path)
     if authority.benchmark != "webarena":
         raise SchemaError("pilot task registry is not the WebArena exclusion authority")
     payload, source_record = _task_source_bytes(
@@ -355,25 +358,34 @@ def build_public_pilot_task_export(
         if task_id in by_id:
             raise SchemaError(f"upstream task source repeats task_id {task_id}")
         by_id[task_id] = row
-    missing = sorted(authority.upstream_indices - set(by_id))
+    missing = sorted(authority.upstream_index_set - set(by_id))
     if missing:
         raise SchemaError(f"upstream task source lacks registered tasks: {missing}")
 
-    selected_raw = [by_id[index] for index in sorted(authority.upstream_indices)]
+    selected_raw = [
+        by_id[identity.upstream_index] for identity in authority.tasks
+    ]
     observed_tokens: set[str] = set()
     for row in selected_raw:
         observed_tokens.update(_tokens_in(row))
-    if observed_tokens != PINNED_REQUIRED_URL_TOKENS:
+    unregistered_tokens = observed_tokens - PINNED_REQUIRED_URL_TOKENS
+    if unregistered_tokens:
         raise SchemaError(
-            "registered WebArena 0--49 placeholder set changed "
-            f"(observed={sorted(observed_tokens)})"
+            "registered WebArena development-task placeholder set changed; "
+            f"unregistered URL placeholders: {sorted(unregistered_tokens)}"
+        )
+    if not observed_tokens:
+        raise SchemaError(
+            "registered WebArena development tasks contain no authenticated URL "
+            "placeholders"
         )
     urls = _registered_url_map(
         site_url_map, required_tokens=PINNED_REQUIRED_URL_TOKENS
     )
 
     tasks: list[dict[str, Any]] = []
-    for index, raw in zip(sorted(authority.upstream_indices), selected_raw, strict=True):
+    for identity, raw in zip(authority.tasks, selected_raw, strict=True):
+        index = identity.upstream_index
         resolved = _resolve_tokens(raw, urls)
         unresolved = _tokens_in(resolved)
         if unresolved:
@@ -398,9 +410,9 @@ def build_public_pilot_task_export(
 
         tasks.append(
             {
-                "task_id": f"webarena.{index}",
+                "task_id": identity.task_id,
                 "upstream_index": index,
-                "benchmark_task_id": str(index),
+                "benchmark_task_id": identity.benchmark_task_id,
                 "benchmark_task_version": task_version,
                 "instruction": instruction,
                 "start_state": start_state,
@@ -413,7 +425,7 @@ def build_public_pilot_task_export(
             }
         )
 
-    if len(tasks) != 50:
+    if len(tasks) != PUBLIC_DEVELOPMENT_TASK_COUNT:
         raise SchemaError("resolved public WebArena pilot export must contain 50 tasks")
     task_set_sha256 = sha256_json(tasks)
     return {
@@ -430,8 +442,8 @@ def build_public_pilot_task_export(
         "paper_table_status": "N/R",
         "locked_test_content": False,
         "final_paper_evaluation_eligible": False,
-        "selection_rule": PUBLIC_PILOT_SELECTION_RULE,
-        "required_task_count": 50,
+        "selection_rule": authority.selection_rule,
+        "required_task_count": PUBLIC_DEVELOPMENT_TASK_COUNT,
         "registry_manifest_id": authority.manifest_id,
         "registry_manifest_sha256": authority.registry_sha256,
         "source": source_record,
@@ -488,7 +500,7 @@ def validate_public_pilot_task_export(
     if dict(value) != expected:
         raise SchemaError(
             "resolved WebArena task export differs from an independent rebuild "
-            "of the pinned upstream 0--49 task bytes"
+            "of the pinned upstream tasks in exact tracked-registry order"
         )
     return expected
 

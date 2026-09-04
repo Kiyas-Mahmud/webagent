@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -8,19 +9,120 @@ from web_agent.benchmarks.webarena import (
     WebArenaManualRescueCheck,
     WebArenaManualRescueReceipt,
 )
-from web_agent.eval.table2.common import SchemaError
+from web_agent.eval.table2.common import SchemaError, atomic_write_json
+from web_agent.eval.table2.execution_guard import (
+    PC01_PROVIDER_BOUNDARY_CLAIM_SCOPE,
+    PC01_PROVIDER_INSTALLATION_RECEIPT_SCHEMA_VERSION,
+    PC01ProviderInstallationReceipt,
+    PRODUCTION_RUNNER_ENTRYPOINT,
+)
 from web_agent.eval.table2.package_validator import (
     _validate_abort_terminal_semantics,
     _validate_evaluator_backend_guards,
     _validate_final_evidence,
     _validate_frozen_runtime_budget_evidence,
     _validate_manual_rescue_guard_events,
+    _validate_pc01_provider_installation_ledger,
+    _provider_campaign_state_sha256,
 )
 from web_agent.runtime.contracts import canonical_sha256
 
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
+
+
+def _provider_installation_fixture(root: Path) -> tuple[dict, dict]:
+    frozen = root / "frozen"
+    frozen.mkdir(parents=True)
+    expected_contract = "e" * 64
+    binding = {
+        "factory_entrypoint": "fixture.provider:create_provider",
+        "factory_module": "fixture.provider",
+        "factory_qualname": "create_provider",
+        "source_relative_path": "src/fixture_provider.py",
+        "source_sha256": "f" * 64,
+        "expected_provider_public_contract_sha256": expected_contract,
+    }
+    manifest = {
+        "campaign_mode": "evaluation",
+        "runner_entrypoint": PRODUCTION_RUNNER_ENTRYPOINT,
+    }
+    atomic_write_json(root / "campaign_manifest.json", manifest)
+    atomic_write_json(
+        frozen / "runner_attestation.json",
+        {"pc01_operations_provider_bootstrap": binding},
+    )
+    atomic_write_json(frozen / "environment.json", {"fixture": True})
+    (frozen / "protocol.yaml").write_text("{}\n", encoding="utf-8")
+    state_sha256 = _provider_campaign_state_sha256(root)
+    receipt = PC01ProviderInstallationReceipt(
+        schema_version=PC01_PROVIDER_INSTALLATION_RECEIPT_SCHEMA_VERSION,
+        record_type="PC01ProviderInstallationReceipt",
+        status="PASS",
+        claim_scope=PC01_PROVIDER_BOUNDARY_CLAIM_SCOPE,
+        same_process_factory=True,
+        kernel_filesystem_sandbox=False,
+        factory_entrypoint=binding["factory_entrypoint"],
+        factory_module=binding["factory_module"],
+        factory_qualname=binding["factory_qualname"],
+        factory_source_relative_path=binding["source_relative_path"],
+        factory_source_sha256=binding["source_sha256"],
+        bootstrap_context_sha256="1" * 64,
+        pre_factory_campaign_state_sha256=state_sha256,
+        post_factory_campaign_state_sha256=state_sha256,
+        provider_boundary_receipt_sha256="2" * 64,
+        credential_public_identity_sha256="3" * 64,
+        expected_provider_public_contract_sha256=expected_contract,
+        actual_provider_public_contract_sha256=expected_contract,
+    )
+    event = {
+        "event_type": "pc01_provider_installation",
+        "payload": {
+            "installation_receipt": receipt.to_dict(),
+            "installation_receipt_sha256": receipt.receipt_sha256,
+            "locked_test_content": False,
+        },
+    }
+    return manifest, event
+
+
+def test_provider_installation_ledger_precedes_tasks_and_binds_actual_hash(
+    tmp_path: Path,
+) -> None:
+    manifest, installation = _provider_installation_fixture(tmp_path)
+    task_load = {
+        "event_type": "episode_task_load",
+        "payload": {"locked_test_content": False},
+    }
+    with pytest.raises(SchemaError, match="precedes required"):
+        _validate_pc01_provider_installation_ledger(
+            tmp_path,
+            manifest,
+            access_records=[task_load],
+        )
+    with pytest.raises(SchemaError, match="must precede"):
+        _validate_pc01_provider_installation_ledger(
+            tmp_path,
+            manifest,
+            access_records=[task_load, installation],
+        )
+    _validate_pc01_provider_installation_ledger(
+        tmp_path,
+        manifest,
+        access_records=[installation, task_load],
+    )
+
+    tampered = deepcopy(installation)
+    tampered["payload"]["installation_receipt"][
+        "actual_provider_public_contract_sha256"
+    ] = "d" * 64
+    with pytest.raises(SchemaError, match="actual provider contract"):
+        _validate_pc01_provider_installation_ledger(
+            tmp_path,
+            manifest,
+            access_records=[tampered, task_load],
+        )
 
 
 def _manual_rescue_event(
@@ -593,6 +695,17 @@ def test_sealed_incident_resolution_matches_linked_successful_attempt():
     )
 
 
+@pytest.mark.parametrize("successful", ([True, False], [True, True]))
+def test_first_verified_recovery_remains_resolved_when_runtime_attempts_again(
+    successful: list[bool],
+):
+    _validate_recovery_truth(
+        successful=successful,
+        resolved=True,
+        resolved_attempt_index=1,
+    )
+
+
 @pytest.mark.parametrize(
     ("successful", "resolved", "resolved_attempt_index", "message"),
     (
@@ -600,7 +713,7 @@ def test_sealed_incident_resolution_matches_linked_successful_attempt():
         ([True], False, None, "resolved status differs"),
         ([True], True, 2, "resolved_attempt_index differs"),
         ([False], False, 1, "cannot declare resolved_attempt_index"),
-        ([True, True], True, 2, "multiple successful recovery attempts"),
+        ([True, True], True, 2, "resolved_attempt_index differs"),
     ),
 )
 def test_sealed_incident_resolution_manipulations_fail_closed(
