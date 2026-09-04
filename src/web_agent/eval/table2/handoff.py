@@ -77,25 +77,48 @@ from web_agent.eval.table2.resolved_config import (
     load_resolved_config_identity,
 )
 from web_agent.eval.table2.package_validator import (
+    EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS,
+    FROZEN_MEMORY_STORE_FILES,
+    MODEL_EVIDENCE_PRODUCER_SCHEMA_VERSION,
+    MODEL_EVIDENCE_ROLES,
     MODEL_PAYLOAD_HASH_FIELDS,
     MODEL_PAYLOAD_ROLES,
+    JOINT_DUPLICATE_ASSIGNMENT_FILES,
+    JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH,
+    JOINT_DUPLICATE_AUDIT_REGISTRATION_RELATIVE_PATH,
+    P4_PREPARATION_EVIDENCE_FILES,
+    P4_SOURCE_AUTHORITY_RELATIVE_PATH,
+    PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD,
+    PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH,
     _artifact_payload_descriptor,
     _build_task_content_binding_manifest,
+    _copy_exact,
     _expected_runner_runtime_identity,
     _load_recovery_scenarios,
+    _load_and_verify_frozen_memory_store,
     _load_task_manifest,
+    _model_evidence_bundle_value,
     _processor_contract_from_payload,
     _resolve_input,
     _validate_duplicate_audit_bindings,
     _validate_duplicate_audit_manifest,
     _validate_environment_manifest,
     _validate_model_artifact_payloads,
+    _validate_model_evidence_bundle,
     _validate_model_memory_source_bindings,
+    _validate_registered_joint_duplicate_memory_bindings,
+    _validate_pc01_checkpoint_compatibility_readiness,
     _validate_recovery_campaign_counts,
     _validate_registered_protocol,
     _validate_resolved_task_snapshot,
     _validate_seed_manifest_coverage,
     load_yaml,
+)
+from web_agent.memory.joint_duplicate_audit import (
+    AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS,
+    AUDIT_TOOL_SOURCE_RELATIVE_PATH,
+    JointDuplicateAuditError,
+    validate_compact_joint_duplicate_evidence,
 )
 
 
@@ -658,6 +681,7 @@ def _stage_models(
             "test_rows_read",
             "locked_test_rows_read",
             "artifact_paths",
+            "model_evidence_paths",
         )
         require_keys(row, required, context="model handoff input")
         seed = row["model_seed"]
@@ -668,6 +692,13 @@ def _stage_models(
             MODEL_PAYLOAD_ROLES
         ):
             raise SchemaError("model artifact_paths must contain every registered payload role")
+        evidence_paths = row["model_evidence_paths"]
+        if not isinstance(evidence_paths, Mapping) or set(evidence_paths) != set(
+            MODEL_EVIDENCE_ROLES
+        ):
+            raise SchemaError(
+                "model model_evidence_paths must contain every registered evidence role"
+            )
         model_dir = output_root / "models"
         model_path = model_dir / f"seed_{seed}.json"
         descriptors: dict[str, dict[str, Any]] = {}
@@ -696,6 +727,24 @@ def _stage_models(
         for role in ("processor_contract", "e0_processor_contract"):
             source = (model_dir / descriptors[role]["path"]).resolve()
             _processor_contract_from_payload(source)
+        evidence_descriptors: dict[str, dict[str, Any]] = {}
+        for role in MODEL_EVIDENCE_ROLES:
+            source = _spec_path(
+                spec_path,
+                evidence_paths[role],
+                field=f"model[{seed}].model_evidence_paths.{role}",
+            )
+            role_root = output_root / "model_evidence" / f"seed_{seed}" / role
+            staged = _copy_payload(source, role_root)
+            stored_path = os.path.relpath(staged, model_dir)
+            evidence_descriptors[role] = _artifact_payload_descriptor(
+                staged,
+                stored_path=stored_path,
+            )
+        evidence_bundle = _model_evidence_bundle_value(
+            evidence_descriptors,
+            producer_schema_version=MODEL_EVIDENCE_PRODUCER_SCHEMA_VERSION,
+        )
         resolved_config_path = (
             model_dir / descriptors["resolved_config"]["path"]
         ).resolve()
@@ -716,16 +765,27 @@ def _stage_models(
             )
         manifest = {
             "schema_version": SCHEMA_VERSION,
-            **{key: row[key] for key in required if key != "artifact_paths"},
+            **{
+                key: row[key]
+                for key in required
+                if key not in {"artifact_paths", "model_evidence_paths"}
+            },
             **model_hashes,
             "resolved_config_record_sha256": (
                 resolved_config_identity.record_sha256
             ),
             "e0_base_prompt_sha256": prompt_hash,
             "artifact_payloads": descriptors,
+            "model_evidence_bundle_sha256": evidence_bundle["bundle_sha256"],
+            "model_evidence_bundle": evidence_bundle,
         }
         atomic_write_json(model_path, manifest)
-        _validate_model_artifact_payloads(model_path, manifest)
+        executable = _validate_model_artifact_payloads(model_path, manifest)
+        _validate_model_evidence_bundle(
+            model_path,
+            manifest,
+            executable_payloads=executable,
+        )
         model_paths.append(model_path)
     return _validate_seed_manifest_coverage(
         model_paths, matched_seeds, kind="model", required=True
@@ -740,6 +800,14 @@ def _bind_duplicate_audit(
     task_snapshot_path: Path,
     recovery_path: Path,
     memory_by_seed: Mapping[int, Path],
+    repository_root: Path,
+    assignment_package_root: Path,
+    preparation_package_root: Path,
+    resolved_task_export_path: Path,
+    approved_task_registry_path: Path,
+    registered_recovery_scenarios_path: Path,
+    duplicate_audit_registration_path: Path,
+    provenance_manifest_path: Path,
 ) -> Path:
     payload = read_json(input_path)
     if (
@@ -793,6 +861,21 @@ def _bind_duplicate_audit(
         task_content_manifest=bindings,
         require_verified_normal=True,
     )
+    _validate_registered_joint_duplicate_memory_bindings(
+        memory_by_seed,
+        duplicate_audit_path=input_path,
+        required=True,
+        repository_root=repository_root,
+        assignment_package_root=assignment_package_root,
+        preparation_package_root=preparation_package_root,
+        resolved_task_export_path=resolved_task_export_path,
+        approved_task_registry_path=approved_task_registry_path,
+        registered_recovery_scenarios_path=(
+            registered_recovery_scenarios_path
+        ),
+        duplicate_audit_registration_path=duplicate_audit_registration_path,
+        provenance_manifest_path=provenance_manifest_path,
+    )
     # Copy only after every supplied row, its canonical audit record, and the
     # joint memory/task namespace have passed fail-closed validation.  Handoff
     # must never fill in hashes that the external audit did not itself bind.
@@ -828,6 +911,11 @@ def prepare_handoff(
     if not isinstance(selection_config, Mapping):
         raise SchemaError("frozen protocol lacks selection configuration")
     selection_mode = str(selection_config.get("mode") or "")
+    pilot_only = (
+        str(campaign.get("campaign_kind")) != "locked_final"
+        or str(campaign.get("evidence_label")) == "PILOT_ONLY"
+    )
+    requires_pc01_checkpoint_compatibility = pilot_only
     registry_path = _resolve_input(repo, campaign["task_manifest"])
     recovery_source = _resolve_input(repo, campaign["recovery_scenarios"])
     matched_seeds = [int(seed) for seed in campaign.get("matched_seeds", [])]
@@ -958,6 +1046,77 @@ def prepare_handoff(
         duplicate_output_path=duplicate_path,
     )
     task_snapshot_path = output / "resolved_tasks.json"
+    duplicate_input_source = _spec_path(
+        spec_path, spec.get("duplicate_audit"), field="duplicate_audit"
+    )
+
+    joint_assignment_source = _spec_path(
+        spec_path,
+        spec.get("joint_duplicate_assignment_package"),
+        field="joint_duplicate_assignment_package",
+    )
+    joint_preparation_source = _spec_path(
+        spec_path,
+        spec.get("p4_preparation_package"),
+        field="p4_preparation_package",
+    )
+    joint_provenance_source = _spec_path(
+        spec_path,
+        spec.get("joint_duplicate_provenance_manifest"),
+        field="joint_duplicate_provenance_manifest",
+    )
+    duplicate_registration_source = (
+        repo / JOINT_DUPLICATE_AUDIT_REGISTRATION_RELATIVE_PATH
+    ).resolve()
+    try:
+        validate_compact_joint_duplicate_evidence(
+            package_root=joint_assignment_source,
+            config_path=repo / JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH,
+            source_authority_path=repo / P4_SOURCE_AUTHORITY_RELATIVE_PATH,
+            preparation_root=joint_preparation_source,
+            resolved_task_export_path=export_path,
+            approved_task_registry_path=registry_path,
+            recovery_scenarios_path=recovery_source,
+            duplicate_audit_registration_path=duplicate_registration_source,
+            provenance_manifest_path=joint_provenance_source,
+            final_audit_path=duplicate_input_source,
+        )
+    except (JointDuplicateAuditError, OSError, TypeError, ValueError) as exc:
+        raise SchemaError(
+            f"handoff compact joint duplicate evidence is invalid: {exc}"
+        ) from exc
+    joint_evidence_root = output / "joint_duplicate_evidence"
+    for name in JOINT_DUPLICATE_ASSIGNMENT_FILES:
+        _copy_exact(
+            joint_assignment_source / name,
+            joint_evidence_root / "assignment" / name,
+        )
+    for name in P4_PREPARATION_EVIDENCE_FILES:
+        _copy_exact(
+            joint_preparation_source / name,
+            joint_evidence_root / "preparation" / name,
+        )
+    _copy_exact(
+        export_path,
+        joint_evidence_root / "resolved_task_export.json",
+    )
+    _copy_exact(
+        recovery_source,
+        joint_evidence_root / "registered_recovery_scenarios.json",
+    )
+    _copy_exact(
+        joint_provenance_source,
+        joint_evidence_root / "provenance_manifest.json",
+    )
+    tracked_evidence_root = joint_evidence_root / "tracked_repository"
+    for relative in (
+        JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH,
+        P4_SOURCE_AUTHORITY_RELATIVE_PATH,
+        Path(AUDIT_TOOL_SOURCE_RELATIVE_PATH),
+        *(Path(value) for value in AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS),
+        JOINT_DUPLICATE_AUDIT_REGISTRATION_RELATIVE_PATH,
+    ):
+        _copy_exact(repo / relative, tracked_evidence_root / relative)
 
     model_by_seed = _stage_models(
         model_specs=spec.get("models"),
@@ -989,6 +1148,67 @@ def prepare_handoff(
         expected_model_seeds=matched_seeds,
         expected_selection_mode=selection_mode,
     )
+    checkpoint_compatibility_binding: dict[str, Any] | None = None
+    checkpoint_compatibility_source_files: tuple[Path, ...] = ()
+    checkpoint_compatibility_path: Path | None = None
+    supplied_checkpoint_compatibility = spec.get(
+        "pc01_checkpoint_compatibility_receipt"
+    )
+    if requires_pc01_checkpoint_compatibility:
+        checkpoint_compatibility_source = _spec_path(
+            spec_path,
+            supplied_checkpoint_compatibility,
+            field="pc01_checkpoint_compatibility_receipt",
+        )
+        resolved_checkpoint_compatibility = checkpoint_compatibility_source.resolve()
+        if (
+            resolved_checkpoint_compatibility == repo
+            or repo in resolved_checkpoint_compatibility.parents
+        ):
+            raise SchemaError(
+                "pc01_checkpoint_compatibility_receipt must be measured outside "
+                "the source checkout"
+            )
+        (
+            _,
+            checkpoint_compatibility_binding,
+            checkpoint_compatibility_source_files,
+        ) = _validate_pc01_checkpoint_compatibility_readiness(
+            checkpoint_compatibility_source,
+            repository_root=repo,
+            expected_source_commit=commit,
+            model_manifest_path=model_by_seed[42],
+            selection_evidence_path=selection_evidence_path,
+        )
+        checkpoint_compatibility_path = (
+            output / PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH
+        )
+        checkpoint_compatibility_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(
+            checkpoint_compatibility_source,
+            checkpoint_compatibility_path,
+        )
+        checkpoint_compatibility_path.chmod(0o444)
+        (
+            _,
+            staged_checkpoint_compatibility_binding,
+            _,
+        ) = _validate_pc01_checkpoint_compatibility_readiness(
+            checkpoint_compatibility_path,
+            repository_root=repo,
+            expected_source_commit=commit,
+            model_manifest_path=model_by_seed[42],
+            selection_evidence_path=selection_evidence_path,
+        )
+        if staged_checkpoint_compatibility_binding != checkpoint_compatibility_binding:
+            raise SchemaError(
+                "staged PC-01 checkpoint compatibility receipt changed identity"
+            )
+    elif supplied_checkpoint_compatibility is not None:
+        raise SchemaError(
+            "pc01_checkpoint_compatibility_receipt is provisional PC-01 pilot "
+            "evidence and cannot authorize another campaign"
+        )
     memory_values = spec.get("memory_manifests")
     if not isinstance(memory_values, list):
         raise SchemaError("handoff input memory_manifests must be an array")
@@ -996,9 +1216,19 @@ def prepare_handoff(
         _spec_path(spec_path, value, field=f"memory_manifests[{index}]")
         for index, value in enumerate(memory_values)
     ]
-    memory_by_seed = _validate_seed_manifest_coverage(
+    source_memory_by_seed = _validate_seed_manifest_coverage(
         memory_paths, matched_seeds, kind="memory", required=True
     )
+    _validate_model_memory_source_bindings(
+        model_by_seed, source_memory_by_seed, protocol_source=protocol_path
+    )
+    memory_by_seed: dict[int, Path] = {}
+    for seed, source_manifest in sorted(source_memory_by_seed.items()):
+        destination = output / "memory" / f"seed_{seed}"
+        for name in FROZEN_MEMORY_STORE_FILES:
+            _copy_exact(source_manifest.parent / name, destination / name)
+        _load_and_verify_frozen_memory_store(destination)
+        memory_by_seed[seed] = destination / "manifest.json"
     _validate_model_memory_source_bindings(
         model_by_seed, memory_by_seed, protocol_source=protocol_path
     )
@@ -1007,16 +1237,21 @@ def prepare_handoff(
     recovery_payload["duplicate_audit_manifest"] = str(duplicate_path)
     recovery_path = output / "recovery_scenarios.json"
     atomic_write_json(recovery_path, recovery_payload)
-    duplicate_input = _spec_path(
-        spec_path, spec.get("duplicate_audit"), field="duplicate_audit"
-    )
     _bind_duplicate_audit(
-        input_path=duplicate_input,
+        input_path=duplicate_input_source,
         output_path=duplicate_path,
         task_rows=task_rows,
         task_snapshot_path=task_snapshot_path,
         recovery_path=recovery_path,
         memory_by_seed=memory_by_seed,
+        repository_root=repo,
+        assignment_package_root=joint_assignment_source,
+        preparation_package_root=joint_preparation_source,
+        resolved_task_export_path=export_path,
+        approved_task_registry_path=registry_path,
+        registered_recovery_scenarios_path=recovery_source,
+        duplicate_audit_registration_path=duplicate_registration_source,
+        provenance_manifest_path=joint_provenance_source,
     )
     recovery_rows, recovery_metadata = _load_recovery_scenarios(recovery_path)
     _validate_recovery_campaign_counts(
@@ -1076,8 +1311,20 @@ def prepare_handoff(
         EVALUATION_CLI_SOURCE_RELATIVE_PATH,
         "src/web_agent/train/selection.py",
         "src/web_agent/eval/table2/selection_evidence.py",
+        "src/web_agent/eval/table2/model_compatibility.py",
+        "src/web_agent/train/gold_stages.py",
+        "scripts/run_gold.py",
         "src/web_agent/eval/table2/live_deployment.py",
+        AUDIT_TOOL_SOURCE_RELATIVE_PATH,
+        str(JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH),
+        str(P4_SOURCE_AUTHORITY_RELATIVE_PATH),
+        *AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS,
+        *EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS,
     }
+    required_sources.update(
+        str(path.relative_to(repo))
+        for path in checkpoint_compatibility_source_files
+    )
     required_sources.update(
         row["relative_path"]
         for row in live_deployment.binding["capability_source_files"]
@@ -1087,7 +1334,7 @@ def prepare_handoff(
     if not required_sources.issubset(source_paths):
         raise SchemaError(
             "runner source set must explicitly include the CLI, primary, integration, "
-            "evaluator, and validation-selection sources"
+            "evaluator, validation-selection, compatibility-gate, and generator sources"
         )
     for relative in sorted(source_paths):
         source_rows.append(
@@ -1112,6 +1359,7 @@ def prepare_handoff(
         resolved_task_snapshot_path=task_snapshot_path,
         runtime_integration=integration_identity,
         selection_evidence_path=selection_evidence_path,
+        checkpoint_compatibility_receipt_path=checkpoint_compatibility_path,
     )
     attestation = {
         "schema_version": RUNNER_ATTESTATION_SCHEMA_VERSION,
@@ -1136,6 +1384,7 @@ def prepare_handoff(
     prepared_campaign = dict(campaign)
     prepared_campaign.update(
         {
+            "handoff_manifest": str(output / "handoff_manifest.json"),
             "resolved_task_snapshot": str(task_snapshot_path),
             "recovery_scenarios": str(recovery_path),
             "duplicate_audit_manifest": str(duplicate_path),
@@ -1144,14 +1393,38 @@ def prepare_handoff(
             "runtime_integration_entrypoint": integration_entrypoint,
             "runtime_integration_source": integration_relative,
             "checkpoint_selection_evidence": str(selection_evidence_path),
+            "joint_duplicate_assignment_package": str(
+                joint_evidence_root / "assignment"
+            ),
+            "p4_preparation_package": str(
+                joint_evidence_root / "preparation"
+            ),
+            "joint_duplicate_resolved_task_export": str(
+                joint_evidence_root / "resolved_task_export.json"
+            ),
+            "joint_duplicate_registered_recovery_scenarios": str(
+                joint_evidence_root / "registered_recovery_scenarios.json"
+            ),
+            "joint_duplicate_audit_registration": str(
+                tracked_evidence_root
+                / JOINT_DUPLICATE_AUDIT_REGISTRATION_RELATIVE_PATH
+            ),
+            "joint_duplicate_provenance_manifest": str(
+                joint_evidence_root / "provenance_manifest.json"
+            ),
         }
     )
+    if checkpoint_compatibility_path is not None:
+        prepared_campaign["pc01_checkpoint_compatibility_receipt"] = str(
+            checkpoint_compatibility_path
+        )
     campaign_path = output / "campaign.yaml"
     campaign_path.write_text(
         yaml.safe_dump(prepared_campaign, sort_keys=False), encoding="utf-8"
     )
 
     freeze_arguments = {
+        "handoff_manifest": str(output / "handoff_manifest.json"),
         "campaign_config": str(campaign_path),
         "resolved_task_snapshot": str(task_snapshot_path),
         "environment_manifest": str(environment_path),
@@ -1160,6 +1433,10 @@ def prepare_handoff(
         "model_manifests": [str(model_by_seed[seed]) for seed in sorted(model_by_seed)],
         "memory_manifests": [str(memory_by_seed[seed]) for seed in sorted(memory_by_seed)],
     }
+    if checkpoint_compatibility_path is not None:
+        freeze_arguments["pc01_checkpoint_compatibility_receipt"] = str(
+            checkpoint_compatibility_path
+        )
     files = {
         str(path.relative_to(output)): sha256_file(path)
         for path in sorted(output.rglob("*"))
@@ -1173,6 +1450,9 @@ def prepare_handoff(
         "selection_mode": selection_mode,
         "matched_seeds": matched_seeds,
         LIVE_DEPLOYMENT_BINDING_FIELD: live_deployment.binding,
+        PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD: (
+            checkpoint_compatibility_binding
+        ),
         "freeze_arguments": freeze_arguments,
         "files": files,
     }

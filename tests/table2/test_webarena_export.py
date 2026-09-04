@@ -20,6 +20,7 @@ from web_agent.eval.table2.task_interface_audit import (
     PC01_BROWSER_ACTIONS,
     build_webarena_task_interface_audit,
     require_webarena_task_interface_compatible,
+    validate_resolved_task_interface_binding,
     validate_webarena_task_interface_audit,
     write_webarena_task_interface_audit,
 )
@@ -298,6 +299,46 @@ def test_task_interface_audit_is_exactly_recomputed_and_writer_is_no_overwrite(
     write_webarena_task_interface_audit(output, task_export=export)
     with pytest.raises(FileExistsError, match="refusing to overwrite"):
         write_webarena_task_interface_audit(output, task_export=export)
+
+
+def test_resolved_snapshot_recomputes_and_cannot_forge_interface_pass(
+    tmp_path: Path,
+) -> None:
+    export, _, _, _, _ = _build_interface_fixture(tmp_path)
+    audit = build_webarena_task_interface_audit(export)
+    snapshot = {
+        "snapshot_id": export["snapshot_id"],
+        "upstream_export_schema_version": export["schema_version"],
+        "upstream_export_record_type": export["record_type"],
+        "upstream_export_content_sha256": sha256_json(export),
+        "upstream_task_source": export["source"],
+        "site_url_map_sha256": export["site_url_map_sha256"],
+        "resolved_task_set_sha256": export["resolved_task_set_sha256"],
+        "task_action_interface_audit": audit,
+        "task_action_interface_audit_content_sha256": sha256_json(audit),
+        "tasks": export["tasks"],
+    }
+    assert validate_resolved_task_interface_binding(snapshot) == audit
+
+    forged = json.loads(json.dumps(snapshot))
+    forged["task_action_interface_audit"]["status"] = "PASS"
+    forged["task_action_interface_audit"]["handoff_eligible"] = True
+    forged["task_action_interface_audit_content_sha256"] = sha256_json(
+        forged["task_action_interface_audit"]
+    )
+    with pytest.raises(SchemaError, match="task-row recomputation"):
+        validate_resolved_task_interface_binding(forged)
+
+    changed_task = json.loads(json.dumps(snapshot))
+    changed_task["tasks"][0]["evaluator"]["config"] = {
+        "eval_types": ["url_match"],
+        "reference_url": "http://gitlab.example.test",
+    }
+    changed_task["tasks"][0]["task_config"]["eval"] = dict(
+        changed_task["tasks"][0]["evaluator"]["config"]
+    )
+    with pytest.raises(SchemaError, match="task-row recomputation"):
+        validate_resolved_task_interface_binding(changed_task)
 
 
 def test_task_interface_audit_cli_writes_fail_evidence_without_mutating_tasks(

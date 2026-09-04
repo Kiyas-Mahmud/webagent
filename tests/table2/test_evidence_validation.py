@@ -15,8 +15,10 @@ from web_agent.benchmarks.recovery_fixture import (
 )
 from web_agent.eval.table2.common import SchemaError
 from web_agent.eval.table2.evidence_validation import (
+    validate_e1_e2_e3_causal_prefix,
     validate_e2_e3_causal_trace,
     validate_e1_e2_e3_first_pre_action_equivalence,
+    validate_included_block_causal_trace,
     validate_ordered_verifier_receipts,
     validate_runtime_screenshot_artifacts,
 )
@@ -54,6 +56,76 @@ def test_first_trained_pre_action_output_matches_e1_e2_e3_artifacts(
     _write_jsonl(actions_path, rows)
     with pytest.raises(SchemaError, match="first trained pre-action outputs differ"):
         validate_e1_e2_e3_first_pre_action_equivalence(root)
+
+
+def test_trained_causal_prefix_covers_all_actions_when_p1_does_not_intervene(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "full-trained-prefix"
+    run_all_systems_fixture_smoke(root)
+
+    result = validate_e1_e2_e3_causal_prefix(root)
+
+    assert result["status"] == "PASS"
+    assert result["comparison_scope"] == "FULL_SHARED_TRACE_NO_P1_RECOVERY"
+    assert result["p1_recovery_intervention_present"] is False
+    assert result["normal_action_count"] == 6
+    assert result["observation_count"] == 7
+
+
+def test_included_block_receipt_result_binds_trained_causal_prefix(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "included-block-prefix"
+    run_all_systems_fixture_smoke(root)
+
+    result = validate_included_block_causal_trace(
+        root,
+        state_fingerprint_fields=(
+            "screenshot_sha256",
+            "url",
+            "title",
+            "page_state",
+        ),
+    )
+
+    assert result["trained_causal_prefix"]["comparison_scope"] == (
+        "FULL_SHARED_TRACE_NO_P1_RECOVERY"
+    )
+    assert result["trained_causal_prefix"]["normal_action_count"] == 6
+    assert result["trained_first_pre_action_sha256"] == (
+        result["trained_causal_prefix"]["first_pre_action_sha256"]
+    )
+
+
+def test_trained_causal_prefix_rejects_second_pre_action_divergence(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "changed-second-decision"
+    run_all_systems_fixture_smoke(root)
+    actions_path = root / "E3/runtime/actions.jsonl"
+    rows = _read_jsonl(actions_path)
+    assert len(rows) > 1
+    rows[1]["payload"]["decision"]["confidence_before"] = 0.123
+    _write_jsonl(actions_path, rows)
+
+    with pytest.raises(SchemaError, match="trained causal prefix differs"):
+        validate_e1_e2_e3_causal_prefix(root)
+
+
+def test_trained_causal_prefix_stops_at_first_p1_recovery_input(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "p1-intervention"
+    run_failure_memory_intervention_smoke(root)
+
+    result = validate_e1_e2_e3_causal_prefix(root)
+
+    assert result["comparison_scope"] == (
+        "PREFIX_THROUGH_FIRST_P1_RECOVERY_INPUT"
+    )
+    assert result["p1_recovery_intervention_present"] is True
+    assert result["normal_action_count"] == 1
 
 
 def test_e2_e3_trace_requires_full_equality_when_e3_abstains(tmp_path: Path) -> None:

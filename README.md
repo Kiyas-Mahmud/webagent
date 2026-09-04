@@ -10,6 +10,8 @@ Gold v2.8 artifacts and the canonical documents below.
 > `docs/PROJECT_SPECIFICATION.md`. For the post-training browser experiment,
 > `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md` is the canonical
 > authority and supersedes conflicting runtime wording in older design files.
+> Its active model-promotion gate compares exactly PC-01/PC-02/PC-03 at seed 42;
+> the 19-model roadmap below is historical supporting/generalization scope.
 
 ## The idea
 

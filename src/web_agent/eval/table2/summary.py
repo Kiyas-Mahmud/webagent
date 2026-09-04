@@ -22,6 +22,7 @@ from .common import (
     strict_bool,
 )
 from .metrics import compute_table2_metrics
+from .execution_guard import validate_analysis_source_identity
 from .package_validator import (
     DRAFT_PILOT_STATUS,
     FINAL_READY_STATUS,
@@ -45,6 +46,32 @@ MAIN_FIELDS = (
     "Loop Episode Rate",
     "Unrecovered Failure Rate",
     "Evidence Status",
+)
+PAIRED_CONTRAST_FIELDS = (
+    "contrast",
+    "metric",
+    "analysis_family",
+    "estimate",
+    "ci_low",
+    "ci_high",
+    "absolute_change",
+    "relative_change",
+    "left_estimate",
+    "right_estimate",
+    "numerator",
+    "denominator",
+    "n_clusters",
+    "n_rows",
+    "exact_sign_two_sided_p",
+    "holm_adjusted_p",
+    "right_better_task_clusters",
+    "left_better_task_clusters",
+    "tied_task_clusters",
+    "non_tied_task_clusters",
+    "interval_method",
+    "inference_unit",
+    "confidence",
+    "publication_status",
 )
 MANUAL_AUDIT_CASE_CATEGORIES = (
     "successful_recovery",
@@ -74,6 +101,12 @@ def summarize_campaign(
     if not validation.passed:
         _write_guarded_main_table(aggregate, publication_status=validation.publication_status)
         raise Table2Error("campaign validation failed: " + "; ".join(validation.errors))
+
+    analysis_source_identity = validate_analysis_source_identity(root)
+    atomic_write_json(
+        aggregate / "analysis_source_identity.json",
+        analysis_source_identity,
+    )
 
     protocol = load_yaml(root / "frozen" / "protocol.yaml")
     records = load_selected_analysis_records(root)
@@ -372,22 +405,64 @@ def _write_metric_csv(aggregate: Path, metrics: Mapping[str, Any]) -> None:
             "system_id": system_id,
             "publication_status": metrics["publication_status"],
         }
+
+        def add_estimate(prefix: str, value: Mapping[str, Any]) -> None:
+            row[f"{prefix}_numerator"] = value.get("numerator")
+            row[f"{prefix}_denominator"] = value.get("denominator")
+            row[prefix] = value.get("estimate")
+            row[f"{prefix}_ci_low"] = value.get(
+                "ci_low", value.get("ci95_low")
+            )
+            row[f"{prefix}_ci_high"] = value.get(
+                "ci_high", value.get("ci95_high")
+            )
+            row[f"{prefix}_interval_method"] = value.get("interval_method")
+            row[f"{prefix}_n_task_clusters"] = value.get("n_task_clusters")
+            for field in ("std", "median", "q1", "q3", "iqr"):
+                if field in value:
+                    row[f"{prefix}_{field}"] = value.get(field)
+            for field in (
+                "confidence",
+                "valid_bootstrap_samples",
+                "interval_status",
+                "missing_seed_repeat_cells",
+            ):
+                if field in value:
+                    row[f"{prefix}_{field}"] = value.get(field)
+
         for key, value in values.items():
             if isinstance(value, Mapping) and "estimate" in value:
-                row[f"{key}_numerator"] = value.get("numerator")
-                row[f"{key}_denominator"] = value.get("denominator")
-                row[key] = value.get("estimate")
-                row[f"{key}_ci_low"] = value.get(
-                    "ci_low", value.get("ci95_low")
+                add_estimate(key, value)
+            elif key in {"steps", "efficiency"} and isinstance(value, Mapping):
+                for nested_key, nested_value in value.items():
+                    if isinstance(nested_value, Mapping) and "estimate" in nested_value:
+                        add_estimate(f"{key}_{nested_key}", nested_value)
+
+        environment = metrics.get("environment_failure_rate")
+        if isinstance(environment, Mapping):
+            by_system = environment.get("by_system")
+            if isinstance(by_system, Mapping) and isinstance(
+                by_system.get(system_id), Mapping
+            ):
+                add_estimate(
+                    "environment_failure_rate",
+                    {
+                        **by_system[system_id],
+                        "interval_method": "wilson_score_95",
+                        "confidence": 0.95,
+                    },
                 )
-                row[f"{key}_ci_high"] = value.get(
-                    "ci_high", value.get("ci95_high")
-                )
-                row[f"{key}_interval_method"] = value.get("interval_method")
-                row[f"{key}_n_task_clusters"] = value.get("n_task_clusters")
-            elif key == "steps":
-                row["mean_browser_actions"] = value["all"]["mean"]
-                row["median_browser_actions"] = value["all"]["median"]
+            for scope in ("all_launches", "original_launches", "rerun_launches"):
+                scoped = environment.get(scope)
+                if isinstance(scoped, Mapping):
+                    add_estimate(
+                        f"environment_failure_{scope}",
+                        {
+                            **scoped,
+                            "interval_method": "wilson_score_95",
+                            "confidence": 0.95,
+                        },
+                    )
         rows.append(row)
     fields = []
     for row in rows:
@@ -411,12 +486,18 @@ def _write_main_table(
         rows.append(
             {
                 "System": system_id,
-                "Task Success Rate": values["task_success_rate"]["display"],
-                "Recovery Success Rate": values["recovery_success_rate"]["display"],
-                "Success After Initial Failure": values["success_after_initial_failure"]["display"],
-                "Avg. Browser Actions": _format_number(values["steps"]["all"]["mean"]),
-                "Loop Episode Rate": values["loop_episode_rate"]["display"],
-                "Unrecovered Failure Rate": values["unrecovered_failure_rate"]["display"],
+                "Task Success Rate": _format_rate(values["task_success_rate"]),
+                "Recovery Success Rate": _format_rate(
+                    values["recovery_success_rate"]
+                ),
+                "Success After Initial Failure": _format_rate(
+                    values["success_after_initial_failure"]
+                ),
+                "Avg. Browser Actions": _format_continuous(values["steps"]["all"]),
+                "Loop Episode Rate": _format_rate(values["loop_episode_rate"]),
+                "Unrecovered Failure Rate": _format_rate(
+                    values["unrecovered_failure_rate"]
+                ),
                 "Evidence Status": FINAL_READY_STATUS,
             }
         )
@@ -476,58 +557,100 @@ def _write_companion_table(
         rows.append(
             {
                 "System": system_id,
-                "Recovery@1": guard or values["recovery_at_1"]["display"],
-                f"Recovery@{recovery_k}": guard or values[f"recovery_at_{recovery_k}"]["display"],
-                "Verified-failure-only RSR": guard or values["verified_failure_only_recovery_success_rate"]["display"],
-                "Episode recovery success rate": guard or values["episode_recovery_success_rate"]["display"],
-                "False-trigger rate": guard or values["false_trigger_rate"]["display"],
-                "Unnecessary-intervention rate": guard or values["unnecessary_intervention_rate"]["display"],
-                "Repeated-error event rate": guard or values["repeated_error_event_rate"]["display"],
-                "Verified-failure incidence": guard or values["verified_failure_incidence"]["display"],
-                "Avg. recovery attempts/run": guard or _format_number(
-                    values["recovery_attempts_per_episode"]["mean"]
-                ),
-                "Avg. recovery attempts/failure episode": guard or _format_number(
-                    values["recovery_attempts_per_failure_episode"]["mean"]
+                "Recovery@1": guard or _format_rate(values["recovery_at_1"]),
+                f"Recovery@{recovery_k}": guard
+                or _format_rate(values[f"recovery_at_{recovery_k}"]),
+                "Verified-failure-only RSR": guard
+                or _format_rate(values["verified_failure_only_recovery_success_rate"]),
+                "Episode recovery success rate": guard
+                or _format_rate(values["episode_recovery_success_rate"]),
+                "False-trigger rate": guard
+                or _format_rate(values["false_trigger_rate"]),
+                "Unnecessary-intervention rate": guard
+                or _format_rate(values["unnecessary_intervention_rate"]),
+                "Repeated-error event rate": guard
+                or _format_rate(values["repeated_error_event_rate"]),
+                "Verified-failure incidence": guard
+                or _format_rate(values["verified_failure_incidence"]),
+                "Avg. recovery attempts/run": guard
+                or _format_continuous(values["recovery_attempts_per_episode"]),
+                "Avg. recovery attempts/failure episode": guard
+                or _format_continuous(
+                    values["recovery_attempts_per_failure_episode"]
                 ),
                 "Environment failure rate": guard
-                or metrics["environment_failure_rate"]["by_system"][system_id]["display"],
+                or _format_rate(
+                    metrics["environment_failure_rate"]["by_system"][system_id]
+                ),
                 "Task wall-clock seconds": guard
-                or _format_number(values["efficiency"]["task_wall_clock_seconds"]["mean"]),
+                or _format_continuous(values["efficiency"]["task_wall_clock_seconds"]),
                 "Model call count": guard
-                or _format_number(values["efficiency"]["model_call_count"]["mean"]),
+                or _format_continuous(values["efficiency"]["model_call_count"]),
                 "Decision latency ms": guard
-                or _format_number(values["efficiency"]["decision_latency_ms"]["mean"]),
+                or _format_continuous(values["efficiency"]["decision_latency_ms"]),
                 "Provider latency ms": guard
-                or _format_number(values["efficiency"]["provider_latency_ms"]["mean"]),
+                or _format_continuous(values["efficiency"]["provider_latency_ms"]),
                 "Recovery latency ms": guard
-                or _format_number(values["efficiency"]["recovery_latency_ms"]["mean"]),
+                or _format_continuous(values["efficiency"]["recovery_latency_ms"]),
                 "Retrieval latency ms": guard
-                or _format_number(values["efficiency"]["retrieval_latency_ms"]["mean"]),
+                or _format_continuous(values["efficiency"]["retrieval_latency_ms"]),
                 "Input tokens": guard
-                or _format_number(values["efficiency"]["input_token_count"]["mean"]),
+                or _format_continuous(values["efficiency"]["input_token_count"]),
                 "Output tokens": guard
-                or _format_number(values["efficiency"]["output_token_count"]["mean"]),
+                or _format_continuous(values["efficiency"]["output_token_count"]),
                 "Model parameters": guard
-                or _format_number(values["efficiency"]["model_parameter_count"]["mean"]),
+                or _format_continuous(values["efficiency"]["model_parameter_count"]),
                 "Trainable parameters": guard
-                or _format_number(values["efficiency"]["trainable_parameter_count"]["mean"]),
+                or _format_continuous(values["efficiency"]["trainable_parameter_count"]),
                 "Peak GPU memory MB": guard
-                or _format_number(values["efficiency"]["peak_gpu_memory_mb"]["mean"]),
+                or _format_continuous(values["efficiency"]["peak_gpu_memory_mb"]),
                 "Peak system memory MB": guard
-                or _format_number(values["efficiency"]["peak_system_memory_mb"]["mean"]),
+                or _format_continuous(values["efficiency"]["peak_system_memory_mb"]),
                 "Memory index size": guard
-                or _format_number(values["efficiency"]["memory_index_size"]["mean"]),
+                or _format_continuous(values["efficiency"]["memory_index_size"]),
                 "Training GPU hours": guard
-                or _format_number(values["efficiency"]["training_gpu_hours"]["mean"]),
+                or _format_continuous(values["efficiency"]["training_gpu_hours"]),
                 "Evidence Status": publication_status,
             }
         )
     write_csv(aggregate / "table2_companion.csv", rows, fields)
 
 
-def _format_number(value: Any) -> str:
-    return "N/A" if value is None else f"{float(value):.2f}"
+def _format_rate(value: Mapping[str, Any]) -> str:
+    """Render a rate with its exact counts and registered 95% interval."""
+
+    estimate = value.get("estimate")
+    if estimate is None:
+        return "N/A"
+    numerator = int(value["numerator"])
+    denominator = int(value["denominator"])
+    low = value.get("ci95_low", value.get("ci_low"))
+    high = value.get("ci95_high", value.get("ci_high"))
+    point = 100.0 * float(estimate)
+    if low is None or high is None:
+        return (
+            f"{point:.2f}% ({numerator}/{denominator}; "
+            "95% CI not estimable)"
+        )
+    return (
+        f"{point:.2f}% ({numerator}/{denominator}; 95% CI "
+        f"{100.0 * float(low):.2f}%, {100.0 * float(high):.2f}%)"
+    )
+
+
+def _format_continuous(value: Mapping[str, Any]) -> str:
+    estimate = value.get("estimate", value.get("mean"))
+    if estimate is None:
+        return "N/A"
+    low = value.get("ci95_low")
+    high = value.get("ci95_high")
+    denominator = value.get("denominator", value.get("n"))
+    if low is None or high is None:
+        return f"{float(estimate):.2f} (n={int(denominator)})"
+    return (
+        f"{float(estimate):.2f} [95% CI {float(low):.2f}, "
+        f"{float(high):.2f}; n={int(denominator)}]"
+    )
 
 
 def build_manual_audit_selection(
@@ -883,39 +1006,20 @@ def _export_results(
         results_dir / "table2_companion.csv",
         (root / "aggregate" / "table2_companion.csv").read_bytes(),
     )
+    _write_result_bytes(
+        results_dir / "metrics.csv", (root / "aggregate" / "metrics.csv").read_bytes()
+    )
+    _write_result_bytes(
+        results_dir / "metrics.json", (root / "aggregate" / "metrics.json").read_bytes()
+    )
 
-    contrast_rows: list[dict[str, Any]] = []
-    for contrast, metric_values in statistics["contrasts"].items():
-        for metric, values in metric_values.items():
-            if not isinstance(values, Mapping) or "estimate" not in values:
-                continue
-            contrast_rows.append(
-                {
-                    "contrast": contrast,
-                    "metric": metric,
-                    "estimate": values.get("estimate"),
-                    "ci_low": values.get("ci_low"),
-                    "ci_high": values.get("ci_high"),
-                    "absolute_change": values.get("absolute_change"),
-                    "relative_change": values.get("relative_change"),
-                    "n_clusters": values.get("n_clusters"),
-                    "publication_status": publication_status,
-                }
-            )
+    contrast_rows = _paired_contrast_rows(
+        statistics, publication_status=publication_status
+    )
     _write_result_csv(
         results_dir / "paired_contrasts.csv",
         contrast_rows,
-        (
-            "contrast",
-            "metric",
-            "estimate",
-            "ci_low",
-            "ci_high",
-            "absolute_change",
-            "relative_change",
-            "n_clusters",
-            "publication_status",
-        ),
+        PAIRED_CONTRAST_FIELDS,
     )
 
     retrieval_rows: list[dict[str, Any]] = []
@@ -960,6 +1064,9 @@ def _export_results(
         "frozen_artifact_hashes_sha256": sha256_file(root / "artifact_hashes.json"),
         "environment_sha256": sha256_file(root / "frozen" / "environment.json"),
         "protocol_sha256": sha256_file(root / "frozen" / "protocol.yaml"),
+        "analysis_source_identity_sha256": sha256_file(
+            root / "aggregate" / "analysis_source_identity.json"
+        ),
         "contains_raw_oracle_evidence": False,
     }
     _write_result_json(results_dir / "provenance.json", provenance)
@@ -967,6 +1074,8 @@ def _export_results(
         "pilot_summary.json",
         "table2_main.csv",
         "table2_companion.csv",
+        "metrics.csv",
+        "metrics.json",
         "paired_contrasts.csv",
         "retrieval_metrics.csv",
         "statistics.json",
@@ -979,6 +1088,143 @@ def _export_results(
         "files": {name: sha256_file(results_dir / name) for name in names},
         "raw_evidence_exported": False,
     }
+
+
+def _paired_contrast_rows(
+    statistics: Mapping[str, Any],
+    *,
+    publication_status: str,
+) -> list[dict[str, Any]]:
+    """Flatten every registered paired analysis without dropping inference."""
+
+    confidence = statistics.get("confidence")
+    bootstrap_unit = statistics.get("bootstrap_unit", "task_id")
+    rows: list[dict[str, Any]] = []
+    contrasts = statistics.get("contrasts")
+    if not isinstance(contrasts, Mapping):
+        raise SchemaError("statistics lacks registered paired contrasts")
+    for contrast, metric_values in contrasts.items():
+        if not isinstance(metric_values, Mapping):
+            raise SchemaError(f"statistics contrast is malformed: {contrast}")
+        for metric, values in metric_values.items():
+            if not isinstance(values, Mapping) or "estimate" not in values:
+                continue
+            significance = values.get("task_clustered_significance")
+            if not isinstance(significance, Mapping):
+                significance = {}
+            rows.append(
+                {
+                    "contrast": contrast,
+                    "metric": metric,
+                    "analysis_family": "paired_mean_difference",
+                    "estimate": values.get("estimate"),
+                    "ci_low": values.get("ci_low"),
+                    "ci_high": values.get("ci_high"),
+                    "absolute_change": values.get("absolute_change"),
+                    "relative_change": values.get("relative_change"),
+                    "left_estimate": values.get("left_mean"),
+                    "right_estimate": values.get("right_mean"),
+                    "numerator": None,
+                    "denominator": None,
+                    "n_clusters": values.get("n_clusters"),
+                    "n_rows": values.get("n_rows"),
+                    "exact_sign_two_sided_p": significance.get(
+                        "exact_sign_two_sided_p"
+                    ),
+                    "holm_adjusted_p": significance.get("holm_adjusted_p"),
+                    "right_better_task_clusters": significance.get(
+                        "right_better_task_clusters"
+                    ),
+                    "left_better_task_clusters": significance.get(
+                        "left_better_task_clusters"
+                    ),
+                    "tied_task_clusters": significance.get("tied_task_clusters"),
+                    "non_tied_task_clusters": significance.get(
+                        "non_tied_task_clusters"
+                    ),
+                    "interval_method": "percentile_task_cluster_bootstrap",
+                    "inference_unit": bootstrap_unit,
+                    "confidence": confidence,
+                    "publication_status": publication_status,
+                }
+            )
+
+    ratio_contrasts = statistics.get("clustered_ratio_contrasts", {})
+    if not isinstance(ratio_contrasts, Mapping):
+        raise SchemaError("statistics clustered ratio contrasts are malformed")
+    for contrast, metric_values in ratio_contrasts.items():
+        if not isinstance(metric_values, Mapping):
+            raise SchemaError(f"ratio contrast is malformed: {contrast}")
+        for metric, values in metric_values.items():
+            if not isinstance(values, Mapping) or "estimate" not in values:
+                raise SchemaError(
+                    f"ratio contrast metric is malformed: {contrast}.{metric}"
+                )
+            rows.append(
+                {
+                    "contrast": contrast,
+                    "metric": metric,
+                    "analysis_family": "paired_ratio_difference",
+                    "estimate": values.get("estimate"),
+                    "ci_low": values.get("ci_low"),
+                    "ci_high": values.get("ci_high"),
+                    "absolute_change": values.get("absolute_change"),
+                    "relative_change": values.get("relative_change"),
+                    "left_estimate": values.get("left_ratio"),
+                    "right_estimate": values.get("right_ratio"),
+                    "numerator": None,
+                    "denominator": None,
+                    "n_clusters": values.get("n_clusters"),
+                    "n_rows": None,
+                    "exact_sign_two_sided_p": None,
+                    "holm_adjusted_p": None,
+                    "right_better_task_clusters": None,
+                    "left_better_task_clusters": None,
+                    "tied_task_clusters": None,
+                    "non_tied_task_clusters": None,
+                    "interval_method": "percentile_task_cluster_bootstrap",
+                    "inference_unit": bootstrap_unit,
+                    "confidence": confidence,
+                    "publication_status": publication_status,
+                }
+            )
+
+    memory_regression = statistics.get("paired_memory_regression_rate")
+    if not isinstance(memory_regression, Mapping) or "estimate" not in memory_regression:
+        raise SchemaError("statistics lacks paired memory-regression rate")
+    rows.append(
+        {
+            "contrast": "E3_minus_E2",
+            "metric": "paired_memory_regression_rate",
+            "analysis_family": "task_level_harm_rate",
+            "estimate": memory_regression.get("estimate"),
+            "ci_low": memory_regression.get(
+                "ci_low", memory_regression.get("ci95_low")
+            ),
+            "ci_high": memory_regression.get(
+                "ci_high", memory_regression.get("ci95_high")
+            ),
+            "absolute_change": None,
+            "relative_change": None,
+            "left_estimate": None,
+            "right_estimate": None,
+            "numerator": memory_regression.get("numerator"),
+            "denominator": memory_regression.get("denominator"),
+            "n_clusters": memory_regression.get("n_task_clusters"),
+            "n_rows": None,
+            "exact_sign_two_sided_p": None,
+            "holm_adjusted_p": None,
+            "right_better_task_clusters": None,
+            "left_better_task_clusters": None,
+            "tied_task_clusters": None,
+            "non_tied_task_clusters": None,
+            "interval_method": "wilson_score_95",
+            "inference_unit": memory_regression.get("unit", "task_id"),
+            "confidence": 0.95,
+            "publication_status": publication_status,
+        }
+    )
+    return rows
 
 
 def _write_result_json(path: Path, value: Mapping[str, Any]) -> None:
@@ -1058,7 +1304,12 @@ def _write_aggregate_hashes(aggregate: Path) -> None:
 
 def _write_campaign_evidence_manifest(root: Path) -> None:
     files: dict[str, str] = {}
-    for directory_name in ("paired_blocks", "manual_audit", "aggregate"):
+    for directory_name in (
+        "paired_blocks",
+        "manual_audit",
+        "runtime_readiness",
+        "aggregate",
+    ):
         directory = root / directory_name
         for path in sorted(directory.rglob("*")):
             if not path.is_file():

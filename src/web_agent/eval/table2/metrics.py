@@ -215,6 +215,167 @@ def describe(values: Iterable[float]) -> dict[str, Any]:
     }
 
 
+def task_clustered_mean(
+    contributions: Iterable[Mapping[str, Any]],
+    *,
+    metric_name: str,
+    system_id: str,
+    samples: int = 10_000,
+    confidence: float = 0.95,
+    seed: int = 20250831,
+    force_na: bool = False,
+) -> dict[str, Any]:
+    """Return a mean and task-cluster bootstrap interval.
+
+    Each contribution is one registered seed/repeat cell. Exact duplicate
+    cells are collapsed, conflicting copies fail closed, and a bootstrap draw
+    resamples complete tasks so repeated cells from one task are never treated
+    as independent tasks. ``numerator`` is the finite value total and
+    ``denominator`` is the number of unique contributing cells.
+    """
+
+    if samples <= 0:
+        raise ValueError("bootstrap samples must be positive")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be between zero and one")
+    if not metric_name or system_id not in SYSTEM_IDS:
+        raise ValueError("clustered mean requires a metric and registered system")
+
+    tasks: dict[str, dict[tuple[Any, ...], float | None]] = defaultdict(dict)
+    duplicate_cells = 0
+    for raw in contributions:
+        task_id = str(raw.get("task_id") or "")
+        if not task_id:
+            raise SchemaError(f"{metric_name} contribution lacks task_id")
+        cell = raw.get("cell")
+        if not isinstance(cell, tuple) or not cell:
+            raise SchemaError(f"{metric_name} contribution lacks a cell key")
+        raw_value = raw.get("value")
+        value = (
+            None
+            if raw_value is None
+            else _nonnegative_float(raw_value, f"{metric_name}.value")
+        )
+        if cell not in tasks[task_id]:
+            tasks[task_id][cell] = value
+        elif tasks[task_id][cell] != value:
+            raise SchemaError(
+                "conflicting continuous contributions for duplicate "
+                f"seed/repeat cell {metric_name}.{system_id}.{task_id}.{cell}"
+            )
+        else:
+            duplicate_cells += 1
+
+    registered_task_ids = sorted(tasks)
+    task_values = {
+        task_id: tuple(
+            value
+            for cell in sorted(tasks[task_id])
+            if (value := tasks[task_id][cell]) is not None
+        )
+        for task_id in registered_task_ids
+    }
+    task_ids = [task_id for task_id in registered_task_ids if task_values[task_id]]
+    ordered = sorted(
+        value for task_id in task_ids for value in task_values[task_id]
+    )
+    descriptive = describe(ordered)
+    derived_seed = stable_int_seed(seed, "per_system_mean", system_id, metric_name)
+    common = {
+        **descriptive,
+        "numerator": descriptive["total"],
+        "denominator": descriptive["n"],
+        "estimate": descriptive["mean"],
+        "n_task_clusters": len(task_ids),
+        "registered_task_clusters": len(registered_task_ids),
+        "unique_seed_repeat_cells": len(ordered),
+        "missing_seed_repeat_cells": sum(
+            value is None for cells in tasks.values() for value in cells.values()
+        ),
+        "duplicate_seed_repeat_cells_collapsed": duplicate_cells,
+        "confidence": confidence,
+        "interval_method": "percentile_task_cluster_bootstrap",
+        "inference_unit": "task_id",
+        "estimand": "mean_over_unique_registered_seed_repeat_cells",
+        "within_task_aggregation": (
+            "retain_all_unique_matched_seed_repeat_cells"
+        ),
+        "bootstrap_samples": samples,
+        "bootstrap_seed": derived_seed,
+    }
+    if force_na:
+        return {
+            **common,
+            "n": 0,
+            "total": 0.0,
+            "mean": None,
+            "std": None,
+            "median": None,
+            "q1": None,
+            "q3": None,
+            "iqr": None,
+            "min": None,
+            "max": None,
+            "numerator": 0.0,
+            "denominator": 0,
+            "estimate": None,
+            "ci_low": None,
+            "ci_high": None,
+            "ci95_low": None,
+            "ci95_high": None,
+            "valid_bootstrap_samples": 0,
+            "interval_status": "NOT_APPLICABLE",
+            "display": "N/A",
+        }
+    if not ordered:
+        return {
+            **common,
+            "estimate": None,
+            "ci_low": None,
+            "ci_high": None,
+            "ci95_low": None,
+            "ci95_high": None,
+            "valid_bootstrap_samples": 0,
+            "interval_status": "NOT_APPLICABLE",
+            "display": "N/A",
+        }
+    if len(task_ids) < 2:
+        return {
+            **common,
+            "ci_low": None,
+            "ci_high": None,
+            "ci95_low": None,
+            "ci95_high": None,
+            "valid_bootstrap_samples": 0,
+            "interval_status": "NOT_ESTIMABLE_FEWER_THAN_TWO_TASK_CLUSTERS",
+            "display": f"{descriptive['mean']:.2f} ({descriptive['total']:.2f}/{descriptive['n']})",
+        }
+
+    rng = random.Random(derived_seed)
+    estimates: list[float] = []
+    for _ in range(samples):
+        chosen = [task_ids[rng.randrange(len(task_ids))] for _ in task_ids]
+        sampled_values = [
+            value for task_id in chosen for value in task_values[task_id]
+        ]
+        if sampled_values:
+            estimates.append(sum(sampled_values) / len(sampled_values))
+    estimates.sort()
+    alpha = (1.0 - confidence) / 2.0
+    low = _quantile(estimates, alpha) if estimates else None
+    high = _quantile(estimates, 1.0 - alpha) if estimates else None
+    return {
+        **common,
+        "ci_low": low,
+        "ci_high": high,
+        "ci95_low": low if confidence == 0.95 else None,
+        "ci95_high": high if confidence == 0.95 else None,
+        "valid_bootstrap_samples": len(estimates),
+        "interval_status": "ESTIMATED" if estimates else "NO_VALID_BOOTSTRAP_MEANS",
+        "display": f"{descriptive['mean']:.2f} ({descriptive['total']:.2f}/{descriptive['n']})",
+    }
+
+
 def compute_table2_metrics(
     episodes: Iterable[Mapping[str, Any]],
     *,
@@ -343,8 +504,6 @@ def _system_metrics(
         for item in incidents
         if _bool(item["verified_agent_failure"], "verified_agent_failure")
     }
-    failure_episodes = [row for row in episodes if row["episode_id"] in failure_episode_ids]
-
     initiated = [row for row in attempts if _bool(row.get("initiated", True), "initiated")]
     verified_attempts = [
         row for row in initiated
@@ -438,17 +597,34 @@ def _system_metrics(
             force_na=force_na,
         )
 
-    all_steps = [row["step_count"] for row in episodes]
-    successful_steps = [row["step_count"] for row in episodes if row["task_success"]]
-    unsuccessful_steps = [row["step_count"] for row in episodes if not row["task_success"]]
-    attempt_counts = [
-        sum(str(attempt.get("episode_id")) == row["episode_id"] for attempt in initiated)
-        for row in episodes
-    ]
-    failure_attempt_counts = [
-        sum(str(attempt.get("episode_id")) == row["episode_id"] for attempt in initiated)
-        for row in failure_episodes
-    ]
+    def clustered_mean(
+        metric_name: str,
+        value: Callable[[Mapping[str, Any]], float | int | None],
+        *,
+        include: Callable[[Mapping[str, Any]], bool] | None = None,
+        force_na: bool = False,
+    ) -> dict[str, Any]:
+        contributions: list[dict[str, Any]] = []
+        for episode in episodes:
+            if include is not None and not include(episode):
+                continue
+            measured = value(episode)
+            contributions.append(
+                {
+                    "task_id": episode["task_id"],
+                    "cell": _episode_seed_repeat_cell(episode),
+                    "value": measured,
+                }
+            )
+        return task_clustered_mean(
+            contributions,
+            metric_name=metric_name,
+            system_id=system_id,
+            samples=bootstrap_samples,
+            confidence=confidence,
+            seed=bootstrap_seed,
+            force_na=force_na,
+        )
 
     return {
         "episode_count": len(episodes),
@@ -576,15 +752,41 @@ def _system_metrics(
             ),
         ),
         "steps": {
-            "all": describe(all_steps),
-            "successful_tasks": describe(successful_steps),
-            "unsuccessful_tasks": describe(unsuccessful_steps),
-            "executed": describe(row["executed_action_count"] for row in episodes),
-            "rejected": describe(row["rejected_action_count"] for row in episodes),
-            "recovery": describe(row["recovery_action_count"] for row in episodes),
+            "all": clustered_mean("browser_actions_all", lambda row: row["step_count"]),
+            "successful_tasks": clustered_mean(
+                "browser_actions_successful_tasks",
+                lambda row: row["step_count"],
+                include=lambda row: bool(row["task_success"]),
+            ),
+            "unsuccessful_tasks": clustered_mean(
+                "browser_actions_unsuccessful_tasks",
+                lambda row: row["step_count"],
+                include=lambda row: not bool(row["task_success"]),
+            ),
+            "executed": clustered_mean(
+                "executed_browser_actions",
+                lambda row: row["executed_action_count"],
+            ),
+            "rejected": clustered_mean(
+                "rejected_browser_actions",
+                lambda row: row["rejected_action_count"],
+            ),
+            "recovery": clustered_mean(
+                "recovery_browser_actions",
+                lambda row: row["recovery_action_count"],
+            ),
         },
-        "recovery_attempts_per_episode": describe(attempt_counts),
-        "recovery_attempts_per_failure_episode": describe(failure_attempt_counts),
+        "recovery_attempts_per_episode": clustered_mean(
+            "recovery_attempts_per_episode",
+            lambda row: len(initiated_by_episode[row["episode_id"]]),
+            force_na=recovery_disabled,
+        ),
+        "recovery_attempts_per_failure_episode": clustered_mean(
+            "recovery_attempts_per_failure_episode",
+            lambda row: len(initiated_by_episode[row["episode_id"]]),
+            include=lambda row: row["episode_id"] in failure_episode_ids,
+            force_na=recovery_disabled,
+        ),
         "episode_recovery_success_rate": clustered_rate(
             "episode_recovery_success_rate",
             lambda episode: (
@@ -598,75 +800,61 @@ def _system_metrics(
             force_na=recovery_disabled,
         ),
         "efficiency": {
-            "task_wall_clock_seconds": describe(
-                row["task_wall_clock_seconds"]
-                for row in episodes
-                if row["task_wall_clock_seconds"] is not None
+            "task_wall_clock_seconds": clustered_mean(
+                "task_wall_clock_seconds",
+                lambda row: row["task_wall_clock_seconds"],
             ),
-            "model_call_count": describe(
-                row["model_call_count"]
-                for row in episodes
-                if row["model_call_count"] is not None
+            "model_call_count": clustered_mean(
+                "model_call_count",
+                lambda row: row["model_call_count"],
             ),
-            "decision_latency_ms": describe(
-                row["decision_latency_ms"]
-                for row in episodes
-                if row["decision_latency_ms"] is not None
+            "decision_latency_ms": clustered_mean(
+                "decision_latency_ms",
+                lambda row: row["decision_latency_ms"],
             ),
-            "provider_latency_ms": describe(
-                row["provider_latency_ms"]
-                for row in episodes
-                if row["provider_latency_ms"] is not None
+            "provider_latency_ms": clustered_mean(
+                "provider_latency_ms",
+                lambda row: row["provider_latency_ms"],
             ),
-            "recovery_latency_ms": describe(
-                row["recovery_latency_ms"]
-                for row in episodes
-                if row["recovery_latency_ms"] is not None
+            "recovery_latency_ms": clustered_mean(
+                "recovery_latency_ms",
+                lambda row: row["recovery_latency_ms"],
             ),
-            "retrieval_latency_ms": describe(
-                row["retrieval_latency_ms"]
-                for row in episodes
-                if row["retrieval_latency_ms"] is not None
+            "retrieval_latency_ms": clustered_mean(
+                "retrieval_latency_ms",
+                lambda row: row["retrieval_latency_ms"],
             ),
-            "input_token_count": describe(
-                row["input_token_count"]
-                for row in episodes
-                if row["input_token_count"] is not None
+            "input_token_count": clustered_mean(
+                "input_token_count",
+                lambda row: row["input_token_count"],
             ),
-            "output_token_count": describe(
-                row["output_token_count"]
-                for row in episodes
-                if row["output_token_count"] is not None
+            "output_token_count": clustered_mean(
+                "output_token_count",
+                lambda row: row["output_token_count"],
             ),
-            "model_parameter_count": describe(
-                row["model_parameter_count"]
-                for row in episodes
-                if row["model_parameter_count"] is not None
+            "model_parameter_count": clustered_mean(
+                "model_parameter_count",
+                lambda row: row["model_parameter_count"],
             ),
-            "trainable_parameter_count": describe(
-                row["trainable_parameter_count"]
-                for row in episodes
-                if row["trainable_parameter_count"] is not None
+            "trainable_parameter_count": clustered_mean(
+                "trainable_parameter_count",
+                lambda row: row["trainable_parameter_count"],
             ),
-            "peak_gpu_memory_mb": describe(
-                row["peak_gpu_memory_mb"]
-                for row in episodes
-                if row["peak_gpu_memory_mb"] is not None
+            "peak_gpu_memory_mb": clustered_mean(
+                "peak_gpu_memory_mb",
+                lambda row: row["peak_gpu_memory_mb"],
             ),
-            "peak_system_memory_mb": describe(
-                row["peak_system_memory_mb"]
-                for row in episodes
-                if row["peak_system_memory_mb"] is not None
+            "peak_system_memory_mb": clustered_mean(
+                "peak_system_memory_mb",
+                lambda row: row["peak_system_memory_mb"],
             ),
-            "memory_index_size": describe(
-                row["memory_index_size"]
-                for row in episodes
-                if row["memory_index_size"] is not None
+            "memory_index_size": clustered_mean(
+                "memory_index_size",
+                lambda row: row["memory_index_size"],
             ),
-            "training_gpu_hours": describe(
-                row["training_gpu_hours"]
-                for row in episodes
-                if row["training_gpu_hours"] is not None
+            "training_gpu_hours": clustered_mean(
+                "training_gpu_hours",
+                lambda row: row["training_gpu_hours"],
             ),
         },
     }

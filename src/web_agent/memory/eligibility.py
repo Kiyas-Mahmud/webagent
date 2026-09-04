@@ -18,6 +18,7 @@ from web_agent.memory.manifest import (
     ELIGIBILITY_POLICY_VERSION,
     ManifestError,
     PROVENANCE_SCHEMA_VERSION,
+    canonical_sha256,
     require_sha256,
 )
 from web_agent.runtime.duplicate_audit import (
@@ -26,6 +27,10 @@ from web_agent.runtime.duplicate_audit import (
 )
 from web_agent.memory.verification import (
     VerificationEvidenceError,
+    canonical_p4_memory_source_material,
+    recovery_action_evidence_sha256,
+    recovery_state_evidence_sha256,
+    validate_p4_label_review_evidence,
     validate_provenance_verification_evidence,
 )
 
@@ -91,6 +96,18 @@ def _view(record: Mapping[str, Any]) -> tuple[Mapping, Mapping, Mapping]:
     return inputs, labels, meta
 
 
+def _public_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _public_value(item)
+            for key, item in value.items()
+            if not str(key).startswith("_")
+        }
+    if isinstance(value, (list, tuple)):
+        return [_public_value(item) for item in value]
+    return value
+
+
 def _nonempty(value: object, *, field: str) -> str:
     normalized = str(value or "").strip()
     if not normalized:
@@ -116,7 +133,7 @@ def _strict_step(value: object) -> int:
     return parsed
 
 
-def _is_explicitly_non_admitted(
+def is_explicitly_non_admitted(
     meta: Mapping[str, Any], evidence: Mapping[str, Any] | None
 ) -> bool:
     """Reject a quarantine/non-admission marker without relying on an overlay.
@@ -311,7 +328,13 @@ def _sample_id(meta: Mapping[str, Any], index: int) -> str:
     )
 
 
-def _memory_id(dataset_id: str, source_sample_id: str, recovery_sample_id: str) -> str:
+def canonical_memory_id(
+    dataset_id: str,
+    source_sample_id: str,
+    recovery_sample_id: str,
+) -> str:
+    """Return the registered deterministic memory identity."""
+
     raw = f"{dataset_id}\0{source_sample_id}\0{recovery_sample_id}".encode("utf-8")
     return f"mem_{hashlib.sha256(raw).hexdigest()}"
 
@@ -413,21 +436,52 @@ def _candidate_from_record(
         raise MemoryEligibilityError(
             f"potential memory {sample_id} cites a different duplicate-cluster namespace"
         )
-    if str(meta.get("review_status", "")).lower() != "approved":
+    review_status = meta.get("review_status")
+    if not isinstance(review_status, str) or review_status.strip().lower() not in {
+        "approved",
+        "pending",
+    }:
         raise MemoryEligibilityError(
-            f"potential memory {sample_id} is not review_status=approved"
+            f"potential memory {sample_id} has no registered source review status"
         )
 
+    source_role = str(meta.get("_source_dataset") or "original_gold").strip()
+    if source_role not in {"original_gold", "retry_abort_supplement_v2"}:
+        raise MemoryEligibilityError(
+            f"potential memory {sample_id} has an unregistered source role"
+        )
+    direct_transition = source_role == "retry_abort_supplement_v2"
+    direct_marker = meta.get("_direct_recovery_transition")
+    if (direct_transition and direct_marker is not True) or (
+        not direct_transition and direct_marker is True
+    ):
+        raise MemoryEligibilityError(
+            f"potential memory {sample_id} source role/direct marker mismatch"
+        )
+    source_transition_kind = (
+        "direct_recovery_from_observed_failure_state"
+        if direct_transition
+        else "adjacent_failure_then_recovery"
+    )
     outcome = _nonempty(labels.get("outcome_label"), field=f"{sample_id}.outcome")
-    failure_type = _nonempty(
+    source_failure_type = _nonempty(
         labels.get("failure_type_4"), field=f"{sample_id}.failure_type"
+    )
+    source_action_type = _nonempty(
+        labels.get("action_type"), field=f"{sample_id}.action_type"
     )
     recovery_strategy = _nonempty(
         labels.get("recovery_strategy"), field=f"{sample_id}.recovery_strategy"
     )
-    if outcome != "FAILURE" or failure_type == "NONE":
+    if not direct_transition and (
+        outcome != "FAILURE" or source_failure_type == "NONE"
+    ):
         raise MemoryEligibilityError(
             f"potential memory {sample_id} is not an observed agent failure"
+        )
+    if direct_transition and outcome not in {"SUCCESS", "FAILURE"}:
+        raise MemoryEligibilityError(
+            f"potential memory {sample_id} has an invalid direct recovery outcome"
         )
     if recovery_strategy == "NONE":
         raise MemoryEligibilityError(
@@ -449,6 +503,18 @@ def _candidate_from_record(
         raise MemoryEligibilityError(
             f"potential memory {sample_id} strategy conflicts with transition"
         )
+    if direct_transition:
+        source_meta = transition.get("source_meta")
+        if not isinstance(source_meta, Mapping) or source_meta.get(
+            "direct_transition"
+        ) is not True:
+            raise MemoryEligibilityError(
+                f"potential memory {sample_id} lacks a trusted direct transition"
+            )
+        if recovery_strategy == "ABORT":
+            raise MemoryEligibilityError(
+                f"potential memory {sample_id} is ABORT and cannot prove final task success"
+            )
     recovery_sample_id = _nonempty(
         transition.get("recovery_sample_id"),
         field=f"{sample_id}.transition.recovery_sample_id",
@@ -473,6 +539,87 @@ def _candidate_from_record(
         raise MemoryEligibilityError(
             f"potential memory {sample_id} source step differs from transition"
         )
+    public_transition = _public_value(
+        {key: value for key, value in transition.items() if key != "source_meta"}
+    )
+    source_review_status = review_status.strip().lower()
+    effective_failure_type = (
+        "UNAVAILABLE" if direct_transition else source_failure_type
+    )
+    effective_failed_action = (
+        "UNAVAILABLE" if direct_transition else source_action_type
+    )
+    try:
+        source_material = canonical_p4_memory_source_material(
+            {
+                "source_dataset_role": source_role,
+                "source_review_status": source_review_status,
+                "source_sample_id": sample_id,
+                "recovery_sample_id": recovery_sample_id,
+                "canonical_task_id": canonical_task_id,
+                "episode_id": episode_id,
+                "source_step_index": step_index,
+                "source_record_sha256": canonical_sha256(_public_value(record)),
+                "transition_sha256": canonical_sha256(public_transition),
+                "source_transition_kind": source_transition_kind,
+                "task_description": _nonempty(
+                    inputs.get("task_description"),
+                    field=f"{sample_id}.task_description",
+                ),
+                "website_domain": str(inputs.get("website_domain") or "").strip(),
+                "observed_failure_basis": (
+                    "source_attested_direct_pre_recovery_state"
+                    if direct_transition
+                    else "source_outcome_failure"
+                ),
+                "source_outcome_label": outcome,
+                "source_failure_type": source_failure_type,
+                "source_action_type": source_action_type,
+                "failure_type": effective_failure_type,
+                "failure_type_available": not direct_transition,
+                "failed_action": effective_failed_action,
+                "failed_action_available": not direct_transition,
+                "recovery_strategy": recovery_strategy,
+                "reflection_text": str(labels.get("reflection_text") or ""),
+                "pre_recovery_state_sha256": recovery_state_evidence_sha256(
+                    transition, field="failure_state"
+                ),
+                "executed_recovery_action": executed_recovery_action,
+                "recovery_action_value": str(
+                    transition.get("recovery_action_value") or ""
+                ),
+                "executed_recovery_action_sha256": (
+                    recovery_action_evidence_sha256(transition)
+                ),
+                "post_recovery_state_sha256": recovery_state_evidence_sha256(
+                    transition, field="post_recovery_state"
+                ),
+            }
+        )
+    except VerificationEvidenceError as error:
+        raise MemoryEligibilityError(str(error)) from error
+    label_review_digest: str | None = None
+    label_review = evidence.get("p4_label_review")
+    if source_review_status == "pending" or label_review is not None:
+        if not isinstance(label_review, Mapping):
+            raise MemoryEligibilityError(
+                f"potential memory {sample_id} lacks independent P4 label review"
+            )
+        try:
+            label_review_digest = validate_p4_label_review_evidence(
+                label_review,
+                source_sample_id=sample_id,
+                source_record_sha256=str(source_material["source_record_sha256"]),
+                memory_item_source_material_sha256=canonical_sha256(
+                    source_material
+                ),
+            )
+        except VerificationEvidenceError as error:
+            raise MemoryEligibilityError(str(error)) from error
+        if evidence.get("p4_label_review_evidence_sha256") != label_review_digest:
+            raise MemoryEligibilityError(
+                f"potential memory {sample_id} P4 label-review digest mismatch"
+            )
     try:
         verified_evidence = validate_provenance_verification_evidence(
             evidence,
@@ -485,7 +632,11 @@ def _candidate_from_record(
     except VerificationEvidenceError as error:
         raise MemoryEligibilityError(str(error)) from error
 
-    memory_id = _memory_id(provenance.dataset_id, sample_id, recovery_sample_id)
+    memory_id = canonical_memory_id(
+        provenance.dataset_id,
+        sample_id,
+        recovery_sample_id,
+    )
     item = {
         "schema_version": ELIGIBILITY_POLICY_VERSION,
         "memory_id": memory_id,
@@ -497,15 +648,22 @@ def _candidate_from_record(
         "source_task_id": canonical_task_id,
         "source_episode_id": episode_id,
         "step_index": step_index,
-        "website_domain": str(inputs.get("website_domain") or ""),
-        "failure_type": failure_type,
-        "failed_action": str(labels.get("action_type") or ""),
+        "website_domain": source_material["website_domain"],
+        "source_transition_kind": source_transition_kind,
+        "source_review_status": source_review_status,
+        "source_record_sha256": source_material["source_record_sha256"],
+        "memory_item_source_material_sha256": canonical_sha256(source_material),
+        "failure_type": effective_failure_type,
+        "failure_type_available": not direct_transition,
+        "failed_action": effective_failed_action,
+        "failed_action_available": not direct_transition,
         "strategy": recovery_strategy,
         "executed_recovery_action": executed_recovery_action,
         "recovery_action_value": str(
             transition.get("recovery_action_value") or ""
         ),
         "reflection_text": str(labels.get("reflection_text") or ""),
+        "p4_label_review_evidence_sha256": label_review_digest,
         "memory_update_flag": True,
         "verified_recovery_success": True,
         "final_task_success": True,
@@ -539,7 +697,13 @@ def _candidate_from_record(
             verified_evidence.final_task_evidence_sha256
         ),
         verification_evidence_sha256=verified_evidence.bundle_sha256,
-        verification_evidence=verified_evidence.to_payload(),
+        verification_evidence={
+            **verified_evidence.to_payload(),
+            "p4_label_review": (
+                dict(label_review) if isinstance(label_review, Mapping) else None
+            ),
+            "p4_label_review_evidence_sha256": label_review_digest,
+        },
         item=item,
     )
 
@@ -571,9 +735,20 @@ def select_eligible_candidates(
             _, labels, meta = _view(record)
             sample_id = _sample_id(meta, index)
             evidence = provenance.records.get(sample_id)
-            if _is_explicitly_non_admitted(meta, evidence):
+            if is_explicitly_non_admitted(meta, evidence):
                 exclusions["quarantined_or_non_admitted"] += 1
                 continue
+            review_status = meta.get("review_status")
+            if not isinstance(review_status, str) or not review_status.strip():
+                raise MemoryEligibilityError(
+                    f"{sample_id}.review_status must be a non-empty string"
+                )
+            normalized_review_status = review_status.strip().lower()
+            if normalized_review_status not in {"approved", "pending"}:
+                raise MemoryEligibilityError(
+                    f"{sample_id}.review_status is not registered: "
+                    f"{review_status!r}"
+                )
             if "memory_update_flag" not in labels:
                 exclusions["memory_update_flag_missing"] += 1
                 continue

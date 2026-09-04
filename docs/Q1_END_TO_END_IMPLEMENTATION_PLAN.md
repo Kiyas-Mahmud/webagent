@@ -3,8 +3,10 @@
 **Project:** four-pillar failure-aware multimodal web agent  
 **Plan status:** implementation-ready, no code implemented by this document  
 **Date:** 2026-07-28  
-**Current primary model:** Qwen2-VL-2B with QLoRA  
-**Current controlled evidence:** 5,000 train rows, 500 validation rows, zero test
+**PC-01 provisional pilot candidate:** Qwen2-VL-2B with QLoRA; the final
+backbone remains unselected pending the registered validation-only PC-01/
+PC-02/PC-03 comparison
+**Historical controlled evidence when this document was drafted:** 5,000 train rows, 500 validation rows, zero test
 rows read  
 
 This is the repository-specific plan for turning the existing offline

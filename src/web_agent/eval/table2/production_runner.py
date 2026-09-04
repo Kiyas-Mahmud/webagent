@@ -66,8 +66,13 @@ from web_agent.eval.table2.live_deployment import (
     validate_bound_pc01_live_deployment,
 )
 from web_agent.eval.table2.package_validator import (
+    MODEL_EVIDENCE_ROLES,
     MODEL_PAYLOAD_HASH_FIELDS,
     MODEL_PAYLOAD_ROLES,
+    PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD,
+    PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH,
+    _validate_pc01_checkpoint_compatibility_readiness,
+    _validate_model_evidence_bundle,
     validate_campaign,
 )
 from web_agent.eval.table2.resolved_config import (
@@ -173,6 +178,7 @@ class FrozenRuntimeContext:
 
     model_manifest_paths: Mapping[int, Path]
     model_payload_paths: Mapping[int, Mapping[str, Path]]
+    model_evidence_paths: Mapping[int, Mapping[str, Path]]
     runtime_identity: Mapping[str, Any]
 
 
@@ -516,7 +522,12 @@ class ProductionTable2Runner:
             campaign_id=str(self.manifest["campaign_id"]),
             campaign_seed=int(self.manifest["campaign_seed"]),
         )
-        self.model_manifests, payload_paths = self._verify_model_payloads()
+        (
+            self.model_manifests,
+            payload_paths,
+            evidence_paths,
+        ) = self._verify_model_payloads()
+        self._revalidate_pc01_checkpoint_compatibility()
         self.memory_store_paths = {
             seed: self.root / "memory" / f"seed_{seed}"
             for seed in self.model_manifests
@@ -539,6 +550,7 @@ class ProductionTable2Runner:
                 for seed in self.model_manifests
             },
             model_payload_paths=payload_paths,
+            model_evidence_paths=evidence_paths,
             runtime_identity=dict(runtime_identity),
         )
         integration_spec = str(self.manifest.get("runtime_integration_entrypoint") or "")
@@ -1123,6 +1135,63 @@ class ProductionTable2Runner:
         )
         return receipt
 
+    def _revalidate_pc01_checkpoint_compatibility(self) -> None:
+        """Reopen the DGX gate before any integration import or browser reset."""
+
+        receipt_path = (
+            self.root
+            / "frozen"
+            / PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH
+        )
+        try:
+            receipt, binding, _ = (
+                _validate_pc01_checkpoint_compatibility_readiness(
+                    receipt_path,
+                    repository_root=self.repository_root,
+                    expected_source_commit=str(
+                        self.manifest["repository_commit"]
+                    ),
+                    model_manifest_path=(
+                        self.root / "frozen" / "models" / "seed_42.json"
+                    ),
+                    selection_evidence_path=(
+                        self.root
+                        / "frozen"
+                        / "selection_evidence"
+                        / "manifest.json"
+                    ),
+                    path_base=self.root,
+                )
+            )
+        except (SchemaError, FileNotFoundError, OSError) as exc:
+            raise ProductionRunnerError(
+                "PC-01 checkpoint compatibility revalidation failed"
+            ) from exc
+        runtime_identity = self.attestation.get("runtime_identity")
+        if not isinstance(runtime_identity, Mapping):
+            raise ProductionRunnerError(
+                "runner checkpoint compatibility runtime identity is malformed"
+            )
+        if (
+            self.manifest.get(
+                "pc01_checkpoint_compatibility_receipt_sha256"
+            )
+            != binding["receipt_sha256"]
+            or self.manifest.get(
+                PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD
+            )
+            != binding
+            or runtime_identity.get(
+                PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD
+            )
+            != binding
+        ):
+            raise ProductionRunnerError(
+                "campaign/runner checkpoint compatibility bindings differ"
+            )
+        self.checkpoint_compatibility_receipt = receipt
+        self.checkpoint_compatibility_binding = binding
+
     def _invoke_guarded_evaluator(
         self,
         session: _ActiveWebArenaSession,
@@ -1407,13 +1476,18 @@ class ProductionTable2Runner:
 
     def _verify_model_payloads(
         self,
-    ) -> tuple[dict[int, dict[str, Any]], dict[int, dict[str, Path]]]:
+    ) -> tuple[
+        dict[int, dict[str, Any]],
+        dict[int, dict[str, Path]],
+        dict[int, dict[str, Path]],
+    ]:
         expected = {int(seed) for seed in self.manifest.get("matched_seeds", [])}
         descriptors_by_seed = self.manifest.get("model_payloads_by_seed")
         if not isinstance(descriptors_by_seed, Mapping):
             raise ProductionRunnerError("campaign lacks frozen model payload descriptors")
         manifests: dict[int, dict[str, Any]] = {}
         paths: dict[int, dict[str, Path]] = {}
+        evidence_paths: dict[int, dict[str, Path]] = {}
         for seed in sorted(expected):
             path = self.root / "frozen" / "models" / f"seed_{seed}.json"
             value = read_json(path)
@@ -1454,6 +1528,35 @@ class ProductionTable2Runner:
                     )
                 seed_paths[role] = payload
             try:
+                executable = {
+                    role: (seed_paths[role], dict(rows[role]))
+                    for role in MODEL_PAYLOAD_ROLES
+                }
+                evidence = _validate_model_evidence_bundle(
+                    path,
+                    value,
+                    path_base=self.root,
+                    executable_payloads=executable,
+                )
+            except (SchemaError, FileNotFoundError) as exc:
+                raise ProductionRunnerError(
+                    "frozen model evidence bundle failed authentication"
+                ) from exc
+            evidence_by_seed = self.manifest.get("model_evidence_by_seed")
+            if not isinstance(evidence_by_seed, Mapping) or evidence_by_seed.get(
+                str(seed)
+            ) != value.get("model_evidence_bundle"):
+                raise ProductionRunnerError(
+                    "campaign/model evidence bundle descriptors differ"
+                )
+            if set(evidence) != set(MODEL_EVIDENCE_ROLES):
+                raise ProductionRunnerError(
+                    "model evidence bundle role coverage differs"
+                )
+            evidence_paths[seed] = {
+                role: source for role, (source, _) in evidence.items()
+            }
+            try:
                 resolved_config_identity = load_resolved_config_identity(
                     seed_paths["resolved_config"]
                 )
@@ -1471,7 +1574,7 @@ class ProductionTable2Runner:
             paths[seed] = seed_paths
         if set(map(int, descriptors_by_seed)) != expected:
             raise ProductionRunnerError("campaign payload seeds differ from schedule")
-        return manifests, paths
+        return manifests, paths, evidence_paths
 
     def _build_seed_state(
         self,

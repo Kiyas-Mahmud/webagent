@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import random
@@ -96,6 +97,10 @@ def _artifacts(tmp_path: Path) -> PC01RuntimeArtifacts:
         e0_resolved_config_path=tmp_path / "e0.json",
         e0_processor_contract_path=tmp_path / "e0-processor.json",
         e0_backbone_path=tmp_path / "base",
+        export_manifest_path=tmp_path / "pc01_export_manifest.json",
+        training_action_value_evidence_path=(
+            tmp_path / "training_action_value_evidence.json"
+        ),
     )
 
 
@@ -148,6 +153,41 @@ def test_import_has_no_torch_transformers_or_peft_side_effect() -> None:
     environment = dict(os.environ)
     environment["PYTHONPATH"] = str(repository / "src")
     subprocess.run([sys.executable, "-c", code], check=True, env=environment)
+
+
+def test_runtime_processor_is_bound_to_v3_action_value_evidence(
+    tmp_path: Path,
+) -> None:
+    selected, _ = _selections(tmp_path)
+    artifacts = _artifacts(tmp_path)
+    action_bytes = b'{"schema_version":"fixture-action-value"}'
+    artifacts.training_action_value_evidence_path.write_bytes(action_bytes)
+    action_sha256 = hashlib.sha256(action_bytes).hexdigest()
+    export = {
+        "schema_version": "table2.pc01-export.v3",
+        "runtime_ready": False,
+        "checkpoint_sha256": selected.selected_checkpoint_sha256,
+        "resolved_config_payload_sha256": selected.resolved_config_sha256,
+        "processor_contract_sha256": selected.processor_contract_sha256,
+        "training_action_value_evidence_sha256": action_sha256,
+    }
+    artifacts.export_manifest_path.write_text(
+        json.dumps(export), encoding="utf-8"
+    )
+    assert qwen2vl_pc01._runtime_action_value_evidence_sha256(
+        selection=selected,
+        artifacts=artifacts,
+    ) == action_sha256
+
+    export["runtime_ready"] = True
+    artifacts.export_manifest_path.write_text(
+        json.dumps(export), encoding="utf-8"
+    )
+    with pytest.raises(PC01RuntimeError, match="v3 evidence bundle"):
+        qwen2vl_pc01._runtime_action_value_evidence_sha256(
+            selection=selected,
+            artifacts=artifacts,
+        )
 
 
 def test_e0_parser_is_strict_and_never_repairs_output() -> None:

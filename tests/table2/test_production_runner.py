@@ -7,6 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 import scripts.run_table2_evaluation as evaluation_cli
+from web_agent.eval.table2 import package_validator as package_validator_module
+from web_agent.eval.table2 import production_runner as production_runner_module
 
 from web_agent.eval.table2 import execution_guard
 from web_agent.eval.table2.common import SchemaError, sha256_file, sha256_json
@@ -21,6 +23,11 @@ from web_agent.eval.table2.execution_guard import (
 from web_agent.eval.table2.live_deployment import (
     LIVE_DEPLOYMENT_BINDING_FIELD,
     stage_pc01_live_deployment_package,
+)
+from web_agent.eval.table2.package_validator import (
+    PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD,
+    PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH,
+    _copy_model_payloads,
 )
 from web_agent.eval.table2.production_runner import (
     EvaluationRuntimeBinding,
@@ -50,6 +57,7 @@ from web_agent.runtime.state_reset import (
 from tests.table2.test_live_deployment import (
     _manifest as _valid_live_deployment_manifest,
 )
+from tests.table2.test_package_validator import _valid_model_manifest
 
 
 def _processor() -> ProcessorParityContract:
@@ -211,6 +219,7 @@ def test_policy_integration_context_has_no_task_memory_or_sealed_capability() ->
     assert names == {
         "model_manifest_paths",
         "model_payload_paths",
+        "model_evidence_paths",
         "runtime_identity",
     }
     assert not names & {
@@ -220,6 +229,47 @@ def test_policy_integration_context_has_no_task_memory_or_sealed_capability() ->
         "sealed_root",
         "verifier_sink",
     }
+
+
+def test_production_runner_reopens_frozen_model_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_base_snapshot",
+        lambda path, _backbone: json.loads(path.read_text(encoding="utf-8")),
+    )
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_export_manifest",
+        lambda _path: None,
+    )
+    source = _valid_model_manifest(tmp_path / "source-model.json")
+    campaign = tmp_path / "campaign"
+    _, payloads, evidence = _copy_model_payloads(
+        campaign_root=campaign,
+        seed=42,
+        manifest_path=source,
+        manifest=json.loads(source.read_text(encoding="utf-8")),
+        copied=[],
+    )
+    runner = object.__new__(ProductionTable2Runner)
+    runner.root = campaign
+    runner.manifest = {
+        "matched_seeds": [42],
+        "model_payloads_by_seed": {"42": payloads},
+        "model_evidence_by_seed": {"42": evidence},
+    }
+    manifests, model_paths, evidence_paths = runner._verify_model_payloads()
+    assert set(manifests) == {42}
+    assert set(model_paths[42]) == set(payloads)
+    assert set(evidence_paths[42]) == set(evidence["artifacts"])
+
+    action_evidence = evidence_paths[42]["training_action_value_evidence"]
+    action_evidence.write_bytes(action_evidence.read_bytes() + b" ")
+    with pytest.raises(ProductionRunnerError, match="evidence bundle"):
+        runner._verify_model_payloads()
 
 
 def test_runtime_and_evaluator_factories_are_separate_capabilities() -> None:
@@ -421,6 +471,89 @@ def test_efficiency_probe_is_complete_and_oracle_blind() -> None:
 def test_production_factory_fails_closed_without_frozen_campaign(tmp_path: Path) -> None:
     with pytest.raises((ProductionRunnerError, FileNotFoundError)):
         create_runner(campaign_dir=tmp_path)
+
+
+def test_production_runner_revalidates_checkpoint_receipt_before_runtime_use(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binding = {
+        "receipt_sha256": "a" * 64,
+        "schema_version": "fixture",
+        "gate_id": "fixture-gate",
+    }
+    receipt = {"status": "PASS"}
+    calls: list[dict] = []
+
+    def validate(path, **kwargs):
+        calls.append({"path": path, **kwargs})
+        return receipt, binding, ()
+
+    monkeypatch.setattr(
+        production_runner_module,
+        "_validate_pc01_checkpoint_compatibility_readiness",
+        validate,
+    )
+    runner = object.__new__(ProductionTable2Runner)
+    runner.root = tmp_path / "campaign"
+    runner.repository_root = tmp_path / "source"
+    runner.manifest = {
+        "repository_commit": "1" * 40,
+        "pc01_checkpoint_compatibility_receipt_sha256": "a" * 64,
+        PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD: binding,
+    }
+    runner.attestation = {
+        "runtime_identity": {
+            PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD: binding,
+        }
+    }
+    runner._revalidate_pc01_checkpoint_compatibility()
+    assert runner.checkpoint_compatibility_receipt == receipt
+    assert runner.checkpoint_compatibility_binding == binding
+    assert calls == [
+        {
+            "path": (
+                runner.root
+                / "frozen"
+                / PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH
+            ),
+            "repository_root": runner.repository_root,
+            "expected_source_commit": "1" * 40,
+            "model_manifest_path": runner.root
+            / "frozen/models/seed_42.json",
+            "selection_evidence_path": runner.root
+            / "frozen/selection_evidence/manifest.json",
+            "path_base": runner.root,
+        }
+    ]
+
+    runner.manifest["pc01_checkpoint_compatibility_receipt_sha256"] = "b" * 64
+    with pytest.raises(ProductionRunnerError, match="bindings differ"):
+        runner._revalidate_pc01_checkpoint_compatibility()
+
+
+def test_production_runner_fails_closed_when_checkpoint_receipt_is_invalid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def reject(*_args, **_kwargs):
+        raise SchemaError("tampered checkpoint receipt")
+
+    monkeypatch.setattr(
+        production_runner_module,
+        "_validate_pc01_checkpoint_compatibility_readiness",
+        reject,
+    )
+    runner = object.__new__(ProductionTable2Runner)
+    runner.root = tmp_path / "campaign"
+    runner.repository_root = tmp_path / "source"
+    runner.manifest = {"repository_commit": "1" * 40}
+    runner.attestation = {"runtime_identity": {}}
+    with pytest.raises(
+        ProductionRunnerError,
+        match="checkpoint compatibility revalidation failed",
+    ):
+        runner._revalidate_pc01_checkpoint_compatibility()
 
 
 def test_injected_callback_source_must_be_in_attested_hash_set() -> None:

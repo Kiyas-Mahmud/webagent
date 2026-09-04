@@ -1,8 +1,17 @@
 # Implementation Plan — Failure-Aware Resilient Autonomous Web Agents
 
 > **Target:** Q1 top-tier journal publication + thesis competition.
-> **Current first priority:** Train all models one by one. Application comes later.
+> **Historical priority when this plan was drafted:** train component models one by one before application work.
 > **Read this with `PROJECT_SPECIFICATION.md`. That file defines the *what*; this file defines the *how* and the *order*.**
+>
+> **Current table-number authority (2026-09-04):** this is a historical
+> component-training plan. All table labels in its former Section 10.3 are superseded
+> by `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`. The paper's
+> current Table 2 is the paired browser-time E0--E3 evaluation; the component
+> ablation grid below is supporting evidence and must not be reported as that
+> table.
+> Its three-seed/19-model roadmap is also historical supporting scope and does
+> not override Table 2's research-locked seed-42 PC-01/PC-02/PC-03 promotion.
 
 ---
 
@@ -343,9 +352,9 @@ Efficiency:
 
 ### 10.3 Three core tables
 ```
-Table 1 — Main Results: all 19 models, primary metrics, per split
-Table 2 — Ablation: A1–A5 vs full Y1
-Table 3 — Backbone Generalization: Y1–Y7
+Supporting historical multi-model grid (unnumbered): all 19 models, primary metrics, per split
+Supporting component ablation grid (unnumbered): A1–A5 vs full Y1
+Supporting historical backbone-generalization grid (unnumbered): Y1–Y7
 ```
 
 ### 10.4 Figures

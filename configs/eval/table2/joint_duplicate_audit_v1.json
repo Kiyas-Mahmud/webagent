@@ -1,0 +1,30 @@
+{
+  "audit_tool_id": "table2-deterministic-joint-duplicate-auditor",
+  "audit_tool_version": "1.0.0",
+  "cluster_id_policy": {
+    "exact": "exact:<sha256-of-normalized-goal-and-sites>",
+    "near": "near:<sha256-of-namespace-and-sorted-component-members>",
+    "task_runtime_clusters": "sorted_exact_and_near_ids"
+  },
+  "exact_match": {
+    "identity": "sha256_of_canonical_normalized_goal_tokens_and_site_keys"
+  },
+  "near_match": {
+    "feature_representation": "word_3_shingle_set_plus_site_keys",
+    "jaccard_threshold_denominator": 5,
+    "jaccard_threshold_numerator": 4,
+    "linkage": "deterministic_connected_components_single_link",
+    "require_site_overlap_when_both_nonempty": true,
+    "shingle_size": 3,
+    "singleton_policy": "retain_unique_cluster"
+  },
+  "normalization": {
+    "case": "unicode_casefold",
+    "empty_goal": "forbidden",
+    "site_key": "lowercase_host_or_label_without_www_or_trailing_dot",
+    "token_pattern": "[a-z0-9]+",
+    "unicode_form": "NFKC",
+    "whitespace": "single_ascii_space"
+  },
+  "schema_version": "table2-joint-duplicate-audit-config-v1"
+}

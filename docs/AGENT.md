@@ -100,7 +100,10 @@ The first model built proves the whole architecture (heads + loss + training loo
 every later model reuses its code and swaps only the backbone front-end.
 
 ### 5.3 Primary model is chosen by RESULTS
-Do not hardcode a primary model. Train all 7 backbones, compare validation Failure-F1 + Recovery-SR, then mark the winner as primary.
+Do not hardcode a primary model. The former seven-backbone rule describes the
+historical broad program; the current registered Table 2 promotion gate
+compares PC-01, PC-02, and PC-03 at seed 42 using validation evidence only.
+Only that registered comparison may promote the final Table 2 backbone.
 
 ### 5.4 Backbone-agnostic implementation
 ```

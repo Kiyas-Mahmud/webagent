@@ -256,6 +256,109 @@ def validate_webarena_task_interface_audit(
     return expected
 
 
+def validate_resolved_task_interface_binding(
+    resolved_snapshot: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Recompute interface compatibility from a frozen resolved snapshot.
+
+    This is the campaign-freeze side of the task-source handoff. It prevents a
+    lower-level freezer caller from omitting, replacing, or falsifying the
+    six-action compatibility result while presenting an otherwise consistent
+    task snapshot.
+    """
+
+    if not isinstance(resolved_snapshot, Mapping):
+        raise SchemaError("resolved task snapshot must be a mapping")
+    require_keys(
+        resolved_snapshot,
+        (
+            "snapshot_id",
+            "upstream_export_schema_version",
+            "upstream_export_record_type",
+            "upstream_export_content_sha256",
+            "upstream_task_source",
+            "site_url_map_sha256",
+            "resolved_task_set_sha256",
+            "task_action_interface_audit",
+            "task_action_interface_audit_content_sha256",
+            "tasks",
+        ),
+        context="resolved task interface binding",
+    )
+    rows = resolved_snapshot.get("tasks")
+    if not isinstance(rows, list) or not all(isinstance(row, Mapping) for row in rows):
+        raise SchemaError("resolved task interface binding requires task mappings")
+    audit = resolved_snapshot.get("task_action_interface_audit")
+    if not isinstance(audit, Mapping):
+        raise SchemaError("resolved task snapshot lacks its interface audit")
+
+    task_results = [_task_audit(row) for row in rows]
+    evaluator_type_counts: Counter[str] = Counter()
+    answer_mode_counts: Counter[str] = Counter()
+    for result in task_results:
+        evaluator_type_counts.update(result["eval_types"])
+        answer_mode_counts.update(result["answer_matching_modes"])
+    compatible_count = sum(bool(row["compatible"]) for row in task_results)
+    incompatible_count = len(task_results) - compatible_count
+    answer_required_count = sum(
+        bool(row["assistant_answer_required"]) for row in task_results
+    )
+    unsupported_count = sum(
+        "UNREGISTERED_EVALUATOR_TYPE" in row["incompatibility_reasons"]
+        for row in task_results
+    )
+    fuzzy_count = sum(
+        "fuzzy_match" in row["answer_matching_modes"] for row in task_results
+    )
+    source = resolved_snapshot.get("upstream_task_source")
+    if not isinstance(source, Mapping):
+        raise SchemaError("resolved task snapshot lacks upstream task-source identity")
+    expected = {
+        "schema_version": TASK_INTERFACE_AUDIT_SCHEMA_VERSION,
+        "record_type": TASK_INTERFACE_AUDIT_RECORD_TYPE,
+        "audit_scope": "EXACT_RESOLVED_WEBARENA_PUBLIC_INDICES_0_49",
+        "status": "PASS" if incompatible_count == 0 else "FAIL",
+        "handoff_eligible": incompatible_count == 0,
+        "action_interface": _action_interface_contract(),
+        "task_export_schema_version": resolved_snapshot[
+            "upstream_export_schema_version"
+        ],
+        "task_export_record_type": resolved_snapshot[
+            "upstream_export_record_type"
+        ],
+        "task_export_snapshot_id": resolved_snapshot["snapshot_id"],
+        "task_export_content_sha256": resolved_snapshot[
+            "upstream_export_content_sha256"
+        ],
+        "resolved_task_set_sha256": resolved_snapshot[
+            "resolved_task_set_sha256"
+        ],
+        "task_source_sha256": source.get("task_source_sha256"),
+        "site_url_map_sha256": resolved_snapshot["site_url_map_sha256"],
+        "task_count": len(task_results),
+        "compatible_task_count": compatible_count,
+        "incompatible_task_count": incompatible_count,
+        "assistant_answer_required_task_count": answer_required_count,
+        "page_state_only_task_count": sum(
+            row["evaluator_mode"] == _PAGE_STATE_ONLY for row in task_results
+        ),
+        "unsupported_evaluator_task_count": unsupported_count,
+        "fuzzy_string_match_task_count": fuzzy_count,
+        "evaluator_type_counts": dict(sorted(evaluator_type_counts.items())),
+        "answer_matching_mode_counts": dict(sorted(answer_mode_counts.items())),
+        "tasks": task_results,
+    }
+    if dict(audit) != expected:
+        raise SchemaError(
+            "resolved task-interface audit differs from exact task-row recomputation"
+        )
+    if resolved_snapshot.get("task_action_interface_audit_content_sha256") != sha256_json(
+        audit
+    ):
+        raise SchemaError("resolved task-interface audit content hash differs")
+    return dict(audit)
+
+
 def require_webarena_task_interface_compatible(
     audit: Mapping[str, Any],
 ) -> None:

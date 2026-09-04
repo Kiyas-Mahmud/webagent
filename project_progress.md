@@ -14,8 +14,10 @@
 
 Project: Failure-Aware Resilient Autonomous Web Agent (MSc thesis).
 Repo: https://github.com/Kiyas-Mahmud/webagent (branch `Code`).
-Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/FinalData`
-(70,965 labeled steps; train 38,875 / val 16,070 / test 16,020).
+Historical source corpus: Kaggle `thesisdata` →
+`/kaggle/input/datasets/kiyasmahmud/thesisdata/FinalData` (70,965 labeled
+steps; train 38,875 / val 16,070 / test 16,020). Current experiment row/split
+authority comes only from each reviewed Gold v2.8 run manifest.
 
 ## 2026-09-04 — Research-locked Table 2 PC-01 pilot preparation
 
@@ -26,6 +28,11 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   status `AWAITING_MODEL_PROMOTION`. It still requires the three seed-42
   validation packages, but cannot authorize final tasks until PC-02/PC-03,
   validation-only promotion, and task eligibility are complete.
+- Final-selection compatibility evidence now uses a source-registered,
+  candidate-specific SHA-256 map. The production map contains only the real
+  PC-01 report; PC-02 and PC-03 remain deliberately absent until their distinct
+  immutable reports exist and are reviewed in a clean commit. Selection-input
+  hashes alone cannot authorize final promotion.
 - Scope remains separated: Table 1 is the locked Web-Gold component evaluation,
   Table 2 is the paired E0--E3 browser campaign, and Table 3 is related-paper
   comparison/discussion. Gold train data may supply verified P4 memories but
@@ -36,6 +43,40 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   at SHA-256
   `d014050287ae2142e1c2111cff8b00de214dc3f416fedb49504edde8bd61007f`;
   it was not reconstructed from inherited YAML.
+- Quarantined the earlier schema-v2 export as
+  `/home/kiyas-mahmud/Thesis/table2-inputs/pc01-epoch6-seed42-full-v2.INVALID-action-value-parity`.
+  Its fixture had incorrectly exposed executable action parameters as
+  `action_value` processor text even though all 24,107 authenticated PC-01
+  training rows omitted that key. The directory now carries an explicit
+  invalidation marker and is forbidden as handoff evidence; the checkpoint and
+  base-model bytes were not implicated.
+- Produced the corrected full PC-01 schema-v3 export outside Git at
+  `/home/kiyas-mahmud/Thesis/table2-inputs/pc01-epoch6-seed42-full-v3`
+  without changing training or model weights. Its export-manifest SHA-256 is
+  `63c01942cc653732c9e9e18639cb49bded09a82235fd4ea37fef3fad14c9fa2d`.
+  Full export authenticates and embeds the canonical checked-in
+  training environment, validates five preprocessing sources against commit
+  `2fadf0f508cec42ce6f89b8961db7cfd2adef1df`, requires Transformers 4.57.6
+  with the concrete Qwen2VL fast processor, and records all facts in the
+  processor identity. It emits an authenticated manifest for all 14 pinned base
+  snapshot files (including both weight shards, without copying them) with
+  directory payload SHA-256
+  `e002f8290faa3e9f44bf3099eac85a2445e17de738c5bb0cc10d342da837c46c`.
+  The fifth source, `recovery_transitions.py`, binds how the historical
+  recovery action was selected. The canonical train-only action-value evidence
+  SHA-256 is
+  `c32691ef921bb5716ea9bba99ef64db53bc697d5f98ab9c06d99049f5a3b821c`.
+  A deterministic processor-only receipt independently replays the historical
+  training factory and production runtime preprocessing for pre/post/recovery
+  and every one of the six action classes. The real pinned snapshot passed the
+  export and a separate standalone replay with byte-identical receipt SHA-256
+  `210fd36449b643c60df7a9517478001981654b6b15872f40ae6b257a4f73f4ec`.
+  This proves processor parity, not CUDA/model/browser runtime readiness.
+- Materialized the exact Hugging Face base snapshot outside Git at revision
+  `895c3a49bc3fa70a340399125c650a463535e71c`: 14 regular files,
+  4,429,622,901 bytes, no symlinks, with both weight shards and aggregate
+  directory-payload SHA-256
+  `e002f8290faa3e9f44bf3099eac85a2445e17de738c5bb0cc10d342da837c46c`.
 - Added the source-attested PC-01 model bridge: E0 loads the pinned unadapted
   base only; E1--E3 load the same frozen epoch-6 checkpoint; the bridge exposes
   causal pre-action prediction, post-action diagnosis, recovery assessment,
@@ -50,6 +91,14 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   after causal provenance, successful-recovery/final-success, split,
   duplicate, and joint-WebArena audit evidence is complete. Validation/test
   reads, Gold-image transfer, and WebArena threshold tuning remain forbidden.
+- Added a read-only P4 provenance attachment validator. It requires every
+  preparation-queue candidate to be represented and binds admitted independent
+  verification to the exact dataset/version/record and pre-action/action/
+  post-action causal hashes. It explicitly does not author success evidence,
+  establish reviewer independence, authenticate the dataset artifact, or run
+  the still-missing joint Gold/WebArena duplicate audit. The two public Kaggle
+  datasets and retry-supplement path were located, but no authenticated Kaggle
+  job or real memory build was launched from this host.
 - Added pinned public WebArena task export, task/action-interface audit,
   seven-service host preflight, split local-browser/DGX preflight, and a typed
   full start-state contract retaining sites, start URL, login requirement,
@@ -65,6 +114,15 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   Before the pilot can continue, the user must approve and preregister either
   a 50-task page-state-compatible public development registry or a justified
   answer/termination interface as a material P3/protocol change.
+- An outcome-blind replacement candidate has been audited but not frozen:
+  50 page-state-scored public tasks preserving the original site quotas, with
+  zero `string_match`/reference-answer evaluators. Forty-five are read-only;
+  five bounded Reddit mutations require proven reset parity and a second
+  blinded safety review. Approving it would permanently exclude both the
+  historical 0--49 set and the replacement 50 from final evaluation.
+  Its exact indices and approval consequences are preserved in
+  `docs/TABLE2_PILOT_TASK_INTERFACE_DECISION.md`; that document is proposal
+  evidence only and is not a campaign input.
 - Added a strict live-deployment evidence contract for seven operational
   capabilities, the validation-disabled BrowserGym execution boundary, and a
   one-way sealed-page broker. Runtime scoring must identify
@@ -77,6 +135,12 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   campaign validation, production-runner construction, and every ordinary
   browser launch. These are validators for real deployment evidence; they do
   not claim that the external services or evidence are ready.
+- Installed the pinned browser stack only in an isolated local x86 diagnostic
+  environment. BrowserGym core/WebArena 0.14.3, `libwebarena==0.0.4`,
+  Playwright 1.44.0, and Chromium 125.0.6422.26 passed package and 1280x720
+  browser checks. The seven required WebArena services were absent, so the
+  measured preflight failed, live reset was not run, and the host is not
+  campaign-eligible.
 - Added the dependency-lazy, source-attested BrowserGym/WebArena production
   wrapper. It applies all six frozen start-state fields, exposes only causal
   visible controls and SELECT options, maps only the six registered P3 browser
@@ -84,6 +148,22 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   publishes pages one-way to the sealed evaluator, and records typed cleanup
   receipts on success and abort paths. No external BrowserGym/WebArena run has
   been performed on this host.
+- Added an exact evaluation-handoff consumption boundary. Campaign and handoff
+  roots must be disjoint; every staged argument is authenticated before,
+  during, and after copy; the selected evidence manifest must occupy its
+  canonical destination; source-to-campaign bindings are frozen in
+  `frozen/handoff_consumption.json`; and authority is replayed again after
+  provenance/ledger construction. Extra bytes, empty directories, symlinks,
+  hard links, source mutation, selection substitution, or unconsumed freeze
+  arguments fail closed.
+- Added the separate, non-scored live matched E0--E3 readiness gate. Before the
+  target pilot can dispatch any block, an isolated campaign must execute its
+  first normal WebArena block and seal a portable target-local package with
+  exactly `probe_evidence/`, the readiness receipt, and its SHA sidecar. The
+  recursive block schema retains any authorized prior infrastructure rerun,
+  requires unlaunched system directories to stay exactly empty, and rejects
+  hidden files/directories/symlinks. This gate has not run; no live receipt or
+  browser result is claimed.
 - Action-parameter and controller evidence now records every deterministic and
   frozen-base fallback attempt, stage and total latency, the exact native
   command digest, safety binding, execution timestamps/status, and interrupted
@@ -93,24 +173,24 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   incidents in the 200 ordinary WebArena episodes. The 60 controlled recovery
   episodes remain separately reported mechanism diagnostics and are not pooled
   into headline WebArena rates.
-- Final integrated verification is **616/616 Table 2 tests passing**. The three
+- Current integrated verification is **788/788 Table 2 tests passing**. The three
   deterministic artifact-producing smokes also pass: six-action E0--E3 success
   chain, P1/P4 failure-memory intervention, and all 15 recovery scenarios x
   E0--E3 (60 diagnostic episodes). The authenticated WebArena export/audit was
   replayed from the pinned wheel and again reported 50 tasks, 47 incompatible,
   3 compatible, and 13 fuzzy-judge tasks. Python compilation and every new
   Table 2 CLI help path pass.
-- The full repository run reports **737 passing, 4 failing, 2 warnings**. The
+- The full repository run reports **909 passing, 4 failing, 2 warnings**. The
   four failures are the same pre-existing, out-of-scope checks: historical
   v2.3/v2.5 notebook stage literals, saved output in the historical v2.7 resume
   notebook, and a legacy model unit test that bypasses initialization and lacks
   the existing bbox flags. No training notebook or training configuration was
   changed to conceal them. These verification counts and fixture episodes are
   engineering evidence, not live-pilot results.
-- Remaining live-pilot prerequisites are external: the pinned local
-  `Qwen/Qwen2-VL-2B-Instruct` model/processor snapshot at revision
-  `895c3a49bc3fa70a340399125c650a463535e71c`, the frozen P4 store and joint
-  duplicate audit produced where Gold data lives, a passing BrowserGym/
+- Remaining live-pilot prerequisites are external: a checkpoint-backed
+  CUDA/model-forward inference-parity receipt and mandatory live model
+  callbacks, the frozen P4 store and joint duplicate audit produced where Gold
+  data lives, a passing BrowserGym/
   WebArena/Chromium host or split-deployment preflight, real seven-capability
   readiness evidence, credentials and reset/sealed-evaluator callbacks, a
   user-approved task-interface resolution and compatible resolved 50-task
@@ -138,7 +218,7 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   resume, source-separated validation, and a fail-closed validation-only
   comparison exporter.
 - Added `docs/DGX_THREE_MODEL_COMPARISON.md` with the run, recovery, artifact
-  transfer, ranking, repeated-seed, and locked-test protocol.
+  transfer, ranking, fixed-seed promotion, and locked-test protocol.
 - Local verification covers configuration contracts, static notebook parsing,
   Python parsing, formatting checks, and CPU-available unit tests. Actual 7B/8B
   model loading, CUDA backward, mini acceptance, runtime, and full metrics must
@@ -153,8 +233,10 @@ Dataset: Kaggle `thesisdata` → `/kaggle/input/datasets/kiyasmahmud/thesisdata/
   live in the notebook so progress is visible.
 - Commits: plain messages, **no Claude/AI mention**.
 
-## Key decisions
-- **Model = Qwen2-VL-2B-Instruct** (4-bit QLoRA). The spec's "Qwen2.5-VL-0.5B" does
+## Historical training decisions (superseded where the current-authority note says so)
+- **Historical PC-01 choice = Qwen2-VL-2B-Instruct** (4-bit QLoRA); this is now
+  the provisional pilot candidate, not the final promoted Table 2 backbone. The
+  spec's "Qwen2.5-VL-0.5B" does
   NOT exist (text-only Qwen2.5-0.5B, can't see images); 2B is the real smallest VLM
   (hidden D=1536). QLoRA for all VLM models for consistency.
 - **VLM adapter path** (no cross-attention): VLM(image+text) → mean-pool → Adapter
@@ -1270,7 +1352,8 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   observation/task/goal, validates normal and recovery `SELECT` candidates against
   observable controls, freezes `SCROLL` parameters, validates probability
   contracts, and redacts direct/nested URL credentials and session tokens.
-- Verification: the complete Table 2 suite passes `394/394`. Fresh deterministic
+- Historical verification snapshot (superseded by the 2026-09-04 entry): the
+  then-current Table 2 suite passed `394/394`. Fresh deterministic
   `success-chain`, `failure-memory`, and 15-scenario × E0-E3 `recovery-60` smokes
   all pass and remain labelled `ENGINEERING_SMOKE_ONLY`; paper Table 2 remains
   `N/R`. The whole repository reports `515 passed / 4 known pre-existing failures`
@@ -1299,7 +1382,8 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   request, and terminal verification. Missing exclusivity, non-agent input,
   mismatched action/observation/step counts, mutation, missing coverage, or receipt
   tampering fails fatally and cannot authorize an infrastructure rerun.
-- Final verification from the integrated tree: **461/461 Table 2 tests pass**.
+- Historical verification snapshot (superseded by the 2026-09-04 entry):
+  **461/461 Table 2 tests passed** in that earlier tree.
   Fresh `success-chain`, `failure-memory`, and `recovery-60` smokes all pass; the
   recovery smoke contains exactly **15 scenarios x E0-E3 = 60 episodes**. Every
   smoke remains `ENGINEERING_SMOKE_ONLY`, and the paper Table 2 remains `N/R`.

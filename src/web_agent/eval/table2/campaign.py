@@ -38,6 +38,11 @@ from .outcome_semantics import (
     OPAQUE_VERIFIER_TERMINAL,
     normalize_runtime_terminal_reason,
 )
+from .live_compatibility import (
+    authorize_live_compatibility_probe,
+    require_live_compatibility_before_execution,
+    write_live_compatibility_receipt,
+)
 from .schedule import (
     SYSTEM_IDS,
     discover_block_attempt_directories,
@@ -86,11 +91,17 @@ class CampaignRunner:
         runner: Any,
         runner_entrypoint: str | None = None,
         maximum_blocks: int | None = None,
+        live_readiness_probe_target: str | Path | None = None,
     ) -> None:
         self.root = Path(campaign_dir).resolve()
         self.runner = runner
         self.runner_entrypoint = runner_entrypoint
         self.maximum_blocks = maximum_blocks
+        self.live_readiness_probe_target = (
+            Path(live_readiness_probe_target).resolve()
+            if live_readiness_probe_target is not None
+            else None
+        )
         if maximum_blocks is not None and maximum_blocks <= 0:
             raise ValueError("maximum_blocks must be positive")
         preflight = validate_campaign(
@@ -151,7 +162,19 @@ class CampaignRunner:
         task_id = str(schedule_row["task_id"])
         if task_id not in self.tasks:
             raise SchemaError(f"scheduled task is absent from frozen manifest: {task_id}")
-        return _run_block(
+        if self.live_readiness_probe_target is not None:
+            authorize_live_compatibility_probe(
+                self.root,
+                self.live_readiness_probe_target,
+                block_id=str(schedule_row["block_id"]),
+            )
+        else:
+            # This is deliberately adjacent to physical block dispatch.  The
+            # receipt and its isolated evidence campaign are reopened before
+            # every resumed/new pilot block, so deletion or mutation cannot be
+            # hidden by a runner object constructed earlier.
+            require_live_compatibility_before_execution(self.root, self.manifest)
+        resolution = _run_block(
             self.root,
             schedule_row,
             task=self.tasks[task_id],
@@ -159,8 +182,25 @@ class CampaignRunner:
             systems=self.systems,
             runner=self.runner,
         )
+        if self.live_readiness_probe_target is not None:
+            if resolution.get("status") != "INCLUDED":
+                raise Table2Error(
+                    "live WebArena compatibility probe did not produce one included "
+                    "matched E0--E3 block"
+                )
+            receipt = write_live_compatibility_receipt(
+                probe_campaign_dir=self.root,
+                target_campaign_dir=self.live_readiness_probe_target,
+            )
+            return {**resolution, "live_readiness_receipt": str(receipt)}
+        return resolution
 
     def run(self) -> dict[str, Any]:
+        if self.live_readiness_probe_target is not None:
+            raise Table2Error(
+                "live-readiness probe mode may run only one explicit normal block"
+            )
+        require_live_compatibility_before_execution(self.root, self.manifest)
         selected_rows = (
             self.schedule
             if self.maximum_blocks is None

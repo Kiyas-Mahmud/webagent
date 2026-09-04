@@ -4,6 +4,12 @@
 > This is the single source of truth for the project. Every architectural decision, dataset detail, model configuration, and training step is defined here.
 >
 > **v2 changes:** (1) The architecture is backbone-agnostic — the primary model is chosen by results, NOT pre-fixed. (2) Compute plan is FREE-first (Kaggle T4), so VLM sizes are reduced to fit free hardware. (3) Model list updated accordingly.
+>
+> **Current experiment authority (2026-09-04):** this v2 document preserves
+> the broad historical research roadmap. For Table 2, the controlling protocol
+> is `TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`: PC-01 is provisional,
+> final promotion compares exactly PC-01/PC-02/PC-03 at seed 42 using validation
+> only, and model-seed uncertainty is explicitly not measured.
 
 ---
 

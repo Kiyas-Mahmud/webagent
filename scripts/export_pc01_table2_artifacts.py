@@ -24,6 +24,16 @@ def parse_args() -> argparse.Namespace:
         help="materialized local pinned Qwen2-VL base snapshot (required for full export)",
     )
     parser.add_argument(
+        "--training-environment",
+        type=Path,
+        help="checked-in PC-01 training environment.json (required for full export)",
+    )
+    parser.add_argument(
+        "--training-action-value-evidence",
+        type=Path,
+        help="canonical train-only action-value audit receipt (required for full export)",
+    )
+    parser.add_argument(
         "--config-only",
         action="store_true",
         help="export authenticated checkpoint config without requiring processor/base weights",
@@ -36,6 +46,12 @@ def main() -> None:
     if args.config_only:
         if args.processor_source is not None:
             raise ValueError("--processor-source is not used with --config-only")
+        if args.training_environment is not None:
+            raise ValueError("--training-environment is not used with --config-only")
+        if args.training_action_value_evidence is not None:
+            raise ValueError(
+                "--training-action-value-evidence is not used with --config-only"
+            )
         result = export_pc01_checkpoint_identity(
             checkpoint_path=args.checkpoint,
             report_path=args.report,
@@ -45,11 +61,21 @@ def main() -> None:
     else:
         if args.processor_source is None:
             raise ValueError("full PC-01 export requires --processor-source")
+        if args.training_environment is None:
+            raise ValueError("full PC-01 export requires --training-environment")
+        if args.training_action_value_evidence is None:
+            raise ValueError(
+                "full PC-01 export requires --training-action-value-evidence"
+            )
         result = export_pc01_artifacts(
             checkpoint_path=args.checkpoint,
             report_path=args.report,
             run_contract_path=args.run_contract,
             processor_source=args.processor_source,
+            training_environment_path=args.training_environment,
+            training_action_value_evidence_path=(
+                args.training_action_value_evidence
+            ),
             output_dir=args.output_dir,
         )
     print(json.dumps({

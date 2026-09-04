@@ -37,6 +37,14 @@ embeddings.npy
 cookies*.json
 credentials*.json
 storage_state*.json
+*token*.json
+*secret*.json
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
 
 # Generated results. Table 2 exports stay ignored until a separately reviewed,
 # redacted paper artifact is deliberately placed in a tracked paper location.

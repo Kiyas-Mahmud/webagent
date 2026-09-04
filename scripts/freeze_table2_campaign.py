@@ -42,6 +42,24 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--pc01-checkpoint-compatibility-receipt",
+        type=Path,
+        default=None,
+        help=(
+            "canonical read-only DGX checkpoint compatibility PASS receipt "
+            "(mandatory for PC-01 PILOT_ONLY evaluation; forbidden for smoke)"
+        ),
+    )
+    parser.add_argument(
+        "--handoff-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "source-attested handoff_manifest.json (mandatory for evaluation; "
+            "forbidden for ENGINEERING_SMOKE_ONLY)"
+        ),
+    )
+    parser.add_argument(
         "--allow-dirty-pilot",
         action="store_true",
         help="permit an explicitly PILOT_ONLY freeze from a dirty worktree",
@@ -61,6 +79,10 @@ def main() -> None:
         environment_manifest_path=args.environment_manifest,
         runner_attestation_path=args.runner_attestation,
         resolved_task_snapshot_path=args.resolved_task_snapshot,
+        pc01_checkpoint_compatibility_receipt_path=(
+            args.pc01_checkpoint_compatibility_receipt
+        ),
+        handoff_manifest_path=args.handoff_manifest,
         allow_dirty_pilot=args.allow_dirty_pilot,
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))

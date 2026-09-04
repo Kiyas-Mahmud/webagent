@@ -60,7 +60,10 @@ def _install_deterministic_recomputation_stubs(
         partition = str(episodes[0]["task_partition"])
         return {
             "schema_version": "table2.v1",
-            "systems": {"partition": partition, "estimate": 0.625},
+            "systems": {
+                system_id: {"partition": partition, "estimate": 0.625}
+                for system_id in ("E0", "E1", "E2", "E3")
+            },
         }
 
     monkeypatch.setattr(validator, "compute_table2_metrics", fake_metrics)
@@ -86,20 +89,36 @@ def _install_deterministic_recomputation_stubs(
         "compute_clustered_ratio_contrasts",
         lambda *_args, **_kwargs: {"E1_minus_E0": {"estimate": 0.25}},
     )
+    # This unit isolates the five canonical JSON recomputations. Exact CSV and
+    # redacted-result byte replay have separate full-package tamper canaries.
+    monkeypatch.setattr(
+        validator,
+        "_validate_canonical_summary_exports",
+        lambda *_args, **_kwargs: None,
+    )
 
 
 def _write_expected_aggregates(root: Path) -> dict[str, dict[str, Any]]:
     expected = {
         "metrics.json": {
             "schema_version": "table2.v1",
-            "systems": {"partition": "normal", "estimate": 0.625},
+            "systems": {
+                system_id: {"partition": "normal", "estimate": 0.625}
+                for system_id in ("E0", "E1", "E2", "E3")
+            },
             "publication_status": "DRAFT_PILOT_ONLY",
             "headline_task_partition": "normal",
             "paper_table_status": "N/R",
         },
         "recovery_diagnostic_metrics.json": {
             "schema_version": "table2.v1",
-            "systems": {"partition": "recovery_diagnostic", "estimate": 0.625},
+            "systems": {
+                system_id: {
+                    "partition": "recovery_diagnostic",
+                    "estimate": 0.625,
+                }
+                for system_id in ("E0", "E1", "E2", "E3")
+            },
             "publication_status": "DRAFT_PILOT_ONLY",
             "task_partition": "recovery_diagnostic",
         },
@@ -163,7 +182,7 @@ def test_recomputation_rejects_every_tampered_numeric_aggregate(
             "metrics.json",
             "recovery_diagnostic_metrics.json",
         }:
-            tampered["systems"]["estimate"] = 0.999
+            tampered["systems"]["E0"]["estimate"] = 0.999
         elif filename in {
             "retrieval_diagnostics.json",
             "recovery_diagnostic_retrieval.json",

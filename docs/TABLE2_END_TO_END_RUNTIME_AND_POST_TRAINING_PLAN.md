@@ -97,18 +97,29 @@ strongly related papers are context only and are never copied into Table 2.
 The additive runtime, evaluator, evidence package, deterministic browser
 fixtures, and 15-scenario recovery harness are implemented. Their checks are
 engineering verification only. Before the registered 260-episode PC-01
-engineering pilot may start, the campaign freezer must receive and verify all
-of the following:
+engineering pilot may start, the authenticated handoff, campaign-freeze, and
+post-freeze live-readiness sequence must establish all of the following:
 
-- the already-authenticated PC-01 epoch-6 checkpoint and checkpoint-exported
-  resolved-config artifact together with the still-missing processor manifest;
-  the checkpoint SHA-256 is
+- the authenticated PC-01 epoch-6 checkpoint and checkpoint-exported
+  resolved-config artifact. The checkpoint SHA-256 is
   `9eaab6d24719b7bce8d0dd2ccf9169c3ddf83e0a800714a84531679c0c94895a`,
   and the canonical checkpoint-saved config SHA-256 is
   `d014050287ae2142e1c2111cff8b00de214dc3f416fedb49504edde8bd61007f`;
+- the completed schema-v3 identity/preprocessing export. It authenticates all
+  14 files in the pinned base snapshot at revision
+  `895c3a49bc3fa70a340399125c650a463535e71c`, binds the checked training
+  environment and preprocessing sources, contains the train-only action-value
+  omission audit, and cross-binds that audit to the deterministic processor-
+  parity receipt. The snapshot directory-payload SHA-256 is
+  `e002f8290faa3e9f44bf3099eac85a2445e17de738c5bb0cc10d342da837c46c`;
 - the complete seed-42 report, run contract, and compatibility report already
-  present for PC-01, revalidated as part of the eventual runtime bundle;
+  present for PC-01, revalidated as part of the eventual runtime bundle. The
+  historical compatibility report is fixed at SHA-256
+  `1a8e9bb008daab5dfe893db7738daf12ee6e57e1ce2469ae29810d793030a441`;
 - the frozen unadapted version of the selected backbone for E0;
+- a real checkpoint-backed CUDA inference-parity receipt and all mandatory
+  live operational bindings. The processor-only export intentionally records
+  `runtime_ready: false` and cannot satisfy this gate;
 - a complete train-only, per-seed memory store and its train-only threshold-
   calibration evidence;
 - a genuine joint train/WebArena duplicate audit marking all 50 development
@@ -129,14 +140,21 @@ of the following:
   start without a live mapper that has passed its schema/canary smoke;
 - the complete resolved 50-task export and the preregistered blinded-audit
   sampling/adjudication protocol. Human audit labels are created only after
-  episode execution and enter only the sealed evaluation path.
+  episode execution and enter only the sealed evaluation path;
+- a separate frozen readiness-probe campaign that completes the exact first
+  normal WebArena block across matched E0--E3. Its target-local, portable
+  `runtime_readiness/` receipt must replay successfully before every pilot
+  block dispatch. This gate has not run and is non-scored readiness evidence,
+  not one of the 260 pilot episodes or a Table 2 result.
 
 The final template remains non-runnable until the complete seed-42
 reports and run contracts for all three registered backbone candidates and the
 independently replayable comparison JSON/CSV are available. Therefore the live
 PC-01 pilot has an authenticated epoch-6 checkpoint and checkpoint-saved
-resolved configuration, but its complete runnable model bundle is still
-blocked on the pinned local base-model/processor snapshot. The exact pinned
+resolved configuration plus an authenticated local base-model/processor
+snapshot and exact processor-parity receipt. Its complete runnable model bundle
+is still blocked on checkpoint-backed CUDA/model-forward parity and the live
+operational callbacks. The exact pinned
 WebArena 0--49 export has also exposed a material protocol incompatibility: 47
 tasks use `string_match` and require an assistant answer submitted through a
 STOP/termination interface that the fixed six-class P3 action contract does
@@ -148,7 +166,8 @@ seventh action. A live pilot therefore requires one explicit, user-approved
 and preregistered resolution: either replace the pilot registry with 50 public
 page-state-compatible development tasks, or add a scientifically justified
 answer/termination interface and update the P3/protocol contract before
-outcomes are observed.
+outcomes are observed. The exact unapproved replacement and consequences are
+recorded in `docs/TABLE2_PILOT_TASK_INTERFACE_DECISION.md`.
 
 The pilot is also blocked on measured WebArena services, sealed-evaluator
 compatibility evidence, reset callbacks, the genuine joint train/WebArena
@@ -157,12 +176,18 @@ capability manifest, and the preregistered audit protocol. Until every input
 exists and the task-interface gate passes, evaluation stops before browser
 reset and the paper Table 2 remains `N/R`.
 
-### 0.3 Deferred browser-stack installation
+### 0.3 Isolated browser-stack diagnostic
 
-The optional Table 2 dependencies are declared in `pyproject.toml` but are not
-installed on the active DGX training environment. After the complete
-post-training handoff exists, install them once in the intended campaign-host
-Python environment and install the pinned Playwright browser binary:
+The optional Table 2 dependencies are declared in `pyproject.toml` and remain
+separate from the active DGX training environment. An isolated local x86
+diagnostic environment was created with BrowserGym core/WebArena 0.14.3,
+`libwebarena==0.0.4`, Gymnasium 1.0.0, Playwright 1.44.0, and Chromium
+125.0.6422.26 (build 1117). Package checks and the 1280x720 Chromium smoke
+passed. All seven WebArena services were absent, so service readiness failed,
+live reset was not run, and that diagnostic host is not campaign-eligible.
+
+On the eventual intended campaign host, install and freeze the same stack in a
+dedicated environment rather than mutating the training environment:
 
 ```bash
 python3 -m pip install -e '.[table2]'
@@ -171,8 +196,8 @@ python3 -m playwright install chromium
 
 Record the resulting Python/package/browser versions in the dependency lock
 before freezing the campaign. Installing the browser stack does not authorize
-access to locked tasks, and it is deliberately deferred while training and
-selection artifacts are incomplete.
+access to locked tasks or establish service, reset, credential, evaluator, or
+campaign readiness.
 
 ---
 
@@ -236,7 +261,7 @@ task + current pre-action state
 | --- | --- | --- |
 | Pre-action | current screenshot, task, domain/site, current URL and permitted current-page state | action class, bbox/target, confidence |
 | Execution | frozen provider output and controller state | concrete executed action and execution status |
-| Post-action | pre-state, executed action/value, observed post-state, task/domain | outcome, failure type, needs recovery, recovery strategy, memory-update prediction |
+| Post-action | pre-state, executed action type, observed post-state, task/domain; for PC-01, action-value text is omitted to match all 24,107 training rows | outcome, failure type, needs recovery, recovery strategy, memory-update prediction |
 | Recovery | observed post-failure state, P1 diagnosis, concrete recovery, observed post-recovery state | predicted recovery outcome plus sealed progress verification |
 | Memory query | current post-failure representation and permitted task/site metadata | filtered training-recovery neighbours and optional advice |
 
@@ -509,6 +534,7 @@ src/web_agent/memory/
     build_pipeline.py
     calibration_builder.py
     frozen_store.py
+    joint_duplicate_audit.py
     manifest.py
     preparation.py
     verification.py
@@ -525,10 +551,14 @@ src/web_agent/eval/table2/
     execution_guard.py
     evidence_validation.py
     handoff.py
+    handoff_authority.py
+    live_compatibility.py
     live_deployment.py
     locked_mount_preflight.py
     package_validator.py
     pc01_artifacts.py
+    pc01_checkpoint_compatibility.py
+    pc01_processor_parity.py
     pilot_task_exclusion.py
     production_runner.py
     resolved_config.py
@@ -538,6 +568,7 @@ src/web_agent/eval/table2/
     state_isolation_validation.py
     summary.py
     task_interface_audit.py
+    model_compatibility.py
     webarena_export.py
     webarena_preflight.py
     webarena_preflight_binding.py
@@ -546,6 +577,8 @@ configs/eval/table2/
     protocol.yaml
     protocol_final.yaml
     pilot_webarena.yaml
+    joint_duplicate_audit_v1.json
+    p4_source_authority_v1.json
     prompts/
     systems/e0.yaml ... systems/e3.yaml
 
@@ -559,11 +592,15 @@ benchmarks/table2/pilot/
 
 scripts/
     export_pc01_table2_artifacts.py
+    audit_pc01_training_action_values.py
+    verify_pc01_processor_parity.py
+    run_pc01_checkpoint_compatibility.py
     export_table2_webarena_tasks.py
     audit_table2_webarena_task_interface.py
     preflight_table2_webarena.py
     prepare_table2_split_preflight.py
     prepare_table2_p4.py
+    run_table2_joint_duplicate_audit.py
     build_table2_memory.py
     prepare_table2_handoff.py
     freeze_table2_campaign.py
@@ -1628,6 +1665,10 @@ artifacts/table2/<campaign_id>/
                         E3/sealed/
     aggregate/
     manual_audit/
+    runtime_readiness/                  # provisional PC-01 pilot only
+        probe_evidence/                 # portable non-scored first-block evidence
+        live_matched_e0_e3_receipt.json
+        live_matched_e0_e3_receipt.sha256
 ```
 
 Every system, including E0, is nested under the matched seed. This prevents an
@@ -1887,7 +1928,13 @@ The evaluation handoff is prepared only from a clean, committed Git checkout.
 The runner, runtime integration factory, evaluator source, protocol, prompts,
 and overlays must all be the bytes in that checkout. The handoff and campaign
 directories must be outside the checkout so that creating them does not dirty
-the source tree. `prepare_table2_handoff.py` rejects a dirty/non-Git checkout,
+the source tree. They must also be disjoint: the campaign directory cannot be
+equal to, inside, or an ancestor of the handoff package. The freeze copies the
+handoff authority, authenticates every handoff-sourced byte before and after
+copying, records `frozen/handoff_consumption.json`, and replays the complete
+handoff inventory immediately before finalization. Frozen-package validation
+then verifies every recorded source-to-campaign digest without reopening the
+external handoff directory. `prepare_table2_handoff.py` rejects a dirty/non-Git checkout,
 missing inputs, placeholder/unknown environment values, unverified audit
 evidence, hash drift, noncanonical processor contracts, or an incomplete task
 export. It does not infer any external value.
@@ -2063,13 +2110,46 @@ operator-supplied fields:
   before every ordinary browser launch;
 - for `pc01_provisional`, `selection_evidence` contains exactly the immutable
   PC-01 seed-42 run contract, complete report, checkpoint-saved resolved
-  config, and selected checkpoint. It must not contain three-model comparison
-  JSON/CSV. The handoff independently replays PC-01's registered epoch gate and
-  requires epoch 6 plus the registered checkpoint/config hashes;
+  config, selected checkpoint identity, registered backbone config, and
+  `model_compatibility_report.json`. It must not contain three-model comparison
+  JSON/CSV. The handoff independently replays PC-01's registered epoch gate,
+  requires epoch 6 plus the registered checkpoint/config hashes, pins the
+  compatibility report to SHA-256
+  `1a8e9bb008daab5dfe893db7738daf12ee6e57e1ce2469ae29810d793030a441`,
+  and revalidates its 16-row smoke semantics rather than trusting its `PASS`
+  label. This report proves pre-training pipeline/head compatibility only; it
+  is not a ranking metric and cannot replace the separate checkpoint-backed
+  DGX receipt;
+- for the PC-01 `PILOT_ONLY` evaluation, the separate
+  `pc01_checkpoint_compatibility_receipt` field points to the immutable
+  canonical receipt produced on the registered DGX by
+  `scripts/run_pc01_checkpoint_compatibility.py`. It is not an eighth
+  `MODEL_EVIDENCE_ROLES` member. Its source commit must equal the clean handoff
+  commit; all 11 source-attestation rows are recomputed against the exact
+  runner source, and every receipt artifact digest is cross-bound to the staged
+  executable/v3 bundle and selected full report/run contract. Handoff copies
+  the exact bytes to
+  `<handoff>/runtime_readiness/pc01_checkpoint_compatibility_receipt.json`;
+  freeze then places it at
+  `<campaign>/frozen/runtime_readiness/pc01_checkpoint_compatibility_receipt.json`.
+  This is distinct from the campaign-root `runtime_readiness/` directory,
+  which is reserved for exactly the portable live matched-block evidence,
+  receipt, and SHA sidecar. Freeze,
+  package validation, runner attestation, and production startup revalidate the
+  same binding before browser reset. See
+  `docs/PC01_CHECKPOINT_COMPATIBILITY_RUNBOOK.md` for the DGX command and
+  receipt boundary. `ENGINEERING_SMOKE_ONLY` omits this receipt, and the
+  provisional receipt cannot authorize a locked-final campaign;
 - only the later `three_candidate_final` selection profile accepts all three
-  registered seed-42 candidate packages and comparison JSON/CSV. That profile
-  cannot be used by the current pilot and the checked final template cannot
-  authorize a final campaign;
+  registered seed-42 candidate packages and comparison JSON/CSV. Before final
+  comparison/handoff, the three distinct model-to-compatibility-report SHA-256
+  assignments must be reviewed and committed in the source registry in
+  `selection_evidence.py`; repeating a self-asserted hash in the handoff input
+  is insufficient. The production registry intentionally contains only PC-01
+  until the real PC-02 and PC-03 bytes exist, so final selection currently
+  fails closed. Those reports remain compatibility evidence and never enter
+  the ranking rule. This profile cannot be used by the current pilot and the
+  checked final template cannot authorize a final campaign;
 - the complete measured `environment` mapping registered by
   `table2-environment-v2` and an `evaluator` mapping with ID, version,
   repository-relative source, `model_based`, and (only when applicable) an
@@ -2086,6 +2166,25 @@ operator-supplied fields:
   `resolved_config_record_sha256`, while memory construction requires the
   checkpoint-saved full `config` mapping to equal that canonical mapping
   exactly;
+- every `models[]` row also supplies exact `model_evidence_paths` for the
+  schema-v3 export manifest, full base-snapshot manifest, processor-artifact
+  manifest, processor-parity receipt, training environment, training-source
+  manifest, and train-only action-value evidence. Handoff wraps those seven
+  canonical JSON files in `table2-model-evidence-bundle-v1`, checks all
+  internal/cross-artifact hashes, requires the schema-v3 export-manifest byte
+  identity `63c01942cc653732c9e9e18639cb49bded09a82235fd4ea37fef3fad14c9fa2d`,
+  rebuilds the complete registered base-
+  snapshot manifest from the executable E0 directory, and requires exact
+  equality. The action-value audit must cover exactly the registered 23,499-
+  row Gold train split plus 608-row retry supplement (24,107 rows total). The
+  parity receipt must pass the production validator with pre/post/recovery
+  tensor streams, all six action classes, exact implementations, the exact
+  live names and source hashes of all nine registered callables, and the five
+  registered training/preprocessing sources,
+  including `src/web_agent/data/recovery_transitions.py`. The bundle preserves
+  `runtime_ready: false` as an evidence-only statement. Live runtime readiness
+  remains controlled solely by the checkpoint-backed compatibility and
+  measured deployment gates;
 - one complete frozen-store `manifest.json` path per seed in
   `memory_manifests`;
 - `runner.runner_entrypoint` set to the canonical
@@ -2133,15 +2232,38 @@ PYTHONPATH=src python3 scripts/prepare_table2_handoff.py \
   --output-dir /secure/table2-handoff/pilot-260
 PYTHONPATH=src python3 scripts/freeze_table2_campaign.py \
   --repository-root "$PWD" \
+  --handoff-manifest /secure/table2-handoff/pilot-260/handoff_manifest.json \
   --campaign-config /secure/table2-handoff/pilot-260/campaign.yaml \
   --campaign-dir /secure/table2-campaigns/pilot-260 \
   --resolved-task-snapshot /secure/table2-handoff/pilot-260/resolved_tasks.json \
   --environment-manifest /secure/table2-handoff/pilot-260/environment.json \
   --runner-attestation /secure/table2-handoff/pilot-260/runner_attestation.json \
+  --pc01-checkpoint-compatibility-receipt /secure/table2-handoff/pilot-260/runtime_readiness/pc01_checkpoint_compatibility_receipt.json \
   --model-manifest /secure/table2-handoff/pilot-260/models/seed_42.json \
-  --memory-manifest /secure/table2-inputs/frozen-memory/seed_42/manifest.json
+  --memory-manifest /secure/table2-handoff/pilot-260/memory/seed_42/manifest.json \
+  --campaign-id table2-pc01-pilot-260-v1
+PYTHONPATH=src python3 scripts/freeze_table2_campaign.py \
+  --repository-root "$PWD" \
+  --handoff-manifest /secure/table2-handoff/pilot-260/handoff_manifest.json \
+  --campaign-config /secure/table2-handoff/pilot-260/campaign.yaml \
+  --campaign-dir /secure/table2-campaigns/pilot-readiness-probe \
+  --resolved-task-snapshot /secure/table2-handoff/pilot-260/resolved_tasks.json \
+  --environment-manifest /secure/table2-handoff/pilot-260/environment.json \
+  --runner-attestation /secure/table2-handoff/pilot-260/runner_attestation.json \
+  --pc01-checkpoint-compatibility-receipt /secure/table2-handoff/pilot-260/runtime_readiness/pc01_checkpoint_compatibility_receipt.json \
+  --model-manifest /secure/table2-handoff/pilot-260/models/seed_42.json \
+  --memory-manifest /secure/table2-handoff/pilot-260/memory/seed_42/manifest.json \
+  --campaign-id table2-pc01-readiness-probe-v1
 PYTHONPATH=src python3 scripts/validate_table2_artifacts.py \
   --campaign-dir /secure/table2-campaigns/pilot-260 --allow-incomplete
+PYTHONPATH=src python3 scripts/validate_table2_artifacts.py \
+  --campaign-dir /secure/table2-campaigns/pilot-readiness-probe --allow-incomplete
+PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
+  --campaign-dir /secure/table2-campaigns/pilot-readiness-probe \
+  --runner web_agent.eval.table2.production_runner:create_runner \
+  --runner-factory \
+  --block-id '<first-normal-block-id-from-the-frozen-probe-schedule>' \
+  --live-readiness-probe-for /secure/table2-campaigns/pilot-260
 PYTHONPATH=src python3 scripts/run_table2_evaluation.py \
   --campaign-dir /secure/table2-campaigns/pilot-260 \
   --runner web_agent.eval.table2.production_runner:create_runner \
@@ -2154,6 +2276,13 @@ PYTHONPATH=src python3 scripts/summarize_table2.py \
 PYTHONPATH=src python3 scripts/validate_table2_artifacts.py \
   --campaign-dir /secure/table2-campaigns/pilot-260 --require-aggregates
 ```
+
+The two freezes deliberately consume the same authenticated handoff bytes but
+use distinct explicit campaign IDs. The readiness command must use the first
+normal block ID from the frozen probe schedule and must produce the exact
+three-entry target-local receipt package described in
+`docs/TABLE2_LIVE_MATCHED_READINESS_RUNBOOK.md`; the target command fails before
+browser reset if that evidence is absent or changed.
 
 The `--runner` value must equal the attested `runner_entrypoint`; the runner
 factory must report the exact loaded runtime identity. Before importing the
@@ -2460,7 +2589,9 @@ evaluation dataset silently.
 
 ### Phase L - Fill Table 2 and freeze paper claims
 
-Table 2 remains `N/R` until all required episode packages pass validation.
+Table 2 remains `N/R` through every `PILOT_ONLY` run. It may be filled only
+from the later frozen final-paper campaign after all final episode packages,
+the final blinded audit, and final package validation pass.
 
 Permitted claims require:
 
@@ -2647,6 +2778,8 @@ environment rather than collapsed into one failure bucket.
 - [x] Exact metric/statistics implementation
 - [x] Deterministic fixture and 15-scenario recovery smokes PASS
 - [x] Production evaluation runner and live-evidence revalidation gates
+- [x] Portable matched E0--E3 live-readiness receipt and dispatch guard
+- [ ] Isolated live first-normal-block readiness probe PASS and target-local receipt frozen
 - [ ] Selected-checkpoint WebArena compatibility smoke PASS
 - [ ] Checkpoint, memory, and measured environment attestations frozen
 

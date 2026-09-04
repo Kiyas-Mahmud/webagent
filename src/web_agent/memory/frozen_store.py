@@ -272,16 +272,63 @@ class FrozenMemoryStore:
             "duplicate_cluster_id",
             "duplicate_cluster_namespace_id",
             "failure_type",
+            "failed_action",
             "strategy",
             "executed_recovery_action",
+            "source_transition_kind",
+            "source_review_status",
+            "source_record_sha256",
+            "memory_item_source_material_sha256",
         ):
             _nonempty(item.get(field), field=f"{prefix}.{field}")
         if item.get("schema_version") != ELIGIBILITY_POLICY_VERSION:
             raise ManifestError(f"{prefix}.schema_version is not supported")
         if item.get("strategy") == "NONE":
             raise ManifestError(f"{prefix}.strategy cannot be NONE")
-        if item.get("failure_type") == "NONE":
-            raise ManifestError(f"{prefix}.failure_type cannot be NONE")
+        transition_kind = item.get("source_transition_kind")
+        if transition_kind == "adjacent_failure_then_recovery":
+            if (
+                item.get("failure_type") in {"NONE", "UNAVAILABLE"}
+                or item.get("failed_action") == "UNAVAILABLE"
+                or item.get("failure_type_available") is not True
+                or item.get("failed_action_available") is not True
+            ):
+                raise ManifestError(
+                    f"{prefix} does not preserve adjacent failure fields"
+                )
+        elif transition_kind == "direct_recovery_from_observed_failure_state":
+            if (
+                item.get("failure_type") != "UNAVAILABLE"
+                or item.get("failed_action") != "UNAVAILABLE"
+                or item.get("failure_type_available") is not False
+                or item.get("failed_action_available") is not False
+            ):
+                raise ManifestError(
+                    f"{prefix} invents unavailable direct-transition failure fields"
+                )
+        else:
+            raise ManifestError(f"{prefix}.source_transition_kind is invalid")
+        if item.get("source_review_status") not in {"approved", "pending"}:
+            raise ManifestError(f"{prefix}.source_review_status is invalid")
+        label_review_digest = item.get("p4_label_review_evidence_sha256")
+        require_sha256(
+            item.get("source_record_sha256"),
+            field=f"{prefix}.source_record_sha256",
+        )
+        require_sha256(
+            item.get("memory_item_source_material_sha256"),
+            field=f"{prefix}.memory_item_source_material_sha256",
+        )
+        if item.get("source_review_status") == "pending":
+            require_sha256(
+                label_review_digest,
+                field=f"{prefix}.p4_label_review_evidence_sha256",
+            )
+        elif label_review_digest is not None:
+            require_sha256(
+                label_review_digest,
+                field=f"{prefix}.p4_label_review_evidence_sha256",
+            )
         step_index = item.get("step_index")
         if type(step_index) is not int or step_index < 0:
             raise ManifestError(f"{prefix}.step_index must be a non-negative integer")

@@ -76,6 +76,21 @@ JOINT_DUPLICATE_NAMESPACE = {
     "audit_tool_config_sha256": SHA_A,
     "audit_tool_source_sha256": SHA_C,
 }
+JOINT_DUPLICATE_BINDING = {
+    "schema_version": "table2-memory-joint-duplicate-evidence-binding-v2",
+    "preparation_manifest_sha256": SHA_A,
+    "assignment_manifest_sha256": SHA_B,
+    "entities_sha256": SHA_C,
+    "clusters_sha256": SHA_A,
+    "audit_config_sha256": SHA_B,
+    "audit_source_sha256": SHA_C,
+    "recovery_scenarios_sha256": SHA_A,
+    "duplicate_audit_registration_sha256": SHA_B,
+    "source_authority_sha256": SHA_A,
+    "final_duplicate_audit_sha256": SHA_C,
+    "provenance_manifest_sha256": SHA_B,
+    "duplicate_cluster_namespace": JOINT_DUPLICATE_NAMESPACE,
+}
 
 
 def _transition(
@@ -171,7 +186,10 @@ def _verification_evidence(
 
 def _source_record() -> dict:
     return {
-        "inputs": {"website_domain": "fixture.test"},
+        "inputs": {
+            "task_description": "Retry the fixture browser action",
+            "website_domain": "fixture.test",
+        },
         "labels": {
             "outcome_label": "FAILURE",
             "failure_type_4": "NO_EFFECT",
@@ -543,6 +561,18 @@ def test_memory_build_cli_derives_threshold_and_protocol_registers_calibration()
         "--checkpoint", "checkpoint.pt",
         "--data-root", "data",
         "--provenance-manifest", "provenance.json",
+        "--resolved-task-export", "resolved-tasks.json",
+        "--webarena-task-source", "libwebarena.whl",
+        "--webarena-task-registry", "pilot-task-registry.json",
+        "--webarena-site-url-map", "webarena-url-map.json",
+        "--task-interface-audit", "task-interface-audit.json",
+        "--duplicate-audit", "duplicate-audit.json",
+        "--joint-assignment-package", "joint-assignments",
+        "--joint-audit-config", "joint-audit-config.json",
+            "--p4-preparation-package", "p4-preparation",
+            "--p4-source-authority", "p4-source-authority.json",
+        "--recovery-scenarios", "recovery-scenarios.json",
+        "--duplicate-audit-registration", "duplicate-registration.json",
         "--model-seed", "42",
         "--output-dir", "memory",
     ]
@@ -839,6 +869,7 @@ def test_frozen_store_is_hash_verified_read_only_and_query_excludes_same_task(tm
         threshold_calibration=calibration_evidence["threshold_calibration"],
         calibration_evidence=calibration_evidence,
         transition_report={"status": "PASS"},
+        joint_duplicate_audit_binding=JOINT_DUPLICATE_BINDING,
     )
 
     assert len(store) == 3
@@ -848,6 +879,7 @@ def test_frozen_store_is_hash_verified_read_only_and_query_excludes_same_task(tm
     assert store.manifest["verification_evidence"]["item_count"] == 3
     assert len(store.manifest["verification_evidence_sha256"]) == 64
     assert store.manifest["duplicate_cluster_namespace"] == JOINT_DUPLICATE_NAMESPACE
+    assert store.manifest["joint_duplicate_audit_binding"] == JOINT_DUPLICATE_BINDING
     assert (
         store._items[0]["duplicate_cluster_namespace_id"]  # noqa: SLF001
         == JOINT_DUPLICATE_NAMESPACE["namespace_id"]
@@ -913,6 +945,7 @@ def test_frozen_store_is_hash_verified_read_only_and_query_excludes_same_task(tm
             threshold_calibration=calibration_evidence["threshold_calibration"],
             calibration_evidence=calibration_evidence,
             transition_report={"status": "PASS"},
+            joint_duplicate_audit_binding=JOINT_DUPLICATE_BINDING,
         )
 
     missing_records_candidate = replace(
@@ -942,6 +975,7 @@ def test_frozen_store_is_hash_verified_read_only_and_query_excludes_same_task(tm
             threshold_calibration=calibration_evidence["threshold_calibration"],
             calibration_evidence=calibration_evidence,
             transition_report={"status": "PASS"},
+            joint_duplicate_audit_binding=JOINT_DUPLICATE_BINDING,
         )
 
 
@@ -964,6 +998,7 @@ def test_frozen_store_revalidates_item_verification_evidence_on_load(tmp_path):
         threshold_calibration=evidence["threshold_calibration"],
         calibration_evidence=evidence,
         transition_report={"status": "PASS"},
+        joint_duplicate_audit_binding=JOINT_DUPLICATE_BINDING,
     )
 
     item_path = store.root / "items.jsonl"
@@ -1017,6 +1052,7 @@ def test_frozen_store_rejects_self_consistent_manifest_verification_reattachment
         threshold_calibration=evidence["threshold_calibration"],
         calibration_evidence=evidence,
         transition_report={"status": "PASS"},
+        joint_duplicate_audit_binding=JOINT_DUPLICATE_BINDING,
     )
 
     manifest_path = store.root / "manifest.json"
@@ -1057,6 +1093,7 @@ def test_frozen_store_rejects_fully_resealed_verification_record_tamper(tmp_path
         threshold_calibration=evidence["threshold_calibration"],
         calibration_evidence=evidence,
         transition_report={"status": "PASS"},
+        joint_duplicate_audit_binding=JOINT_DUPLICATE_BINDING,
     )
 
     evidence_path = store.root / "verification_evidence.json"
@@ -1183,6 +1220,7 @@ def test_frozen_store_replays_calibration_rows_after_hash_consistent_tamper(
         threshold_calibration=evidence["threshold_calibration"],
         calibration_evidence=evidence,
         transition_report={"status": "PASS"},
+        joint_duplicate_audit_binding=JOINT_DUPLICATE_BINDING,
     )
     evidence_path = store.root / "calibration_evidence.json"
     tampered = json.loads(evidence_path.read_text(encoding="utf-8"))
@@ -1367,6 +1405,7 @@ def test_e3_runtime_bridge_queries_real_frozen_store_with_exact_embedding(tmp_pa
         threshold_calibration=calibration_evidence["threshold_calibration"],
         calibration_evidence=calibration_evidence,
         transition_report={"status": "PASS"},
+        joint_duplicate_audit_binding=JOINT_DUPLICATE_BINDING,
     )
     provider = CallablePostFailureEmbeddingProvider(
         embedder=lambda request: _embedding_receipt(request, embedding[0]),

@@ -181,8 +181,8 @@ def validate_included_block_causal_trace(
         root,
         state_fingerprint_fields=state_fingerprint_fields,
     )
-    first_decision_result = (
-        validate_e1_e2_e3_first_pre_action_equivalence(root)
+    trained_prefix_result = (
+        validate_e1_e2_e3_causal_prefix(root)
         if require_trained_first_pre_action
         else None
     )
@@ -195,15 +195,128 @@ def validate_included_block_causal_trace(
         "paired_reset_fingerprint": reset_result["state_fingerprint"],
         "paired_reset_system_count": reset_result["system_count"],
         "trained_first_pre_action_sha256": (
-            first_decision_result["normalized_output_sha256"]
-            if first_decision_result is not None
+            trained_prefix_result["first_pre_action_sha256"]
+            if trained_prefix_result is not None
             else None
         ),
         "trained_first_pre_action_system_count": (
-            first_decision_result["system_count"]
-            if first_decision_result is not None
+            trained_prefix_result["system_count"]
+            if trained_prefix_result is not None
             else 0
         ),
+        "trained_causal_prefix": trained_prefix_result,
+    }
+
+
+def validate_e1_e2_e3_causal_prefix(
+    rerun_dir: str | Path,
+) -> dict[str, Any]:
+    """Prove trained systems are equal until P1 may change the trajectory.
+
+    E1 has the trained pre-action policy but intentionally lacks P1 diagnosis
+    and recovery. E2 and E3 add P1, while E3 may later add a P4 intervention.
+    Consequently, the fair common prefix consists of every trained-policy
+    action, concrete execution, reset, and post-action observation up to the
+    failed transition that causes the first E2/E3 recovery plan. The recovery
+    plan/action itself is outside the E1 equality claim because that is the
+    registered P1 intervention. If neither P1 system intervenes, the complete
+    shared action/observation trace must be identical across E1--E3.
+
+    The separate E2/E3 causal validator remains responsible for transition
+    diagnosis, recovery shadows/plans, and equality through P4's first admitted
+    memory intervention. Together the two checks prevent later pre-action
+    decisions from escaping comparison while respecting the system switches.
+    """
+
+    root = Path(rerun_dir)
+    first = validate_e1_e2_e3_first_pre_action_equivalence(root)
+    traces = {
+        system_id: _load_causal_streams(
+            root / system_id / "runtime",
+            require_memory=system_id == "E3",
+        )
+        for system_id in ("E1", "E2", "E3")
+    }
+    if traces["E1"]["recoveries"] or any(
+        str(row.get("event_type", "")) == "recovery_action"
+        for row in traces["E1"]["actions"]
+    ):
+        raise SchemaError("E1 cannot contain an enabled P1 recovery intervention")
+
+    p1_plans = {
+        system_id: _recovery_plan_records(traces[system_id]["recoveries"])
+        for system_id in ("E2", "E3")
+    }
+    p1_intervention = {system_id: bool(rows) for system_id, rows in p1_plans.items()}
+    if len(set(p1_intervention.values())) != 1:
+        raise SchemaError("E2/E3 disagree on the first enabled P1 recovery boundary")
+    has_intervention = p1_intervention["E2"]
+
+    action_prefixes = {
+        system_id: _normal_action_prefix(
+            traces[system_id]["actions"],
+            stop_at_recovery=has_intervention and system_id in {"E2", "E3"},
+            context=system_id,
+        )
+        for system_id in ("E1", "E2", "E3")
+    }
+    if has_intervention:
+        p1_counts = {len(action_prefixes[system_id]) for system_id in ("E2", "E3")}
+        if len(p1_counts) != 1:
+            raise SchemaError("E2/E3 reach P1 recovery after different action counts")
+        prefix_action_count = p1_counts.pop()
+        if prefix_action_count <= 0:
+            raise SchemaError("P1 recovery lacks a preceding trained normal action")
+        if len(action_prefixes["E1"]) < prefix_action_count:
+            raise SchemaError("E1 ends before the common P1 recovery boundary")
+        action_prefixes["E1"] = action_prefixes["E1"][:prefix_action_count]
+    else:
+        if any(traces[system_id]["recoveries"] for system_id in ("E2", "E3")):
+            raise SchemaError("P1 recovery evidence lacks a recovery_plan boundary")
+        action_counts = {len(rows) for rows in action_prefixes.values()}
+        if len(action_counts) != 1:
+            raise SchemaError("E1/E2/E3 full trained action counts differ")
+        prefix_action_count = action_counts.pop()
+
+    observation_prefixes = {
+        system_id: _pre_recovery_observation_prefix(
+            traces[system_id]["observations"],
+            normal_action_count=prefix_action_count,
+            require_full=not has_intervention,
+            context=system_id,
+        )
+        for system_id in ("E1", "E2", "E3")
+    }
+    normalized = {
+        system_id: {
+            "actions": [_normalize_event(row) for row in action_prefixes[system_id]],
+            "observations": [
+                _normalize_event(row) for row in observation_prefixes[system_id]
+            ],
+        }
+        for system_id in ("E1", "E2", "E3")
+    }
+    reference = normalized["E1"]
+    for system_id in ("E2", "E3"):
+        if normalized[system_id] != reference:
+            raise SchemaError(
+                f"E1/E2/E3 trained causal prefix differs for {system_id}"
+            )
+
+    return {
+        "status": "PASS",
+        "comparison_scope": (
+            "PREFIX_THROUGH_FIRST_P1_RECOVERY_INPUT"
+            if has_intervention
+            else "FULL_SHARED_TRACE_NO_P1_RECOVERY"
+        ),
+        "p1_recovery_intervention_present": has_intervention,
+        "normal_action_count": prefix_action_count,
+        "observation_count": prefix_action_count + 1,
+        "normalized_causal_prefix_sha256": sha256_json(reference),
+        "first_pre_action_sha256": first["normalized_output_sha256"],
+        "first_pre_action_event_type": first["event_type"],
+        "system_count": 3,
     }
 
 
@@ -614,6 +727,54 @@ def _load_causal_streams(root: Path, *, require_memory: bool) -> dict[str, list[
         raise SchemaError("E3 causal trace lacks memory_queries.jsonl")
     output["memory"] = read_jsonl(memory_path) if memory_path.is_file() else []
     return output
+
+
+def _normal_action_prefix(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    stop_at_recovery: bool,
+    context: str,
+) -> list[dict[str, Any]]:
+    prefix: list[dict[str, Any]] = []
+    for row in rows:
+        event_type = str(row.get("event_type", ""))
+        if event_type == "recovery_action":
+            if stop_at_recovery:
+                break
+            raise SchemaError(f"{context} has a recovery action without a P1 boundary")
+        if event_type != "normal_action":
+            raise SchemaError(
+                f"{context} trained causal trace has unsupported action event "
+                f"{event_type!r}"
+            )
+        prefix.append(dict(row))
+    return prefix
+
+
+def _pre_recovery_observation_prefix(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    normal_action_count: int,
+    require_full: bool,
+    context: str,
+) -> list[dict[str, Any]]:
+    required_count = normal_action_count + 1
+    if len(rows) < required_count:
+        raise SchemaError(
+            f"{context} ends before the common causal observation boundary"
+        )
+    prefix = [dict(row) for row in rows[:required_count]]
+    expected_types = ["reset"] + ["post_action_observation"] * normal_action_count
+    actual_types = [str(row.get("event_type", "")) for row in prefix]
+    if actual_types != expected_types:
+        raise SchemaError(
+            f"{context} causal observation order differs before P1 recovery"
+        )
+    if require_full and len(rows) != required_count:
+        raise SchemaError(
+            f"{context} has observations outside a no-recovery common trace"
+        )
+    return prefix
 
 
 def _parse_e3_memory_events(

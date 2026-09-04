@@ -33,14 +33,21 @@ from .common import (
     sha256_file,
     sha256_json,
 )
+from .model_compatibility import (
+    PC01_EXPECTED_FULL_REPORT_SHA256,
+    PC01_EXPECTED_MODEL_COMPATIBILITY_REPORT_SHA256,
+    PC01_EXPECTED_RUN_CONTRACT_SHA256,
+    validate_model_compatibility_report,
+)
 from .pc01_artifacts import (
     PC01_EXPECTED_CHECKPOINT_SHA256,
     PC01_EXPECTED_CONFIG_SHA256,
+    PC01_EXPECTED_EXPORT_MANIFEST_SHA256,
     PC01_MODEL_ID,
 )
 
 
-SELECTION_EVIDENCE_SCHEMA_VERSION = "table2-validation-selection-evidence-v3"
+SELECTION_EVIDENCE_SCHEMA_VERSION = "table2-validation-selection-evidence-v4"
 PC01_PROVISIONAL_SELECTION_MODE = "pc01_provisional"
 THREE_CANDIDATE_FINAL_SELECTION_MODE = "three_candidate_final"
 PC01_EXPECTED_SELECTED_EPOCH = 6
@@ -58,6 +65,47 @@ EXPECTED_VALIDATION_ROWS = 7_861
 EXPECTED_SUPPLEMENT_ROWS = 194
 EXPECTED_MAXIMUM_EPOCHS = 10
 EXPECTED_CANDIDATE_SEED = 42
+MODEL_COMPATIBILITY_EVIDENCE_ROLE = {
+    "scope": "pre_training_model_data_pipeline_smoke",
+    "used_for_validation_ranking": False,
+    "checkpoint_runtime_proof": False,
+    "checkpoint_weight_identity_proof": False,
+    "runtime_readiness_proof": False,
+}
+# This is deliberately incomplete until the two pending DGX candidates finish.
+# Adding PC-02/PC-03 is a reviewed preregistration source change made from their
+# real, immutable report bytes before the final three-model comparison/handoff.
+# A hash supplied only by a handoff JSON is never accepted as ownership proof.
+REGISTERED_MODEL_COMPATIBILITY_REPORT_SHA256_BY_MODEL = {
+    PC01_MODEL_ID: PC01_EXPECTED_MODEL_COMPATIBILITY_REPORT_SHA256,
+}
+_CANDIDATE_BINDING_SCHEMA_VERSION = "table2-selection-candidate-binding-v1"
+_SOURCE_IDENTITY_REGISTRATION: dict[str, dict[str, str]] = {
+    "selection_implementation": {
+        "relative_path": "src/web_agent/train/selection.py",
+    },
+    "compatibility_implementation": {
+        "relative_path": "src/web_agent/train/gold_stages.py",
+        "callable": "run_gold_smoke",
+    },
+    "compatibility_report_writer": {
+        "relative_path": "scripts/run_gold.py",
+        "callable": "main",
+        "serialization": "json.dumps(indent=2, ensure_ascii=True, no_trailing_newline)",
+    },
+    "compatibility_validator": {
+        "relative_path": "src/web_agent/eval/table2/model_compatibility.py",
+        "callable": "validate_model_compatibility_report",
+    },
+    "selection_evidence_implementation": {
+        "relative_path": "src/web_agent/eval/table2/selection_evidence.py",
+        "stage_callable": "stage_selection_evidence",
+        "validate_callable": "validate_selection_evidence",
+    },
+}
+_COMPARISON_SOURCE_IDENTITY = {
+    "relative_path": "scripts/compare_full_models.py",
+}
 
 
 def _selection_policy(selection_mode: str) -> dict[str, Any]:
@@ -80,6 +128,171 @@ def _selection_policy(selection_mode: str) -> dict[str, Any]:
             "comparison_performed": True,
         }
     raise SchemaError(f"unregistered selection evidence mode: {selection_mode!r}")
+
+
+def _source_identities(
+    repository_root: Path,
+    *,
+    selection_mode: str,
+) -> dict[str, dict[str, str]]:
+    """Hash every source that generates, interprets, or ranks this evidence."""
+
+    registrations = dict(_SOURCE_IDENTITY_REGISTRATION)
+    if selection_mode == THREE_CANDIDATE_FINAL_SELECTION_MODE:
+        registrations["comparison_script"] = _COMPARISON_SOURCE_IDENTITY
+    identities: dict[str, dict[str, str]] = {}
+    root = repository_root.resolve()
+    for field, registration in registrations.items():
+        relative = _safe_relative(registration["relative_path"])
+        source = (root / relative).resolve()
+        if root not in source.parents or not source.is_file() or source.is_symlink():
+            raise SchemaError(f"registered selection source is missing or unsafe: {source}")
+        identities[field] = {**registration, "sha256": sha256_file(source)}
+    return identities
+
+
+def _validate_source_identities(
+    manifest: Mapping[str, Any],
+    *,
+    selection_mode: str,
+    repository_root: Path | None,
+) -> dict[str, dict[str, str]]:
+    registrations = dict(_SOURCE_IDENTITY_REGISTRATION)
+    if selection_mode == THREE_CANDIDATE_FINAL_SELECTION_MODE:
+        registrations["comparison_script"] = _COMPARISON_SOURCE_IDENTITY
+    elif "comparison_script" in manifest:
+        raise SchemaError(
+            "pc01_provisional evidence must not claim a comparison script"
+        )
+
+    identities: dict[str, dict[str, str]] = {}
+    root = repository_root.resolve() if repository_root is not None else None
+    for field, registration in registrations.items():
+        raw = manifest.get(field)
+        expected_fields = frozenset((*registration, "sha256"))
+        if not isinstance(raw, Mapping) or frozenset(raw) != expected_fields:
+            raise SchemaError(f"selection evidence lacks exact {field} identity")
+        for key, expected in registration.items():
+            if raw.get(key) != expected:
+                raise SchemaError(f"registered {field} {key} differs")
+        digest = raw.get("sha256")
+        if not _is_sha256(digest):
+            raise SchemaError(f"registered {field} source hash is malformed")
+        identity = {str(key): str(value) for key, value in raw.items()}
+        identities[field] = identity
+        if root is not None:
+            relative = _safe_relative(registration["relative_path"])
+            source = (root / relative).resolve()
+            if (
+                root not in source.parents
+                or not source.is_file()
+                or source.is_symlink()
+                or sha256_file(source) != digest
+            ):
+                raise SchemaError(f"registered {field} source differs from evidence")
+    return identities
+
+
+def _compatibility_identity_scope(model_id: str) -> str:
+    del model_id
+    return "source_registered_candidate_sha256"
+
+
+def _registered_compatibility_report_hashes(
+    candidate_model_ids: Sequence[str],
+) -> dict[str, str]:
+    """Return the exact source-preregistered report identity for each candidate."""
+
+    expected_ids = tuple(str(value) for value in candidate_model_ids)
+    registered = {
+        str(model_id): str(digest)
+        for model_id, digest in (
+            REGISTERED_MODEL_COMPATIBILITY_REPORT_SHA256_BY_MODEL.items()
+        )
+        if str(model_id) in set(expected_ids)
+    }
+    missing = sorted(set(expected_ids) - set(registered))
+    if missing:
+        raise SchemaError(
+            "model compatibility reports are not source-preregistered for: "
+            + ", ".join(missing)
+        )
+    if len(registered) != len(expected_ids):
+        raise SchemaError("model compatibility report registry coverage changed")
+    for model_id, digest in registered.items():
+        if not _is_sha256(digest):
+            raise SchemaError(
+                f"source-registered compatibility hash is malformed: {model_id}"
+            )
+    if len(set(registered.values())) != len(registered):
+        raise SchemaError(
+            "each candidate requires distinct source-registered compatibility bytes"
+        )
+    if registered.get(PC01_MODEL_ID) != (
+        PC01_EXPECTED_MODEL_COMPATIBILITY_REPORT_SHA256
+    ):
+        raise SchemaError("PC-01 compatibility registration changed")
+    return registered
+
+
+def _candidate_binding_value(
+    candidate: Mapping[str, Any],
+    *,
+    source_identities: Mapping[str, Mapping[str, str]],
+) -> dict[str, Any]:
+    """Return the complete non-ranking identity closure for one candidate."""
+
+    artifacts = {
+        "run_contract": {
+            "path": candidate.get("run_contract_path"),
+            "sha256": candidate.get("run_contract_sha256"),
+        },
+        "full_report": {
+            "path": candidate.get("full_report_path"),
+            "sha256": candidate.get("full_report_sha256"),
+        },
+        "resolved_config": {
+            "path": candidate.get("resolved_config_path"),
+            "file_sha256": candidate.get("resolved_config_artifact_sha256"),
+            "record_sha256": candidate.get("resolved_config_sha256"),
+        },
+        "registered_config": {
+            "path": candidate.get("registered_config_path"),
+            "sha256": candidate.get("registered_config_sha256"),
+        },
+        "checkpoint_identity": {
+            "path": candidate.get("checkpoint_identity_path"),
+            "sha256": candidate.get("checkpoint_identity_sha256"),
+            "checkpoint_sha256": candidate.get("checkpoint_sha256"),
+        },
+        "model_compatibility_report": {
+            "path": candidate.get("model_compatibility_report_path"),
+            "sha256": candidate.get("model_compatibility_report_sha256"),
+            "identity_scope": candidate.get(
+                "model_compatibility_report_identity_scope"
+            ),
+        },
+    }
+    compatibility_sources = {
+        field: identity["sha256"]
+        for field, identity in source_identities.items()
+        if field
+        in {
+            "compatibility_implementation",
+            "compatibility_report_writer",
+            "compatibility_validator",
+            "selection_evidence_implementation",
+        }
+    }
+    return {
+        "schema_version": _CANDIDATE_BINDING_SCHEMA_VERSION,
+        "model_id": candidate.get("model_id"),
+        "seed": candidate.get("seed"),
+        "selected_epoch": candidate.get("selected_epoch"),
+        "run_git_commit": candidate.get("run_git_commit"),
+        "artifacts": artifacts,
+        "compatibility_source_sha256": compatibility_sources,
+    }
 
 
 def stage_selection_evidence(
@@ -112,6 +325,13 @@ def stage_selection_evidence(
             f"{selection_mode} selection evidence requires exactly "
             f"{len(candidate_model_ids)} registered candidate run(s)"
         )
+    source_identities = _source_identities(
+        repository_root,
+        selection_mode=selection_mode,
+    )
+    compatibility_report_registry = _registered_compatibility_report_hashes(
+        candidate_model_ids
+    )
 
     output_dir.mkdir(parents=True, exist_ok=False)
     rows: list[dict[str, Any]] = []
@@ -143,6 +363,21 @@ def stage_selection_evidence(
                 f"selection_evidence.candidate_runs[{index}].resolved_config"
             ),
         )
+        compatibility_report_source = _input_path(
+            spec_path,
+            raw.get("model_compatibility_report"),
+            field=(
+                f"selection_evidence.candidate_runs[{index}]."
+                "model_compatibility_report"
+            ),
+        )
+        expected_compatibility_sha256 = str(
+            raw.get("model_compatibility_report_sha256") or ""
+        )
+        if expected_compatibility_sha256 != compatibility_report_registry[model_id]:
+            raise SchemaError(
+                f"{model_id} compatibility report differs from source registration"
+            )
         checkpoint_source = _input_path(
             spec_path,
             raw.get("selected_checkpoint"),
@@ -168,6 +403,11 @@ def stage_selection_evidence(
             model_id=model_id,
             contract=contract,
         )
+        validate_model_compatibility_report(
+            compatibility_report_source,
+            model_id=model_id,
+            expected_sha256=expected_compatibility_sha256,
+        )
         if sha256_json(resolved_config) != candidate_row["resolved_config_sha256"]:
             raise SchemaError(
                 f"{model_id} resolved-config artifact differs from its full report"
@@ -185,6 +425,9 @@ def stage_selection_evidence(
         resolved_config_destination = candidate_dir / "resolved_config.json"
         config_source = (repository_root / config_relative).resolve()
         config_destination = candidate_dir / "registered_config.yaml"
+        compatibility_report_destination = (
+            candidate_dir / "model_compatibility_report.json"
+        )
         checkpoint_identity_destination = (
             candidate_dir / "selected_checkpoint_identity.json"
         )
@@ -193,6 +436,7 @@ def stage_selection_evidence(
             (report_source, report_destination),
             (resolved_config_source, resolved_config_destination),
             (config_source, config_destination),
+            (compatibility_report_source, compatibility_report_destination),
         ):
             _copy_exact(source, destination)
             artifacts.append(
@@ -218,38 +462,57 @@ def stage_selection_evidence(
                 "sha256": sha256_file(checkpoint_identity_destination),
             }
         )
-        rows.append(
-            {
-                **candidate_row,
-                "run_contract_path": contract_destination.relative_to(
+        staged_candidate = {
+            **candidate_row,
+            "run_contract_path": contract_destination.relative_to(
+                output_dir
+            ).as_posix(),
+            "run_contract_sha256": sha256_file(contract_destination),
+            "full_report_path": report_destination.relative_to(
+                output_dir
+            ).as_posix(),
+            "full_report_sha256": sha256_file(report_destination),
+            "resolved_config_path": resolved_config_destination.relative_to(
+                output_dir
+            ).as_posix(),
+            "resolved_config_artifact_sha256": sha256_file(
+                resolved_config_destination
+            ),
+            "checkpoint_identity_path": (
+                checkpoint_identity_destination.relative_to(output_dir).as_posix()
+            ),
+            "checkpoint_identity_sha256": sha256_file(
+                checkpoint_identity_destination
+            ),
+            "registered_config_path": config_destination.relative_to(
+                output_dir
+            ).as_posix(),
+            "registered_config_sha256": sha256_file(config_destination),
+            "model_compatibility_report_path": (
+                compatibility_report_destination.relative_to(
                     output_dir
-                ).as_posix(),
-                "run_contract_sha256": sha256_file(contract_destination),
-                "full_report_path": report_destination.relative_to(
-                    output_dir
-                ).as_posix(),
-                "full_report_sha256": sha256_file(report_destination),
-                "resolved_config_path": resolved_config_destination.relative_to(
-                    output_dir
-                ).as_posix(),
-                "resolved_config_artifact_sha256": sha256_file(
-                    resolved_config_destination
-                ),
-                "checkpoint_identity_path": (
-                    checkpoint_identity_destination.relative_to(output_dir).as_posix()
-                ),
-                "checkpoint_identity_sha256": sha256_file(
-                    checkpoint_identity_destination
-                ),
-                "registered_config_path": config_destination.relative_to(
-                    output_dir
-                ).as_posix(),
-                "registered_config_sha256": sha256_file(config_destination),
-                "recomputed_quality_sha256": sha256_json(
-                    candidate_row["recomputed_quality"]
-                ),
-            }
+                ).as_posix()
+            ),
+            "model_compatibility_report_sha256": sha256_file(
+                compatibility_report_destination
+            ),
+            "model_compatibility_report_identity_scope": (
+                _compatibility_identity_scope(model_id)
+            ),
+            "model_compatibility_report_contains_model_identity": False,
+            "model_compatibility_report_used_for_ranking": False,
+            "model_compatibility_report_checkpoint_runtime_proof": False,
+            "recomputed_quality_sha256": sha256_json(
+                candidate_row["recomputed_quality"]
+            ),
+        }
+        staged_candidate["candidate_evidence_binding_sha256"] = sha256_json(
+            _candidate_binding_value(
+                staged_candidate,
+                source_identities=source_identities,
+            )
         )
+        rows.append(staged_candidate)
 
     if seen != set(candidate_model_ids):
         raise SchemaError(
@@ -297,16 +560,6 @@ def stage_selection_evidence(
             selected, git_commit=next(iter(git_commits))
         )
     _bind_selected_model_manifest(selected_model_manifest, selected)
-    compare_source = repository_root / "scripts" / "compare_full_models.py"
-    selector_source = repository_root / "src" / "web_agent" / "train" / "selection.py"
-    required_sources = (
-        (compare_source, selector_source)
-        if selection_mode == THREE_CANDIDATE_FINAL_SELECTION_MODE
-        else (selector_source,)
-    )
-    for source in required_sources:
-        if not source.is_file() or source.is_symlink():
-            raise SchemaError(f"registered selection implementation is missing: {source}")
 
     manifest = {
         "schema_version": SELECTION_EVIDENCE_SCHEMA_VERSION,
@@ -332,19 +585,13 @@ def stage_selection_evidence(
         "selected_checkpoint_sha256": selected["checkpoint_sha256"],
         "test_rows_read": 0,
         "locked_test_rows_read": 0,
+        "model_compatibility_evidence_role": MODEL_COMPATIBILITY_EVIDENCE_ROLE,
+        "model_compatibility_report_registry": compatibility_report_registry,
         "recomputed_decision": decision,
         "candidates": sorted(rows, key=lambda row: str(row["model_id"])),
-        "selection_implementation": {
-            "relative_path": "src/web_agent/train/selection.py",
-            "sha256": sha256_file(selector_source),
-        },
+        **source_identities,
         "artifacts": sorted(artifacts, key=lambda row: row["path"]),
     }
-    if selection_mode == THREE_CANDIDATE_FINAL_SELECTION_MODE:
-        manifest["comparison_script"] = {
-            "relative_path": "scripts/compare_full_models.py",
-            "sha256": sha256_file(compare_source),
-        }
     manifest_path = output_dir / "manifest.json"
     atomic_write_json(manifest_path, manifest)
     validate_selection_evidence(
@@ -405,8 +652,24 @@ def validate_selection_evidence(
     for key, expected in expected_constants.items():
         if manifest.get(key) != expected:
             raise SchemaError(f"validation-selection evidence changed {key}")
+    if manifest.get("model_compatibility_evidence_role") != (
+        MODEL_COMPATIBILITY_EVIDENCE_ROLE
+    ):
+        raise SchemaError("model compatibility evidence scientific role changed")
+    compatibility_report_registry = _registered_compatibility_report_hashes(
+        candidate_model_ids
+    )
+    if manifest.get("model_compatibility_report_registry") != (
+        compatibility_report_registry
+    ):
+        raise SchemaError("model compatibility source registry changed")
+    source_identities = _validate_source_identities(
+        manifest,
+        selection_mode=selection_mode,
+        repository_root=repository_root,
+    )
     descriptors = manifest.get("artifacts")
-    expected_artifact_count = len(candidate_model_ids) * 5 + (
+    expected_artifact_count = len(candidate_model_ids) * 6 + (
         2 if policy["comparison_performed"] else 0
     )
     if (
@@ -416,7 +679,10 @@ def validate_selection_evidence(
         raise SchemaError("validation-selection evidence artifact closure is incomplete")
     descriptor_by_path: dict[str, str] = {}
     for descriptor in descriptors:
-        if not isinstance(descriptor, Mapping):
+        if (
+            not isinstance(descriptor, Mapping)
+            or frozenset(descriptor) != frozenset({"path", "sha256"})
+        ):
             raise SchemaError("selection artifact descriptor is malformed")
         relative = _safe_relative(str(descriptor.get("path") or ""))
         if relative in descriptor_by_path:
@@ -455,6 +721,28 @@ def validate_selection_evidence(
         config_relative = _safe_relative(
             str(stored.get("registered_config_path") or "")
         )
+        compatibility_report_relative = _safe_relative(
+            str(stored.get("model_compatibility_report_path") or "")
+        )
+        expected_compatibility_fields = {
+            "model_compatibility_report_identity_scope": (
+                _compatibility_identity_scope(model_id)
+            ),
+            "model_compatibility_report_contains_model_identity": False,
+            "model_compatibility_report_used_for_ranking": False,
+            "model_compatibility_report_checkpoint_runtime_proof": False,
+        }
+        for field, expected in expected_compatibility_fields.items():
+            if stored.get(field) != expected:
+                raise SchemaError(
+                    f"{model_id} model compatibility evidence changed {field}"
+                )
+        if stored.get("model_compatibility_report_sha256") != (
+            compatibility_report_registry.get(model_id)
+        ):
+            raise SchemaError(
+                f"{model_id} compatibility report differs from source registration"
+            )
         for relative, hash_field in (
             (contract_relative, "run_contract_sha256"),
             (report_relative, "full_report_sha256"),
@@ -467,6 +755,10 @@ def validate_selection_evidence(
                 "checkpoint_identity_sha256",
             ),
             (config_relative, "registered_config_sha256"),
+            (
+                compatibility_report_relative,
+                "model_compatibility_report_sha256",
+            ),
         ):
             if descriptor_by_path.get(relative) != stored.get(hash_field):
                 raise SchemaError("selection candidate artifact binding mismatch")
@@ -474,6 +766,13 @@ def validate_selection_evidence(
         report = read_json(root / report_relative)
         resolved_config = read_json(root / resolved_config_relative)
         checkpoint_identity = read_json(root / checkpoint_identity_relative)
+        validate_model_compatibility_report(
+            root / compatibility_report_relative,
+            model_id=model_id,
+            expected_sha256=str(
+                stored.get("model_compatibility_report_sha256") or ""
+            ),
+        )
         _validate_staged_run_contract(contract, model_id=model_id)
         _validate_staged_registered_config(
             root / config_relative,
@@ -512,6 +811,13 @@ def validate_selection_evidence(
                 "checkpoint_identity_sha256",
                 "registered_config_path",
                 "registered_config_sha256",
+                "model_compatibility_report_path",
+                "model_compatibility_report_sha256",
+                "model_compatibility_report_identity_scope",
+                "model_compatibility_report_contains_model_identity",
+                "model_compatibility_report_used_for_ranking",
+                "model_compatibility_report_checkpoint_runtime_proof",
+                "candidate_evidence_binding_sha256",
                 "recomputed_quality_sha256",
             }
         }
@@ -521,6 +827,15 @@ def validate_selection_evidence(
             row["recomputed_quality"]
         ):
             raise SchemaError("stored selection quality hash differs from replay")
+        if stored.get("candidate_evidence_binding_sha256") != sha256_json(
+            _candidate_binding_value(
+                stored,
+                source_identities=source_identities,
+            )
+        ):
+            raise SchemaError(
+                f"{model_id} candidate evidence closure differs from its binding"
+            )
         recomputed.append({**dict(stored), **row})
     if {row["model_id"] for row in recomputed} != set(candidate_model_ids):
         raise SchemaError("selection candidate set differs from registration")
@@ -576,26 +891,6 @@ def validate_selection_evidence(
         raise SchemaError(
             "expected_model_seeds requires the campaign model-manifest mapping"
         )
-    if repository_root is not None:
-        source_fields = ["selection_implementation"]
-        if selection_mode == THREE_CANDIDATE_FINAL_SELECTION_MODE:
-            source_fields.insert(0, "comparison_script")
-        elif "comparison_script" in manifest:
-            raise SchemaError(
-                "pc01_provisional evidence must not claim a comparison script"
-            )
-        for field in source_fields:
-            identity = manifest.get(field)
-            if not isinstance(identity, Mapping):
-                raise SchemaError(f"selection evidence lacks {field}")
-            relative = _safe_relative(str(identity.get("relative_path") or ""))
-            source = (repository_root.resolve() / relative).resolve()
-            if (
-                repository_root.resolve() not in source.parents
-                or not source.is_file()
-                or sha256_file(source) != identity.get("sha256")
-            ):
-                raise SchemaError(f"registered {field} source differs from evidence")
     return manifest
 
 
@@ -1023,6 +1318,41 @@ def _bind_selected_model_manifest(
         or int(model_manifest.get("locked_test_rows_read", -1)) != 0
     ):
         raise SchemaError("Table 2 model manifest violates validation-only selection")
+    # A production PC-01 model manifest carries the exact registered v3 export
+    # descriptor.  That export independently commits to the historical full
+    # report and run-contract hashes, so selection and runtime evidence must
+    # identify the same run.  Synthetic unit-test manifests do not claim this
+    # production export identity and remain usable as test seams.
+    evidence_bundle = model_manifest.get("model_evidence_bundle")
+    artifacts = (
+        evidence_bundle.get("artifacts")
+        if isinstance(evidence_bundle, Mapping)
+        else None
+    )
+    export_descriptor = (
+        artifacts.get("export_manifest")
+        if isinstance(artifacts, Mapping)
+        else None
+    )
+    if (
+        winner.get("model_id") == PC01_MODEL_ID
+        and isinstance(export_descriptor, Mapping)
+        and export_descriptor.get("sha256")
+        == PC01_EXPECTED_EXPORT_MANIFEST_SHA256
+    ):
+        expected_run_identity = {
+            "run_contract_sha256": PC01_EXPECTED_RUN_CONTRACT_SHA256,
+            "full_report_sha256": PC01_EXPECTED_FULL_REPORT_SHA256,
+            "model_compatibility_report_sha256": (
+                PC01_EXPECTED_MODEL_COMPATIBILITY_REPORT_SHA256
+            ),
+        }
+        for field, expected in expected_run_identity.items():
+            if winner.get(field) != expected:
+                raise SchemaError(
+                    "PC-01 selection evidence differs from the registered v3 "
+                    f"export {field}"
+                )
 
 
 def _bind_selected_model_manifests(

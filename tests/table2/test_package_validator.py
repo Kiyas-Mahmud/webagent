@@ -4,6 +4,7 @@ import csv
 from copy import deepcopy
 import json
 from pathlib import Path
+import shutil
 import subprocess
 from typing import Any
 
@@ -28,12 +29,22 @@ from web_agent.eval.table2.common import (
 )
 from web_agent.eval.table2.package_validator import (
     FINAL_READY_STATUS,
+    MODEL_EVIDENCE_PRODUCER_SCHEMA_VERSION,
+    MODEL_EVIDENCE_ROLES,
+    PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD,
+    PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH,
     ValidationReport,
     _artifact_payload_descriptor,
     _expected_runner_runtime_identity,
+    _model_evidence_bundle_value,
     _processor_contract_from_payload,
+    _pc01_checkpoint_compatibility_binding,
+    _pc01_checkpoint_compatibility_source_files,
+    _read_canonical_pc01_checkpoint_compatibility_receipt,
     _validate_duplicate_audit_bindings,
     _validate_environment_manifest,
+    _validate_model_artifact_payloads,
+    _validate_model_evidence_bundle,
     _validate_model_memory_source_bindings,
     _publication_status,
     append_campaign_ledger_event,
@@ -43,19 +54,47 @@ from web_agent.eval.table2.package_validator import (
     validate_manual_adjudication_completion,
     validate_campaign,
 )
+from web_agent.eval.table2.pc01_artifacts import (
+    PC01_IMAGE_PROCESSOR_CLASS,
+    PC01_EXPECTED_EXPORT_MANIFEST_SHA256,
+    PC01_PRIMARY_TRAIN_ROWS,
+    PC01_PRIMARY_TRAIN_SHA256,
+    PC01_PROCESSOR_CLASS,
+    PC01_MODEL_REVISION,
+    PC01_SUPPLEMENT_TRAIN_ROWS,
+    PC01_SUPPLEMENT_TRAIN_SHA256,
+    PC01_TOTAL_TRAIN_ROWS,
+    PC01_TRAINING_ENVIRONMENT_SHA256,
+    PC01_TRAINING_GIT_COMMIT,
+    PC01_TRANSFORMERS_VERSION,
+    registered_pc01_training_source_manifest,
+    validate_pc01_training_action_value_evidence,
+)
+from web_agent.eval.table2.pc01_processor_parity import (
+    current_pc01_processor_parity_source_identity,
+    validate_pc01_processor_parity_receipt,
+)
+from web_agent.eval.table2.pc01_checkpoint_compatibility import _SOURCE_PATHS
 from web_agent.eval.table2.execution_guard import (
     EVALUATION_RUNNER_SCOPE,
     InfrastructureInvalidError,
     RUNNER_ATTESTATION_SCHEMA_VERSION,
 )
 from web_agent.eval.table2 import handoff as handoff_preparer
+from web_agent.eval.table2 import package_validator as package_validator_module
 from web_agent.eval.table2 import selection_evidence as selection_evidence_module
 from web_agent.eval.table2.live_deployment import (
     LIVE_DEPLOYMENT_BINDING_FIELD,
     stage_pc01_live_deployment_package,
 )
+from web_agent.eval.table2.model_compatibility import (
+    PC01_EXPECTED_MODEL_COMPATIBILITY_REPORT_SHA256,
+)
 from tests.table2.test_live_deployment import (
     _manifest as _valid_live_deployment_manifest,
+)
+from tests.table2.test_pc01_checkpoint_compatibility import (
+    _receipt as _checkpoint_compatibility_receipt,
 )
 from web_agent.eval.table2.task_interface_audit import (
     TASK_INTERFACE_AUDIT_RELATIVE_PATH,
@@ -64,6 +103,8 @@ from web_agent.eval.table2.task_interface_audit import (
 from web_agent.eval.table2.webarena_export import (
     PINNED_BROWSERGYM_WEBARENA_VERSION,
     PINNED_TASK_DEFINITION_VERSION,
+    PUBLIC_PILOT_EXPORT_RECORD_TYPE,
+    PUBLIC_PILOT_EXPORT_SCHEMA_VERSION,
     build_public_pilot_task_export,
 )
 from web_agent.eval.table2.webarena_preflight import (
@@ -131,6 +172,74 @@ PROTOCOL = REPOSITORY_ROOT / "configs/eval/table2/protocol.yaml"
 SHA_A = "a" * 64
 SHA_B = "b" * 64
 SHA_C = "c" * 64
+
+
+def _fixture_model_compatibility_payloads() -> dict[str, bytes]:
+    """Return distinct, schema-valid report bytes for synthetic candidates.
+
+    Production deliberately registers only the real PC-01 report until PC-02
+    and PC-03 finish.  Final-selection unit tests use explicit, test-local
+    registrations so they cannot accidentally normalize missing production
+    evidence into a passing final campaign.
+    """
+
+    registered_path = (
+        REPOSITORY_ROOT
+        / "webagent_comparison/outputs/model_comparison"
+        / "qwen2vl_2b_gold_v2_8_dgx"
+        / "seed_42/model_compatibility_report.json"
+    )
+    pc01_payload = registered_path.read_bytes()
+    if sha256_bytes(pc01_payload) != (
+        PC01_EXPECTED_MODEL_COMPATIBILITY_REPORT_SHA256
+    ):
+        raise AssertionError("registered PC-01 compatibility report hash changed")
+    base = json.loads(pc01_payload)
+    payloads = {"qwen2vl_2b_gold_v2_8_dgx": pc01_payload}
+    for model_id, peak_gpu_gb in (
+        ("qwen25vl_7b_gold_v2_8_dgx", 12.0),
+        ("internvl35_8b_gold_v2_8_dgx", 13.0),
+    ):
+        report = deepcopy(base)
+        report["peak_gpu_gb"] = peak_gpu_gb
+        payloads[model_id] = json.dumps(
+            report,
+            indent=2,
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("utf-8")
+    return payloads
+
+
+FIXTURE_MODEL_COMPATIBILITY_PAYLOAD_BY_MODEL = (
+    _fixture_model_compatibility_payloads()
+)
+FIXTURE_MODEL_COMPATIBILITY_SHA256_BY_MODEL = {
+    model_id: sha256_bytes(payload)
+    for model_id, payload in FIXTURE_MODEL_COMPATIBILITY_PAYLOAD_BY_MODEL.items()
+}
+
+
+@pytest.fixture(autouse=True)
+def _register_synthetic_candidate_compatibility_reports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        selection_evidence_module,
+        "REGISTERED_MODEL_COMPATIBILITY_REPORT_SHA256_BY_MODEL",
+        dict(FIXTURE_MODEL_COMPATIBILITY_SHA256_BY_MODEL),
+    )
+
+
+_PRODUCTION_BASE_SNAPSHOT_VALIDATOR = (
+    package_validator_module._validate_registered_pc01_base_snapshot
+)
+_PRODUCTION_EXPORT_MANIFEST_VALIDATOR = (
+    package_validator_module._validate_registered_pc01_export_manifest
+)
+_PRODUCTION_JOINT_DUPLICATE_BINDING_VALIDATOR = (
+    package_validator_module._validate_registered_joint_duplicate_memory_bindings
+)
 JOINT_DUPLICATE_NAMESPACE = {
     "schema_version": "table2-joint-duplicate-cluster-namespace-v1",
     "namespace_id": "fixture-gold-v2.8-webarena-joint-v1",
@@ -139,6 +248,112 @@ JOINT_DUPLICATE_NAMESPACE = {
     "audit_tool_config_sha256": SHA_A,
     "audit_tool_source_sha256": SHA_C,
 }
+
+
+def _fixture_joint_assignment_binding() -> dict[str, Any]:
+    return {
+        "schema_version": (
+            "table2-provenance-joint-duplicate-assignment-binding-v1"
+        ),
+        "assignment_manifest_sha256": SHA_A,
+        "entities_sha256": SHA_B,
+        "clusters_sha256": SHA_C,
+        "duplicate_cluster_namespace_sha256": sha256_json(
+            JOINT_DUPLICATE_NAMESPACE
+        ),
+    }
+
+
+def _fixture_joint_store_binding(
+    *, duplicate_audit_sha256: str,
+) -> dict[str, Any]:
+    assignment = _fixture_joint_assignment_binding()
+    return {
+        "schema_version": "table2-memory-joint-duplicate-evidence-binding-v2",
+        "preparation_manifest_sha256": SHA_A,
+        "assignment_manifest_sha256": assignment[
+            "assignment_manifest_sha256"
+        ],
+        "entities_sha256": assignment["entities_sha256"],
+        "clusters_sha256": assignment["clusters_sha256"],
+        "audit_config_sha256": JOINT_DUPLICATE_NAMESPACE[
+            "audit_tool_config_sha256"
+        ],
+        "audit_source_sha256": JOINT_DUPLICATE_NAMESPACE[
+            "audit_tool_source_sha256"
+        ],
+        "recovery_scenarios_sha256": SHA_A,
+        "duplicate_audit_registration_sha256": SHA_B,
+        "source_authority_sha256": SHA_A,
+        "final_duplicate_audit_sha256": duplicate_audit_sha256,
+        "provenance_manifest_sha256": SHA_B,
+        "duplicate_cluster_namespace": JOINT_DUPLICATE_NAMESPACE,
+    }
+
+
+@pytest.fixture(autouse=True)
+def _synthetic_base_snapshot_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replace only the 4.43-GB production base identity in synthetic tests."""
+
+    def validate_fixture(path: Path, executable_backbone: Path) -> dict[str, Any]:
+        value = read_json(path)
+        assert value["directory_payload_sha256"] == (
+            _artifact_payload_descriptor(executable_backbone)["sha256"]
+        )
+        return value
+
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_base_snapshot",
+        validate_fixture,
+    )
+
+    # Synthetic package fixtures cannot reproduce the immutable DGX export
+    # bytes. Production keeps the exact registered SHA-256 boundary, exercised
+    # explicitly below.
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_export_manifest",
+        lambda _path: None,
+    )
+
+    def validate_synthetic_joint_binding(
+        memory_by_seed: dict[int, Path],
+        *,
+        required: bool,
+        **_: Any,
+    ) -> dict[str, Any] | None:
+        if not memory_by_seed:
+            if required:
+                raise SchemaError("evaluation duplicate evidence has no memory")
+            return None
+        values = [
+            read_json(path).get("joint_duplicate_audit_binding")
+            for _, path in sorted(memory_by_seed.items())
+        ]
+        assert all(isinstance(value, dict) for value in values)
+        assert all(value == values[0] for value in values)
+        return dict(values[0])
+
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_joint_duplicate_memory_bindings",
+        validate_synthetic_joint_binding,
+    )
+    monkeypatch.setattr(
+        handoff_preparer,
+        "_validate_registered_joint_duplicate_memory_bindings",
+        validate_synthetic_joint_binding,
+    )
+    monkeypatch.setattr(
+        handoff_preparer,
+        "validate_compact_joint_duplicate_evidence",
+        lambda **_: None,
+    )
+
+
 WEBARENA_TASK_URL_MAP = {
     "__GITLAB__": "http://gitlab.example.test",
     "__MAP__": "http://map.example.test",
@@ -230,7 +445,11 @@ def _fixture_sealed_evaluator_factory(*_: Any, **__: Any) -> Any:
 
 
 def _fixture_train_corpus_binding() -> str:
-    value = {
+    return sha256_json(_fixture_train_corpus_binding_payload())
+
+
+def _fixture_train_corpus_binding_payload() -> dict[str, Any]:
+    return {
         "records_sha256": SHA_B,
         "provenance_manifest_sha256": SHA_B,
         "duplicate_cluster_namespace": JOINT_DUPLICATE_NAMESPACE,
@@ -238,7 +457,6 @@ def _fixture_train_corpus_binding() -> str:
             JOINT_DUPLICATE_NAMESPACE
         ),
     }
-    return sha256_json(value)
 
 
 def _fixture_resolved_candidate_config(model_id: str) -> dict[str, Any]:
@@ -260,6 +478,85 @@ def _write_json(path: Path, value: Any) -> Path:
     return path
 
 
+def _write_canonical_json(path: Path, value: Any) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(canonical_json_bytes(value))
+    return path
+
+
+def _fixture_checkpoint_compatibility_receipt(
+    path: Path,
+    *,
+    commit: str,
+) -> Path:
+    """Build a structurally real receipt bound to the current fixture sources."""
+
+    receipt = _checkpoint_compatibility_receipt()
+    source_rows = [
+        {
+            "path": relative,
+            "sha256": sha256_file(REPOSITORY_ROOT / relative),
+            "size_bytes": (REPOSITORY_ROOT / relative).stat().st_size,
+        }
+        for relative in _SOURCE_PATHS
+    ]
+    receipt["source_attestation"].update(
+        {
+            "git_commit": commit,
+            "source_files": source_rows,
+            "source_manifest_sha256": sha256_bytes(
+                canonical_json_bytes(source_rows)
+            ),
+        }
+    )
+    receipt["fixture"]["generator_source_sha256"] = source_rows[
+        _SOURCE_PATHS.index(
+            "src/web_agent/eval/table2/pc01_checkpoint_compatibility.py"
+        )
+    ]["sha256"]
+    destination = _write_canonical_json(path, receipt)
+    destination.chmod(0o444)
+    return destination
+
+
+def _install_fixture_checkpoint_readiness_validator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep large-model package fixtures focused on custody plumbing."""
+
+    def validate_fixture(
+        receipt_path: str | Path,
+        *,
+        repository_root: Path,
+        expected_source_commit: str,
+        **_kwargs: Any,
+    ) -> tuple[dict[str, Any], dict[str, Any], tuple[Path, ...]]:
+        receipt = _read_canonical_pc01_checkpoint_compatibility_receipt(
+            receipt_path
+        )
+        assert receipt["source_attestation"]["git_commit"] == expected_source_commit
+        sources = _pc01_checkpoint_compatibility_source_files(
+            receipt,
+            repository_root=repository_root,
+        )
+        return (
+            receipt,
+            _pc01_checkpoint_compatibility_binding(Path(receipt_path), receipt),
+            sources,
+        )
+
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_pc01_checkpoint_compatibility_readiness",
+        validate_fixture,
+    )
+    monkeypatch.setattr(
+        handoff_preparer,
+        "_validate_pc01_checkpoint_compatibility_readiness",
+        validate_fixture,
+    )
+
+
 def _campaign_config(
     tmp_path: Path,
     *,
@@ -269,6 +566,50 @@ def _campaign_config(
 ) -> Path:
     value = yaml.safe_load(PILOT_CONFIG.read_text(encoding="utf-8"))
     value["campaign_mode"] = mode
+    if mode == "evaluation":
+        joint_root = tmp_path / "synthetic-joint-evidence"
+        assignment = joint_root / "assignment"
+        preparation = joint_root / "preparation"
+        for name in package_validator_module.JOINT_DUPLICATE_ASSIGNMENT_FILES:
+            target = assignment / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("{}\n", encoding="utf-8")
+        for name in package_validator_module.P4_PREPARATION_EVIDENCE_FILES:
+            target = preparation / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("{}\n", encoding="utf-8")
+        task_export = joint_root / "resolved_task_export.json"
+        task_export.write_text("{}\n", encoding="utf-8")
+        provenance = joint_root / "provenance_manifest.json"
+        provenance.write_text("{}\n", encoding="utf-8")
+        registered_recovery = joint_root / "registered_recovery_scenarios.json"
+        registered_recovery.write_bytes(
+            (
+                REPOSITORY_ROOT
+                / "benchmarks/table2/pilot/recovery_scenarios.json"
+            ).read_bytes()
+        )
+        joint_registration = joint_root / "duplicate_audit_registration.json"
+        joint_registration.write_bytes(
+            (
+                REPOSITORY_ROOT
+                / "benchmarks/table2/pilot/duplicate_audit_manifest.json"
+            ).read_bytes()
+        )
+        value.update(
+            {
+                "joint_duplicate_assignment_package": str(assignment),
+                "p4_preparation_package": str(preparation),
+                "joint_duplicate_resolved_task_export": str(task_export),
+                "joint_duplicate_registered_recovery_scenarios": str(
+                    registered_recovery
+                ),
+                "joint_duplicate_audit_registration": str(
+                    joint_registration
+                ),
+                "joint_duplicate_provenance_manifest": str(provenance),
+            }
+        )
     if duplicate_audit_manifest is not None:
         value["duplicate_audit_manifest"] = str(duplicate_audit_manifest)
         for key, source_name in (("recovery_scenarios", "recovery_scenarios.json"),):
@@ -302,6 +643,14 @@ def _verified_duplicate_audit(path: Path, *, task_manifest: Path) -> Path:
     value["normal_task_runtime_policy"] = "VERIFIED_NONEMPTY_CLUSTERS_REQUIRED"
     task_manifest = json.loads(task_manifest.read_text(encoding="utf-8"))
     value["duplicate_cluster_namespace"] = dict(JOINT_DUPLICATE_NAMESPACE)
+    value["joint_duplicate_assignment_binding"] = (
+        _fixture_joint_assignment_binding()
+    )
+    value["provenance_manifest_sha256"] = SHA_B
+    value["train_corpus_binding"] = {
+        **_fixture_train_corpus_binding_payload(),
+        "corpus_binding_sha256": _fixture_train_corpus_binding(),
+    }
     namespace = JointDuplicateClusterNamespace.from_mapping(
         JOINT_DUPLICATE_NAMESPACE,
         require_hashes=True,
@@ -560,6 +909,10 @@ def _valid_resolved_task_snapshot(
     for registry_row in registry["tasks"]:
         task_id = str(registry_row["task_id"])
         index = int(registry_row["upstream_index"])
+        evaluator_config = {
+            "eval_types": ["url_match"],
+            "reference_url": f"https://fixture.invalid/task/{index}/done",
+        }
         row = {
             "task_id": task_id,
             "upstream_index": index,
@@ -570,21 +923,41 @@ def _valid_resolved_task_snapshot(
                 "sites": ["fixture-site"],
                 "start_url": f"https://fixture.invalid/task/{index}",
             },
-            "task_config": {"task_id": index, "intent": f"fixture intent {index}"},
+            "task_config": {
+                "task_id": index,
+                "intent": f"fixture intent {index}",
+                "eval": evaluator_config,
+            },
             "evaluator": {
                 "evaluator_id": evaluator["evaluator_id"],
                 "evaluator_version": evaluator["evaluator_version"],
-                "config": {"task_id": index},
+                "config": evaluator_config,
             },
         }
         row["source_content_sha256"] = sha256_json(row)
         tasks.append(row)
+    snapshot_id = "fixture-resolved-webarena-0-49"
+    resolved_task_set_sha256 = sha256_json(tasks)
+    task_export = {
+        "schema_version": PUBLIC_PILOT_EXPORT_SCHEMA_VERSION,
+        "record_type": PUBLIC_PILOT_EXPORT_RECORD_TYPE,
+        "snapshot_id": snapshot_id,
+        "benchmark": "webarena",
+        "benchmark_version": environment_value["benchmark_version"],
+        "task_definition_version": "fixture-task-v1",
+        "source": {"task_source_sha256": SHA_B},
+        "site_url_map_sha256": SHA_C,
+        "resolved_task_set_sha256": resolved_task_set_sha256,
+        "required_task_count": 50,
+        "tasks": tasks,
+    }
+    task_interface_audit = build_webarena_task_interface_audit(task_export)
     return _write_json(
         path,
         {
             "schema_version": SCHEMA_VERSION,
             "record_type": "ResolvedWebArenaTaskSnapshot",
-            "snapshot_id": "fixture-resolved-webarena-0-49",
+            "snapshot_id": snapshot_id,
             "benchmark": environment_value["benchmark"],
             "benchmark_version": environment_value["benchmark_version"],
             "registry_manifest_sha256": sha256_file(registry_path),
@@ -597,6 +970,16 @@ def _valid_resolved_task_snapshot(
             ],
             "required_task_count": 50,
             "duplicate_audit_manifest": str(duplicate_audit_manifest),
+            "upstream_export_schema_version": task_export["schema_version"],
+            "upstream_export_record_type": task_export["record_type"],
+            "upstream_export_content_sha256": sha256_json(task_export),
+            "upstream_task_source": dict(task_export["source"]),
+            "site_url_map_sha256": task_export["site_url_map_sha256"],
+            "resolved_task_set_sha256": resolved_task_set_sha256,
+            "task_action_interface_audit": task_interface_audit,
+            "task_action_interface_audit_content_sha256": sha256_json(
+                task_interface_audit
+            ),
             "tasks": tasks,
         },
     )
@@ -604,15 +987,88 @@ def _valid_resolved_task_snapshot(
 
 def _valid_model_manifest(path: Path) -> Path:
     payload_root = path.parent / "model-payloads"
+    evidence_root = path.parent / "model-evidence"
     selected_resolved_config = _fixture_resolved_candidate_config(
         "qwen2vl_2b_gold_v2_8_dgx"
     )
+    backbone = payload_root / "e0_backbone"
+    backbone.mkdir(parents=True)
+    backbone_file = backbone / "weights.bin"
+    backbone_file.write_bytes(b"fixture unadapted backbone")
+    backbone_descriptor = _artifact_payload_descriptor(backbone)
+
+    training_environment = {
+        "transformers": PC01_TRANSFORMERS_VERSION,
+        "git_commit": PC01_TRAINING_GIT_COMMIT,
+    }
+    training_sources = registered_pc01_training_source_manifest()
+    zero_counts = {
+        "top_level": 0,
+        "inputs": 0,
+        "labels": 0,
+        "recursive_total": 0,
+    }
+    action_value_evidence = {
+        "schema_version": "table2.pc01-training-action-value-evidence.v1",
+        "training_git_commit": training_environment["git_commit"],
+        "action_value_mode": "OMITTED_FOR_ALL_TRAINING_ROWS",
+        "runtime_requirement": "OMIT_ACTION_VALUE_TEXT",
+        "executed_action_type_supplied_to_processor": True,
+        "action_value_supplied_to_processor": False,
+        "sources": [
+            {
+                "source_id": "original_gold",
+                "file_name": "split_train.json",
+                "sha256": PC01_PRIMARY_TRAIN_SHA256,
+                "rows": PC01_PRIMARY_TRAIN_ROWS,
+                "action_value_key_occurrences": zero_counts,
+            },
+            {
+                "source_id": "retry_abort_supplement_v2",
+                "file_name": "supplement_train.json",
+                "sha256": PC01_SUPPLEMENT_TRAIN_SHA256,
+                "rows": PC01_SUPPLEMENT_TRAIN_ROWS,
+                "action_value_key_occurrences": zero_counts,
+            },
+        ],
+        "combined_train_rows": PC01_TOTAL_TRAIN_ROWS,
+        "report_sha256": SHA_A,
+        "run_contract_sha256": SHA_B,
+        "training_rows_read": PC01_TOTAL_TRAIN_ROWS,
+        "validation_rows_read": 0,
+        "test_rows_read": 0,
+        "locked_test_rows_read": 0,
+    }
+    processor_artifacts = {
+        "schema_version": "table2.pc01-processor-artifacts.v3",
+        "model_id": "Qwen/Qwen2-VL-2B-Instruct",
+        "revision": PC01_MODEL_REVISION,
+        "training_environment_sha256": PC01_TRAINING_ENVIRONMENT_SHA256,
+        "training_source_manifest_sha256": sha256_json(training_sources),
+        "training_action_value_evidence_sha256": sha256_json(
+            action_value_evidence
+        ),
+        "training_transformers_version": training_environment["transformers"],
+        "implementation_identity": {
+            "transformers_version": PC01_TRANSFORMERS_VERSION,
+            "processor_class": PC01_PROCESSOR_CLASS,
+            "image_processor_class": PC01_IMAGE_PROCESSOR_CLASS,
+            "use_fast": True,
+        },
+        "files": [
+            {
+                "path": backbone_file.name,
+                "size_bytes": backbone_file.stat().st_size,
+                "sha256": sha256_file(backbone_file),
+            }
+        ],
+    }
     processor_contract = {
         "schema_version": "table2.runtime.v1",
         "record_type": "ProcessorParityContract",
-        "processor_class": "FixtureProcessor",
-        "processor_revision": "fixture-processor-v1",
-        "processor_config_sha256": SHA_A,
+        "processor_class": PC01_PROCESSOR_CLASS,
+        "processor_revision": PC01_MODEL_REVISION,
+        "processor_config_sha256": sha256_json(processor_artifacts),
         "pre_action_field_mapping": {"state_before": "pixels"},
         "post_action_field_mapping": {"state_after": "pixels_after"},
     }
@@ -639,10 +1095,7 @@ def _valid_model_manifest(path: Path) -> Path:
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
         artifact_path.write_bytes(payload)
         artifact_payloads[role] = _artifact_payload_descriptor(artifact_path)
-    backbone = payload_root / "e0_backbone"
-    backbone.mkdir(parents=True)
-    (backbone / "weights.bin").write_bytes(b"fixture unadapted backbone")
-    artifact_payloads["e0_backbone"] = _artifact_payload_descriptor(backbone)
+    artifact_payloads["e0_backbone"] = backbone_descriptor
     artifact_payloads["e0_parser"].update(
         {"module": "fixture_e0_parser", "attribute": "parse_action"}
     )
@@ -658,6 +1111,217 @@ def _valid_model_manifest(path: Path) -> Path:
         }[role]: descriptor["sha256"]
         for role, descriptor in artifact_payloads.items()
     }
+    evidence_root.mkdir(parents=True)
+    evidence_values = {
+        "base_snapshot_manifest": {
+            "schema_version": "table2.pc01-base-snapshot.v1",
+            "model_id": "Qwen/Qwen2-VL-2B-Instruct",
+            "revision": PC01_MODEL_REVISION,
+            "file_count": 1,
+            "total_size_bytes": backbone_file.stat().st_size,
+            "directory_payload_sha256": backbone_descriptor["sha256"],
+            "files": [
+                {
+                    "path": backbone_file.name,
+                    "size_bytes": backbone_file.stat().st_size,
+                    "sha256": sha256_file(backbone_file),
+                }
+            ],
+        },
+        "processor_artifact_manifest": processor_artifacts,
+        "training_environment": training_environment,
+        "training_source_manifest": training_sources,
+        "training_action_value_evidence": action_value_evidence,
+    }
+    role_filenames = {
+        "base_snapshot_manifest": "base_snapshot_manifest.json",
+        "processor_artifact_manifest": "processor_artifact_manifest.json",
+        "training_environment": "training_environment.json",
+        "training_source_manifest": "training_source_manifest.json",
+        "training_action_value_evidence": "training_action_value_evidence.json",
+    }
+    evidence_paths: dict[str, Path] = {}
+    for role, value in evidence_values.items():
+        evidence_paths[role] = _write_canonical_json(
+            evidence_root / role_filenames[role], value
+        )
+    tensor_bundle = {
+        "training_bundle_sha256": SHA_A,
+        "runtime_bundle_sha256": SHA_A,
+        "tensor_count": 5,
+        "tensors": {
+            name: {
+                "dtype": "torch.int64" if name != "pixel_values" else "torch.float32",
+                "shape": [1],
+                "payload_sha256": SHA_B,
+            }
+            for name in (
+                "attention_mask",
+                "image_counts",
+                "image_grid_thw",
+                "input_ids",
+                "pixel_values",
+            )
+        },
+    }
+    implementation_identity = {
+        "transformers_version": PC01_TRANSFORMERS_VERSION,
+        "processor_class": PC01_PROCESSOR_CLASS,
+        "image_processor_class": PC01_IMAGE_PROCESSOR_CLASS,
+        "use_fast": True,
+    }
+    parity = {
+        "schema_version": "table2.pc01-processor-parity.v1",
+        "model_id": "Qwen/Qwen2-VL-2B-Instruct",
+        "revision": PC01_MODEL_REVISION,
+        "resolved_config_record_sha256": sha256_json(selected_resolved_config),
+        "processor_contract_sha256": hashes["processor_contract_sha256"],
+        "processor_artifact_manifest_sha256": sha256_file(
+            evidence_paths["processor_artifact_manifest"]
+        ),
+        "base_snapshot_directory_payload_sha256": backbone_descriptor["sha256"],
+        "training_environment_record_sha256": sha256_file(
+            evidence_paths["training_environment"]
+        ),
+        "training_environment_sha256": PC01_TRAINING_ENVIRONMENT_SHA256,
+        "training_source_manifest_sha256": sha256_file(
+            evidence_paths["training_source_manifest"]
+        ),
+        "training_action_value_evidence_sha256": sha256_file(
+            evidence_paths["training_action_value_evidence"]
+        ),
+        "training_source_manifest": training_sources,
+        "run_contract_sha256": SHA_B,
+        "implementation_identity": implementation_identity,
+        "training_processor_implementation": {
+            "transformers_version": PC01_TRANSFORMERS_VERSION,
+            "processor_class": PC01_PROCESSOR_CLASS,
+            "image_processor_class": PC01_IMAGE_PROCESSOR_CLASS,
+            "factory": "web_agent.train.gold_stages.build_processor",
+            "use_fast_argument": "omitted",
+        },
+        "runtime_processor_implementation": implementation_identity,
+        "source_identity": current_pc01_processor_parity_source_identity(),
+        "fixture": {
+            "schema_version": "table2.pc01-processor-parity-fixture.v1",
+            "width": 16,
+            "height": 16,
+            "before_sha256": SHA_A,
+            "after_sha256": SHA_B,
+            "task_id": "fixture-task",
+            "goal": "fixture goal",
+            "url": "https://fixture.invalid",
+            "regular_action": "CLICK",
+            "regular_action_parameter": None,
+            "recovery_action": "CLICK",
+            "recovery_action_parameter": None,
+            "processor_action_value_omitted": True,
+        },
+        "streams": {
+            name: deepcopy(tensor_bundle)
+            for name in ("pre", "post", "recovery")
+        },
+        "action_class_matrix": {
+            action_type: {
+                "parameter_sha256": SHA_A,
+                "processor_action_value_omitted": True,
+                "post": deepcopy(tensor_bundle),
+                "recovery": deepcopy(tensor_bundle),
+            }
+            for action_type in (
+                "CLICK",
+                "TYPE",
+                "SELECT",
+                "SCROLL",
+                "NAVIGATE",
+                "PRESS_KEY",
+            )
+        },
+        "parity_verified": True,
+        "model_weights_loaded": False,
+        "model_forward_executed": False,
+        "network_access_used": False,
+    }
+    evidence_paths["processor_parity_receipt"] = _write_canonical_json(
+        evidence_root / "processor_parity_receipt.json", parity
+    )
+    export_files = {
+        Path(descriptor["path"]).name: {
+            "sha256": descriptor["sha256"],
+            "size_bytes": descriptor["size_bytes"],
+        }
+        for role, descriptor in artifact_payloads.items()
+        if role
+        in {
+            "resolved_config",
+            "processor_contract",
+            "e0_resolved_config",
+            "e0_processor_contract",
+        }
+    }
+    export_files.update(
+        {
+            source.name: {
+                "sha256": sha256_file(source),
+                "size_bytes": source.stat().st_size,
+            }
+            for source in evidence_paths.values()
+        }
+    )
+    export = {
+        "schema_version": MODEL_EVIDENCE_PRODUCER_SCHEMA_VERSION,
+        "model_id": "qwen2vl_2b_gold_v2_8_dgx",
+        "model_seed": 42,
+        "model_revision": PC01_MODEL_REVISION,
+        "checkpoint_sha256": hashes["selected_checkpoint_sha256"],
+        "resolved_config_record_sha256": sha256_json(selected_resolved_config),
+        "resolved_config_payload_sha256": hashes["resolved_config_sha256"],
+        "processor_contract_sha256": hashes["processor_contract_sha256"],
+        "processor_artifact_manifest_sha256": sha256_file(
+            evidence_paths["processor_artifact_manifest"]
+        ),
+        "processor_parity_receipt_sha256": sha256_file(
+            evidence_paths["processor_parity_receipt"]
+        ),
+        "base_snapshot_manifest_sha256": sha256_file(
+            evidence_paths["base_snapshot_manifest"]
+        ),
+        "base_snapshot_directory_payload_sha256": backbone_descriptor["sha256"],
+        "base_snapshot_file_count": 1,
+        "training_environment_source_sha256": PC01_TRAINING_ENVIRONMENT_SHA256,
+        "training_environment_record_sha256": sha256_file(
+            evidence_paths["training_environment"]
+        ),
+        "training_source_manifest_sha256": sha256_file(
+            evidence_paths["training_source_manifest"]
+        ),
+        "training_action_value_evidence_sha256": sha256_file(
+            evidence_paths["training_action_value_evidence"]
+        ),
+        "training_transformers_version": training_environment["transformers"],
+        "runtime_processor_implementation": implementation_identity,
+        "report_sha256": SHA_A,
+        "run_contract_sha256": SHA_B,
+        "selection_scope": "validation_only",
+        "test_rows_read": 0,
+        "locked_test_rows_read": 0,
+        "processor_parity_verified": True,
+        "network_access_used": False,
+        "weight_updates_performed": False,
+        "runtime_ready": False,
+        "files": export_files,
+    }
+    evidence_paths["export_manifest"] = _write_canonical_json(
+        evidence_root / "pc01_export_manifest.json", export
+    )
+    evidence_descriptors = {
+        role: _artifact_payload_descriptor(evidence_paths[role])
+        for role in MODEL_EVIDENCE_ROLES
+    }
+    evidence_bundle = _model_evidence_bundle_value(
+        evidence_descriptors,
+        producer_schema_version=MODEL_EVIDENCE_PRODUCER_SCHEMA_VERSION,
+    )
     return _write_json(
         path,
         {
@@ -670,7 +1334,7 @@ def _valid_model_manifest(path: Path) -> Path:
             ),
             **hashes,
             "e0_backbone_id": "fixture-unadapted-backbone",
-            "e0_backbone_revision": "fixture-pinned-revision",
+            "e0_backbone_revision": PC01_MODEL_REVISION,
             "e0_base_prompt_sha256": sha256_file(
                 REPOSITORY_ROOT / "configs/eval/table2/prompts/e0_action_v1.txt"
             ),
@@ -684,8 +1348,379 @@ def _valid_model_manifest(path: Path) -> Path:
             "test_rows_read": 0,
             "locked_test_rows_read": 0,
             "artifact_payloads": artifact_payloads,
+            "model_evidence_bundle_sha256": evidence_bundle["bundle_sha256"],
+            "model_evidence_bundle": evidence_bundle,
         },
     )
+
+
+def _rewrite_fixture_export_and_rebind(
+    model_path: Path,
+    *,
+    updates: Mapping[str, Any],
+    producer_schema_version: str = MODEL_EVIDENCE_PRODUCER_SCHEMA_VERSION,
+) -> dict[str, Any]:
+    model = read_json(model_path)
+    bundle = dict(model["model_evidence_bundle"])
+    artifacts = {
+        role: dict(descriptor)
+        for role, descriptor in bundle["artifacts"].items()
+    }
+    export_path = Path(artifacts["export_manifest"]["path"])
+    export = read_json(export_path)
+    export.update(dict(updates))
+    _write_canonical_json(export_path, export)
+    artifacts["export_manifest"] = _artifact_payload_descriptor(export_path)
+    rebound = _model_evidence_bundle_value(
+        artifacts,
+        producer_schema_version=producer_schema_version,
+    )
+    model["model_evidence_bundle"] = rebound
+    model["model_evidence_bundle_sha256"] = rebound["bundle_sha256"]
+    _write_json(model_path, model)
+    return model
+
+
+def _rebind_all_fixture_model_evidence(model_path: Path) -> dict[str, Any]:
+    """Recompute every attacker-visible hash without repairing semantics."""
+
+    model = read_json(model_path)
+    evidence_paths = {
+        role: Path(descriptor["path"])
+        for role, descriptor in model["model_evidence_bundle"]["artifacts"].items()
+    }
+    action_sha256 = sha256_file(evidence_paths["training_action_value_evidence"])
+
+    processor = read_json(evidence_paths["processor_artifact_manifest"])
+    processor["training_action_value_evidence_sha256"] = action_sha256
+    _write_canonical_json(evidence_paths["processor_artifact_manifest"], processor)
+    processor_sha256 = sha256_file(evidence_paths["processor_artifact_manifest"])
+
+    artifact_payloads = {
+        role: dict(descriptor)
+        for role, descriptor in model["artifact_payloads"].items()
+    }
+    for role in ("processor_contract", "e0_processor_contract"):
+        contract_path = Path(artifact_payloads[role]["path"])
+        contract = read_json(contract_path)
+        contract["processor_config_sha256"] = processor_sha256
+        _write_canonical_json(contract_path, contract)
+        artifact_payloads[role] = _artifact_payload_descriptor(contract_path)
+        model[
+            {
+                "processor_contract": "processor_contract_sha256",
+                "e0_processor_contract": "e0_processor_contract_sha256",
+            }[role]
+        ] = artifact_payloads[role]["sha256"]
+
+    parity_path = evidence_paths["processor_parity_receipt"]
+    parity = read_json(parity_path)
+    parity.update(
+        {
+            "resolved_config_record_sha256": model[
+                "resolved_config_record_sha256"
+            ],
+            "processor_contract_sha256": model["processor_contract_sha256"],
+            "processor_artifact_manifest_sha256": processor_sha256,
+            "base_snapshot_directory_payload_sha256": model[
+                "e0_backbone_sha256"
+            ],
+            "training_environment_record_sha256": sha256_file(
+                evidence_paths["training_environment"]
+            ),
+            "training_environment_sha256": PC01_TRAINING_ENVIRONMENT_SHA256,
+            "training_source_manifest_sha256": sha256_file(
+                evidence_paths["training_source_manifest"]
+            ),
+            "training_action_value_evidence_sha256": action_sha256,
+        }
+    )
+    _write_canonical_json(parity_path, parity)
+
+    export_path = evidence_paths["export_manifest"]
+    export = read_json(export_path)
+    export.update(
+        {
+            "processor_contract_sha256": model["processor_contract_sha256"],
+            "processor_artifact_manifest_sha256": processor_sha256,
+            "processor_parity_receipt_sha256": sha256_file(parity_path),
+            "training_action_value_evidence_sha256": action_sha256,
+        }
+    )
+    executable_export_files = {
+        "resolved_config.json": "resolved_config",
+        "processor_contract.json": "processor_contract",
+        "e0_resolved_config.json": "e0_resolved_config",
+        "e0_processor_contract.json": "e0_processor_contract",
+    }
+    for filename, role in executable_export_files.items():
+        descriptor = artifact_payloads[role]
+        export["files"][filename] = {
+            "sha256": descriptor["sha256"],
+            "size_bytes": descriptor["size_bytes"],
+        }
+    for role, path in evidence_paths.items():
+        if role == "export_manifest":
+            continue
+        export["files"][path.name] = {
+            "sha256": sha256_file(path),
+            "size_bytes": path.stat().st_size,
+        }
+    _write_canonical_json(export_path, export)
+
+    evidence_descriptors = {
+        role: _artifact_payload_descriptor(path)
+        for role, path in evidence_paths.items()
+    }
+    evidence_bundle = _model_evidence_bundle_value(
+        evidence_descriptors,
+        producer_schema_version=MODEL_EVIDENCE_PRODUCER_SCHEMA_VERSION,
+    )
+    model["artifact_payloads"] = artifact_payloads
+    model["model_evidence_bundle"] = evidence_bundle
+    model["model_evidence_bundle_sha256"] = evidence_bundle["bundle_sha256"]
+    _write_json(model_path, model)
+    return model
+
+
+def test_model_evidence_requires_v3_and_keeps_export_nonreadiness_semantics(
+    tmp_path: Path,
+) -> None:
+    model_path = _valid_model_manifest(tmp_path / "model.json")
+    model = read_json(model_path)
+    executable = _validate_model_artifact_payloads(model_path, model)
+    evidence = _validate_model_evidence_bundle(
+        model_path,
+        model,
+        executable_payloads=executable,
+    )
+    assert set(evidence) == set(MODEL_EVIDENCE_ROLES)
+    assert model["model_evidence_bundle"]["runtime_readiness_claim"] is False
+    assert read_json(evidence["export_manifest"][0])["runtime_ready"] is False
+
+    model = _rewrite_fixture_export_and_rebind(
+        model_path,
+        updates={"schema_version": "table2.pc01-export.v2"},
+        producer_schema_version="table2.pc01-export.v2",
+    )
+    with pytest.raises(SchemaError, match="producer_schema_version"):
+        _validate_model_evidence_bundle(
+            model_path,
+            model,
+            executable_payloads=_validate_model_artifact_payloads(
+                model_path, model
+            ),
+        )
+
+
+def test_model_evidence_rejects_export_runtime_ready_claim(
+    tmp_path: Path,
+) -> None:
+    model_path = _valid_model_manifest(tmp_path / "model.json")
+    model = _rewrite_fixture_export_and_rebind(
+        model_path,
+        updates={"runtime_ready": True},
+    )
+    with pytest.raises(SchemaError, match="runtime_ready"):
+        _validate_model_evidence_bundle(
+            model_path,
+            model,
+            executable_payloads=_validate_model_artifact_payloads(
+                model_path, model
+            ),
+        )
+
+
+def test_model_evidence_rejects_action_value_receipt_tampering(
+    tmp_path: Path,
+) -> None:
+    model_path = _valid_model_manifest(tmp_path / "model.json")
+    model = read_json(model_path)
+    action_path = Path(
+        model["model_evidence_bundle"]["artifacts"][
+            "training_action_value_evidence"
+        ]["path"]
+    )
+    action_path.write_bytes(action_path.read_bytes() + b" ")
+    with pytest.raises(SchemaError, match="training_action_value_evidence"):
+        _validate_model_evidence_bundle(
+            model_path,
+            model,
+            executable_payloads=_validate_model_artifact_payloads(
+                model_path, model
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    "missing_field",
+    ("streams", "action_class_matrix", "source_identity"),
+)
+def test_model_evidence_rejects_rebound_incomplete_parity_receipt(
+    tmp_path: Path,
+    missing_field: str,
+) -> None:
+    model_path = _valid_model_manifest(tmp_path / "model.json")
+    model = read_json(model_path)
+    parity_path = Path(
+        model["model_evidence_bundle"]["artifacts"][
+            "processor_parity_receipt"
+        ]["path"]
+    )
+    parity = read_json(parity_path)
+    parity.pop(missing_field)
+    _write_canonical_json(parity_path, parity)
+    model = _rebind_all_fixture_model_evidence(model_path)
+    with pytest.raises(SchemaError, match="processor parity evidence"):
+        _validate_model_evidence_bundle(
+            model_path,
+            model,
+            executable_payloads=_validate_model_artifact_payloads(
+                model_path, model
+            ),
+        )
+
+
+def test_model_evidence_rejects_rebound_fabricated_parity_source_identity(
+    tmp_path: Path,
+) -> None:
+    model_path = _valid_model_manifest(tmp_path / "model.json")
+    model = read_json(model_path)
+    parity_path = Path(
+        model["model_evidence_bundle"]["artifacts"][
+            "processor_parity_receipt"
+        ]["path"]
+    )
+    parity = read_json(parity_path)
+    parity["source_identity"]["runtime_stream"] = {
+        "callable": "attacker.rebound_runtime_stream",
+        "source_sha256": SHA_A,
+    }
+    _write_canonical_json(parity_path, parity)
+    model = _rebind_all_fixture_model_evidence(model_path)
+
+    with pytest.raises(SchemaError, match="processor parity evidence"):
+        _validate_model_evidence_bundle(
+            model_path,
+            model,
+            executable_payloads=_validate_model_artifact_payloads(
+                model_path, model
+            ),
+        )
+
+
+def test_model_evidence_rejects_rebound_two_row_action_audit(
+    tmp_path: Path,
+) -> None:
+    model_path = _valid_model_manifest(tmp_path / "model.json")
+    model = read_json(model_path)
+    action_path = Path(
+        model["model_evidence_bundle"]["artifacts"][
+            "training_action_value_evidence"
+        ]["path"]
+    )
+    action = read_json(action_path)
+    action["sources"] = [
+        {
+            "source_id": "self-asserted",
+            "file_name": "tiny.json",
+            "sha256": SHA_A,
+            "rows": 2,
+            "action_value_key_occurrences": {
+                "top_level": 0,
+                "inputs": 0,
+                "labels": 0,
+                "recursive_total": 0,
+            },
+        }
+    ]
+    action["combined_train_rows"] = 2
+    action["training_rows_read"] = 2
+    _write_canonical_json(action_path, action)
+    model = _rebind_all_fixture_model_evidence(model_path)
+    with pytest.raises(SchemaError, match="training action-value evidence"):
+        _validate_model_evidence_bundle(
+            model_path,
+            model,
+            executable_payloads=_validate_model_artifact_payloads(
+                model_path, model
+            ),
+        )
+
+
+def test_model_evidence_rejects_fully_rebound_otherwise_valid_export(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model_path = _valid_model_manifest(tmp_path / "model.json")
+    model = read_json(model_path)
+    executable = _validate_model_artifact_payloads(model_path, model)
+    export_path = Path(
+        model["model_evidence_bundle"]["artifacts"]["export_manifest"]["path"]
+    )
+    synthetic_registered_sha256 = sha256_file(export_path)
+    assert PC01_EXPECTED_EXPORT_MANIFEST_SHA256 == (
+        "63c01942cc653732c9e9e18639cb49bded09a82235fd4ea37fef3fad14c9fa2d"
+    )
+    monkeypatch.setattr(
+        package_validator_module,
+        "PC01_EXPECTED_EXPORT_MANIFEST_SHA256",
+        synthetic_registered_sha256,
+    )
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_export_manifest",
+        _PRODUCTION_EXPORT_MANIFEST_VALIDATOR,
+    )
+    _validate_model_evidence_bundle(
+        model_path,
+        model,
+        executable_payloads=executable,
+    )
+
+    model = _rewrite_fixture_export_and_rebind(
+        model_path,
+        updates={"self_asserted_note": "fully rebound but not registered"},
+    )
+    with pytest.raises(SchemaError, match="registered v3 identity"):
+        _validate_model_evidence_bundle(
+            model_path,
+            model,
+            executable_payloads=_validate_model_artifact_payloads(
+                model_path, model
+            ),
+        )
+
+
+def test_production_base_snapshot_validator_rejects_synthetic_identity(
+    tmp_path: Path,
+) -> None:
+    model_path = _valid_model_manifest(tmp_path / "model.json")
+    model = read_json(model_path)
+    with pytest.raises(SchemaError, match="registered PC-01 base-snapshot"):
+        _PRODUCTION_BASE_SNAPSHOT_VALIDATOR(
+            Path(
+                model["model_evidence_bundle"]["artifacts"][
+                    "base_snapshot_manifest"
+                ]["path"]
+            ),
+            Path(model["artifact_payloads"]["e0_backbone"]["path"]),
+        )
+
+
+def test_production_export_manifest_validator_rejects_synthetic_identity(
+    tmp_path: Path,
+) -> None:
+    model_path = _valid_model_manifest(tmp_path / "model.json")
+    model = read_json(model_path)
+    with pytest.raises(SchemaError, match="registered v3 identity"):
+        _PRODUCTION_EXPORT_MANIFEST_VALIDATOR(
+            Path(
+                model["model_evidence_bundle"]["artifacts"][
+                    "export_manifest"
+                ]["path"]
+            )
+        )
 
 
 def _valid_selection_evidence_inputs(
@@ -815,6 +1850,12 @@ def _valid_selection_evidence_inputs(
             candidate_root / "full/resolved_config.json",
             resolved_config,
         )
+        compatibility_report_path = (
+            candidate_root / "model_compatibility_report.json"
+        )
+        compatibility_report_path.write_bytes(
+            FIXTURE_MODEL_COMPATIBILITY_PAYLOAD_BY_MODEL[model_id]
+        )
         candidate_runs.append(
             {
                 "model_id": model_id,
@@ -822,6 +1863,10 @@ def _valid_selection_evidence_inputs(
                 "full_report": str(report_path),
                 "resolved_config": str(resolved_config_path),
                 "selected_checkpoint": str(checkpoint_path),
+                "model_compatibility_report": str(compatibility_report_path),
+                "model_compatibility_report_sha256": sha256_file(
+                    compatibility_report_path
+                ),
             }
         )
         comparison_rows.append(
@@ -1288,6 +2333,8 @@ def _valid_runner_attestation(
     memory: Path,
     environment: Path,
     resolved_tasks: Path,
+    selection_evidence: Path,
+    checkpoint_compatibility_receipt: Path,
 ) -> Path:
     source = Path(__file__).resolve()
     relative = str(source.relative_to(REPOSITORY_ROOT))
@@ -1295,12 +2342,34 @@ def _valid_runner_attestation(
     live_validator_source = (
         REPOSITORY_ROOT / "src/web_agent/eval/table2/live_deployment.py"
     )
+    source_candidates = {
+        source,
+        live_fixture_source,
+        live_validator_source,
+        REPOSITORY_ROOT / "src/web_agent/train/selection.py",
+        REPOSITORY_ROOT / "src/web_agent/train/gold_stages.py",
+        REPOSITORY_ROOT / "src/web_agent/eval/table2/model_compatibility.py",
+        REPOSITORY_ROOT / "src/web_agent/eval/table2/selection_evidence.py",
+        REPOSITORY_ROOT / "src/web_agent/memory/joint_duplicate_audit.py",
+        REPOSITORY_ROOT / "configs/eval/table2/joint_duplicate_audit_v1.json",
+        REPOSITORY_ROOT / "configs/eval/table2/p4_source_authority_v1.json",
+        REPOSITORY_ROOT / "scripts/run_gold.py",
+        *(
+            REPOSITORY_ROOT / relative
+            for relative in package_validator_module.AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS
+        ),
+        *(REPOSITORY_ROOT / relative for relative in _SOURCE_PATHS),
+        *(
+            REPOSITORY_ROOT / relative
+            for relative in package_validator_module.EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS
+        ),
+    }
     source_rows = [
         {
             "relative_path": str(candidate.relative_to(REPOSITORY_ROOT)),
             "sha256": sha256_file(candidate),
         }
-        for candidate in (source, live_fixture_source, live_validator_source)
+        for candidate in sorted(source_candidates)
     ]
     identity = _expected_runner_runtime_identity(
         model_by_seed={42: model},
@@ -1322,6 +2391,10 @@ def _valid_runner_attestation(
             "source_relative_path": relative,
             "source_sha256": sha256_file(source),
         },
+        selection_evidence_path=selection_evidence,
+        checkpoint_compatibility_receipt_path=(
+            checkpoint_compatibility_receipt
+        ),
     )
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"],
@@ -1372,7 +2445,12 @@ def _valid_memory_manifest(path: Path) -> Path:
     )
 
 
-def _valid_memory_store(path: Path, *, model: Path | None = None) -> Path:
+def _valid_memory_store(
+    path: Path,
+    *,
+    model: Path | None = None,
+    duplicate_audit: Path | None = None,
+) -> Path:
     protocol_sha256 = sha256_file(PROTOCOL)
     model_value = read_json(model) if model is not None else {}
     checkpoint_sha256 = str(model_value.get("selected_checkpoint_sha256", SHA_A))
@@ -1441,14 +2519,29 @@ def _valid_memory_store(path: Path, *, model: Path | None = None) -> Path:
                     "source_task_id": task_id,
                     "source_episode_id": episode_id,
                     "step_index": index,
+                    "website_domain": "fixture.test",
+                    "source_transition_kind": "adjacent_failure_then_recovery",
+                    "source_review_status": "approved",
+                    "source_record_sha256": sha256_json(
+                        {"source_sample_id": source_id}
+                    ),
+                    "memory_item_source_material_sha256": sha256_json(
+                        {"fixture_material": source_id}
+                    ),
                     "exact_duplicate_key": exact_key,
                     "duplicate_cluster_id": f"train-near-{index}",
                     "duplicate_cluster_namespace_id": (
                         JOINT_DUPLICATE_NAMESPACE["namespace_id"]
                     ),
                     "failure_type": "NO_EFFECT",
+                    "failure_type_available": True,
+                    "failed_action": action,
+                    "failed_action_available": True,
                     "strategy": strategy,
                     "executed_recovery_action": action,
+                    "recovery_action_value": "",
+                    "reflection_text": "fixture recovery reflection",
+                    "p4_label_review_evidence_sha256": None,
                     "memory_update_flag": True,
                     "verified_recovery_success": True,
                     "final_task_success": True,
@@ -1546,6 +2639,13 @@ def _valid_memory_store(path: Path, *, model: Path | None = None) -> Path:
         threshold_calibration=calibration_evidence["threshold_calibration"],
         calibration_evidence=calibration_evidence,
         transition_report={"status": "PASS"},
+        joint_duplicate_audit_binding=_fixture_joint_store_binding(
+            duplicate_audit_sha256=(
+                sha256_file(duplicate_audit)
+                if duplicate_audit is not None
+                else SHA_C
+            )
+        ),
     )
     return store.root / "manifest.json"
 
@@ -1578,6 +2678,35 @@ def _freeze_smoke(tmp_path: Path, *, name: str = "campaign") -> Path:
         allow_dirty_pilot=True,
     )
     return destination
+
+
+@pytest.mark.parametrize("relation", ("equal", "descendant", "ancestor"))
+def test_freeze_rejects_campaign_and_handoff_path_overlap(
+    tmp_path: Path,
+    relation: str,
+) -> None:
+    handoff_root = tmp_path / "container" / "handoff"
+    handoff_manifest = _write_json(handoff_root / "handoff_manifest.json", {})
+    config = _campaign_config(tmp_path / "overlap-input", mode="evaluation")
+    config_value = yaml.safe_load(config.read_text(encoding="utf-8"))
+    config_value["handoff_manifest"] = str(handoff_manifest)
+    config.write_text(
+        yaml.safe_dump(config_value, sort_keys=False), encoding="utf-8"
+    )
+    destinations = {
+        "equal": handoff_root,
+        "descendant": handoff_root / "campaign",
+        "ancestor": handoff_root.parent,
+    }
+
+    with pytest.raises(SchemaError, match="disjoint"):
+        freeze_campaign(
+            repository_root=REPOSITORY_ROOT,
+            campaign_config_path=config,
+            campaign_dir=destinations[relation],
+            handoff_manifest_path=handoff_manifest,
+            allow_dirty_pilot=True,
+        )
 
 
 def test_explicit_smoke_freeze_registers_exact_pilot_and_canonical_layout(tmp_path: Path):
@@ -1655,6 +2784,24 @@ def test_explicit_smoke_freeze_registers_exact_pilot_and_canonical_layout(tmp_pa
     assert report.counts["block_status_not_started"] == 65
 
 
+def test_engineering_smoke_cannot_claim_checkpoint_compatibility(
+    tmp_path: Path,
+) -> None:
+    config = _campaign_config(tmp_path, mode="smoke")
+    campaign = yaml.safe_load(config.read_text(encoding="utf-8"))
+    campaign["pc01_checkpoint_compatibility_receipt"] = str(
+        _write_canonical_json(tmp_path / "false-receipt.json", {"status": "PASS"})
+    )
+    config.write_text(yaml.safe_dump(campaign, sort_keys=False), encoding="utf-8")
+    with pytest.raises(SchemaError, match="ENGINEERING_SMOKE_ONLY"):
+        freeze_campaign(
+            repository_root=REPOSITORY_ROOT,
+            campaign_config_path=config,
+            campaign_dir=tmp_path / "false-readiness-smoke",
+            allow_dirty_pilot=True,
+        )
+
+
 def test_campaign_validation_rejects_changed_pilot_exclusion_provenance_hash(
     tmp_path: Path,
 ) -> None:
@@ -1685,8 +2832,14 @@ def test_pilot_summary_is_guarded_and_never_promoted_to_paper_table(tmp_path: Pa
     assert read_json(campaign / "campaign_manifest.json")["paper_table_status"] == "N/R"
 
 
-def test_evaluation_freeze_requires_environment_model_and_memory_readiness(tmp_path: Path):
-    config, environment, resolved_tasks, _ = _evaluation_registration(tmp_path)
+def test_evaluation_freeze_requires_environment_model_and_memory_readiness(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    handoff_root = tmp_path / "manual-handoff"
+    config, environment, resolved_tasks, duplicate_audit = _evaluation_registration(
+        handoff_root
+    )
 
     with pytest.raises(SchemaError, match="environment manifest"):
         freeze_campaign(
@@ -1706,7 +2859,7 @@ def test_evaluation_freeze_requires_environment_model_and_memory_readiness(tmp_p
             allow_dirty_pilot=True,
         )
 
-    model = _valid_model_manifest(tmp_path / "model.json")
+    model = _valid_model_manifest(handoff_root / "model.json")
     with pytest.raises(SchemaError, match="memory manifests must cover every matched seed"):
         freeze_campaign(
             repository_root=REPOSITORY_ROOT,
@@ -1719,7 +2872,7 @@ def test_evaluation_freeze_requires_environment_model_and_memory_readiness(tmp_p
         )
 
     manifest_only = _valid_memory_manifest(
-        tmp_path / "manifest-only-store/manifest.json"
+        handoff_root / "manifest-only-store/manifest.json"
     )
     with pytest.raises(SchemaError, match="invalid frozen memory store"):
         freeze_campaign(
@@ -1733,17 +2886,159 @@ def test_evaluation_freeze_requires_environment_model_and_memory_readiness(tmp_p
             allow_dirty_pilot=True,
         )
 
-    memory = _valid_memory_store(tmp_path / "external-memory-store", model=model)
+    memory = _valid_memory_store(
+        handoff_root / "external-memory-store",
+        model=model,
+        duplicate_audit=duplicate_audit,
+    )
+    model_value = read_json(model)
+    selection_inputs = _valid_selection_evidence_inputs(
+        handoff_root,
+        selected_checkpoint_sha256=model_value["selected_checkpoint_sha256"],
+        selected_resolved_config_sha256=model_value[
+            "resolved_config_record_sha256"
+        ],
+        selection_mode=PC01_PROVISIONAL_SELECTION_MODE,
+    )
+    monkeypatch.setattr(
+        selection_evidence_module,
+        "PC01_EXPECTED_SELECTED_EPOCH",
+        model_value["selected_epoch"],
+    )
+    monkeypatch.setattr(
+        selection_evidence_module,
+        "PC01_EXPECTED_CHECKPOINT_SHA256",
+        model_value["selected_checkpoint_sha256"],
+    )
+    monkeypatch.setattr(
+        selection_evidence_module,
+        "PC01_EXPECTED_CONFIG_SHA256",
+        model_value["resolved_config_record_sha256"],
+    )
+    selection_manifest = stage_selection_evidence(
+        selection_spec=selection_inputs,
+        spec_path=handoff_root / "selection-input.json",
+        output_dir=handoff_root / "selection-evidence",
+        repository_root=REPOSITORY_ROOT,
+        selected_model_manifest=model_value,
+        selection_mode=PC01_PROVISIONAL_SELECTION_MODE,
+    )
+    campaign_value = yaml.safe_load(config.read_text(encoding="utf-8"))
+    campaign_value["checkpoint_selection_evidence"] = str(selection_manifest)
+    config.write_text(
+        yaml.safe_dump(campaign_value, sort_keys=False),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        SchemaError,
+        match="requires pc01_checkpoint_compatibility_receipt",
+    ):
+        freeze_campaign(
+            repository_root=REPOSITORY_ROOT,
+            campaign_config_path=config,
+            campaign_dir=tmp_path / "missing-checkpoint-compatibility",
+            environment_manifest_path=environment,
+            model_manifest_paths=[model],
+            memory_manifest_paths=[memory],
+            resolved_task_snapshot_path=resolved_tasks,
+            allow_dirty_pilot=True,
+        )
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPOSITORY_ROOT,
+        text=True,
+    ).strip()
+    checkpoint_compatibility = _fixture_checkpoint_compatibility_receipt(
+        handoff_root / "pc01-checkpoint-compatibility.json",
+        commit=commit,
+    )
+    _install_fixture_checkpoint_readiness_validator(monkeypatch)
+    campaign_value = yaml.safe_load(config.read_text(encoding="utf-8"))
+    campaign_value["pc01_checkpoint_compatibility_receipt"] = str(
+        checkpoint_compatibility
+    )
+    config.write_text(
+        yaml.safe_dump(campaign_value, sort_keys=False),
+        encoding="utf-8",
+    )
     runner_attestation = _valid_runner_attestation(
-        tmp_path / "runner-attestation.json",
+        handoff_root / "runner-attestation.json",
         model=model,
         memory=memory,
         environment=environment,
         resolved_tasks=resolved_tasks,
+        selection_evidence=selection_manifest,
+        checkpoint_compatibility_receipt=checkpoint_compatibility,
+    )
+    incomplete_attestation = read_json(runner_attestation)
+    incomplete_attestation["source_files"] = [
+        row
+        for row in incomplete_attestation["source_files"]
+        if row["relative_path"] != "src/web_agent/train/gold_stages.py"
+    ]
+    incomplete_attestation["source_set_sha256"] = sha256_json(
+        incomplete_attestation["source_files"]
+    )
+    incomplete_attestation_path = _write_json(
+        handoff_root / "runner-attestation-missing-selection-source.json",
+        incomplete_attestation,
+    )
+    with pytest.raises(
+        SchemaError,
+        match="omits validation-selection generator/validator source",
+    ):
+        freeze_campaign(
+            repository_root=REPOSITORY_ROOT,
+            campaign_config_path=config,
+            campaign_dir=tmp_path / "missing-selection-source",
+            environment_manifest_path=environment,
+            model_manifest_paths=[model],
+            memory_manifest_paths=[memory],
+            runner_attestation_path=incomplete_attestation_path,
+            resolved_task_snapshot_path=resolved_tasks,
+            pc01_checkpoint_compatibility_receipt_path=checkpoint_compatibility,
+            allow_dirty_pilot=True,
+        )
+    handoff_manifest = handoff_root / "handoff_manifest.json"
+    campaign_value = yaml.safe_load(config.read_text(encoding="utf-8"))
+    campaign_value["handoff_manifest"] = str(handoff_manifest)
+    config.write_text(
+        yaml.safe_dump(campaign_value, sort_keys=False), encoding="utf-8"
+    )
+    handoff_files = {
+        path.relative_to(handoff_root).as_posix(): sha256_file(path)
+        for path in sorted(handoff_root.rglob("*"))
+        if path.is_file() and path != handoff_manifest
+    }
+    _write_json(
+        handoff_manifest,
+        {
+            "schema_version": "table2-handoff-bundle-v1",
+            "repository_root": str(REPOSITORY_ROOT),
+            "repository_commit": commit,
+            "campaign_mode": "evaluation",
+            "selection_mode": PC01_PROVISIONAL_SELECTION_MODE,
+            "matched_seeds": [42],
+            "freeze_arguments": {
+                "handoff_manifest": str(handoff_manifest),
+                "campaign_config": str(config),
+                "resolved_task_snapshot": str(resolved_tasks),
+                "environment_manifest": str(environment),
+                "runner_attestation": str(runner_attestation),
+                "checkpoint_selection_evidence": str(selection_manifest),
+                "model_manifests": [str(model)],
+                "memory_manifests": [str(memory)],
+                "pc01_checkpoint_compatibility_receipt": str(
+                    checkpoint_compatibility
+                ),
+            },
+            "files": handoff_files,
+        },
     )
     campaign = tmp_path / "ready-evaluation"
     freeze_campaign(
         repository_root=REPOSITORY_ROOT,
+        handoff_manifest_path=handoff_manifest,
         campaign_config_path=config,
         campaign_dir=campaign,
         environment_manifest_path=environment,
@@ -1751,9 +3046,22 @@ def test_evaluation_freeze_requires_environment_model_and_memory_readiness(tmp_p
         memory_manifest_paths=[memory],
         runner_attestation_path=runner_attestation,
         resolved_task_snapshot_path=resolved_tasks,
+        pc01_checkpoint_compatibility_receipt_path=checkpoint_compatibility,
         allow_dirty_pilot=True,
     )
     assert (campaign / "frozen/models/seed_42.json").is_file()
+    frozen_checkpoint_compatibility = (
+        campaign
+        / "frozen"
+        / PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH
+    )
+    assert frozen_checkpoint_compatibility.read_bytes() == (
+        checkpoint_compatibility.read_bytes()
+    )
+    assert frozen_checkpoint_compatibility.stat().st_mode & 0o222 == 0
+    assert read_json(campaign / "campaign_manifest.json")[
+        PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD
+    ]["receipt_sha256"] == sha256_file(frozen_checkpoint_compatibility)
     copied_store = campaign / "memory/seed_42"
     assert {
         path.name for path in copied_store.iterdir() if path.is_file()
@@ -1771,6 +3079,263 @@ def test_evaluation_freeze_requires_environment_model_and_memory_readiness(tmp_p
     ).read_bytes()
     report = validate_campaign(campaign, require_complete=False)
     assert report.passed, report.errors
+    campaign_manifest = read_json(campaign / "campaign_manifest.json")
+    handoff_consumption_path = (
+        campaign
+        / package_validator_module.FROZEN_HANDOFF_CONSUMPTION_RELATIVE_PATH
+    )
+    handoff_consumption = read_json(handoff_consumption_path)
+    assert campaign_manifest["handoff_consumption_sha256"] == sha256_file(
+        handoff_consumption_path
+    )
+    assert set(handoff_consumption["required_freeze_argument_sources"]).issubset(
+        {
+            row["source_relative_path"]
+            for row in handoff_consumption["bindings"]
+        }
+    )
+
+    external_selection = stage_selection_evidence(
+        selection_spec=selection_inputs,
+        spec_path=tmp_path / "selection-substitution-input.json",
+        output_dir=tmp_path / "external-selection-evidence",
+        repository_root=REPOSITORY_ROOT,
+        selected_model_manifest=model_value,
+        selection_mode=PC01_PROVISIONAL_SELECTION_MODE,
+    )
+    original_config_bytes = config.read_bytes()
+    original_handoff_bytes = handoff_manifest.read_bytes()
+    substituted_config = yaml.safe_load(original_config_bytes.decode("utf-8"))
+    substituted_config["checkpoint_selection_evidence"] = str(
+        external_selection
+    )
+    config.write_text(
+        yaml.safe_dump(substituted_config, sort_keys=False), encoding="utf-8"
+    )
+    substituted_handoff = read_json(handoff_manifest)
+    substituted_handoff["files"][
+        config.relative_to(handoff_root).as_posix()
+    ] = sha256_file(config)
+    _write_json(handoff_manifest, substituted_handoff)
+    substituted_campaign = tmp_path / "selection-substitution-campaign"
+    try:
+        with pytest.raises(
+            SchemaError,
+            match="checkpoint_selection_evidence differs",
+        ):
+            freeze_campaign(
+                repository_root=REPOSITORY_ROOT,
+                handoff_manifest_path=handoff_manifest,
+                campaign_config_path=config,
+                campaign_dir=substituted_campaign,
+                environment_manifest_path=environment,
+                model_manifest_paths=[model],
+                memory_manifest_paths=[memory],
+                runner_attestation_path=runner_attestation,
+                resolved_task_snapshot_path=resolved_tasks,
+                pc01_checkpoint_compatibility_receipt_path=(
+                    checkpoint_compatibility
+                ),
+                allow_dirty_pilot=True,
+            )
+        assert not (substituted_campaign / "campaign_manifest.json").exists()
+    finally:
+        config.write_bytes(original_config_bytes)
+        handoff_manifest.write_bytes(original_handoff_bytes)
+
+    original_authority_validator = (
+        package_validator_module.validate_handoff_freeze_authority
+    )
+    authority_replay_count = 0
+
+    def mutate_after_second_authority_replay(*args: Any, **kwargs: Any):
+        nonlocal authority_replay_count
+        authority = original_authority_validator(*args, **kwargs)
+        authority_replay_count += 1
+        if authority_replay_count == 2:
+            config.write_bytes(original_config_bytes + b"\n")
+        return authority
+
+    monkeypatch.setattr(
+        package_validator_module,
+        "validate_handoff_freeze_authority",
+        mutate_after_second_authority_replay,
+    )
+    failed_provenance_race = tmp_path / "failed-provenance-race"
+    try:
+        with pytest.raises(
+            SchemaError,
+            match="inventory differs|changed while provenance was recorded",
+        ):
+            freeze_campaign(
+                repository_root=REPOSITORY_ROOT,
+                handoff_manifest_path=handoff_manifest,
+                campaign_config_path=config,
+                campaign_dir=failed_provenance_race,
+                environment_manifest_path=environment,
+                model_manifest_paths=[model],
+                memory_manifest_paths=[memory],
+                runner_attestation_path=runner_attestation,
+                resolved_task_snapshot_path=resolved_tasks,
+                pc01_checkpoint_compatibility_receipt_path=(
+                    checkpoint_compatibility
+                ),
+                allow_dirty_pilot=True,
+            )
+        assert authority_replay_count == 2
+        assert not (failed_provenance_race / "campaign_manifest.json").exists()
+    finally:
+        config.write_bytes(original_config_bytes)
+        monkeypatch.setattr(
+            package_validator_module,
+            "validate_handoff_freeze_authority",
+            original_authority_validator,
+        )
+
+    original_copy = package_validator_module._copy_exact
+    mutation_fired = False
+
+    def mutate_after_handoff_manifest_copy(source: Path, destination: Path) -> Path:
+        nonlocal mutation_fired
+        copied_path = original_copy(source, destination)
+        if not mutation_fired and Path(source).resolve() == handoff_manifest.resolve():
+            config.write_bytes(original_config_bytes + b"\n")
+            mutation_fired = True
+        return copied_path
+
+    monkeypatch.setattr(
+        package_validator_module,
+        "_copy_exact",
+        mutate_after_handoff_manifest_copy,
+    )
+    failed_toctou_campaign = tmp_path / "failed-toctou-evaluation"
+    try:
+        with pytest.raises(
+            SchemaError,
+            match="inventory differs|changed during campaign freeze",
+        ):
+            freeze_campaign(
+                repository_root=REPOSITORY_ROOT,
+                handoff_manifest_path=handoff_manifest,
+                campaign_config_path=config,
+                campaign_dir=failed_toctou_campaign,
+                environment_manifest_path=environment,
+                model_manifest_paths=[model],
+                memory_manifest_paths=[memory],
+                runner_attestation_path=runner_attestation,
+                resolved_task_snapshot_path=resolved_tasks,
+                pc01_checkpoint_compatibility_receipt_path=(
+                    checkpoint_compatibility
+                ),
+                allow_dirty_pilot=True,
+            )
+        assert mutation_fired
+        assert not (failed_toctou_campaign / "campaign_manifest.json").exists()
+    finally:
+        config.write_bytes(original_config_bytes)
+        monkeypatch.setattr(package_validator_module, "_copy_exact", original_copy)
+
+    mutation_fired = False
+
+    def mutate_during_config_copy(source: Path, destination: Path) -> Path:
+        nonlocal mutation_fired
+        copied_path = original_copy(source, destination)
+        if not mutation_fired and Path(source).resolve() == config.resolve():
+            config.write_bytes(original_config_bytes + b"\n")
+            mutation_fired = True
+        return copied_path
+
+    monkeypatch.setattr(
+        package_validator_module,
+        "_copy_exact",
+        mutate_during_config_copy,
+    )
+    failed_authenticated_copy = tmp_path / "failed-authenticated-copy"
+    try:
+        with pytest.raises(
+            SchemaError,
+            match="changed during authenticated copy",
+        ):
+            freeze_campaign(
+                repository_root=REPOSITORY_ROOT,
+                handoff_manifest_path=handoff_manifest,
+                campaign_config_path=config,
+                campaign_dir=failed_authenticated_copy,
+                environment_manifest_path=environment,
+                model_manifest_paths=[model],
+                memory_manifest_paths=[memory],
+                runner_attestation_path=runner_attestation,
+                resolved_task_snapshot_path=resolved_tasks,
+                pc01_checkpoint_compatibility_receipt_path=(
+                    checkpoint_compatibility
+                ),
+                allow_dirty_pilot=True,
+            )
+        assert mutation_fired
+        assert not (failed_authenticated_copy / "campaign_manifest.json").exists()
+    finally:
+        config.write_bytes(original_config_bytes)
+        monkeypatch.setattr(package_validator_module, "_copy_exact", original_copy)
+
+    generic_fallback_campaign = tmp_path / "generic-selection-fallback"
+    shutil.copytree(campaign, generic_fallback_campaign)
+    generic_consumption_path = (
+        generic_fallback_campaign
+        / package_validator_module.FROZEN_HANDOFF_CONSUMPTION_RELATIVE_PATH
+    )
+    generic_consumption = read_json(generic_consumption_path)
+    selection_source_relative = Path(
+        read_json(handoff_manifest)["freeze_arguments"][
+            "checkpoint_selection_evidence"
+        ]
+    ).relative_to(handoff_root).as_posix()
+    canonical_selection_relative = "frozen/selection_evidence/manifest.json"
+    generic_selection_relative = (
+        "frozen/handoff_inputs/" + selection_source_relative
+    )
+    generic_selection_path = generic_fallback_campaign / generic_selection_relative
+    generic_selection_path.parent.mkdir(parents=True, exist_ok=True)
+    generic_selection_path.write_bytes(
+        (generic_fallback_campaign / canonical_selection_relative).read_bytes()
+    )
+    selection_bindings = [
+        row
+        for row in generic_consumption["bindings"]
+        if row["source_relative_path"] == selection_source_relative
+        and row["campaign_relative_path"] == canonical_selection_relative
+    ]
+    assert len(selection_bindings) == 1
+    selection_bindings[0]["campaign_relative_path"] = generic_selection_relative
+    _write_json(generic_consumption_path, generic_consumption)
+    generic_hashes_path = generic_fallback_campaign / "artifact_hashes.json"
+    generic_hashes = read_json(generic_hashes_path)
+    generic_hashes["files"][generic_selection_relative] = sha256_file(
+        generic_selection_path
+    )
+    generic_hashes["files"][
+        package_validator_module.FROZEN_HANDOFF_CONSUMPTION_RELATIVE_PATH.as_posix()
+    ] = sha256_file(generic_consumption_path)
+    _write_json(generic_hashes_path, generic_hashes)
+    generic_campaign_manifest_path = (
+        generic_fallback_campaign / "campaign_manifest.json"
+    )
+    generic_campaign_manifest = read_json(generic_campaign_manifest_path)
+    generic_campaign_manifest["handoff_consumption_sha256"] = sha256_file(
+        generic_consumption_path
+    )
+    generic_campaign_manifest["artifact_hashes_sha256"] = sha256_file(
+        generic_hashes_path
+    )
+    _write_json(generic_campaign_manifest_path, generic_campaign_manifest)
+    generic_report = validate_campaign(
+        generic_fallback_campaign,
+        require_complete=False,
+    )
+    assert not generic_report.passed
+    assert any(
+        "checkpoint-selection authority is not bound" in error
+        for error in generic_report.errors
+    )
 
     (copied_store / "items.jsonl").write_text("{}\n", encoding="utf-8")
     tampered = validate_campaign(campaign, require_complete=False)
@@ -1813,7 +3378,9 @@ def test_duplicate_audit_rejects_a_different_memory_cluster_namespace(
 def test_evaluation_freeze_requires_positive_validation_selection_evidence(
     tmp_path: Path,
 ):
-    config, environment, resolved_tasks, _ = _evaluation_registration(tmp_path)
+    config, environment, resolved_tasks, duplicate_audit = _evaluation_registration(
+        tmp_path
+    )
     model = _valid_model_manifest(tmp_path / "model.json")
     payload = json.loads(model.read_text(encoding="utf-8"))
     payload["validation_rows_read"] = 0
@@ -1832,10 +3399,14 @@ def test_evaluation_freeze_requires_positive_validation_selection_evidence(
 
 
 def test_evaluation_freeze_rejects_selection_mode_mismatch(tmp_path: Path):
-    config, environment, resolved_tasks, _ = _evaluation_registration(tmp_path)
+    config, environment, resolved_tasks, duplicate_audit = _evaluation_registration(
+        tmp_path
+    )
     model = _valid_model_manifest(tmp_path / "model.json")
     model_value = read_json(model)
-    memory = _valid_memory_store(tmp_path / "memory", model=model)
+    memory = _valid_memory_store(
+        tmp_path / "memory", model=model, duplicate_audit=duplicate_audit
+    )
     inputs = _valid_selection_evidence_inputs(
         tmp_path,
         selected_checkpoint_sha256=model_value["selected_checkpoint_sha256"],
@@ -2073,6 +3644,9 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
     duplicate_input_path = _write_json(
         tmp_path / "external-duplicate-audit.json", duplicate_input
     )
+    synthetic_joint_config = load_yaml(
+        _campaign_config(tmp_path / "handoff-joint", mode="evaluation")
+    )
     model_fields = (
         "model_seed",
         "selected_model_id",
@@ -2093,6 +3667,12 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
     model_spec["artifact_paths"] = {
         role: descriptor["path"]
         for role, descriptor in source_model_value["artifact_payloads"].items()
+    }
+    model_spec["model_evidence_paths"] = {
+        role: descriptor["path"]
+        for role, descriptor in source_model_value["model_evidence_bundle"][
+            "artifacts"
+        ].items()
     }
     selection_evidence = _valid_selection_evidence_inputs(
         tmp_path,
@@ -2119,8 +3699,37 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
         "PC01_EXPECTED_CONFIG_SHA256",
         source_model_value["resolved_config_record_sha256"],
     )
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=REPOSITORY_ROOT, text=True
+    ).strip()
+    checkpoint_compatibility = _fixture_checkpoint_compatibility_receipt(
+        tmp_path / "pc01-checkpoint-compatibility.json",
+        commit=commit,
+    )
+    _install_fixture_checkpoint_readiness_validator(monkeypatch)
     source_relative = str(Path(__file__).resolve().relative_to(REPOSITORY_ROOT))
     production_runner_relative = "src/web_agent/eval/table2/production_runner.py"
+    runner_source_paths = sorted(
+        {
+            production_runner_relative,
+            source_relative,
+            "scripts/run_table2_evaluation.py",
+            "scripts/compare_full_models.py",
+            "src/web_agent/train/selection.py",
+            "src/web_agent/train/gold_stages.py",
+            "src/web_agent/eval/table2/selection_evidence.py",
+            "src/web_agent/eval/table2/model_compatibility.py",
+            "scripts/run_gold.py",
+            "src/web_agent/eval/table2/live_deployment.py",
+            "src/web_agent/memory/joint_duplicate_audit.py",
+            "configs/eval/table2/joint_duplicate_audit_v1.json",
+            "configs/eval/table2/p4_source_authority_v1.json",
+            *package_validator_module.AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS,
+            "tests/table2/test_live_deployment.py",
+            *_SOURCE_PATHS,
+            *package_validator_module.EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS,
+        }
+    )
     spec_path = _write_json(
         tmp_path / "handoff-input.json",
         {
@@ -2146,7 +3755,19 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
             "pc01_live_deployment_manifest": str(live_deployment_manifest),
             "pc01_live_deployment_evidence_root": str(live_evidence_root),
             "duplicate_audit": str(duplicate_input_path),
+            "joint_duplicate_assignment_package": synthetic_joint_config[
+                "joint_duplicate_assignment_package"
+            ],
+            "p4_preparation_package": synthetic_joint_config[
+                "p4_preparation_package"
+            ],
+            "joint_duplicate_provenance_manifest": synthetic_joint_config[
+                "joint_duplicate_provenance_manifest"
+            ],
             "selection_evidence": selection_evidence,
+            "pc01_checkpoint_compatibility_receipt": str(
+                checkpoint_compatibility
+            ),
             "models": [model_spec],
             "memory_manifests": [str(memory)],
             "runner": {
@@ -2158,22 +3779,10 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
                     "tests.table2.test_package_validator:_NestedEvidenceRunner"
                 ),
                 "runtime_integration_source_relative_path": source_relative,
-                "source_relative_paths": [
-                    production_runner_relative,
-                    source_relative,
-                    "scripts/run_table2_evaluation.py",
-                    "scripts/compare_full_models.py",
-                    "src/web_agent/train/selection.py",
-                    "src/web_agent/eval/table2/selection_evidence.py",
-                    "src/web_agent/eval/table2/live_deployment.py",
-                    "tests/table2/test_live_deployment.py",
-                ],
+                "source_relative_paths": runner_source_paths,
             },
         },
     )
-    commit = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=REPOSITORY_ROOT, text=True
-    ).strip()
     monkeypatch.setattr(handoff_preparer, "_git_commit_clean", lambda _: commit)
     # The production handoff is permanently pinned to the real libwebarena
     # digest.  This fixture substitutes only its synthetic byte identity; it
@@ -2190,6 +3799,16 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
         repository_root=REPOSITORY_ROOT,
     )
     assert handoff["matched_seeds"] == [42]
+    staged_checkpoint_compatibility = (
+        handoff_root / PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH
+    )
+    assert staged_checkpoint_compatibility.read_bytes() == (
+        checkpoint_compatibility.read_bytes()
+    )
+    assert staged_checkpoint_compatibility.stat().st_mode & 0o222 == 0
+    assert handoff[PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD][
+        "receipt_sha256"
+    ] == sha256_file(staged_checkpoint_compatibility)
     assert (handoff_root / "resolved_tasks.json").is_file()
     resolved_tasks = read_json(handoff_root / "resolved_tasks.json")
     assert resolved_tasks["upstream_task_source"] == task_export["source"]
@@ -2247,11 +3866,24 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
     for role, descriptor in prepared_model["artifact_payloads"].items():
         payload_path = (handoff_root / "models" / descriptor["path"]).resolve()
         assert payload_path.exists(), role
+    assert prepared_model["model_evidence_bundle"]["runtime_readiness_claim"] is False
+    for role, descriptor in prepared_model["model_evidence_bundle"][
+        "artifacts"
+    ].items():
+        evidence_path = (handoff_root / "models" / descriptor["path"]).resolve()
+        assert evidence_path.exists(), role
 
     frozen_campaign = tmp_path / "prepared-campaign"
     freeze_arguments = handoff["freeze_arguments"]
+    staged_memory_manifest = Path(freeze_arguments["memory_manifests"][0])
+    assert handoff_root in staged_memory_manifest.parents
+    for filename in package_validator_module.FROZEN_MEMORY_STORE_FILES:
+        assert (staged_memory_manifest.parent / filename).read_bytes() == (
+            memory.parent / filename
+        ).read_bytes()
     freeze_campaign(
         repository_root=REPOSITORY_ROOT,
+        handoff_manifest_path=freeze_arguments["handoff_manifest"],
         campaign_config_path=freeze_arguments["campaign_config"],
         campaign_dir=frozen_campaign,
         model_manifest_paths=freeze_arguments["model_manifests"],
@@ -2259,9 +3891,21 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
         environment_manifest_path=freeze_arguments["environment_manifest"],
         runner_attestation_path=freeze_arguments["runner_attestation"],
         resolved_task_snapshot_path=freeze_arguments["resolved_task_snapshot"],
+        pc01_checkpoint_compatibility_receipt_path=freeze_arguments[
+            "pc01_checkpoint_compatibility_receipt"
+        ],
         allow_dirty_pilot=True,
     )
     campaign_manifest = read_json(frozen_campaign / "campaign_manifest.json")
+    assert campaign_manifest["handoff_manifest_sha256"] == sha256_file(
+        handoff_root / "handoff_manifest.json"
+    )
+    assert campaign_manifest["handoff_inventory_sha256"] == sha256_json(
+        handoff["files"]
+    )
+    assert (
+        frozen_campaign / "frozen" / "handoff_manifest.json"
+    ).read_bytes() == (handoff_root / "handoff_manifest.json").read_bytes()
     assert campaign_manifest["planned_episode_count"] == 260
     assert campaign_manifest["webarena_deployment_topology"] == (
         SINGLE_HOST_TOPOLOGY
@@ -2276,6 +3920,13 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
         frozen_campaign / "frozen/environment.json"
     )["pc01_live_deployment"]
     for descriptor in campaign_manifest["model_payloads_by_seed"]["42"].values():
+        assert (frozen_campaign / descriptor["path"]).exists()
+    assert campaign_manifest["model_evidence_by_seed"]["42"][
+        "runtime_readiness_claim"
+    ] is False
+    for descriptor in campaign_manifest["model_evidence_by_seed"]["42"][
+        "artifacts"
+    ].values():
         assert (frozen_campaign / descriptor["path"]).exists()
     frozen_model = read_json(frozen_campaign / "frozen/models/seed_42.json")
     frozen_memory = read_json(frozen_campaign / "memory/seed_42/manifest.json")
@@ -3154,6 +4805,8 @@ def test_complete_pilot_writes_deterministic_audit_digests_and_exact_result_expo
         "pilot_summary.json",
         "table2_main.csv",
         "table2_companion.csv",
+        "metrics.csv",
+        "metrics.json",
         "paired_contrasts.csv",
         "retrieval_metrics.csv",
         "statistics.json",
@@ -3221,6 +4874,7 @@ def test_complete_pilot_writes_deterministic_audit_digests_and_exact_result_expo
     # Hashes alone are not a numeric trust root: simulate an attacker changing a
     # registered result and regenerating both aggregate/campaign hash manifests.
     metrics_path = campaign / "aggregate/metrics.json"
+    original_metrics_bytes = metrics_path.read_bytes()
     tampered_metrics = read_json(metrics_path)
     tampered_metrics["systems"]["E0"]["task_success_rate"]["estimate"] = 0.123456
     _write_json(metrics_path, tampered_metrics)
@@ -3234,6 +4888,41 @@ def test_complete_pilot_writes_deterministic_audit_digests_and_exact_result_expo
     assert any(
         "aggregate numeric recomputation mismatch: metrics.json" in error
         for error in tampered_validation.errors
+    )
+
+    metrics_path.write_bytes(original_metrics_bytes)
+    table_path = campaign / "aggregate/table2_main.csv"
+    original_table_bytes = table_path.read_bytes()
+    table_path.write_bytes(original_table_bytes.replace(b"N/R", b"FAKE", 1))
+    _write_aggregate_hashes(campaign / "aggregate")
+    _write_campaign_evidence_manifest(campaign)
+    tampered_table = validate_campaign(
+        campaign, require_complete=True, require_aggregates=True
+    )
+    assert not tampered_table.passed
+    assert any(
+        "aggregate canonical export recomputation mismatch: table2_main.csv"
+        in error
+        for error in tampered_table.errors
+    )
+
+    table_path.write_bytes(original_table_bytes)
+    result_path = results_dir / "paired_contrasts.csv"
+    result_path.write_bytes(result_path.read_bytes() + b"tampered,result\n")
+    result_manifest_path = campaign / "aggregate/results_manifest.json"
+    result_manifest = read_json(result_manifest_path)
+    result_manifest["files"]["paired_contrasts.csv"] = sha256_file(result_path)
+    _write_json(result_manifest_path, result_manifest)
+    _write_aggregate_hashes(campaign / "aggregate")
+    _write_campaign_evidence_manifest(campaign)
+    tampered_result = validate_campaign(
+        campaign, require_complete=True, require_aggregates=True
+    )
+    assert not tampered_result.passed
+    assert any(
+        "redacted result canonical recomputation mismatch: paired_contrasts.csv"
+        in error
+        for error in tampered_result.errors
     )
 
 

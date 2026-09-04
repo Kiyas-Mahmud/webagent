@@ -1,15 +1,17 @@
 """Build one immutable, train-only Table 2 corrective-memory store.
 
-This command never reads validation or test splits.  It requires a separately
-frozen provenance manifest that supplies final-task-success and duplicate-cluster
-evidence for every potentially admitted source sample.  The repository script
-is a thin entrypoint; checkpoint/data orchestration lives in this module.
+This command never reads validation or test splits. It requires a separately
+frozen provenance manifest plus an authenticated compatible WebArena task export
+and a completed joint train/task duplicate audit before checkpoint or model
+access. The repository script is a thin entrypoint; checkpoint/data
+orchestration lives in this module.
 """
 
 from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -20,6 +22,15 @@ from web_agent.eval.table2.resolved_config import (
     ResolvedConfigIdentity,
     assert_checkpoint_config_matches,
     load_resolved_config_identity,
+)
+from web_agent.eval.table2.task_interface_audit import (
+    require_webarena_task_interface_compatible,
+    validate_webarena_task_interface_audit,
+)
+from web_agent.eval.table2.webarena_export import (
+    PINNED_TASK_SOURCE_SHA256,
+    load_url_map,
+    validate_public_pilot_task_export,
 )
 from web_agent.memory import (
     ProvenanceManifest,
@@ -43,8 +54,104 @@ from web_agent.memory.manifest import (
     THRESHOLD_CALIBRATION_SCHEMA_VERSION,
     THRESHOLD_CALIBRATION_TIE_BREAK,
     canonical_sha256,
+    require_sha256,
     sha256_file,
 )
+from web_agent.memory.joint_duplicate_audit import (
+    validate_final_joint_duplicate_audit,
+    validate_joint_duplicate_assignment_package,
+)
+from web_agent.memory.preparation import (
+    P4_REGISTERED_SOURCE_AUTHORITY_SHA256,
+    reconstruct_p4_selection_from_preparation,
+)
+from web_agent.runtime.duplicate_audit import (
+    DuplicateAuditError,
+    FrozenDuplicateAuditManifest,
+    canonical_train_corpus_binding,
+    duplicate_audit_task_content_sha256,
+)
+
+
+_PILOT_TASK_COUNT = 50
+_FORBIDDEN_READ_FIELDS = (
+    "validation_rows_read",
+    "test_rows_read",
+    "locked_test_rows_read",
+)
+
+
+@dataclass(frozen=True)
+class P4BuildPrerequisiteValidation:
+    """Validated external evidence required before any P4 model work."""
+
+    provenance: ProvenanceManifest
+    provenance_manifest_sha256: str
+    resolved_task_export_sha256: str
+    task_interface_audit_sha256: str
+    duplicate_audit_sha256: str
+    train_corpus_binding_sha256: str
+    duplicate_cluster_namespace_id: str
+    verified_task_count: int
+    preparation_manifest_sha256: str | None = None
+    joint_assignment_manifest_sha256: str | None = None
+    joint_assignment_entities_sha256: str | None = None
+    joint_assignment_clusters_sha256: str | None = None
+    joint_audit_config_sha256: str | None = None
+    joint_audit_source_sha256: str | None = None
+    recovery_scenarios_sha256: str | None = None
+    duplicate_audit_registration_sha256: str | None = None
+    source_authority_sha256: str | None = None
+
+    def report(self) -> dict[str, Any]:
+        report = {
+            "status": "PASS",
+            "evidence_role": "VALIDATION_ONLY_EXTERNAL_EVIDENCE_NOT_AUTHORED",
+            "provenance_manifest_sha256": self.provenance_manifest_sha256,
+            "resolved_task_export_sha256": self.resolved_task_export_sha256,
+            "task_interface_audit_sha256": self.task_interface_audit_sha256,
+            "duplicate_audit_sha256": self.duplicate_audit_sha256,
+            "train_corpus_binding_sha256": self.train_corpus_binding_sha256,
+            "duplicate_cluster_namespace_id": (
+                self.duplicate_cluster_namespace_id
+            ),
+            "verified_task_count": self.verified_task_count,
+            "validation_rows_read": self.provenance.validation_rows_read,
+            "test_rows_read": self.provenance.test_rows_read,
+            "locked_test_rows_read": self.provenance.locked_test_rows_read,
+        }
+        registered = self.registered_duplicate_evidence_binding()
+        if registered is not None:
+            report["registered_joint_duplicate_evidence"] = registered
+        return report
+
+    def registered_duplicate_evidence_binding(self) -> dict[str, Any] | None:
+        values = {
+            "preparation_manifest_sha256": self.preparation_manifest_sha256,
+            "assignment_manifest_sha256": self.joint_assignment_manifest_sha256,
+            "entities_sha256": self.joint_assignment_entities_sha256,
+            "clusters_sha256": self.joint_assignment_clusters_sha256,
+            "audit_config_sha256": self.joint_audit_config_sha256,
+            "audit_source_sha256": self.joint_audit_source_sha256,
+            "recovery_scenarios_sha256": self.recovery_scenarios_sha256,
+            "duplicate_audit_registration_sha256": (
+                self.duplicate_audit_registration_sha256
+            ),
+            "source_authority_sha256": self.source_authority_sha256,
+        }
+        if all(value is None for value in values.values()):
+            return None
+        if any(value is None for value in values.values()):
+            raise ValueError("registered joint duplicate-evidence binding is partial")
+        return {
+            "schema_version": "table2-memory-joint-duplicate-evidence-binding-v2",
+            **values,
+            "final_duplicate_audit_sha256": self.duplicate_audit_sha256,
+            "provenance_manifest_sha256": self.provenance_manifest_sha256,
+            "duplicate_cluster_namespace": (
+                self.provenance.duplicate_cluster_namespace.to_dict()
+            ),
+        }
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -83,6 +190,92 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "duplicate evidence plus independently verified recovery and final-"
             "task evidence records with canonical digests"
         ),
+    )
+    parser.add_argument(
+        "--resolved-task-export",
+        type=Path,
+        required=True,
+        help=(
+            "authenticated, fully resolved 50-task WebArena pilot export; it is "
+            "reconstructed from the separately supplied source, registry, and URL map"
+        ),
+    )
+    parser.add_argument(
+        "--webarena-task-source",
+        type=Path,
+        required=True,
+        help="pinned libwebarena wheel or separately authorized raw task JSON",
+    )
+    parser.add_argument(
+        "--webarena-task-registry",
+        type=Path,
+        required=True,
+        help="user-approved and preregistered pilot task exclusion registry",
+    )
+    parser.add_argument(
+        "--webarena-site-url-map",
+        type=Path,
+        required=True,
+        help="credential-free URL-token map used to reproduce the resolved task export",
+    )
+    parser.add_argument(
+        "--authorized-raw-task-source-sha256",
+        default=None,
+        help=(
+            "required only when --webarena-task-source is a separately extracted "
+            "raw JSON file; the content must still match the pinned task-source hash"
+        ),
+    )
+    parser.add_argument(
+        "--task-interface-audit",
+        type=Path,
+        required=True,
+        help="exact recomputable PASS audit for all resolved pilot tasks",
+    )
+    parser.add_argument(
+        "--duplicate-audit",
+        type=Path,
+        required=True,
+        help=(
+            "completed joint Gold-train/WebArena audit with canonical VERIFIED "
+            "records for every resolved pilot task"
+        ),
+    )
+    parser.add_argument(
+        "--joint-assignment-package",
+        type=Path,
+        required=True,
+        help="immutable assignment package from run_table2_joint_duplicate_audit.py",
+    )
+    parser.add_argument(
+        "--joint-audit-config",
+        type=Path,
+        required=True,
+        help="canonical frozen joint_duplicate_audit_v1.json",
+    )
+    parser.add_argument(
+        "--p4-preparation-package",
+        type=Path,
+        required=True,
+        help="exact train-only P4 preparation package used for assignments",
+    )
+    parser.add_argument(
+        "--p4-source-authority",
+        type=Path,
+        required=True,
+        help="tracked PC-01 train-source authority with exact hashes/counts",
+    )
+    parser.add_argument(
+        "--recovery-scenarios",
+        type=Path,
+        required=True,
+        help="registered 15-scenario diagnostic manifest",
+    )
+    parser.add_argument(
+        "--duplicate-audit-registration",
+        type=Path,
+        required=True,
+        help="canonical pilot registration supplying diagnostic-only rows",
     )
     parser.add_argument(
         "--protocol-config",
@@ -132,6 +325,334 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"JSON manifest must be an object: {path}")
     return payload
+
+
+def _load_nonsymlink_json(path: Path, *, artifact: str) -> dict[str, Any]:
+    if path.is_symlink():
+        raise ValueError(f"{artifact} must not be a symlink")
+    return _load_json_object(path)
+
+
+def _validate_pilot_export_boundary(task_export: Mapping[str, Any]) -> None:
+    expected = {
+        "benchmark": "webarena",
+        "partition": "development",
+        "evidence_label": "PILOT_ONLY",
+        "paper_table_status": "N/R",
+        "locked_test_content": False,
+        "final_paper_evaluation_eligible": False,
+        "required_task_count": _PILOT_TASK_COUNT,
+    }
+    mismatches = {
+        key: {"expected": value, "actual": task_export.get(key)}
+        for key, value in expected.items()
+        if task_export.get(key) != value
+    }
+    if mismatches:
+        raise ValueError(
+            "resolved WebArena pilot export boundary mismatch: "
+            f"{mismatches}"
+        )
+    rows = task_export.get("tasks")
+    if not isinstance(rows, list) or len(rows) != _PILOT_TASK_COUNT:
+        raise ValueError("resolved WebArena pilot export must contain exactly 50 tasks")
+    task_ids = [str(row.get("task_id") or "").strip() for row in rows]
+    if any(not task_id for task_id in task_ids) or len(task_ids) != len(
+        set(task_ids)
+    ):
+        raise ValueError("resolved WebArena pilot task IDs must be non-empty and unique")
+    indices = [row.get("upstream_index") for row in rows]
+    if indices != list(range(_PILOT_TASK_COUNT)):
+        raise ValueError(
+            "resolved WebArena pilot tasks must remain in approved index order 0--49"
+        )
+    require_sha256(
+        task_export.get("resolved_task_set_sha256"),
+        field="resolved_task_export.resolved_task_set_sha256",
+    )
+    if task_export["resolved_task_set_sha256"] != canonical_sha256(rows):
+        raise ValueError("resolved WebArena pilot task-set hash mismatch")
+    for field in ("site_url_map_sha256", "registry_manifest_sha256"):
+        require_sha256(
+            task_export.get(field),
+            field=f"resolved_task_export.{field}",
+        )
+    source = task_export.get("source")
+    if not isinstance(source, Mapping):
+        raise ValueError("resolved WebArena pilot export lacks source authority")
+    for field in (
+        "container_sha256",
+        "authorized_container_sha256",
+        "task_source_sha256",
+    ):
+        require_sha256(source.get(field), field=f"resolved_task_export.source.{field}")
+
+
+def validate_p4_build_prerequisites(
+    *,
+    provenance_manifest_path: str | Path,
+    resolved_task_export_path: str | Path,
+    webarena_task_source_path: str | Path,
+    webarena_task_registry_path: str | Path,
+    webarena_site_url_map_path: str | Path,
+    task_interface_audit_path: str | Path,
+    duplicate_audit_path: str | Path,
+    authorized_raw_task_source_sha256: str | None = None,
+    expected_task_source_sha256: str = PINNED_TASK_SOURCE_SHA256,
+) -> P4BuildPrerequisiteValidation:
+    """Validate externally produced task/audit evidence without authoring it.
+
+    The source bytes, task registry and URL map are reopened so a hand-written
+    export cannot authorize a build merely by copying expected hash strings.
+    The returned train-corpus digest is the same commitment checked again at
+    campaign handoff after the store exists.
+    """
+
+    provenance_path = Path(provenance_manifest_path)
+    export_path = Path(resolved_task_export_path)
+    task_source_path = Path(webarena_task_source_path)
+    registry_path = Path(webarena_task_registry_path)
+    url_map_path = Path(webarena_site_url_map_path)
+    interface_path = Path(task_interface_audit_path)
+    duplicate_path = Path(duplicate_audit_path)
+
+    provenance_payload = _load_nonsymlink_json(
+        provenance_path,
+        artifact="memory provenance manifest",
+    )
+    provenance = ProvenanceManifest.from_mapping(provenance_payload)
+    provenance_sha256 = sha256_file(provenance_path)
+
+    submitted_export = _load_nonsymlink_json(
+        export_path,
+        artifact="resolved WebArena task export",
+    )
+    _load_nonsymlink_json(registry_path, artifact="WebArena task registry")
+    _load_nonsymlink_json(url_map_path, artifact="WebArena site URL map")
+    task_export = validate_public_pilot_task_export(
+        submitted_export,
+        source=task_source_path,
+        registry_path=registry_path,
+        site_url_map=load_url_map(url_map_path),
+        expected_source_sha256=expected_task_source_sha256,
+        authorized_raw_json_sha256=authorized_raw_task_source_sha256,
+    )
+    _validate_pilot_export_boundary(task_export)
+    task_rows = task_export["tasks"]
+    task_ids = [str(row["task_id"]) for row in task_rows]
+
+    submitted_interface_audit = _load_nonsymlink_json(
+        interface_path,
+        artifact="WebArena task-interface audit",
+    )
+    interface_audit = validate_webarena_task_interface_audit(
+        submitted_interface_audit,
+        task_export=task_export,
+    )
+    require_webarena_task_interface_compatible(interface_audit)
+    if (
+        interface_audit.get("task_count") != _PILOT_TASK_COUNT
+        or interface_audit.get("compatible_task_count") != _PILOT_TASK_COUNT
+        or interface_audit.get("incompatible_task_count") != 0
+    ):
+        raise ValueError(
+            "P4 build requires exactly 50 compatible WebArena pilot tasks"
+        )
+
+    duplicate_payload = _load_nonsymlink_json(
+        duplicate_path,
+        artifact="joint duplicate-audit manifest",
+    )
+    for field in _FORBIDDEN_READ_FIELDS:
+        if type(duplicate_payload.get(field)) is not int or duplicate_payload[field] != 0:
+            raise ValueError(
+                "joint duplicate audit requires explicit "
+                f"{field}=0"
+            )
+    required_top_level = {
+        "manifest_state": "FROZEN_REGISTRATION",
+        "evidence_label": "PILOT_ONLY",
+        "normal_task_evidence_status": "VERIFIED",
+        "normal_task_runtime_policy": "VERIFIED_NONEMPTY_CLUSTERS_REQUIRED",
+        "required_normal_task_count": _PILOT_TASK_COUNT,
+    }
+    for field, expected in required_top_level.items():
+        if duplicate_payload.get(field) != expected:
+            raise ValueError(
+                "joint duplicate audit is not a completed pilot artifact at "
+                f"{field}"
+            )
+    try:
+        duplicate_manifest = FrozenDuplicateAuditManifest.from_path(duplicate_path)
+    except DuplicateAuditError as error:
+        raise ValueError(f"invalid joint duplicate-audit manifest: {error}") from error
+    namespace = duplicate_manifest.duplicate_cluster_namespace
+    if namespace is None or not namespace.is_evaluation_ready:
+        raise ValueError("joint duplicate-audit namespace is not fully hash-bound")
+    if namespace.to_dict() != provenance.duplicate_cluster_namespace.to_dict():
+        raise ValueError(
+            "joint duplicate audit and memory provenance use different namespaces"
+        )
+
+    entries = duplicate_payload.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("joint duplicate-audit entries must be an array")
+    normal_entries = [
+        row
+        for row in entries
+        if isinstance(row, Mapping) and row.get("task_partition") == "normal"
+    ]
+    normal_ids = [str(row.get("task_id") or "") for row in normal_entries]
+    if normal_ids != task_ids:
+        raise ValueError(
+            "joint duplicate audit must cover the exact 50 resolved pilot tasks "
+            "in approved order"
+        )
+
+    corpus_binding = canonical_train_corpus_binding(
+        records_sha256=provenance.records_sha256,
+        provenance_manifest_sha256=provenance_sha256,
+        duplicate_cluster_namespace=provenance.duplicate_cluster_namespace,
+    )
+    expected_corpus_sha256 = corpus_binding["corpus_binding_sha256"]
+    for task_row, audit_row in zip(task_rows, normal_entries, strict=True):
+        task_id = str(task_row["task_id"])
+        try:
+            clusters = duplicate_manifest.clusters_for(
+                task_id,
+                task_partition="normal",
+            )
+        except DuplicateAuditError as error:
+            raise ValueError(
+                f"joint duplicate audit is not VERIFIED for {task_id}: {error}"
+            ) from error
+        if not clusters:
+            raise ValueError(
+                f"joint duplicate audit has no cluster evidence for {task_id}"
+            )
+        expected_content_sha256 = duplicate_audit_task_content_sha256(task_row)
+        if audit_row.get("content_sha256") != expected_content_sha256:
+            raise ValueError(
+                f"joint duplicate audit task-content hash mismatch for {task_id}"
+            )
+        if audit_row.get("train_corpus_manifest_sha256") != expected_corpus_sha256:
+            raise ValueError(
+                f"joint duplicate audit train-corpus hash mismatch for {task_id}"
+            )
+
+    return P4BuildPrerequisiteValidation(
+        provenance=provenance,
+        provenance_manifest_sha256=provenance_sha256,
+        resolved_task_export_sha256=sha256_file(export_path),
+        task_interface_audit_sha256=sha256_file(interface_path),
+        duplicate_audit_sha256=duplicate_manifest.manifest_sha256,
+        train_corpus_binding_sha256=expected_corpus_sha256,
+        duplicate_cluster_namespace_id=namespace.namespace_id,
+        verified_task_count=len(normal_entries),
+    )
+
+
+def validate_registered_p4_build_prerequisites(
+    *,
+    provenance_manifest_path: str | Path,
+    resolved_task_export_path: str | Path,
+    webarena_task_source_path: str | Path,
+    webarena_task_registry_path: str | Path,
+    webarena_site_url_map_path: str | Path,
+    task_interface_audit_path: str | Path,
+    duplicate_audit_path: str | Path,
+    joint_assignment_package_path: str | Path,
+    joint_audit_config_path: str | Path,
+    p4_source_authority_path: str | Path,
+    p4_preparation_package_path: str | Path,
+    gold_train_json_path: str | Path,
+    recovery_scenarios_path: str | Path,
+    duplicate_audit_registration_path: str | Path,
+    supplement_train_json_path: str | Path | None = None,
+    authorized_raw_task_source_sha256: str | None = None,
+    expected_task_source_sha256: str = PINNED_TASK_SOURCE_SHA256,
+) -> P4BuildPrerequisiteValidation:
+    """Production gate that replays the registered duplicate-audit producer.
+
+    The older :func:`validate_p4_build_prerequisites` remains a dependency-light
+    validator for already-authenticated evidence.  This wrapper is the only gate
+    used by the production CLI: it reopens the exact train sources, preparation
+    package, registered algorithm/config, task export/registry, provenance,
+    recovery registration, and final 50+15 audit before any checkpoint access.
+    """
+
+    if sha256_file(p4_source_authority_path) != (
+        P4_REGISTERED_SOURCE_AUTHORITY_SHA256
+    ):
+        raise ValueError("P4 source authority differs from registered PC-01 authority")
+
+    assignment = validate_joint_duplicate_assignment_package(
+        package_root=joint_assignment_package_path,
+        config_path=joint_audit_config_path,
+        source_authority_path=p4_source_authority_path,
+        preparation_root=p4_preparation_package_path,
+        gold_train_json=gold_train_json_path,
+        supplement_train_json=supplement_train_json_path,
+        resolved_task_export_path=resolved_task_export_path,
+        approved_task_registry_path=webarena_task_registry_path,
+        recovery_scenarios_path=recovery_scenarios_path,
+        duplicate_audit_registration_path=duplicate_audit_registration_path,
+    )
+    validate_final_joint_duplicate_audit(
+        audit_path=duplicate_audit_path,
+        assignment_package_root=joint_assignment_package_path,
+        config_path=joint_audit_config_path,
+        source_authority_path=p4_source_authority_path,
+        preparation_root=p4_preparation_package_path,
+        gold_train_json=gold_train_json_path,
+        supplement_train_json=supplement_train_json_path,
+        resolved_task_export_path=resolved_task_export_path,
+        approved_task_registry_path=webarena_task_registry_path,
+        recovery_scenarios_path=recovery_scenarios_path,
+        duplicate_audit_registration_path=duplicate_audit_registration_path,
+        provenance_manifest_path=provenance_manifest_path,
+    )
+    base = validate_p4_build_prerequisites(
+        provenance_manifest_path=provenance_manifest_path,
+        resolved_task_export_path=resolved_task_export_path,
+        webarena_task_source_path=webarena_task_source_path,
+        webarena_task_registry_path=webarena_task_registry_path,
+        webarena_site_url_map_path=webarena_site_url_map_path,
+        task_interface_audit_path=task_interface_audit_path,
+        duplicate_audit_path=duplicate_audit_path,
+        authorized_raw_task_source_sha256=authorized_raw_task_source_sha256,
+        expected_task_source_sha256=expected_task_source_sha256,
+    )
+    if assignment.namespace.to_dict() != (
+        base.provenance.duplicate_cluster_namespace.to_dict()
+    ):
+        raise ValueError(
+            "registered assignment and validated provenance use different namespaces"
+        )
+    return replace(
+        base,
+        preparation_manifest_sha256=sha256_file(
+            Path(p4_preparation_package_path) / "preparation_manifest.json"
+        ),
+        joint_assignment_manifest_sha256=assignment.assignment_manifest_sha256,
+        joint_assignment_entities_sha256=str(
+            assignment.manifest["entities_sha256"]
+        ),
+        joint_assignment_clusters_sha256=str(
+            assignment.manifest["clusters_sha256"]
+        ),
+        joint_audit_config_sha256=str(
+            assignment.manifest["audit_tool_config_sha256"]
+        ),
+        joint_audit_source_sha256=str(
+            assignment.manifest["audit_tool_source_sha256"]
+        ),
+        recovery_scenarios_sha256=sha256_file(recovery_scenarios_path),
+        duplicate_audit_registration_sha256=sha256_file(
+            duplicate_audit_registration_path
+        ),
+        source_authority_sha256=sha256_file(p4_source_authority_path),
+    )
 
 
 def _validate_protocol(path: Path) -> None:
@@ -245,12 +766,41 @@ def _load_checkpoint(
     )
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: Sequence[str] | None = None) -> None:
+    args = parse_args(argv)
     if args.model_seed < 0:
         raise ValueError("--model-seed must be non-negative")
     if args.batch_size <= 0 or args.num_workers < 0:
         raise ValueError("batch size must be positive and workers non-negative")
+
+    # This is deliberately the first artifact gate. It parses no checkpoint,
+    # imports no model backend, queries no accelerator, and creates no store.
+    prerequisites = validate_registered_p4_build_prerequisites(
+        provenance_manifest_path=args.provenance_manifest,
+        resolved_task_export_path=args.resolved_task_export,
+        webarena_task_source_path=args.webarena_task_source,
+        webarena_task_registry_path=args.webarena_task_registry,
+        webarena_site_url_map_path=args.webarena_site_url_map,
+        task_interface_audit_path=args.task_interface_audit,
+        duplicate_audit_path=args.duplicate_audit,
+        joint_assignment_package_path=args.joint_assignment_package,
+        joint_audit_config_path=args.joint_audit_config,
+        p4_source_authority_path=args.p4_source_authority,
+        p4_preparation_package_path=args.p4_preparation_package,
+        gold_train_json_path=args.data_root / "split_train.json",
+        supplement_train_json_path=(
+            args.supplement_root / "data" / "supplement_train.json"
+            if args.supplement_root is not None
+            else None
+        ),
+        recovery_scenarios_path=args.recovery_scenarios,
+        duplicate_audit_registration_path=(
+            args.duplicate_audit_registration
+        ),
+        authorized_raw_task_source_sha256=(
+            args.authorized_raw_task_source_sha256
+        ),
+    )
     if not args.checkpoint.is_file():
         raise FileNotFoundError(f"missing checkpoint: {args.checkpoint}")
     if args.output_dir.exists():
@@ -289,9 +839,7 @@ def main() -> None:
 
     records = load_gold_split(cfg, "train")
     records_sha256 = canonical_sha256(_public_value(records))
-    provenance = ProvenanceManifest.from_mapping(
-        _load_json_object(args.provenance_manifest)
-    )
+    provenance = prerequisites.provenance
     if records_sha256 != provenance.records_sha256:
         raise ValueError(
             "logical training-record hash does not match provenance manifest: "
@@ -299,7 +847,7 @@ def main() -> None:
         )
     checkpoint_sha256 = sha256_file(args.checkpoint)
     protocol_sha256 = sha256_file(args.protocol_config)
-    provenance_manifest_sha256 = sha256_file(args.provenance_manifest)
+    provenance_manifest_sha256 = prerequisites.provenance_manifest_sha256
 
     transitions, transition_report = build_recovery_transition_index(records)
     # Production verification commits to state artifact bytes, not reusable path
@@ -314,6 +862,43 @@ def main() -> None:
         transitions=transitions,
         provenance=provenance,
     )
+    compact_selection = reconstruct_p4_selection_from_preparation(
+        package_root=args.p4_preparation_package,
+        provenance_manifest_path=args.provenance_manifest,
+    )
+    selection_contract = {
+        "input_rows": selection.input_rows,
+        "pre_dedup_eligible_rows": selection.pre_dedup_eligible_rows,
+        "exclusion_counts": dict(selection.exclusion_counts),
+        "duplicate_cluster_namespace": dict(
+            selection.duplicate_cluster_namespace
+        ),
+        "items": [dict(candidate.item) for candidate in selection.candidates],
+        "verification_evidence": [
+            dict(candidate.verification_evidence)
+            for candidate in selection.candidates
+        ],
+    }
+    compact_contract = {
+        "input_rows": compact_selection.input_rows,
+        "pre_dedup_eligible_rows": compact_selection.pre_dedup_eligible_rows,
+        "exclusion_counts": dict(compact_selection.exclusion_counts),
+        "duplicate_cluster_namespace": dict(
+            compact_selection.duplicate_cluster_namespace
+        ),
+        "items": [
+            dict(candidate.item) for candidate in compact_selection.candidates
+        ],
+        "verification_evidence": [
+            dict(candidate.verification_evidence)
+            for candidate in compact_selection.candidates
+        ],
+    }
+    if selection_contract != compact_contract:
+        raise ValueError(
+            "raw-source P4 selection differs from the authenticated compact "
+            "preparation/provenance replay"
+        )
 
     import torch
     if not torch.cuda.is_available():
@@ -414,6 +999,9 @@ def main() -> None:
         threshold_calibration=calibration,
         calibration_evidence=calibration_evidence,
         transition_report=transition_report,
+        joint_duplicate_audit_binding=(
+            prerequisites.registered_duplicate_evidence_binding()
+        ),
     )
     print(json.dumps({
         "status": "PASS",
@@ -430,6 +1018,7 @@ def main() -> None:
         "calibration_retrieved_pairs": calibration_evidence[
             "calibration_sample_count"
         ],
+        "p4_build_prerequisites": prerequisites.report(),
         "source_split": "train",
         "validation_rows_read": 0,
         "test_rows_read": 0,

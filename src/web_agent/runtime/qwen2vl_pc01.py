@@ -130,6 +130,8 @@ class PC01RuntimeArtifacts:
     e0_resolved_config_path: Path
     e0_processor_contract_path: Path
     e0_backbone_path: Path
+    export_manifest_path: Path
+    training_action_value_evidence_path: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,6 +284,35 @@ def _same_backbone(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     return all(left.get(field) == right.get(field) for field in fields)
 
 
+def _runtime_action_value_evidence_sha256(
+    *,
+    selection: ValidationSelectedCheckpoint,
+    artifacts: PC01RuntimeArtifacts,
+) -> str:
+    """Bind processor construction to the already-validated v3 evidence."""
+
+    export_manifest = read_json(artifacts.export_manifest_path)
+    action_value_evidence_sha256 = sha256_file(
+        artifacts.training_action_value_evidence_path
+    )
+    if (
+        export_manifest.get("schema_version") != "table2.pc01-export.v3"
+        or export_manifest.get("runtime_ready") is not False
+        or export_manifest.get("checkpoint_sha256")
+        != selection.selected_checkpoint_sha256
+        or export_manifest.get("resolved_config_payload_sha256")
+        != selection.resolved_config_sha256
+        or export_manifest.get("processor_contract_sha256")
+        != selection.processor_contract_sha256
+        or export_manifest.get("training_action_value_evidence_sha256")
+        != action_value_evidence_sha256
+    ):
+        raise PC01RuntimeError(
+            "selected runtime artifacts differ from the frozen v3 evidence bundle"
+        )
+    return action_value_evidence_sha256
+
+
 def _load_selected_model(
     *,
     selection: ValidationSelectedCheckpoint,
@@ -303,10 +334,17 @@ def _load_selected_model(
     expected_processor = load_processor_contract(artifacts.processor_contract_path)
     if expected_processor.record_sha256 != selection.processor_contract_sha256:
         raise PC01RuntimeError("selected processor contract differs from the model manifest")
+    action_value_evidence_sha256 = _runtime_action_value_evidence_sha256(
+        selection=selection,
+        artifacts=artifacts,
+    )
     try:
         loaded_processor = load_pinned_local_processor(
             identity.mapping,
             artifacts.processor_source,
+            training_action_value_evidence_sha256=(
+                action_value_evidence_sha256
+            ),
         )
     except PC01ArtifactError as exc:
         raise PC01RuntimeError("cannot reconstruct the exact selected processor") from exc
@@ -483,14 +521,6 @@ def _context_text(
     )
 
 
-def _action_value(parameters: Mapping[str, JsonValue]) -> str:
-    for key in ("value", "text", "url", "key"):
-        value = parameters.get(key)
-        if value is not None:
-            return str(value)
-    return canonical_json_bytes(dict(parameters)).decode("utf-8") if parameters else ""
-
-
 class _RuntimeBatchBuilder:
     def __init__(self, *, processor: Any, config: Mapping[str, Any], torch: Any) -> None:
         self.processor = processor
@@ -570,7 +600,10 @@ class _RuntimeBatchBuilder:
             observations=(value.pre_observation, value.post_observation),
             phase="post",
             executed_action=action.action_type.value,
-            action_value=_action_value(action.parameters),
+            # The authenticated 24,107-row PC-01 training corpus contains no
+            # action_value label. Supplying executable parameters here would
+            # introduce text that the selected checkpoint never saw.
+            action_value="",
         )
         return {**self.prefix(pre, "pre_"), **self.prefix(post, "post_")}
 
@@ -579,10 +612,12 @@ class _RuntimeBatchBuilder:
         task: RuntimeTaskView,
         value: RecoveryTransitionInput,
     ) -> dict[str, Any]:
-        action_names = "+".join(action.action_type.value for action in value.recovery_actions)
-        action_values = canonical_json_bytes(
-            [dict(action.parameters) for action in value.recovery_actions]
-        ).decode("utf-8")
+        # Gold recovery transitions supervise the one action immediately before
+        # the post-recovery screenshot. Bind production preprocessing to that
+        # final action type. The registered train-only data audit proves that no
+        # action_value key existed, so executable parameters stay out of model text.
+        recovery_action = value.recovery_actions[-1]
+        action_name = recovery_action.action_type.value
         pre = self.stream(
             task=task,
             observations=(value.pre_recovery_observation,),
@@ -595,8 +630,8 @@ class _RuntimeBatchBuilder:
                 value.post_recovery_observation,
             ),
             phase="post",
-            executed_action=action_names,
-            action_value=action_values,
+            executed_action=action_name,
+            action_value="",
         )
         recovery = self.stream(
             task=task,
@@ -605,8 +640,8 @@ class _RuntimeBatchBuilder:
                 value.post_recovery_observation,
             ),
             phase="recovery",
-            executed_action=action_names,
-            action_value=action_values,
+            executed_action=action_name,
+            action_value="",
         )
         return {
             **self.prefix(pre, "pre_"),
@@ -1306,12 +1341,17 @@ class PC01EvaluationRuntimeFactory:
             raise PC01RuntimeError(
                 "this PC-01 integration is bound only to matched model seed 42"
             )
-        if set(context.model_payload_paths) != expected or set(self.seed_services) != expected:
+        if (
+            set(context.model_payload_paths) != expected
+            or set(context.model_evidence_paths) != expected
+            or set(self.seed_services) != expected
+        ):
             raise PC01RuntimeError("PC-01 integration does not cover matched seeds exactly")
         bindings: dict[int, Any] = {}
         for seed in sorted(expected):
             manifest = read_json(context.model_manifest_paths[seed])
             payloads = context.model_payload_paths[seed]
+            evidence = context.model_evidence_paths[seed]
             required = {
                 "selected_checkpoint",
                 "resolved_config",
@@ -1323,6 +1363,19 @@ class PC01EvaluationRuntimeFactory:
             }
             if set(payloads) != required:
                 raise PC01RuntimeError("PC-01 frozen model payload roles are incomplete")
+            required_evidence = {
+                "export_manifest",
+                "base_snapshot_manifest",
+                "processor_artifact_manifest",
+                "processor_parity_receipt",
+                "training_environment",
+                "training_source_manifest",
+                "training_action_value_evidence",
+            }
+            if set(evidence) != required_evidence:
+                raise PC01RuntimeError(
+                    "PC-01 frozen model evidence roles are incomplete"
+                )
             selected = ValidationSelectedCheckpoint.from_mapping(
                 manifest,
                 checkpoint_path=payloads["selected_checkpoint"],
@@ -1352,6 +1405,10 @@ class PC01EvaluationRuntimeFactory:
                 e0_resolved_config_path=payloads["e0_resolved_config"],
                 e0_processor_contract_path=payloads["e0_processor_contract"],
                 e0_backbone_path=payloads["e0_backbone"],
+                export_manifest_path=evidence["export_manifest"],
+                training_action_value_evidence_path=evidence[
+                    "training_action_value_evidence"
+                ],
             )
             factories = make_pc01_backend_factories(
                 selected=selected,

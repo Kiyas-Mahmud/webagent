@@ -34,6 +34,18 @@ PRODUCTION_RUNNER_ENTRYPOINT = (
     "web_agent.eval.table2.production_runner:create_runner"
 )
 EVALUATION_CLI_SOURCE_RELATIVE_PATH = "scripts/run_table2_evaluation.py"
+ANALYSIS_SOURCE_IDENTITY_SCHEMA_VERSION = "table2-analysis-source-identity-v1"
+ANALYSIS_REQUIRED_SOURCE_RELATIVE_PATHS: tuple[str, ...] = (
+    "scripts/summarize_table2.py",
+    "scripts/validate_table2_artifacts.py",
+    "src/web_agent/eval/table2/common.py",
+    "src/web_agent/eval/table2/execution_guard.py",
+    "src/web_agent/eval/table2/metrics.py",
+    "src/web_agent/eval/table2/package_validator.py",
+    "src/web_agent/eval/table2/retrieval_metrics.py",
+    "src/web_agent/eval/table2/statistics.py",
+    "src/web_agent/eval/table2/summary.py",
+)
 REGISTERED_INFRASTRUCTURE_REASONS: tuple[str, ...] = (
     "BENCHMARK_SERVICE_UNAVAILABLE",
     "BROWSER_CONTROLLER_DISCONNECTED",
@@ -419,6 +431,82 @@ def validate_frozen_dependency_lock(campaign_root: Path) -> Path:
     return validate_dependency_lock_for_environment(
         campaign_root.resolve() / "frozen" / "environment.json"
     )
+
+
+def validate_analysis_source_identity(
+    campaign_root: str | Path,
+    *,
+    repository_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """Authenticate the code that computes or revalidates Table 2 results.
+
+    Engineering-smoke summaries retain an explicit non-paper identity. A real
+    evaluation summary must run from the clean frozen commit and every
+    registered analysis source must match both the live checkout and the copy
+    carried in the runner attestation.
+    """
+
+    campaign_path = Path(campaign_root).resolve()
+    campaign = read_json(campaign_path / "campaign_manifest.json")
+    if campaign.get("campaign_mode") == "smoke":
+        return {
+            "schema_version": ANALYSIS_SOURCE_IDENTITY_SCHEMA_VERSION,
+            "identity_scope": ENGINEERING_SMOKE_SCOPE,
+            "paper_table_eligible": False,
+            "repository_commit": None,
+            "runner_attestation_sha256": None,
+            "sources": [],
+            "source_set_sha256": sha256_json([]),
+        }
+    if campaign.get("runner_identity_scope") != EVALUATION_RUNNER_SCOPE:
+        raise SchemaError("evaluation analysis lacks frozen runner identity scope")
+
+    repo = (
+        Path(repository_root).resolve()
+        if repository_root is not None
+        else Path(__file__).resolve().parents[4]
+    )
+    commit = assert_clean_git_checkout(repo)
+    if commit != campaign.get("repository_commit"):
+        raise SchemaError(
+            "Table 2 analysis checkout commit differs from the frozen campaign"
+        )
+
+    attestation_path = campaign_path / "frozen" / "runner_attestation.json"
+    if attestation_path.is_symlink() or not attestation_path.is_file():
+        raise SchemaError("Table 2 analysis lacks a regular runner attestation")
+    if sha256_file(attestation_path) != campaign.get("runner_attestation_sha256"):
+        raise SchemaError("Table 2 analysis runner attestation hash mismatch")
+    attestation = read_json(attestation_path)
+    source_hashes = attested_source_hashes(attestation)
+    frozen_source_root = campaign_path / "frozen" / "runner_source"
+    rows: list[dict[str, str]] = []
+    for relative in ANALYSIS_REQUIRED_SOURCE_RELATIVE_PATHS:
+        expected = source_hashes.get(relative)
+        live = repo / safe_relative_path(relative)
+        frozen = frozen_source_root / safe_relative_path(relative)
+        if (
+            expected is None
+            or live.is_symlink()
+            or frozen.is_symlink()
+            or not live.is_file()
+            or not frozen.is_file()
+            or sha256_file(live) != expected
+            or sha256_file(frozen) != expected
+        ):
+            raise SchemaError(
+                f"Table 2 analysis source is not live/frozen attested: {relative}"
+            )
+        rows.append({"relative_path": relative, "sha256": expected})
+    return {
+        "schema_version": ANALYSIS_SOURCE_IDENTITY_SCHEMA_VERSION,
+        "identity_scope": "FROZEN_TABLE2_ANALYSIS_SOURCE",
+        "paper_table_eligible": True,
+        "repository_commit": commit,
+        "runner_attestation_sha256": sha256_file(attestation_path),
+        "sources": rows,
+        "source_set_sha256": sha256_json(rows),
+    }
 
 
 def _source_hash_for_relative(

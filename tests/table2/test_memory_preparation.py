@@ -9,12 +9,18 @@ import pytest
 
 from web_agent.memory.manifest import canonical_sha256, sha256_file
 from web_agent.memory.preparation import (
+    P4_REGISTERED_SOURCE_AUTHORITY_SHA256,
     P4PreparationError,
     create_memory_store_transfer_manifest,
-    prepare_p4_candidate_audit,
+    main as preparation_main,
+    _prepare_p4_candidate_audit_fixture,
+    prepare_p4_candidate_audit as prepare_registered_p4_candidate_audit,
+    reconstruct_p4_selection_from_preparation,
     validate_memory_store_transfer_manifest,
     validate_p4_preparation_package,
+    validate_p4_provenance_against_preparation,
 )
+from web_agent.memory.verification import verification_bundle_sha256
 
 
 SHA_A = "a" * 64
@@ -79,6 +85,54 @@ def _write_state(root: Path, relative: str, content: bytes) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
+
+
+def prepare_p4_candidate_audit(**kwargs):
+    """Attach an explicit synthetic authority to direct unit fixtures."""
+
+    sources = []
+    for role, argument, expected_name in (
+        ("original_gold", "gold_train_json", "split_train.json"),
+        (
+            "retry_abort_supplement_v2",
+            "supplement_train_json",
+            "supplement_train.json",
+        ),
+    ):
+        raw_path = kwargs.get(argument)
+        if raw_path is None:
+            continue
+        path = Path(raw_path)
+        try:
+            rows = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            rows = []
+        sources.append(
+            {
+                "file_name": expected_name,
+                "records": len(rows) if isinstance(rows, list) else 0,
+                "role": role,
+                "sha256": sha256_file(path),
+            }
+        )
+    authority = Path(kwargs["output_dir"]).parent / (
+        "." + Path(kwargs["output_dir"]).name + "-source-authority.json"
+    )
+    _write_json(
+        authority,
+        {
+            "authority_id": "table2-synthetic-unit-source-authority",
+            "authority_version": "fixture-v1",
+            "dataset_id": kwargs["dataset_id"],
+            "dataset_version": kwargs["dataset_version"],
+            "schema_version": "table2-p4-source-authority-v1",
+            "sources": sources,
+        },
+    )
+    return _prepare_p4_candidate_audit_fixture(
+        **kwargs,
+        source_authority_path=authority,
+    )
 
 
 def _source_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
@@ -190,6 +244,74 @@ def test_candidate_audit_reads_only_train_and_never_claims_provenance(tmp_path: 
     assert "recovery_verification" not in queue[0]
     assert "final_task_verification" not in queue[0]
     validate_p4_preparation_package(package.root)
+
+
+def test_production_preparation_rejects_self_authored_fixture_authority(
+    tmp_path: Path,
+):
+    gold_root, gold_json, _, _ = _source_fixture(tmp_path)
+    forged_authority = tmp_path / "forged-source-authority.json"
+    _write_json(
+        forged_authority,
+        {
+            "authority_id": "attacker-self-authored",
+            "authority_version": "fixture-v1",
+            "dataset_id": "gold-v2.8",
+            "dataset_version": "fixture-v1",
+            "schema_version": "table2-p4-source-authority-v1",
+            "sources": [
+                {
+                    "file_name": "split_train.json",
+                    "records": 2,
+                    "role": "original_gold",
+                    "sha256": sha256_file(gold_json),
+                }
+            ],
+        },
+    )
+    assert sha256_file(forged_authority) != P4_REGISTERED_SOURCE_AUTHORITY_SHA256
+    with pytest.raises(P4PreparationError, match="registered PC-01 source authority"):
+        prepare_registered_p4_candidate_audit(
+            gold_train_json=gold_json,
+            gold_data_root=gold_root,
+            dataset_id="gold-v2.8",
+            dataset_version="fixture-v1",
+            source_authority_path=forged_authority,
+            output_dir=tmp_path / "must-not-exist",
+        )
+    assert not (tmp_path / "must-not-exist").exists()
+
+
+def test_fixture_authority_cannot_relabel_dataset_identity(tmp_path: Path):
+    gold_root, gold_json, _, _ = _source_fixture(tmp_path)
+    authority = tmp_path / "source-authority.json"
+    _write_json(
+        authority,
+        {
+            "authority_id": "table2-synthetic-unit-source-authority",
+            "authority_version": "fixture-v1",
+            "dataset_id": "authorized-dataset",
+            "dataset_version": "authorized-version",
+            "schema_version": "table2-p4-source-authority-v1",
+            "sources": [
+                {
+                    "file_name": "split_train.json",
+                    "records": 2,
+                    "role": "original_gold",
+                    "sha256": sha256_file(gold_json),
+                }
+            ],
+        },
+    )
+    with pytest.raises(P4PreparationError, match="dataset identity differs"):
+        _prepare_p4_candidate_audit_fixture(
+            gold_train_json=gold_json,
+            gold_data_root=gold_root,
+            dataset_id="attacker-relabeled-dataset",
+            dataset_version="authorized-version",
+            source_authority_path=authority,
+            output_dir=tmp_path / "must-not-exist",
+        )
 
 
 def test_nontraining_declaration_is_rejected_without_a_package(tmp_path: Path):
@@ -320,6 +442,388 @@ def test_preparation_package_rejects_nonzero_test_read_after_rehash(tmp_path: Pa
 
     with pytest.raises(P4PreparationError, match="test_rows_read=0"):
         validate_p4_preparation_package(package.root)
+
+
+def _fixture_provenance(package_root: Path) -> dict:
+    package = json.loads((package_root / "preparation_manifest.json").read_text())
+    queue = json.loads((package_root / "review_queue.jsonl").read_text())
+    recovery = {
+        "schema_version": "table2-memory-recovery-verification-evidence-v1",
+        "authority_type": "reviewer",
+        "authority_id": "fixture-reviewer-a",
+        "authority_version": "fixture-v1",
+        "independent_verification": True,
+        "source_sample_id": queue["source_sample_id"],
+        "recovery_sample_id": queue["recovery_sample_id"],
+        "canonical_task_id": queue["canonical_task_id"],
+        "episode_id": queue["episode_id"],
+        "pre_recovery_state_sha256": queue["causal_material"][
+            "pre_recovery_state_sha256"
+        ],
+        "executed_recovery_action_sha256": queue["causal_material"][
+            "executed_recovery_action_sha256"
+        ],
+        "post_recovery_state_sha256": queue["causal_material"][
+            "post_recovery_state_sha256"
+        ],
+        "verified_recovery_success": True,
+    }
+    recovery["evidence_sha256"] = canonical_sha256(recovery)
+    final_task = {
+        "schema_version": "table2-memory-final-task-verification-evidence-v1",
+        "authority_type": "reviewer",
+        "authority_id": "fixture-reviewer-b",
+        "authority_version": "fixture-v1",
+        "independent_verification": True,
+        "source_sample_id": queue["source_sample_id"],
+        "canonical_task_id": queue["canonical_task_id"],
+        "episode_id": queue["episode_id"],
+        "task_specification_sha256": SHA_A,
+        "terminal_state_sha256": SHA_B,
+        "terminal_verifier_output_sha256": SHA_C,
+        "verified_final_task_success": True,
+    }
+    final_task["evidence_sha256"] = canonical_sha256(final_task)
+    evidence = {
+        "source_split": "train",
+        "source_sample_id": queue["source_sample_id"],
+        "provenance_valid": True,
+        "final_task_success": True,
+        "canonical_task_id": queue["canonical_task_id"],
+        "episode_id": queue["episode_id"],
+        "exact_duplicate_key": SHA_D,
+        "near_duplicate_cluster_id": "fixture-near-cluster-1",
+        "duplicate_cluster_namespace_id": "fixture-joint-namespace-v1",
+        "recovery_verification": recovery,
+        "final_task_verification": final_task,
+    }
+    evidence["verification_evidence_sha256"] = verification_bundle_sha256(
+        source_sample_id=queue["source_sample_id"],
+        recovery_sample_id=queue["recovery_sample_id"],
+        canonical_task_id=queue["canonical_task_id"],
+        episode_id=queue["episode_id"],
+        recovery_evidence_sha256=recovery["evidence_sha256"],
+        final_task_evidence_sha256=final_task["evidence_sha256"],
+    )
+    return {
+        "schema_version": "table2-memory-provenance-v1",
+        "source_split": "train",
+        "validation_rows_read": 0,
+        "test_rows_read": 0,
+        "locked_test_rows_read": 0,
+        "dataset_id": package["dataset_id"],
+        "dataset_version": package["dataset_version"],
+        "dataset_artifacts_sha256": package["dataset_artifacts_sha256"],
+        "records_sha256": package["records_sha256"],
+        "duplicate_cluster_namespace": {
+            "schema_version": "table2-joint-duplicate-cluster-namespace-v1",
+            "namespace_id": "fixture-joint-namespace-v1",
+            "audit_tool_id": "fixture-joint-auditor",
+            "audit_tool_version": "fixture-v1",
+            "audit_tool_config_sha256": SHA_E,
+            "audit_tool_source_sha256": SHA_F,
+        },
+        "records": {queue["source_sample_id"]: evidence},
+    }
+
+
+def _attach_p4_label_review(provenance: dict, package_root: Path) -> None:
+    queue = json.loads((package_root / "review_queue.jsonl").read_text())
+    evidence = provenance["records"][queue["source_sample_id"]]
+    review = {
+        "schema_version": "table2-memory-p4-label-review-v1",
+        "authority_type": "reviewer",
+        "authority_id": "fixture-independent-p4-label-reviewer",
+        "authority_version": "fixture-rubric-v1",
+        "independent_verification": True,
+        "source_sample_id": queue["source_sample_id"],
+        "source_record_sha256": queue["source_record_sha256"],
+        "memory_item_source_material_sha256": canonical_sha256(
+            queue["memory_item_source_material"]
+        ),
+        "approved_for_p4_memory": True,
+    }
+    review["evidence_sha256"] = canonical_sha256(review)
+    evidence["p4_label_review"] = review
+    evidence["p4_label_review_evidence_sha256"] = review["evidence_sha256"]
+
+
+def test_pending_source_requires_separate_label_review_before_admission(
+    tmp_path: Path,
+):
+    gold_root, gold_json, _, _ = _source_fixture(tmp_path)
+    rows = json.loads(gold_json.read_text())
+    rows[0]["meta"]["review_status"] = "pending"
+    _write_json(gold_json, rows)
+    package = prepare_p4_candidate_audit(
+        gold_train_json=gold_json,
+        gold_data_root=gold_root,
+        dataset_id="gold-v2.8",
+        dataset_version="fixture-v1",
+        output_dir=tmp_path / "pending-package",
+    )
+    queue = json.loads((package.root / "review_queue.jsonl").read_text())
+    assert queue["source_review_status"] == "pending"
+
+    provenance = _fixture_provenance(package.root)
+    provenance_path = tmp_path / "pending-without-review.json"
+    _write_json(provenance_path, provenance)
+    with pytest.raises(P4PreparationError, match="lacks independent label review"):
+        reconstruct_p4_selection_from_preparation(
+            package_root=package.root,
+            provenance_manifest_path=provenance_path,
+        )
+
+    _attach_p4_label_review(provenance, package.root)
+    reviewed_path = tmp_path / "pending-with-review.json"
+    _write_json(reviewed_path, provenance)
+    selection = reconstruct_p4_selection_from_preparation(
+        package_root=package.root,
+        provenance_manifest_path=reviewed_path,
+    )
+    assert len(selection.candidates) == 1
+    assert selection.candidates[0].item["source_review_status"] == "pending"
+    assert selection.candidates[0].item[
+        "p4_label_review_evidence_sha256"
+    ] == provenance["records"]["gold-0"][
+        "p4_label_review_evidence_sha256"
+    ]
+
+
+def test_pending_externally_rejected_is_counted_without_label_review(tmp_path: Path):
+    gold_root, gold_json, _, _ = _source_fixture(tmp_path)
+    rows = json.loads(gold_json.read_text())
+    rows[0]["meta"]["review_status"] = "pending"
+    _write_json(gold_json, rows)
+    package = prepare_p4_candidate_audit(
+        gold_train_json=gold_json,
+        gold_data_root=gold_root,
+        dataset_id="gold-v2.8",
+        dataset_version="fixture-v1",
+        output_dir=tmp_path / "pending-package",
+    )
+    provenance = _fixture_provenance(package.root)
+    provenance["records"]["gold-0"]["provenance_valid"] = False
+    provenance_path = tmp_path / "pending-rejected.json"
+    _write_json(provenance_path, provenance)
+    report = validate_p4_provenance_against_preparation(
+        package_root=package.root,
+        provenance_manifest_path=provenance_path,
+    )
+    assert report["admitted_records_with_validated_evidence"] == 0
+    assert report["externally_excluded_records"] == 1
+
+
+def test_explicitly_rejected_source_never_enters_review_queue(tmp_path: Path):
+    gold_root, gold_json, _, _ = _source_fixture(tmp_path)
+    rows = json.loads(gold_json.read_text())
+    rows[0]["meta"]["review_status"] = "rejected"
+    _write_json(gold_json, rows)
+    package = prepare_p4_candidate_audit(
+        gold_train_json=gold_json,
+        gold_data_root=gold_root,
+        dataset_id="gold-v2.8",
+        dataset_version="fixture-v1",
+        output_dir=tmp_path / "rejected-package",
+    )
+    assert package.candidate_count == 0
+    assert (package.root / "review_queue.jsonl").read_text() == ""
+    audit = json.loads((package.root / "candidate_audit.json").read_text())
+    assert audit["local_gate_counts"]["quarantined_or_non_admitted"] == 1
+
+
+def test_authenticated_direct_retry_preserves_unavailable_prior_failure_fields(
+    tmp_path: Path,
+):
+    gold_root, gold_json, supplement_root, supplement_json = _source_fixture(tmp_path)
+    gold = json.loads(gold_json.read_text())
+    gold[0]["labels"]["memory_update_flag"] = False
+    _write_json(gold_json, gold)
+    supplement = json.loads(supplement_json.read_text())
+    supplement[0]["labels"].update(
+        {
+            "outcome_label": "SUCCESS",
+            "failure_type_4": "NONE",
+            "action_type": "CLICK",
+            "recovery_strategy": "RETRY",
+            "recovery_success": True,
+            "memory_update_flag": True,
+        }
+    )
+    _write_json(supplement_json, supplement)
+    package = prepare_p4_candidate_audit(
+        gold_train_json=gold_json,
+        gold_data_root=gold_root,
+        supplement_train_json=supplement_json,
+        supplement_data_root=supplement_root,
+        dataset_id="gold-v2.8",
+        dataset_version="fixture-v1",
+        output_dir=tmp_path / "direct-package",
+    )
+    queue = json.loads((package.root / "review_queue.jsonl").read_text())
+    assert queue["source_dataset_role"] == "retry_abort_supplement_v2"
+    assert queue["source_transition_kind"] == (
+        "direct_recovery_from_observed_failure_state"
+    )
+    material = queue["memory_item_source_material"]
+    assert material["failed_action"] == "UNAVAILABLE"
+    assert material["failed_action_available"] is False
+    assert material["failure_type"] == "UNAVAILABLE"
+    assert material["failure_type_available"] is False
+    assert material["executed_recovery_action"] == "CLICK"
+
+    provenance_path = tmp_path / "direct-provenance.json"
+    _write_json(provenance_path, _fixture_provenance(package.root))
+    selection = reconstruct_p4_selection_from_preparation(
+        package_root=package.root,
+        provenance_manifest_path=provenance_path,
+    )
+    item = selection.candidates[0].item
+    assert item["failed_action"] == "UNAVAILABLE"
+    assert item["executed_recovery_action"] == "CLICK"
+
+
+def test_direct_abort_cannot_be_reinterpreted_as_final_task_success(tmp_path: Path):
+    gold_root, gold_json, supplement_root, supplement_json = _source_fixture(tmp_path)
+    gold = json.loads(gold_json.read_text())
+    gold[0]["labels"]["memory_update_flag"] = False
+    _write_json(gold_json, gold)
+    supplement = json.loads(supplement_json.read_text())
+    supplement[0]["labels"]["memory_update_flag"] = True
+    _write_json(supplement_json, supplement)
+    package = prepare_p4_candidate_audit(
+        gold_train_json=gold_json,
+        gold_data_root=gold_root,
+        supplement_train_json=supplement_json,
+        supplement_data_root=supplement_root,
+        dataset_id="gold-v2.8",
+        dataset_version="fixture-v1",
+        output_dir=tmp_path / "abort-package",
+    )
+    provenance_path = tmp_path / "abort-provenance.json"
+    _write_json(provenance_path, _fixture_provenance(package.root))
+    with pytest.raises(P4PreparationError, match="final success for direct ABORT"):
+        reconstruct_p4_selection_from_preparation(
+            package_root=package.root,
+            provenance_manifest_path=provenance_path,
+        )
+
+
+def test_original_gold_cannot_spoof_direct_transition_marker(tmp_path: Path):
+    gold_root, gold_json, _, _ = _source_fixture(tmp_path)
+    rows = json.loads(gold_json.read_text())
+    rows[0]["meta"]["_direct_recovery_transition"] = True
+    _write_json(gold_json, rows)
+    package = prepare_p4_candidate_audit(
+        gold_train_json=gold_json,
+        gold_data_root=gold_root,
+        dataset_id="gold-v2.8",
+        dataset_version="fixture-v1",
+        output_dir=tmp_path / "spoof-package",
+    )
+    queue = json.loads((package.root / "review_queue.jsonl").read_text())
+    assert queue["source_dataset_role"] == "original_gold"
+    assert queue["source_transition_kind"] == "adjacent_failure_then_recovery"
+
+
+def test_external_provenance_validator_binds_exact_preparation_candidate(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    gold_root, gold_json, _, _ = _source_fixture(tmp_path)
+    package = prepare_p4_candidate_audit(
+        gold_train_json=gold_json,
+        gold_data_root=gold_root,
+        dataset_id="gold-v2.8",
+        dataset_version="fixture-v1",
+        output_dir=tmp_path / "review-package",
+    )
+    provenance_path = tmp_path / "provenance.json"
+    _write_json(provenance_path, _fixture_provenance(package.root))
+
+    result = validate_p4_provenance_against_preparation(
+        package_root=package.root,
+        provenance_manifest_path=provenance_path,
+    )
+
+    assert result["status"] == "PASS"
+    assert result["evidence_role"] == (
+        "STRUCTURAL_VALIDATION_ONLY_NOT_REVIEW_AUTHORITY"
+    )
+    assert result["independent_review_performed_by_tool"] is False
+    assert result["admitted_records_with_validated_evidence"] == 1
+    assert result["externally_excluded_records"] == 0
+    assert preparation_main(
+        [
+            "validate-provenance",
+            "--package-dir",
+            str(package.root),
+            "--provenance-manifest",
+            str(provenance_path),
+        ]
+    ) == 0
+    cli_output = json.loads(capsys.readouterr().out)
+    assert cli_output["independent_review_performed_by_tool"] is False
+
+
+def test_external_provenance_validator_rejects_resealed_causal_mismatch(
+    tmp_path: Path,
+):
+    gold_root, gold_json, _, _ = _source_fixture(tmp_path)
+    package = prepare_p4_candidate_audit(
+        gold_train_json=gold_json,
+        gold_data_root=gold_root,
+        dataset_id="gold-v2.8",
+        dataset_version="fixture-v1",
+        output_dir=tmp_path / "review-package",
+    )
+    provenance = _fixture_provenance(package.root)
+    record = next(iter(provenance["records"].values()))
+    recovery = record["recovery_verification"]
+    recovery["pre_recovery_state_sha256"] = SHA_F
+    recovery["evidence_sha256"] = canonical_sha256(
+        {key: value for key, value in recovery.items() if key != "evidence_sha256"}
+    )
+    final_task = record["final_task_verification"]
+    record["verification_evidence_sha256"] = verification_bundle_sha256(
+        source_sample_id=record["source_sample_id"],
+        recovery_sample_id=recovery["recovery_sample_id"],
+        canonical_task_id=record["canonical_task_id"],
+        episode_id=record["episode_id"],
+        recovery_evidence_sha256=recovery["evidence_sha256"],
+        final_task_evidence_sha256=final_task["evidence_sha256"],
+    )
+    provenance_path = tmp_path / "provenance.json"
+    _write_json(provenance_path, provenance)
+
+    with pytest.raises(P4PreparationError, match="pre_recovery_state_sha256"):
+        validate_p4_provenance_against_preparation(
+            package_root=package.root,
+            provenance_manifest_path=provenance_path,
+        )
+
+
+def test_external_provenance_validator_requires_complete_candidate_coverage(
+    tmp_path: Path,
+):
+    gold_root, gold_json, _, _ = _source_fixture(tmp_path)
+    package = prepare_p4_candidate_audit(
+        gold_train_json=gold_json,
+        gold_data_root=gold_root,
+        dataset_id="gold-v2.8",
+        dataset_version="fixture-v1",
+        output_dir=tmp_path / "review-package",
+    )
+    provenance = _fixture_provenance(package.root)
+    provenance["records"] = {}
+    provenance_path = tmp_path / "provenance.json"
+    _write_json(provenance_path, provenance)
+
+    with pytest.raises(P4PreparationError, match="candidate coverage is incomplete"):
+        validate_p4_provenance_against_preparation(
+            package_root=package.root,
+            provenance_manifest_path=provenance_path,
+        )
 
 
 class _FakeFrozenStore:

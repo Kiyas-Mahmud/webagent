@@ -104,6 +104,7 @@ def build_frozen_store(
     threshold_calibration: Mapping[str, Any],
     calibration_evidence: Mapping[str, Any],
     transition_report: Mapping[str, Any],
+    joint_duplicate_audit_binding: Mapping[str, Any],
 ) -> FrozenMemoryStore:
     """Write a new content-verified store and immediately reload-audit it.
 
@@ -211,6 +212,59 @@ def build_frozen_store(
     provenance_hash = require_sha256(
         provenance_manifest_sha256, field="provenance_manifest_sha256"
     )
+    expected_binding_fields = {
+        "schema_version",
+        "preparation_manifest_sha256",
+        "assignment_manifest_sha256",
+        "entities_sha256",
+        "clusters_sha256",
+        "audit_config_sha256",
+        "audit_source_sha256",
+        "recovery_scenarios_sha256",
+        "duplicate_audit_registration_sha256",
+        "source_authority_sha256",
+        "final_duplicate_audit_sha256",
+        "provenance_manifest_sha256",
+        "duplicate_cluster_namespace",
+    }
+    if not isinstance(joint_duplicate_audit_binding, Mapping) or set(
+        joint_duplicate_audit_binding
+    ) != expected_binding_fields:
+        raise MemoryBuildError(
+            "joint duplicate-audit binding fields differ from schema"
+        )
+    if joint_duplicate_audit_binding.get("schema_version") != (
+        "table2-memory-joint-duplicate-evidence-binding-v2"
+    ):
+        raise MemoryBuildError("unsupported joint duplicate-audit binding")
+    for field in expected_binding_fields - {
+        "schema_version",
+        "duplicate_cluster_namespace",
+    }:
+        require_sha256(
+            joint_duplicate_audit_binding.get(field),
+            field=f"joint_duplicate_audit_binding.{field}",
+        )
+    if joint_duplicate_audit_binding.get(
+        "provenance_manifest_sha256"
+    ) != provenance_hash:
+        raise MemoryBuildError(
+            "joint duplicate-audit binding cites another provenance manifest"
+        )
+    try:
+        binding_namespace = JointDuplicateClusterNamespace.from_mapping(
+            joint_duplicate_audit_binding.get("duplicate_cluster_namespace"),
+            require_hashes=True,
+        )
+    except DuplicateAuditError as error:
+        raise MemoryBuildError(
+            f"invalid joint duplicate-audit binding namespace: {error}"
+        ) from error
+    if binding_namespace.to_dict() != duplicate_namespace.to_dict():
+        raise MemoryBuildError(
+            "joint duplicate-audit binding cites another cluster namespace"
+        )
+    registered_duplicate_binding = dict(joint_duplicate_audit_binding)
     normalized_dataset_id = str(dataset_id).strip()
     normalized_dataset_version = str(dataset_version).strip()
     if not normalized_dataset_id or not normalized_dataset_version:
@@ -378,6 +432,7 @@ def build_frozen_store(
             "admission_threshold": threshold,
             "memory_ids": ids,
             "duplicate_cluster_namespace": duplicate_namespace.to_dict(),
+            "joint_duplicate_audit_binding": registered_duplicate_binding,
         })
         manifest = {
             "schema_version": STORE_SCHEMA_VERSION,
@@ -435,6 +490,7 @@ def build_frozen_store(
                 ),
             },
         }
+        manifest["joint_duplicate_audit_binding"] = registered_duplicate_binding
         _write_json(temporary / "manifest.json", manifest)
         (temporary / "manifest.sha256").write_text(
             sha256_file(temporary / "manifest.json") + "\n",

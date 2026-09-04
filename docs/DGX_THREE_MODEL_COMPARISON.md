@@ -25,7 +25,7 @@ from scratch.
 - Primary validation: all 7,861 original-Gold validation rows.
 - Supplement validation: all 194 supplement rows, reported separately.
 - Locked test: zero reads during compatibility, mini, full training, model
-  selection, and repeated-seed confirmation.
+  selection, and fixed-seed final promotion.
 - Seed for the first comparison: 42.
 - Maximum full epochs: 10, with the registered early-stopping behavior.
 - Effective batch: 32 for every candidate. Physical micro-batch may differ.
@@ -122,8 +122,21 @@ or commit-bound experiment instead of silently erasing the failure.
 ## Comparing the completed runs
 
 After all three full runs pass, copy the three complete model directories onto
-one comparison machine under the same `model_comparison` parent. Run notebook
-cell 10. It creates:
+one comparison machine under the same `model_comparison` parent. Before running
+the comparison, compute the exact SHA-256 of each candidate's
+`model_compatibility_report.json` and commit the three distinct model-to-hash
+assignments in
+`REGISTERED_MODEL_COMPATIBILITY_REPORT_SHA256_BY_MODEL` in
+`src/web_agent/eval/table2/selection_evidence.py`. A hash asserted only by the
+selection input is not preregistration and is rejected. The production registry
+intentionally contains only PC-01 until the real PC-02 and PC-03 bytes exist;
+therefore the final selection fails closed today. The Table 2 selection input
+must repeat the corresponding registered hash. Its validator preserves each
+report as a sixth per-candidate artifact, replays its 16-row smoke invariants,
+requires distinct source-registered identities, and binds the current smoke
+generator and validator sources. Compatibility-report values are never ranking
+inputs; the reports only prove that each candidate exercised the shared
+pipeline before training. Then run notebook cell 10. It creates:
 
 ```text
 outputs/comparison_decision/three_model_validation_comparison.csv

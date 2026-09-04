@@ -22,6 +22,16 @@ DUPLICATE_CLUSTER_NAMESPACE_SCHEMA_VERSION = (
     "table2-joint-duplicate-cluster-namespace-v1"
 )
 DUPLICATE_AUDIT_RECORD_SCHEMA_VERSION = "table2-duplicate-audit-task-record-v1"
+DUPLICATE_AUDIT_TASK_CONTENT_FIELDS = (
+    "task_id",
+    "upstream_index",
+    "benchmark_task_id",
+    "benchmark_task_version",
+    "instruction",
+    "start_state",
+    "task_config",
+    "evaluator",
+)
 
 
 class DuplicateAuditError(RuntimeError):
@@ -519,6 +529,93 @@ def canonical_task_audit_record(
         "audit_tool_config_sha256": namespace.audit_tool_config_sha256,
         "audit_tool_source_sha256": namespace.audit_tool_source_sha256,
     }
+
+
+def canonical_duplicate_audit_task_content(
+    value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the exact resolved-task record hashed by the joint audit.
+
+    The task exporter does not carry ``source_content_sha256`` because that
+    field is added when a resolved task enters the campaign boundary.  P4 is
+    built before campaign handoff, so this dependency-light helper gives both
+    stages one canonical projection.  It validates an already-present source
+    hash rather than silently replacing it.
+    """
+
+    if not isinstance(value, Mapping):
+        raise DuplicateAuditError("duplicate-audit task content must be an object")
+    missing = set(DUPLICATE_AUDIT_TASK_CONTENT_FIELDS) - set(value)
+    if missing:
+        raise DuplicateAuditError(
+            "duplicate-audit task content is incomplete: "
+            f"missing={sorted(missing)}"
+        )
+    task_id = str(value.get("task_id") or "").strip()
+    if not task_id:
+        raise DuplicateAuditError("duplicate-audit task content needs task_id")
+    upstream_index = value.get("upstream_index")
+    if type(upstream_index) is not int or upstream_index < 0:
+        raise DuplicateAuditError(
+            "duplicate-audit task content needs a non-negative upstream_index"
+        )
+    core = {
+        field: value[field] for field in DUPLICATE_AUDIT_TASK_CONTENT_FIELDS
+    }
+    source_content_sha256 = canonical_sha256(core)
+    supplied_source_hash = value.get("source_content_sha256")
+    if (
+        supplied_source_hash is not None
+        and supplied_source_hash != source_content_sha256
+    ):
+        raise DuplicateAuditError(
+            "resolved task source_content_sha256 is not canonical"
+        )
+    return {**core, "source_content_sha256": source_content_sha256}
+
+
+def duplicate_audit_task_content_sha256(value: Mapping[str, Any]) -> str:
+    """Hash one task exactly as the task/train duplicate audit must bind it."""
+
+    return canonical_sha256(canonical_duplicate_audit_task_content(value))
+
+
+def canonical_train_corpus_binding(
+    *,
+    records_sha256: str,
+    provenance_manifest_sha256: str,
+    duplicate_cluster_namespace: JointDuplicateClusterNamespace | Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the shared pre-build and campaign train-corpus commitment."""
+
+    records_hash = _required_sha256(
+        records_sha256,
+        field="train_corpus_binding.records_sha256",
+    )
+    provenance_hash = _required_sha256(
+        provenance_manifest_sha256,
+        field="train_corpus_binding.provenance_manifest_sha256",
+    )
+    namespace = (
+        duplicate_cluster_namespace
+        if isinstance(duplicate_cluster_namespace, JointDuplicateClusterNamespace)
+        else JointDuplicateClusterNamespace.from_mapping(
+            duplicate_cluster_namespace,
+            require_hashes=True,
+        )
+    )
+    if not namespace.is_evaluation_ready:
+        raise DuplicateAuditError(
+            "train-corpus binding needs a fully hash-bound duplicate namespace"
+        )
+    namespace_value = namespace.to_dict()
+    core = {
+        "records_sha256": records_hash,
+        "provenance_manifest_sha256": provenance_hash,
+        "duplicate_cluster_namespace": namespace_value,
+        "duplicate_cluster_namespace_sha256": canonical_sha256(namespace_value),
+    }
+    return {**core, "corpus_binding_sha256": canonical_sha256(core)}
 
 
 def _validate_entry_namespace(

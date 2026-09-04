@@ -33,6 +33,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--block-id", default=None, help="run/resume only one frozen block")
     parser.add_argument("--maximum-blocks", type=int, default=None)
+    parser.add_argument(
+        "--live-readiness-probe-for",
+        type=Path,
+        default=None,
+        help=(
+            "run exactly one explicit normal E0--E3 block in this isolated "
+            "campaign and write a non-scored readiness receipt for the supplied "
+            "otherwise-unstarted PILOT_ONLY target campaign"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -150,6 +160,13 @@ def main() -> None:
     args = parse_args()
     if args.maximum_blocks is not None and args.maximum_blocks <= 0:
         raise ValueError("--maximum-blocks must be positive")
+    if args.live_readiness_probe_for is not None:
+        if args.block_id is None:
+            raise ValueError("--live-readiness-probe-for requires --block-id")
+        if args.maximum_blocks is not None:
+            raise ValueError(
+                "--live-readiness-probe-for cannot be combined with --maximum-blocks"
+            )
     _bootstrap_verify_evaluation_source(
         args.campaign_dir,
         runner_entrypoint=args.runner,
@@ -166,6 +183,7 @@ def main() -> None:
         runner=entrypoint,
         runner_entrypoint=args.runner,
         maximum_blocks=args.maximum_blocks,
+        live_readiness_probe_target=args.live_readiness_probe_for,
     )
     result = campaign.run_block(args.block_id) if args.block_id else campaign.run()
     print(json.dumps(result, indent=2, sort_keys=True))

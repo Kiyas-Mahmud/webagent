@@ -463,7 +463,7 @@ def verify_store_manifest(root: str | Path) -> VerifiedStoreManifest:
     if payload.get("duplicate_exclusion") is not True:
         raise ManifestError("duplicate memory exclusion must be enabled")
     try:
-        JointDuplicateClusterNamespace.from_mapping(
+        duplicate_namespace = JointDuplicateClusterNamespace.from_mapping(
             payload.get("duplicate_cluster_namespace"),
             require_hashes=True,
         )
@@ -471,6 +471,59 @@ def verify_store_manifest(root: str | Path) -> VerifiedStoreManifest:
         raise ManifestError(
             f"invalid frozen-memory duplicate-cluster namespace: {error}"
         ) from error
+    joint_binding = payload.get("joint_duplicate_audit_binding")
+    expected_binding_fields = {
+        "schema_version",
+        "preparation_manifest_sha256",
+        "assignment_manifest_sha256",
+        "entities_sha256",
+        "clusters_sha256",
+        "audit_config_sha256",
+        "audit_source_sha256",
+        "recovery_scenarios_sha256",
+        "duplicate_audit_registration_sha256",
+        "source_authority_sha256",
+        "final_duplicate_audit_sha256",
+        "provenance_manifest_sha256",
+        "duplicate_cluster_namespace",
+    }
+    if not isinstance(joint_binding, Mapping) or set(joint_binding) != (
+        expected_binding_fields
+    ):
+        raise ManifestError(
+            "joint_duplicate_audit_binding fields differ from schema"
+        )
+    if joint_binding.get("schema_version") != (
+        "table2-memory-joint-duplicate-evidence-binding-v2"
+    ):
+        raise ManifestError("unsupported joint_duplicate_audit_binding schema")
+    for field in expected_binding_fields - {
+        "schema_version",
+        "duplicate_cluster_namespace",
+    }:
+        require_sha256(
+            joint_binding.get(field),
+            field=f"joint_duplicate_audit_binding.{field}",
+        )
+    if joint_binding.get("provenance_manifest_sha256") != payload.get(
+        "provenance_manifest_sha256"
+    ):
+        raise ManifestError(
+            "joint duplicate binding cites another provenance manifest"
+        )
+    try:
+        binding_namespace = JointDuplicateClusterNamespace.from_mapping(
+            joint_binding.get("duplicate_cluster_namespace"),
+            require_hashes=True,
+        )
+    except DuplicateAuditError as error:
+        raise ManifestError(
+            f"invalid joint duplicate binding namespace: {error}"
+        ) from error
+    if binding_namespace.to_dict() != duplicate_namespace.to_dict():
+        raise ManifestError(
+            "joint duplicate binding cites another cluster namespace"
+        )
     if payload.get("runtime_writes_allowed") is not False:
         raise ManifestError("frozen memory must declare runtime_writes_allowed=false")
     for field in (

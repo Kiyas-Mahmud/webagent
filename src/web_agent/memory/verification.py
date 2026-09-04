@@ -23,9 +23,10 @@ FINAL_TASK_VERIFICATION_SCHEMA_VERSION = (
 )
 VERIFICATION_BUNDLE_SCHEMA_VERSION = "table2-memory-verification-bundle-v1"
 VERIFICATION_MANIFEST_SCHEMA_VERSION = "table2-memory-verification-manifest-v1"
-VERIFICATION_RECORDS_SCHEMA_VERSION = "table2-memory-verification-records-v1"
+VERIFICATION_RECORDS_SCHEMA_VERSION = "table2-memory-verification-records-v2"
 VERIFICATION_DIGEST_ALGORITHM = "canonical_json_sha256_v1"
 VERIFICATION_AUTHORITY_TYPES = frozenset({"verifier", "reviewer"})
+P4_LABEL_REVIEW_SCHEMA_VERSION = "table2-memory-p4-label-review-v1"
 
 
 class VerificationEvidenceError(ValueError):
@@ -218,6 +219,181 @@ def recovery_state_evidence_sha256(
             f"transition.{field} artifact does not exist: {artifact}"
         )
     return sha256_file(artifact)
+
+
+_P4_MEMORY_SOURCE_MATERIAL_FIELDS = frozenset(
+    {
+        "source_dataset_role",
+        "source_review_status",
+        "source_sample_id",
+        "recovery_sample_id",
+        "canonical_task_id",
+        "episode_id",
+        "source_step_index",
+        "source_record_sha256",
+        "transition_sha256",
+        "source_transition_kind",
+        "task_description",
+        "website_domain",
+        "observed_failure_basis",
+        "source_outcome_label",
+        "source_failure_type",
+        "source_action_type",
+        "failure_type",
+        "failure_type_available",
+        "failed_action",
+        "failed_action_available",
+        "recovery_strategy",
+        "reflection_text",
+        "pre_recovery_state_sha256",
+        "executed_recovery_action",
+        "recovery_action_value",
+        "executed_recovery_action_sha256",
+        "post_recovery_state_sha256",
+    }
+)
+
+
+def canonical_p4_memory_source_material(
+    value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate the exact source projection consumed by a P4 memory item."""
+
+    material = _require_exact_fields(
+        value,
+        required=_P4_MEMORY_SOURCE_MATERIAL_FIELDS,
+        field="p4_memory_source_material",
+    )
+    for field in (
+        "source_dataset_role",
+        "source_review_status",
+        "source_sample_id",
+        "recovery_sample_id",
+        "canonical_task_id",
+        "episode_id",
+        "source_transition_kind",
+        "task_description",
+        "observed_failure_basis",
+        "source_outcome_label",
+        "source_failure_type",
+        "source_action_type",
+        "failure_type",
+        "failed_action",
+        "recovery_strategy",
+        "executed_recovery_action",
+    ):
+        _nonempty(material.get(field), field=f"p4_memory_source_material.{field}")
+    for field in ("website_domain", "reflection_text", "recovery_action_value"):
+        if not isinstance(material.get(field), str):
+            raise VerificationEvidenceError(
+                f"p4_memory_source_material.{field} must be text"
+            )
+    _strict_step(
+        material.get("source_step_index"),
+        field="p4_memory_source_material.source_step_index",
+    )
+    for field in (
+        "source_record_sha256",
+        "transition_sha256",
+        "pre_recovery_state_sha256",
+        "executed_recovery_action_sha256",
+        "post_recovery_state_sha256",
+    ):
+        require_sha256(
+            material.get(field), field=f"p4_memory_source_material.{field}"
+        )
+    kind = material.get("source_transition_kind")
+    if kind == "adjacent_failure_then_recovery":
+        if (
+            material.get("observed_failure_basis") != "source_outcome_failure"
+            or material.get("source_outcome_label") != "FAILURE"
+            or material.get("source_failure_type") == "NONE"
+            or material.get("failure_type") != material.get("source_failure_type")
+            or material.get("failed_action") != material.get("source_action_type")
+            or material.get("failure_type_available") is not True
+            or material.get("failed_action_available") is not True
+        ):
+            raise VerificationEvidenceError(
+                "adjacent P4 source material does not preserve failure semantics"
+            )
+    elif kind == "direct_recovery_from_observed_failure_state":
+        if (
+            material.get("source_dataset_role")
+            != "retry_abort_supplement_v2"
+            or material.get("observed_failure_basis")
+            != "source_attested_direct_pre_recovery_state"
+            or material.get("failure_type") != "UNAVAILABLE"
+            or material.get("failed_action") != "UNAVAILABLE"
+            or material.get("failure_type_available") is not False
+            or material.get("failed_action_available") is not False
+            or material.get("source_action_type")
+            != material.get("executed_recovery_action")
+        ):
+            raise VerificationEvidenceError(
+                "direct P4 source material aliases or invents prior failure fields"
+            )
+    else:
+        raise VerificationEvidenceError("unknown P4 source transition kind")
+    if material.get("source_review_status") not in {"approved", "pending"}:
+        raise VerificationEvidenceError("P4 source review status is not registered")
+    return dict(material)
+
+
+_P4_LABEL_REVIEW_FIELDS = frozenset(
+    {
+        "schema_version",
+        "authority_type",
+        "authority_id",
+        "authority_version",
+        "independent_verification",
+        "source_sample_id",
+        "source_record_sha256",
+        "memory_item_source_material_sha256",
+        "approved_for_p4_memory",
+        "evidence_sha256",
+    }
+)
+
+
+def validate_p4_label_review_evidence(
+    evidence: Mapping[str, Any],
+    *,
+    source_sample_id: str,
+    source_record_sha256: str,
+    memory_item_source_material_sha256: str,
+) -> str:
+    """Validate independent approval of pending source fields used by P4."""
+
+    record = _require_exact_fields(
+        evidence,
+        required=_P4_LABEL_REVIEW_FIELDS,
+        field=f"{source_sample_id}.p4_label_review",
+    )
+    if record.get("schema_version") != P4_LABEL_REVIEW_SCHEMA_VERSION:
+        raise VerificationEvidenceError("unsupported P4 label-review schema")
+    _validate_authority(record, field=f"{source_sample_id}.p4_label_review")
+    _strict_true(
+        record.get("approved_for_p4_memory"),
+        field=f"{source_sample_id}.p4_label_review.approved_for_p4_memory",
+    )
+    expected = {
+        "source_sample_id": source_sample_id,
+        "source_record_sha256": require_sha256(
+            source_record_sha256, field="expected.source_record_sha256"
+        ),
+        "memory_item_source_material_sha256": require_sha256(
+            memory_item_source_material_sha256,
+            field="expected.memory_item_source_material_sha256",
+        ),
+    }
+    for field, expected_value in expected.items():
+        if record.get(field) != expected_value:
+            raise VerificationEvidenceError(
+                f"{source_sample_id} P4 label review differs at {field}"
+            )
+    return _validate_record_digest(
+        record, field=f"{source_sample_id}.p4_label_review"
+    )
 
 
 def verification_bundle_sha256(
@@ -455,8 +631,12 @@ _FROZEN_RECORD_FIELDS = frozenset(
         "canonical_task_id",
         "episode_id",
         "source_step_index",
+        "source_record_sha256",
+        "memory_item_source_material_sha256",
         "recovery_verification",
         "final_task_verification",
+        "p4_label_review",
+        "p4_label_review_evidence_sha256",
         "recovery_verification_evidence_sha256",
         "final_task_verification_evidence_sha256",
         "verification_evidence_sha256",
@@ -493,6 +673,14 @@ def _frozen_verification_record(
     source_step_index = _strict_step(
         item.get("step_index"), field=f"{memory_id}.step_index"
     )
+    source_record_sha256 = require_sha256(
+        item.get("source_record_sha256"),
+        field=f"{memory_id}.source_record_sha256",
+    )
+    source_material_sha256 = require_sha256(
+        item.get("memory_item_source_material_sha256"),
+        field=f"{memory_id}.memory_item_source_material_sha256",
+    )
     verified = validate_provenance_verification_evidence(
         evidence,
         source_sample_id=source_sample_id,
@@ -514,6 +702,38 @@ def _frozen_verification_record(
             raise VerificationEvidenceError(
                 f"{memory_id} item/evidence mismatch at {field}"
             )
+    label_review = evidence.get("p4_label_review")
+    label_review_digest = evidence.get("p4_label_review_evidence_sha256")
+    if item.get("source_review_status") == "pending" or label_review is not None:
+        if not isinstance(label_review, Mapping):
+            raise VerificationEvidenceError(
+                f"{memory_id} lacks its full P4 label-review record"
+            )
+        expected_label_review_digest = validate_p4_label_review_evidence(
+            label_review,
+            source_sample_id=source_sample_id,
+            source_record_sha256=source_record_sha256,
+            memory_item_source_material_sha256=source_material_sha256,
+        )
+        if (
+            label_review_digest != expected_label_review_digest
+            or item.get("p4_label_review_evidence_sha256")
+            != expected_label_review_digest
+        ):
+            raise VerificationEvidenceError(
+                f"{memory_id} P4 label-review record/digest mismatch"
+            )
+        frozen_label_review: dict[str, Any] | None = dict(label_review)
+        frozen_label_review_digest: str | None = expected_label_review_digest
+    else:
+        if label_review_digest is not None or item.get(
+            "p4_label_review_evidence_sha256"
+        ) is not None:
+            raise VerificationEvidenceError(
+                f"{memory_id} has a label-review digest without a record"
+            )
+        frozen_label_review = None
+        frozen_label_review_digest = None
     row: dict[str, Any] = {
         "memory_id": memory_id,
         "source_sample_id": source_sample_id,
@@ -521,8 +741,12 @@ def _frozen_verification_record(
         "canonical_task_id": canonical_task_id,
         "episode_id": episode_id,
         "source_step_index": source_step_index,
+        "source_record_sha256": source_record_sha256,
+        "memory_item_source_material_sha256": source_material_sha256,
         "recovery_verification": dict(verified.recovery_record),
         "final_task_verification": dict(verified.final_task_record),
+        "p4_label_review": frozen_label_review,
+        "p4_label_review_evidence_sha256": frozen_label_review_digest,
         **expected_digests,
     }
     row["record_sha256"] = canonical_sha256(row)
@@ -643,6 +867,10 @@ def validate_verification_records_payload(
         evidence = {
             "recovery_verification": row["recovery_verification"],
             "final_task_verification": row["final_task_verification"],
+            "p4_label_review": row["p4_label_review"],
+            "p4_label_review_evidence_sha256": row[
+                "p4_label_review_evidence_sha256"
+            ],
             "verification_evidence_sha256": row[
                 "verification_evidence_sha256"
             ],
@@ -662,6 +890,36 @@ def validate_verification_records_payload(
                 row.get("episode_id"), field=f"{memory_id}.episode_id"
             ),
         )
+        source_record_sha256 = require_sha256(
+            row.get("source_record_sha256"),
+            field=f"{memory_id}.source_record_sha256",
+        )
+        source_material_sha256 = require_sha256(
+            row.get("memory_item_source_material_sha256"),
+            field=f"{memory_id}.memory_item_source_material_sha256",
+        )
+        label_review = row.get("p4_label_review")
+        label_review_digest = row.get("p4_label_review_evidence_sha256")
+        if label_review is not None:
+            if not isinstance(label_review, Mapping):
+                raise VerificationEvidenceError(
+                    f"verification record {memory_id} has invalid P4 label review"
+                )
+            expected_label_review_digest = validate_p4_label_review_evidence(
+                label_review,
+                source_sample_id=str(row["source_sample_id"]),
+                source_record_sha256=source_record_sha256,
+                memory_item_source_material_sha256=source_material_sha256,
+            )
+            if label_review_digest != expected_label_review_digest:
+                raise VerificationEvidenceError(
+                    f"verification record {memory_id} label-review digest mismatch"
+                )
+        elif label_review_digest is not None:
+            raise VerificationEvidenceError(
+                f"verification record {memory_id} has a label-review digest "
+                "without its record"
+            )
         _strict_step(
             row.get("source_step_index"), field=f"{memory_id}.source_step_index"
         )
@@ -692,6 +950,13 @@ def validate_verification_records_payload(
                 "source_task_id": row["canonical_task_id"],
                 "source_episode_id": row["episode_id"],
                 "step_index": row["source_step_index"],
+                "source_record_sha256": row["source_record_sha256"],
+                "memory_item_source_material_sha256": row[
+                    "memory_item_source_material_sha256"
+                ],
+                "p4_label_review_evidence_sha256": row[
+                    "p4_label_review_evidence_sha256"
+                ],
                 **expected_digests,
             }
             for field, expected in expected_item.items():

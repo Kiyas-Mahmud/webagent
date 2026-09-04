@@ -1,12 +1,12 @@
 # Qwen2-VL-2B Gold v2.8 — Full Run, Seed 42 (DGX) — Results
 
 Status: **PASS** — `FULL CANDIDATE PASSED`
-Run directory (DGX box, not in git): `webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/full/`
+Run directory (now tracked through Git LFS): `webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/full/`
 Evidence in this repo: `results/qwen2vl_2b_gold_v2_8_dgx/seed_42/full/` (`diagnostics.json`, `report.json`, `source_validation.csv`, `epoch_metrics.csv`)
 
-This is the first completed full-data headline candidate: all 24,107 combined Gold train rows,
+This is the first completed full-data PC-01 validation candidate: all 24,107 combined Gold train rows,
 10 epochs, checkpoint selected only on the 7,861-row original-Gold validation split, zero
-locked-test rows read.
+locked-test rows read. These are component/selection results, not Table 2 browser results.
 
 ## 1. Run configuration
 
@@ -34,7 +34,7 @@ epochs by `outcome_mcc`. All 10 epochs turned out gate-eligible; **epoch 6** ran
 | Metric | Value |
 |---|---|
 | Selected epoch | 6 of 9 (0-indexed) |
-| `outcome_mcc` (primary/headline) | **0.6242** |
+| `outcome_mcc` (PC-01 validation-selection metric) | **0.6242** |
 | Checkpoint | `best_e6_outcome-mcc0.624.ckpt`, SHA-256 `9eaab6d2…c94895a` |
 
 ### vs. the prior accepted checkpoint (v14, 5k-subset mini, epoch 3)
@@ -52,7 +52,7 @@ improvement over v14 on every gated axis, not just a marginal pass — the recov
 in particular reflects the earlier fix to feed the causal recovery-transition head only proper
 `(failure → recovery action → post-recovery state)` triples instead of leaking future state.
 
-## 3. Headline metrics at the selected checkpoint (epoch 6, original-Gold validation, n=7,861)
+## 3. PC-01 validation metrics at the selected checkpoint (epoch 6, original-Gold validation, n=7,861)
 
 | Head | Metric | Value | Majority baseline |
 |---|---|---|---|
@@ -187,18 +187,20 @@ train_distribution` / `validation_distribution` for exact validation-side counts
   per-epoch diagnostics, gates, distributions, bbox/recovery audits), `report.json` (superset,
   includes resume/checkpoint-lineage audit and per-epoch history), `epoch_metrics.csv` (10 rows,
   one per epoch, ~140 columns), `source_validation.csv` (per-source-split summary row).
-- **DGX box only, not in git** (`webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/full/checkpoints/`):
-  11 checkpoints (`best_e0`…`best_e9` + `last.ckpt`), ~278 MB each, ~3 GB total. Excluded by
-  `.gitignore` (`*.ckpt`) and individually over GitHub's 100 MB push limit regardless — transfer
-  via `scp`/`rsync` or an external dataset store if needed elsewhere.
+- **Tracked through Git LFS** (`webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/full/checkpoints/`):
+  11 checkpoints (`best_e0`…`best_e9` + `last.ckpt`), ~278 MB each, ~3 GB total. Their Git-LFS
+  storage status does not replace the authenticated runtime-export, processor, or DGX
+  checkpoint-compatibility gates required for Table 2.
 
 ## 10. Bottom line
 
 The full-data Qwen2-VL-2B Gold v2.8 run (seed 42) is a genuine, gate-verified improvement over the
 prior accepted checkpoint on every predeclared axis, with the causal recovery-outcome fix being
-the largest single jump (MCC 0.186 → 0.796). It is a reasonable candidate headline result for this
-backbone/seed. It is **not** yet a finished evaluation: no locked-test-split number exists for it
+the largest single jump (MCC 0.186 → 0.796). It is a strong PC-01 validation candidate for this
+backbone/seed, not a Table 2 result or final promoted backbone. It is **not** yet a finished
+evaluation: no locked-test-split number exists for it
 (intentionally — test isolation was preserved), bbox grounding and calibration are still weak in
-absolute terms, and this is a single seed on one backbone — repeated-seed variance, other
-backbones (Qwen2.5-VL-7B / InternVL3.5-8B), ablations (Phase 7), and baselines (Phase 9) are still
-outstanding per `project_progress.md`.
+absolute terms, and this is a single seed on one backbone. The research-locked Table 2 design
+intentionally adds no PC-01 seeds 43--44, so model-seed uncertainty will remain unmeasured and
+must be reported. PC-02/PC-03 validation-only comparison, final model promotion, browser-time
+evaluation, and supporting diagnostics remain outstanding per `project_progress.md`.

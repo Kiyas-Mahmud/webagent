@@ -1,0 +1,21 @@
+{
+  "authority_id": "table2-pc01-gold-train-source-authority",
+  "authority_version": "1.0.0",
+  "dataset_id": "web-gold-v2.8",
+  "dataset_version": "pc01-train-0522807d-supplement-67ade5e9",
+  "schema_version": "table2-p4-source-authority-v1",
+  "sources": [
+    {
+      "file_name": "split_train.json",
+      "records": 23499,
+      "role": "original_gold",
+      "sha256": "0522807d74256fa303a20d5b8f3bb1653de44aad187660a655580c708c7ae3de"
+    },
+    {
+      "file_name": "supplement_train.json",
+      "records": 608,
+      "role": "retry_abort_supplement_v2",
+      "sha256": "67ade5e971e8fa2f58ec8a269b1e476ae8cc2349a89eb3e3e0d5e161c47c1098"
+    }
+  ]
+}

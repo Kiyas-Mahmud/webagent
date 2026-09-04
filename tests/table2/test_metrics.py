@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from web_agent.eval.table2.common import SchemaError
-from web_agent.eval.table2.metrics import compute_table2_metrics, rate
+from web_agent.eval.table2.metrics import (
+    compute_table2_metrics,
+    rate,
+    task_clustered_mean,
+)
 
 
 def _episode(system_id: str, *, success: bool, steps: int, loop: bool = False) -> dict:
@@ -90,6 +94,10 @@ def test_hand_calculated_table2_rates_and_na_denominators():
     assert result["E3"]["unrecovered_failure_rate"]["estimate"] == 1.0
     assert result["E3"]["repeated_error_event_rate"]["estimate"] == 1.0
     assert result["E3"]["steps"]["all"]["mean"] == 5.0
+    assert result["E3"]["steps"]["all"]["numerator"] == 5.0
+    assert result["E3"]["steps"]["all"]["denominator"] == 1
+    assert result["E3"]["steps"]["all"]["estimate"] == 5.0
+    assert result["E3"]["steps"]["all"]["ci95_low"] is None
 
 
 def test_hand_calculated_environment_failure_rate():
@@ -154,6 +162,176 @@ def test_rate_rejects_impossible_counts_and_uses_na_for_empty_denominator():
     assert rate(0, 0)["display"] == "N/A"
     with pytest.raises(ValueError):
         rate(2, 1)
+
+
+def test_task_clustered_mean_reports_total_denominator_and_task_interval():
+    contributions = []
+    for repeat_id in range(10):
+        contributions.extend(
+            [
+                {
+                    "task_id": "task-low",
+                    "cell": ("matched_seed_repeat", 42, repeat_id),
+                    "value": 1,
+                },
+                {
+                    "task_id": "task-high",
+                    "cell": ("matched_seed_repeat", 42, repeat_id),
+                    "value": 9,
+                },
+            ]
+        )
+
+    result = task_clustered_mean(
+        contributions,
+        metric_name="browser_actions_all",
+        system_id="E0",
+        samples=500,
+        seed=17,
+    )
+
+    assert result["numerator"] == 100.0
+    assert result["denominator"] == 20
+    assert result["estimate"] == 5.0
+    assert result["mean"] == 5.0
+    assert result["n_task_clusters"] == 2
+    assert result["ci95_low"] == 1.0
+    assert result["ci95_high"] == 9.0
+    assert result["interval_method"] == "percentile_task_cluster_bootstrap"
+    assert result["inference_unit"] == "task_id"
+
+
+def test_task_clustered_mean_collapses_exact_cells_and_rejects_conflicts():
+    base = {
+        "task_id": "task-a",
+        "cell": ("matched_seed_repeat", 42, 0),
+        "value": 3,
+    }
+    duplicate = task_clustered_mean(
+        [base, dict(base)],
+        metric_name="browser_actions_all",
+        system_id="E0",
+        samples=25,
+    )
+    assert duplicate["denominator"] == 1
+    assert duplicate["duplicate_seed_repeat_cells_collapsed"] == 1
+    assert duplicate["interval_status"] == (
+        "NOT_ESTIMABLE_FEWER_THAN_TWO_TASK_CLUSTERS"
+    )
+
+    with pytest.raises(SchemaError, match="conflicting continuous contributions"):
+        task_clustered_mean(
+            [base, {**base, "value": 4}],
+            metric_name="browser_actions_all",
+            system_id="E0",
+            samples=25,
+        )
+
+    missing = {**base, "value": None}
+    missing_duplicate = task_clustered_mean(
+        [missing, dict(missing)],
+        metric_name="browser_actions_all",
+        system_id="E0",
+        samples=25,
+    )
+    assert missing_duplicate["display"] == "N/A"
+    assert missing_duplicate["denominator"] == 0
+    assert missing_duplicate["missing_seed_repeat_cells"] == 1
+    assert missing_duplicate["duplicate_seed_repeat_cells_collapsed"] == 1
+    with pytest.raises(SchemaError, match="conflicting continuous contributions"):
+        task_clustered_mean(
+            [missing, base],
+            metric_name="browser_actions_all",
+            system_id="E0",
+            samples=25,
+        )
+
+
+def test_task_clustered_mean_force_na_clears_every_descriptive_value():
+    result = task_clustered_mean(
+        [
+            {
+                "task_id": "task-a",
+                "cell": ("matched_seed_repeat", 42, 0),
+                "value": 1,
+            },
+            {
+                "task_id": "task-b",
+                "cell": ("matched_seed_repeat", 42, 0),
+                "value": 9,
+            },
+        ],
+        metric_name="recovery_attempts_all",
+        system_id="E0",
+        samples=25,
+        force_na=True,
+    )
+
+    for field in (
+        "mean",
+        "std",
+        "median",
+        "q1",
+        "q3",
+        "iqr",
+        "min",
+        "max",
+        "estimate",
+        "ci_low",
+        "ci_high",
+        "ci95_low",
+        "ci95_high",
+    ):
+        assert result[field] is None
+    assert result["display"] == "N/A"
+
+
+def test_recovery_disabled_systems_use_na_for_continuous_attempt_means():
+    episodes = [
+        _episode(system_id, success=False, steps=1)
+        for system_id in ("E0", "E1", "E2", "E3")
+    ]
+    metrics = compute_table2_metrics(episodes, bootstrap_samples=25)["systems"]
+    for system_id in ("E0", "E1"):
+        for metric_name in (
+            "recovery_attempts_per_episode",
+            "recovery_attempts_per_failure_episode",
+        ):
+            value = metrics[system_id][metric_name]
+            assert value["display"] == "N/A"
+            assert value["estimate"] is None
+            assert value["mean"] is None
+            assert value["numerator"] == 0.0
+            assert value["denominator"] == 0
+
+
+def test_task_clustered_mean_uses_pooled_cells_with_unequal_cluster_sizes():
+    contributions = [
+        {
+            "task_id": "task-a",
+            "cell": ("matched_seed_repeat", 42, 0),
+            "value": 0,
+        },
+        *[
+            {
+                "task_id": "task-b",
+                "cell": ("matched_seed_repeat", 42, repeat_id),
+                "value": 10,
+            }
+            for repeat_id in range(3)
+        ],
+    ]
+    result = task_clustered_mean(
+        contributions,
+        metric_name="browser_actions_all",
+        system_id="E0",
+        samples=500,
+        seed=31,
+    )
+    assert result["numerator"] == 30.0
+    assert result["denominator"] == 4
+    assert result["estimate"] == 7.5
+    assert result["n_task_clusters"] == 2
 
 
 def test_per_system_tsr_interval_uses_tasks_not_seed_repeat_rows():
