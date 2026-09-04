@@ -295,8 +295,24 @@ build merely because `validate-provenance` passes; the registered audit
 implementation/configuration, approved compatible task export, exact recomputed
 task-interface `PASS`, and finalized 50+15 manifest must also exist.
 
-Run the read-only `validate-final` subcommand with the same arguments,
-`--assignment-package`, `--provenance-manifest`, and `--audit` after any copy.
+Run the read-only `validate-final` subcommand after any copy:
+
+```bash
+PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py validate-final \
+  --config configs/eval/table2/joint_duplicate_audit_v1.json \
+  --source-authority configs/eval/table2/p4_source_authority_v1.json \
+  --preparation-package /kaggle/working/table2-p4-prepare-only-v1/preparation \
+  --gold-train-json /kaggle/input/web-gold-40k/final_data_set_40k/split_train.json \
+  --supplement-train-json /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle/data/supplement_train.json \
+  --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
+  --approved-task-registry /kaggle/working/table2/evidence/approved-pilot-task-registry.json \
+  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
+  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest.json \
+  --assignment-package /kaggle/working/table2/evidence/joint-duplicate-assignments \
+  --provenance-manifest /kaggle/working/table2/evidence/table2-memory-provenance-v1.json \
+  --audit /kaggle/working/table2/evidence/joint-duplicate-audit.json
+```
+
 It reproduces the complete final manifest; it does not merely accept internally
 consistent cluster IDs.
 

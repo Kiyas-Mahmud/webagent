@@ -9,6 +9,17 @@ PC-02/PC-03 comparison
 **Historical controlled evidence when this document was drafted:** 5,000 train rows, 500 validation rows, zero test
 rows read  
 
+> **TABLE 2 SUPERSESSION NOTICE (2026-09-05):** This is a historical design
+> document, not execution authority. Its inventory, proposed folder tree,
+> hard-coded Qwen E0 wording, and "pure training effect" interpretation are
+> obsolete. Do not use them to configure, launch, or interpret Table 2. The
+> current authority is
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`: PC-01 is
+> provisional, final backbone selection remains validation-only, E0 uses the
+> unadapted selected backbone, and E0-vs-E1 is contextual unless fully
+> interface-matched. The paper Table 2 remains `N/R` until a validated final
+> campaign package exists.
+
 This is the repository-specific plan for turning the existing offline
 multitask model into a measurable web-agent system and producing Q1-level
 component, end-to-end, ablation, and related-work evidence.

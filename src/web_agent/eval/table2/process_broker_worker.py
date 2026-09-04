@@ -1,15 +1,17 @@
 """Sealed evaluator/browser-owner worker for authenticated process broker IPC.
 
 Only this process imports the configured backend. The runtime channel exposes
-four exact outer operation envelopes and rejects registered sensitive key
-aliases recursively. Its action/observation/execution inner mappings are not
-operation-specific and carry no value-provenance attestation, so this source
-does not claim that neutral-key values are semantically oracle-free.
+five exact operation envelopes and rejects registered sensitive key aliases
+recursively. Its eight reset/action/observation/execution/verifier request and
+result paths satisfy registered schemas and one-session causal state. Those
+schemas carry no external value-provenance attestation, so this source does not
+claim that neutral-key values are semantically oracle-free.
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
 import importlib
 import json
 import os
@@ -25,10 +27,12 @@ from .process_broker_protocol import (
     RUNTIME_BROKER_OPERATIONS,
     ProcessBrokerProtocolError,
     authenticated_envelope,
+    expected_verifier_receipt_binding,
     receive_frame,
     send_frame,
     validate_runtime_request_payload,
     validate_runtime_result,
+    validated_policy_screenshot_root,
     verify_authenticated_envelope,
 )
 
@@ -37,7 +41,11 @@ CONTROL_OPERATION = "sealed_control_shutdown"
 
 
 def _load_factory(
-    entrypoint: str, *, source_path: Path, source_sha256: str
+    entrypoint: str,
+    *,
+    source_path: Path,
+    source_sha256: str,
+    backend_config: Mapping[str, Any],
 ) -> Any:
     module_name, separator, attribute_name = entrypoint.partition(":")
     if separator != ":" or not module_name or not attribute_name or "." in attribute_name:
@@ -55,13 +63,30 @@ def _load_factory(
     factory = getattr(module, attribute_name, None)
     if not callable(factory):
         raise ProcessBrokerProtocolError("sealed backend factory is not callable")
-    backend = factory()
+    backend = factory(dict(backend_config))
     for operation in RUNTIME_BROKER_OPERATIONS:
         if not callable(getattr(backend, operation, None)):
             raise ProcessBrokerProtocolError(
                 f"sealed backend lacks registered operation {operation}"
             )
     return backend
+
+
+def _detach_backend_result(value: object) -> dict[str, Any]:
+    """Materialize backend-controlled objects before the final source scan."""
+
+    try:
+        encoded = canonical_json_bytes(value)
+        detached = json.loads(encoded)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ProcessBrokerProtocolError(
+            "sealed backend result is not detached canonical JSON"
+        ) from exc
+    if not isinstance(detached, dict):
+        raise ProcessBrokerProtocolError(
+            "sealed backend result must be a JSON object"
+        )
+    return detached
 
 
 def _peer_identity(connection: socket.socket) -> tuple[int, int, int] | None:
@@ -83,6 +108,8 @@ def _verify_imported_broker_sources(config: Mapping[str, Any]) -> None:
     }
     modules = {
         "web_agent": "src/web_agent/__init__.py",
+        "web_agent.benchmarks": "src/web_agent/benchmarks/__init__.py",
+        "web_agent.benchmarks.base": "src/web_agent/benchmarks/base.py",
         "web_agent.eval": "src/web_agent/eval/__init__.py",
         "web_agent.eval.table2": "src/web_agent/eval/table2/__init__.py",
         "web_agent.eval.table2.common": "src/web_agent/eval/table2/common.py",
@@ -92,6 +119,10 @@ def _verify_imported_broker_sources(config: Mapping[str, Any]) -> None:
         "web_agent.eval.table2.process_broker_worker": (
             "src/web_agent/eval/table2/process_broker_worker.py"
         ),
+        "web_agent.runtime": "src/web_agent/runtime/__init__.py",
+        "web_agent.runtime.contracts": "src/web_agent/runtime/contracts.py",
+        "web_agent.runtime.deadline": "src/web_agent/runtime/deadline.py",
+        "web_agent.runtime.state_reset": "src/web_agent/runtime/state_reset.py",
     }
     for module_name, relative in modules.items():
         module = sys.modules.get(module_name)
@@ -105,6 +136,37 @@ def _verify_imported_broker_sources(config: Mapping[str, Any]) -> None:
             raise ProcessBrokerProtocolError(
                 f"imported broker module identity differs: {module_name}"
             )
+    # The worker starts in an isolated interpreter.  Every repository-local
+    # module executed before readiness, including backend imports, must be in
+    # the authenticated launch closure.  This catches future eager package
+    # imports instead of silently expanding the trusted computing base.
+    for module_name, module in tuple(sys.modules.items()):
+        raw_path = getattr(module, "__file__", None)
+        if not raw_path:
+            continue
+        unresolved = Path(str(raw_path))
+        if not unresolved.is_absolute():
+            unresolved = Path.cwd() / unresolved
+        loaded = unresolved.resolve()
+        unresolved_inside_repository = False
+        try:
+            unresolved.absolute().relative_to(repository_root)
+            unresolved_inside_repository = True
+        except ValueError:
+            pass
+        try:
+            relative = loaded.relative_to(repository_root).as_posix()
+        except ValueError:
+            if unresolved_inside_repository:
+                raise ProcessBrokerProtocolError(
+                    "loaded repository module escapes broker source closure: "
+                    f"{module_name}"
+                )
+            continue
+        if loaded.suffix != ".py" or expected.get(relative) != sha256_file(loaded):
+            raise ProcessBrokerProtocolError(
+                f"loaded repository module is outside broker source closure: {module_name}"
+            )
 
 
 def serve(config: Mapping[str, Any]) -> int:
@@ -114,6 +176,26 @@ def serve(config: Mapping[str, Any]) -> int:
     session_id = str(config["session_id"])
     allowed_runtime_pid = int(config["allowed_runtime_pid"])
     allowed_uid = int(config["allowed_uid"])
+    policy_screenshot_root = validated_policy_screenshot_root(
+        config.get("policy_screenshot_root")
+    )
+    backend_config = config.get("sealed_backend_config")
+    if not isinstance(backend_config, Mapping):
+        raise ProcessBrokerProtocolError("sealed backend config is absent")
+    backend_config_sha256 = hashlib.sha256(
+        canonical_json_bytes(backend_config)
+    ).hexdigest()
+    if backend_config_sha256 != config.get("sealed_backend_config_sha256"):
+        raise ProcessBrokerProtocolError("sealed backend config identity differs")
+    screenshot_root_identity = (
+        hashlib.sha256(str(policy_screenshot_root).encode("utf-8")).hexdigest()
+        if policy_screenshot_root is not None
+        else None
+    )
+    if screenshot_root_identity != config.get(
+        "policy_screenshot_root_identity_sha256"
+    ):
+        raise ProcessBrokerProtocolError("policy screenshot root identity differs")
     backend_source = Path(str(config["backend_source_path"]))
     if (
         backend_source.is_symlink()
@@ -126,9 +208,19 @@ def serve(config: Mapping[str, Any]) -> int:
         str(config["backend_entrypoint"]),
         source_path=backend_source,
         source_sha256=str(config["backend_source_sha256"]),
+        backend_config=backend_config,
     )
+    _verify_imported_broker_sources(config)
     sequences = {"runtime": 0, "control": 0}
     seen_nonces: set[str] = set()
+    bound_episode_task: tuple[str, str] | None = None
+    pending_action: tuple[str, bool] | None = None
+    last_action: dict[str, Any] | None = None
+    last_observation: dict[str, Any] | None = None
+    terminal_required = False
+    episode_terminated = False
+    runtime_closed = False
+    runtime_failed = False
     endpoint.parent.mkdir(parents=True, exist_ok=True)
     if endpoint.exists():
         raise ProcessBrokerProtocolError("process-broker endpoint already exists")
@@ -145,6 +237,8 @@ def serve(config: Mapping[str, Any]) -> int:
             "status": "READY",
             "evaluator_pid": os.getpid(),
             "endpoint_mode": oct(endpoint.stat().st_mode & 0o777),
+            "sealed_backend_config_sha256": backend_config_sha256,
+            "policy_screenshot_root_identity_sha256": screenshot_root_identity,
         }
         print(
             canonical_json_bytes(
@@ -211,17 +305,152 @@ def serve(config: Mapping[str, Any]) -> int:
                         validated_payload = validate_runtime_request_payload(
                             operation, payload
                         )
+                        requested_identity = (
+                            str(validated_payload["episode_id"]),
+                            str(validated_payload["task_id"]),
+                        )
+                        if runtime_closed:
+                            raise ProcessBrokerProtocolError(
+                                "runtime broker session is closed"
+                            )
+                        if runtime_failed and operation != "runtime_close":
+                            raise ProcessBrokerProtocolError(
+                                "runtime broker session failed closed"
+                            )
+                        if bound_episode_task is None:
+                            if (
+                                operation != "runtime_reset"
+                            ):
+                                raise ProcessBrokerProtocolError(
+                                    "first runtime operation must be registered reset"
+                                )
+                        elif requested_identity != bound_episode_task:
+                            raise ProcessBrokerProtocolError(
+                                "runtime broker episode/task identity differs"
+                            )
+                        if operation == "runtime_reset" and bound_episode_task is not None:
+                            raise ProcessBrokerProtocolError(
+                                "runtime reset may occur exactly once"
+                            )
+                        if operation == "runtime_observe":
+                            if pending_action is None:
+                                raise ProcessBrokerProtocolError(
+                                    "runtime observation has no pending action"
+                                )
+                            pending_action_id, pending_is_recovery = pending_action
+                            expected_stage = (
+                                "post_recovery"
+                                if pending_is_recovery
+                                else "post_action"
+                            )
+                            if (
+                                validated_payload.get("stage") != expected_stage
+                                or validated_payload.get("prior_action_id")
+                                != pending_action_id
+                            ):
+                                raise ProcessBrokerProtocolError(
+                                    "runtime observation differs from pending action"
+                                )
+                        elif operation == "runtime_execute":
+                            if pending_action is not None:
+                                raise ProcessBrokerProtocolError(
+                                    "runtime execution awaits its post observation"
+                                )
+                            if terminal_required:
+                                raise ProcessBrokerProtocolError(
+                                    "runtime execution requires pending terminal receipt"
+                                )
+                            if episode_terminated:
+                                raise ProcessBrokerProtocolError(
+                                    "runtime episode already terminated"
+                                )
+                        elif operation == "runtime_terminal":
+                            if pending_action is not None:
+                                raise ProcessBrokerProtocolError(
+                                    "runtime terminal check requires post observation"
+                                )
+                            if not terminal_required or last_observation is None:
+                                raise ProcessBrokerProtocolError(
+                                    "runtime terminal receipt is duplicate or out of order"
+                                )
+                            expected_binding = expected_verifier_receipt_binding(
+                                observation=last_observation,
+                                action=last_action,
+                            )
+                            if canonical_json_bytes(
+                                validated_payload.get("receipt_binding")
+                            ) != canonical_json_bytes(expected_binding):
+                                raise ProcessBrokerProtocolError(
+                                    "runtime terminal receipt binding differs from causal state"
+                                )
+                        elif operation == "runtime_close" and not runtime_failed:
+                            if pending_action is not None:
+                                raise ProcessBrokerProtocolError(
+                                    "runtime close awaits its post observation"
+                                )
+                            if terminal_required:
+                                raise ProcessBrokerProtocolError(
+                                    "runtime close requires pending terminal receipt"
+                                )
                         # Consume replay state only after authentication and the
-                        # complete request schema have passed. Backend/result
-                        # failures still consume the synchronized request.
+                        # complete request and causal-state schemas have passed.
+                        # Backend/result failures consume the synchronized
+                        # request and poison every operation except cleanup.
                         sequences[role] += 1
                         seen_nonces.add(nonce)
-                        result = validate_runtime_result(
-                            operation,
-                            getattr(backend, operation)(validated_payload),
-                        )
+                        try:
+                            backend_result = _detach_backend_result(
+                                getattr(backend, operation)(validated_payload)
+                            )
+                            # A backend may import code lazily from an
+                            # operation. Recheck before any result crosses the
+                            # boundary so readiness cannot bypass the source
+                            # closure.
+                            _verify_imported_broker_sources(config)
+                            result = validate_runtime_result(
+                                operation,
+                                backend_result,
+                                request_payload=validated_payload,
+                                policy_screenshot_root=policy_screenshot_root,
+                            )
+                            _verify_imported_broker_sources(config)
+                        except Exception:
+                            runtime_failed = True
+                            raise
+                        if operation == "runtime_reset":
+                            bound_episode_task = requested_identity
+                            last_observation = dict(result["observation"])
+                            last_action = None
+                            terminal_required = True
+                        elif operation == "runtime_observe":
+                            pending_action = None
+                            last_observation = dict(result["observation"])
+                            terminal_required = True
+                        elif operation == "runtime_execute":
+                            action = validated_payload["action"]
+                            pending_action = (
+                                str(action["action_id"]),
+                                action.get("recovery_attempt_id") is not None,
+                            )
+                            last_action = dict(action)
+                        elif operation == "runtime_terminal":
+                            terminal_required = False
+                            signal = result["opaque_terminal_signal"]
+                            episode_terminated = signal["terminate"] is True
+                        elif operation == "runtime_close":
+                            if result != {"closed": True}:
+                                runtime_failed = True
+                                raise ProcessBrokerProtocolError(
+                                    "runtime close was not acknowledged"
+                                )
+                            runtime_closed = True
                         response_role = "sealed_runtime_response"
                     else:
+                        # Control shutdown is lifecycle cleanup only. It is
+                        # deliberately available from an incomplete/failed
+                        # runtime phase and does not certify causal episode
+                        # completion; only runtime_close carries that ordering
+                        # contract.
                         if operation != CONTROL_OPERATION or payload != {}:
                             raise ProcessBrokerProtocolError(
                                 "control requested an unregistered operation"
@@ -231,6 +460,7 @@ def serve(config: Mapping[str, Any]) -> int:
                         shutdown = getattr(backend, "shutdown", None)
                         if callable(shutdown):
                             shutdown()
+                        _verify_imported_broker_sources(config)
                         result = {"shutdown": True}
                         response_role = "sealed_control_response"
                         running = False
@@ -268,7 +498,10 @@ def serve(config: Mapping[str, Any]) -> int:
                             ),
                             "nonce": nonce if type(nonce) is str else "",
                             "status": "REJECTED",
-                            "error_code": type(exc).__name__,
+                            # A backend-controlled exception class name would be
+                            # another neutral scalar channel. Keep rejection
+                            # disclosure closed and deterministic.
+                            "error_code": "REGISTERED_REQUEST_REJECTED",
                             "result": {},
                         }
                         send_frame(

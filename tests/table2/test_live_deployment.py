@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -83,6 +84,21 @@ def _write_bytes(path: Path, value: bytes) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(value)
     return path
+
+
+def test_live_evidence_path_rejects_nested_symlink_ancestry(tmp_path: Path) -> None:
+    evidence_root = tmp_path / "evidence"
+    actual = evidence_root / "actual"
+    actual.mkdir(parents=True)
+    (actual / "record.json").write_text("{}\n", encoding="utf-8")
+    (evidence_root / "linked").symlink_to(actual, target_is_directory=True)
+
+    with pytest.raises(SchemaError, match="symlink ancestry"):
+        live_deployment._evidence_path(
+            evidence_root,
+            "linked/record.json",
+            field="capability.evidence",
+        )
 
 
 def _task_export_and_audit(*, page_state_only: bool) -> tuple[dict, dict]:
@@ -909,6 +925,31 @@ def test_staging_copies_only_transitively_referenced_live_evidence(
     assert len(reopened.capability_source_files) == 3
 
 
+def test_staging_rejects_bidirectional_source_destination_overlap_before_write(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    manifest = _write_json(source / "deployment.json", _manifest(source))
+    nested_destination = source / "handoff-output"
+
+    with pytest.raises(SchemaError, match="staging destination.*tree-disjoint"):
+        stage_pc01_live_deployment_package(
+            manifest_path=manifest,
+            evidence_root=source,
+            repository_root=ROOT,
+            destination_artifact_root=nested_destination,
+        )
+    assert not nested_destination.exists()
+
+    with pytest.raises(SchemaError, match="staging destination.*tree-disjoint"):
+        stage_pc01_live_deployment_package(
+            manifest_path=manifest,
+            evidence_root=source,
+            repository_root=ROOT,
+            destination_artifact_root=tmp_path,
+        )
+
+
 def test_staged_live_evidence_rejects_tampering_and_unreferenced_files(
     tmp_path: Path,
 ) -> None:
@@ -939,6 +980,80 @@ def test_staged_live_evidence_rejects_tampering_and_unreferenced_files(
     with pytest.raises(SchemaError, match="readiness evidence hash differs"):
         validate_bound_pc01_live_deployment(
             environment,
+            artifact_root=destination,
+            repository_root=ROOT,
+        )
+
+
+def test_staged_live_evidence_rejects_unregistered_empty_directory(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    manifest = _write_json(source / "deployment.json", _manifest(source))
+    destination = tmp_path / "handoff"
+    staged = stage_pc01_live_deployment_package(
+        manifest_path=manifest,
+        evidence_root=source,
+        repository_root=ROOT,
+        destination_artifact_root=destination,
+    )
+    (staged.package_root / "unregistered-empty-directory").mkdir()
+
+    with pytest.raises(SchemaError, match="package directory closure differs"):
+        validate_bound_pc01_live_deployment(
+            _bound_environment(staged),
+            artifact_root=destination,
+            repository_root=ROOT,
+        )
+
+
+def test_staged_live_evidence_rejects_unregistered_fifo(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    manifest = _write_json(source / "deployment.json", _manifest(source))
+    destination = tmp_path / "handoff"
+    staged = stage_pc01_live_deployment_package(
+        manifest_path=manifest,
+        evidence_root=source,
+        repository_root=ROOT,
+        destination_artifact_root=destination,
+    )
+    os.mkfifo(staged.package_root / "unregistered-fifo")
+
+    with pytest.raises(SchemaError, match="package contains a non-regular entry"):
+        validate_bound_pc01_live_deployment(
+            _bound_environment(staged),
+            artifact_root=destination,
+            repository_root=ROOT,
+        )
+
+
+def test_staged_live_evidence_rejects_hard_linked_registered_file(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    manifest = _write_json(source / "deployment.json", _manifest(source))
+    destination = tmp_path / "handoff"
+    staged = stage_pc01_live_deployment_package(
+        manifest_path=manifest,
+        evidence_root=source,
+        repository_root=ROOT,
+        destination_artifact_root=destination,
+    )
+    readiness = next(
+        path
+        for path in staged.package_files
+        if path.name == "deterministic_reset.json"
+    )
+    external = tmp_path / "external-readiness.json"
+    external.write_bytes(readiness.read_bytes())
+    readiness.unlink()
+    os.link(external, readiness)
+
+    with pytest.raises(SchemaError, match="package contains a hard-linked file"):
+        validate_bound_pc01_live_deployment(
+            _bound_environment(staged),
             artifact_root=destination,
             repository_root=ROOT,
         )

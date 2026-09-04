@@ -25,8 +25,11 @@ from .common import (
     sha256_json,
 )
 from .process_broker_protocol import (
-    ARBITRARY_RUNTIME_MAPPING_PATHS,
+    POLICY_SCREENSHOT_TRANSPORT_CONTRACT,
+    PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256,
+    PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION,
     PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS,
+    RUNTIME_INNER_SCHEMA_PATHS,
 )
 
 
@@ -47,7 +50,7 @@ PC01_PAGE_BROKER_SECURITY_SCHEMA_VERSION = (
     "table2-pc01-page-broker-security-v1"
 )
 PC01_PROCESS_BROKER_SECURITY_SCHEMA_VERSION = (
-    "table2-pc01-page-broker-security-v3"
+    "table2-pc01-page-broker-security-v5"
 )
 PC01_PAGE_BROKER_SECURITY_CLAIM_SCOPE = (
     "REVIEWED_CODE_DATAFLOW_ONLY_NOT_PROCESS_ISOLATION"
@@ -60,10 +63,12 @@ PC01_PROCESS_BROKER_SECURITY_CLAIM_SCOPE = (
     "NOT_VALUE_PROVENANCE_OR_DEPLOYMENT_AUTHORITY"
 )
 PC01_PROCESS_BROKER_SECURITY_BLOCKED_STATUS = (
-    "BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED"
+    "BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED"
 )
 PC01_PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/__init__.py",
+    "src/web_agent/benchmarks/__init__.py",
+    "src/web_agent/benchmarks/base.py",
     "src/web_agent/eval/__init__.py",
     "src/web_agent/eval/table2/__init__.py",
     "src/web_agent/eval/table2/common.py",
@@ -71,6 +76,10 @@ PC01_PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/eval/table2/process_broker_protocol.py",
     "src/web_agent/eval/table2/process_broker_runtime.py",
     "src/web_agent/eval/table2/process_broker_worker.py",
+    "src/web_agent/runtime/__init__.py",
+    "src/web_agent/runtime/contracts.py",
+    "src/web_agent/runtime/deadline.py",
+    "src/web_agent/runtime/state_reset.py",
 )
 EVALUATION_RUNNER_SCOPE = "FROZEN_EVALUATION_RUNNER"
 ENGINEERING_SMOKE_SCOPE = "ENGINEERING_SMOKE_ONLY"
@@ -144,13 +153,16 @@ def process_isolated_pc01_page_broker_security_binding(
 ) -> dict[str, Any]:
     """Bind the implemented process architecture without self-authorizing it.
 
-    These rows attest distinct local processes, exact outer envelopes, and
-    recursive named-key rejection only. The three nested action/observation/
-    execution mappings have neither operation-specific schemas nor value-
-    provenance evidence. A real deployment also requires a separately
-    authenticated external receipt proving that its processes used the reviewed
-    bytes and boundaries. This repository has no registered trust anchor for
-    such a receipt, so dispatch stays false.
+    These rows attest distinct local processes, exact outer envelopes,
+    recursive named-key rejection, a complete loaded-source closure, and
+    all eight source-bound operation-specific reset/action/observation/
+    execution/verifier schemas, causal session/action binding, canonical wire
+    JSON, and a root-confined content-addressed screenshot transport. They do
+    not attest the origin of scalar values within those schemas. A real
+    deployment therefore still requires external runtime-value provenance and
+    a separately authenticated receipt proving that its processes used the
+    reviewed bytes and boundaries. This repository has no registered trust
+    anchor for such a receipt, so dispatch stays false.
     """
 
     rows: list[dict[str, str]] = []
@@ -170,8 +182,26 @@ def process_isolated_pc01_page_broker_security_binding(
         "runtime_and_evaluator_process_roles_separate": True,
         "outer_envelope_fields_exact": True,
         "forbidden_named_keys_rejected_recursively": True,
-        "arbitrary_nested_mapping_paths": list(ARBITRARY_RUNTIME_MAPPING_PATHS),
-        "operation_specific_inner_schemas_registered": False,
+        "operation_specific_inner_schema_paths": list(RUNTIME_INNER_SCHEMA_PATHS),
+        "inner_schema_registry_version": (
+            PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION
+        ),
+        "inner_schema_registry_sha256": (
+            PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256
+        ),
+        "operation_specific_inner_schemas_registered": True,
+        "loaded_source_closure_enforced": True,
+        "single_episode_task_session_enforced": True,
+        "observation_stage_prior_action_bound": True,
+        "verifier_receipt_causal_binding_enforced": True,
+        "reset_operation_registered": True,
+        "policy_screenshot_transport_contract": (
+            POLICY_SCREENSHOT_TRANSPORT_CONTRACT
+        ),
+        "policy_screenshot_root_bound_per_session": True,
+        "canonical_wire_json_enforced": True,
+        "runtime_client_ambiguous_failure_poisoned": True,
+        "sealed_backend_config_hash_bound": True,
         "runtime_value_provenance_attested": False,
         "evaluator_operation_in_runtime_allowlist": False,
         "authenticated_outer_envelopes": True,
@@ -180,7 +210,7 @@ def process_isolated_pc01_page_broker_security_binding(
             PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
         ),
         "same_process_fixture_production_eligible": False,
-        "local_receipt_schema_version": "table2-process-page-broker-receipt-v2",
+        "local_receipt_schema_version": "table2-process-page-broker-receipt-v4",
         "local_cleanup_receipt_schema_version": (
             "table2-process-page-broker-cleanup-receipt-v1"
         ),
@@ -254,10 +284,10 @@ def assert_pc01_page_broker_production_authorized(value: object) -> None:
             )
         raise SchemaError(
             "PC-01 live campaign is blocked: local broker architecture/source "
-            "evidence does not attest nested-map semantics or value provenance "
-            "and is not external deployment authority; exact operation-specific "
-            "inner schemas plus a registered, independently authenticated "
-            "deployment receipt are required "
+            "evidence includes registered operation-specific inner schemas but "
+            "does not attest runtime-value provenance and is not external "
+            "deployment authority; a registered, independently authenticated "
+            "value-provenance/deployment receipt is required "
             "before any provider or browser runtime loads"
         )
     raise SchemaError(

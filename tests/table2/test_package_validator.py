@@ -89,6 +89,7 @@ from web_agent.eval.table2.execution_guard import (
     EVALUATION_RUNNER_SCOPE,
     InfrastructureInvalidError,
     PC01_PAGE_BROKER_SECURITY_FIELD,
+    PC01_PROCESS_BROKER_SOURCE_PATHS,
     RUNNER_ATTESTATION_SCHEMA_VERSION,
     process_isolated_pc01_page_broker_security_binding,
 )
@@ -964,7 +965,9 @@ def _valid_environment(path: Path) -> Path:
     value[PREFLIGHT_BINDING_FIELD] = _valid_deployment_preflight(path.parent)
     task_export = _fixture_page_state_task_export(value)
     task_audit = build_webarena_task_interface_audit(task_export)
-    live_evidence_root = path.parent / "measured-live-deployment"
+    live_evidence_root = path.parent.with_name(
+        f"{path.parent.name}-measured-live-deployment-source"
+    )
     live_manifest = _write_json(
         live_evidence_root / "deployment.json",
         _valid_live_deployment_manifest(
@@ -3830,6 +3833,7 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
             *package_validator_module.AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS,
             "tests/table2/test_live_deployment.py",
             *_SOURCE_PATHS,
+            *PC01_PROCESS_BROKER_SOURCE_PATHS,
             *package_validator_module.EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS,
         }
     )

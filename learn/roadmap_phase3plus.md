@@ -1,5 +1,10 @@
 # Phase 3+ — Roadmap (preview of what's coming)
 
+> **HISTORICAL TUTORIAL — DO NOT EXECUTE OR TREAT AS A NOVELTY CLAIM.** This
+> roadmap predates the implemented four-pillar system. Current scientific roles
+> and implementation status are defined by `docs/AGENT.md` and
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`.
+
 These phases aren't built yet. This file previews the topics so you can learn
 ahead. Each will get its own full `learn/` file when we build it.
 

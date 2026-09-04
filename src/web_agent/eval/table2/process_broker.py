@@ -22,16 +22,21 @@ import socket
 import subprocess
 import sys
 import tempfile
+from types import MappingProxyType
 from typing import Any, Mapping
 
-from .common import SchemaError, sha256_file, sha256_json
+from .common import canonical_json_bytes, SchemaError, sha256_file, sha256_json
 from .process_broker_protocol import (
-    ARBITRARY_RUNTIME_MAPPING_PATHS,
+    POLICY_SCREENSHOT_TRANSPORT_CONTRACT,
+    PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256,
+    PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION,
     PROCESS_BROKER_PROTOCOL_VERSION,
     PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS,
+    RUNTIME_INNER_SCHEMA_PATHS,
     authenticated_envelope,
     receive_frame,
     send_frame,
+    validated_policy_screenshot_root,
     verify_authenticated_envelope,
 )
 from .process_broker_runtime import ProcessIsolatedRuntimeClient
@@ -39,12 +44,14 @@ from .process_broker_runtime import ProcessIsolatedRuntimeClient
 CONTROL_OPERATION = "sealed_control_shutdown"
 
 
-PROCESS_BROKER_RECEIPT_SCHEMA_VERSION = "table2-process-page-broker-receipt-v2"
+PROCESS_BROKER_RECEIPT_SCHEMA_VERSION = "table2-process-page-broker-receipt-v4"
 PROCESS_BROKER_CLEANUP_RECEIPT_SCHEMA_VERSION = (
     "table2-process-page-broker-cleanup-receipt-v1"
 )
 PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/__init__.py",
+    "src/web_agent/benchmarks/__init__.py",
+    "src/web_agent/benchmarks/base.py",
     "src/web_agent/eval/__init__.py",
     "src/web_agent/eval/table2/__init__.py",
     "src/web_agent/eval/table2/common.py",
@@ -52,6 +59,10 @@ PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/eval/table2/process_broker_protocol.py",
     "src/web_agent/eval/table2/process_broker_runtime.py",
     "src/web_agent/eval/table2/process_broker_worker.py",
+    "src/web_agent/runtime/__init__.py",
+    "src/web_agent/runtime/contracts.py",
+    "src/web_agent/runtime/deadline.py",
+    "src/web_agent/runtime/state_reset.py",
 )
 
 
@@ -62,6 +73,8 @@ def _validated_readiness_envelope(
     session_id: str,
     startup_nonce: str,
     child_pid: int,
+    sealed_backend_config_sha256: str,
+    policy_screenshot_root_identity_sha256: str | None,
 ) -> int:
     ready = verify_authenticated_envelope(value, authentication_key=control_key)
     if set(ready) != {
@@ -72,6 +85,8 @@ def _validated_readiness_envelope(
         "status",
         "evaluator_pid",
         "endpoint_mode",
+        "sealed_backend_config_sha256",
+        "policy_screenshot_root_identity_sha256",
     }:
         raise RuntimeError("process-broker worker readiness fields differ")
     evaluator_pid = ready.get("evaluator_pid")
@@ -82,6 +97,10 @@ def _validated_readiness_envelope(
         or ready.get("startup_nonce") != startup_nonce
         or ready.get("status") != "READY"
         or ready.get("endpoint_mode") != "0o600"
+        or ready.get("sealed_backend_config_sha256")
+        != sealed_backend_config_sha256
+        or ready.get("policy_screenshot_root_identity_sha256")
+        != policy_screenshot_root_identity_sha256
         or type(evaluator_pid) is not int
         or evaluator_pid != child_pid
     ):
@@ -117,6 +136,8 @@ def _verify_parent_imported_sources(
     expected = {row["relative_path"]: row["sha256"] for row in source_rows}
     modules = {
         "web_agent": "src/web_agent/__init__.py",
+        "web_agent.benchmarks": "src/web_agent/benchmarks/__init__.py",
+        "web_agent.benchmarks.base": "src/web_agent/benchmarks/base.py",
         "web_agent.eval": "src/web_agent/eval/__init__.py",
         "web_agent.eval.table2": "src/web_agent/eval/table2/__init__.py",
         "web_agent.eval.table2.common": "src/web_agent/eval/table2/common.py",
@@ -129,6 +150,10 @@ def _verify_parent_imported_sources(
         "web_agent.eval.table2.process_broker_runtime": (
             "src/web_agent/eval/table2/process_broker_runtime.py"
         ),
+        "web_agent.runtime": "src/web_agent/runtime/__init__.py",
+        "web_agent.runtime.contracts": "src/web_agent/runtime/contracts.py",
+        "web_agent.runtime.deadline": "src/web_agent/runtime/deadline.py",
+        "web_agent.runtime.state_reset": "src/web_agent/runtime/state_reset.py",
     }
     for module_name, relative in modules.items():
         module = sys.modules.get(module_name)
@@ -159,8 +184,21 @@ class ProcessBrokerReceipt:
     role_separated_authentication: bool
     outer_envelope_fields_exact: bool
     forbidden_named_keys_rejected_recursively: bool
-    arbitrary_nested_mapping_paths: tuple[str, ...]
+    operation_specific_inner_schema_paths: tuple[str, ...]
+    inner_schema_registry_version: str
+    inner_schema_registry_sha256: str
     operation_specific_inner_schemas_registered: bool
+    loaded_source_closure_enforced: bool
+    single_episode_task_session_enforced: bool
+    observation_stage_prior_action_bound: bool
+    verifier_receipt_causal_binding_enforced: bool
+    reset_operation_registered: bool
+    policy_screenshot_transport_contract: str
+    policy_screenshot_root_identity_sha256: str | None
+    policy_screenshot_root_bound_per_session: bool
+    canonical_wire_json_enforced: bool
+    runtime_client_ambiguous_failure_poisoned: bool
+    sealed_backend_config_hash_bound: bool
     runtime_value_provenance_attested: bool
     evaluator_operation_in_runtime_allowlist: bool
     future_promotion_requirements: tuple[str, ...]
@@ -168,6 +206,7 @@ class ProcessBrokerReceipt:
     backend_entrypoint_sha256: str
     backend_source_relative_path: str
     backend_source_sha256: str
+    sealed_backend_config_sha256: str
     endpoint_identity_sha256: str
     runtime_key_identity_sha256: str
     control_key_identity_sha256: str
@@ -178,12 +217,15 @@ class ProcessBrokerReceipt:
     def __post_init__(self) -> None:
         fixed = {
             "schema_version": PROCESS_BROKER_RECEIPT_SCHEMA_VERSION,
-            "record_type": "ProcessBrokerEnvelopeCompatibilityReceipt",
+            "record_type": "ProcessBrokerInnerSchemaCompatibilityReceipt",
             "claim_scope": (
-                "LOCAL_DISTINCT_PROCESS_AND_KEY_ENVELOPE_EVIDENCE_"
+                "LOCAL_DISTINCT_PROCESS_KEY_ENVELOPE_AND_INNER_SCHEMA_EVIDENCE_"
                 "NOT_VALUE_PROVENANCE_OR_DEPLOYMENT_AUTHORITY"
             ),
-            "status": "LOCAL_DISTINCT_PROCESS_AND_ENVELOPE_CONFORMANCE_PASS",
+            "status": (
+                "LOCAL_DISTINCT_PROCESS_ENVELOPE_AND_INNER_SCHEMA_"
+                "CONFORMANCE_PASS"
+            ),
             "process_ids_distinct": True,
             "transport": "AF_UNIX_JSON_HMAC_SHA256_PEERCRED",
             "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
@@ -191,7 +233,25 @@ class ProcessBrokerReceipt:
             "role_separated_authentication": True,
             "outer_envelope_fields_exact": True,
             "forbidden_named_keys_rejected_recursively": True,
-            "operation_specific_inner_schemas_registered": False,
+            "inner_schema_registry_version": (
+                PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION
+            ),
+            "inner_schema_registry_sha256": (
+                PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256
+            ),
+            "operation_specific_inner_schemas_registered": True,
+            "loaded_source_closure_enforced": True,
+            "single_episode_task_session_enforced": True,
+            "observation_stage_prior_action_bound": True,
+            "verifier_receipt_causal_binding_enforced": True,
+            "reset_operation_registered": True,
+            "policy_screenshot_transport_contract": (
+                POLICY_SCREENSHOT_TRANSPORT_CONTRACT
+            ),
+            "policy_screenshot_root_bound_per_session": True,
+            "canonical_wire_json_enforced": True,
+            "runtime_client_ambiguous_failure_poisoned": True,
+            "sealed_backend_config_hash_bound": True,
             "runtime_value_provenance_attested": False,
             "evaluator_operation_in_runtime_allowlist": False,
             "external_deployment_authority": False,
@@ -199,9 +259,9 @@ class ProcessBrokerReceipt:
         for name, expected in fixed.items():
             if getattr(self, name) != expected:
                 raise SchemaError(f"process-broker receipt {name} differs")
-        if self.arbitrary_nested_mapping_paths != ARBITRARY_RUNTIME_MAPPING_PATHS:
+        if self.operation_specific_inner_schema_paths != RUNTIME_INNER_SCHEMA_PATHS:
             raise SchemaError(
-                "process-broker receipt arbitrary nested mapping paths differ"
+                "process-broker receipt inner-schema paths differ"
             )
         if self.future_promotion_requirements != (
             PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
@@ -229,12 +289,24 @@ class ProcessBrokerReceipt:
             self.backend_source_sha256
         ):
             raise SchemaError("process-broker backend source is not receipt-bound")
+        for name in ("sealed_backend_config_sha256",):
+            value = getattr(self, name)
+            if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+                raise SchemaError(f"process-broker receipt {name} is not SHA-256")
+        root_identity = self.policy_screenshot_root_identity_sha256
+        if root_identity is not None and (
+            len(root_identity) != 64
+            or any(c not in "0123456789abcdef" for c in root_identity)
+        ):
+            raise SchemaError(
+                "process-broker screenshot-root identity is not SHA-256"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         value = {item.name: getattr(self, item.name) for item in fields(self)}
         value["source_files"] = [dict(row) for row in self.source_files]
-        value["arbitrary_nested_mapping_paths"] = list(
-            self.arbitrary_nested_mapping_paths
+        value["operation_specific_inner_schema_paths"] = list(
+            self.operation_specific_inner_schema_paths
         )
         value["future_promotion_requirements"] = list(
             self.future_promotion_requirements
@@ -299,6 +371,8 @@ class ProcessIsolatedBroker:
         repository_root: str | Path,
         backend_entrypoint: str,
         backend_source_relative_path: str,
+        sealed_backend_config: Mapping[str, Any] | None = None,
+        policy_screenshot_root: str | Path | None = None,
         startup_timeout_seconds: float = 10.0,
     ) -> None:
         self._repo = Path(repository_root).resolve()
@@ -321,6 +395,36 @@ class ProcessIsolatedBroker:
         # Source trees use a src/ prefix while import names do not.
         if actual_relative not in {expected_path, Path("src") / expected_path}:
             raise SchemaError("process-broker backend source differs from entrypoint")
+        raw_backend_config: Mapping[str, Any] = sealed_backend_config or {
+            "schema_version": "table2-empty-sealed-backend-config-v1"
+        }
+        try:
+            detached_backend_config = json.loads(
+                canonical_json_bytes(raw_backend_config)
+            )
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise SchemaError("sealed backend config must be canonical JSON") from exc
+        if (
+            not isinstance(detached_backend_config, dict)
+            or type(detached_backend_config.get("schema_version")) is not str
+            or not detached_backend_config["schema_version"].strip()
+        ):
+            raise SchemaError(
+                "sealed backend config requires a versioned object"
+            )
+        self._sealed_backend_config = detached_backend_config
+        self._sealed_backend_config_sha256 = sha256_json(detached_backend_config)
+        try:
+            self._policy_screenshot_root = validated_policy_screenshot_root(
+                policy_screenshot_root
+            )
+        except Exception as exc:
+            raise SchemaError("policy screenshot root is invalid") from exc
+        self._policy_screenshot_root_identity_sha256 = (
+            hashlib.sha256(str(self._policy_screenshot_root).encode("utf-8")).hexdigest()
+            if self._policy_screenshot_root is not None
+            else None
+        )
         self._runtime_key = secrets.token_bytes(32)
         self._control_key = secrets.token_bytes(32)
         self._session_id = secrets.token_hex(32)
@@ -329,6 +433,7 @@ class ProcessIsolatedBroker:
         self._endpoint = self._temp_root / "broker.sock"
         self._process: subprocess.Popen[str] | None = None
         self._receipt: ProcessBrokerReceipt | None = None
+        self._launch_receipt_sha256: str | None = None
         self._cleanup_receipt: ProcessBrokerCleanupReceipt | None = None
         self._runtime_client_issued = False
         self._start_attempted = False
@@ -363,6 +468,7 @@ class ProcessIsolatedBroker:
             endpoint=self._endpoint,
             authentication_key=self._runtime_key,
             session_id=self._session_id,
+            policy_screenshot_root=self._policy_screenshot_root,
         )
 
     def _source_rows(self) -> tuple[dict[str, str], ...]:
@@ -402,6 +508,16 @@ class ProcessIsolatedBroker:
             "backend_source_sha256": source_hashes[
                 self._backend_source.relative_to(self._repo).as_posix()
             ],
+            "sealed_backend_config": self._sealed_backend_config,
+            "sealed_backend_config_sha256": self._sealed_backend_config_sha256,
+            "policy_screenshot_root": (
+                str(self._policy_screenshot_root)
+                if self._policy_screenshot_root is not None
+                else None
+            ),
+            "policy_screenshot_root_identity_sha256": (
+                self._policy_screenshot_root_identity_sha256
+            ),
         }
         try:
             # This stdlib-only launcher verifies all registered source bytes
@@ -464,6 +580,10 @@ raise SystemExit(serve(config))
                 session_id=self._session_id,
                 startup_nonce=startup_nonce,
                 child_pid=process.pid,
+                sealed_backend_config_sha256=self._sealed_backend_config_sha256,
+                policy_screenshot_root_identity_sha256=(
+                    self._policy_screenshot_root_identity_sha256
+                ),
             )
         except BaseException:
             self.stop(force=True)
@@ -471,12 +591,15 @@ raise SystemExit(serve(config))
         try:
             self._receipt = ProcessBrokerReceipt(
                 schema_version=PROCESS_BROKER_RECEIPT_SCHEMA_VERSION,
-                record_type="ProcessBrokerEnvelopeCompatibilityReceipt",
+                record_type="ProcessBrokerInnerSchemaCompatibilityReceipt",
                 claim_scope=(
-                    "LOCAL_DISTINCT_PROCESS_AND_KEY_ENVELOPE_EVIDENCE_"
+                    "LOCAL_DISTINCT_PROCESS_KEY_ENVELOPE_AND_INNER_SCHEMA_EVIDENCE_"
                     "NOT_VALUE_PROVENANCE_OR_DEPLOYMENT_AUTHORITY"
                 ),
-                status="LOCAL_DISTINCT_PROCESS_AND_ENVELOPE_CONFORMANCE_PASS",
+                status=(
+                    "LOCAL_DISTINCT_PROCESS_ENVELOPE_AND_INNER_SCHEMA_"
+                    "CONFORMANCE_PASS"
+                ),
                 runtime_pid=os.getpid(),
                 sealed_evaluator_pid=evaluator_pid,
                 process_ids_distinct=evaluator_pid != os.getpid(),
@@ -486,8 +609,29 @@ raise SystemExit(serve(config))
                 role_separated_authentication=self._runtime_key != self._control_key,
                 outer_envelope_fields_exact=True,
                 forbidden_named_keys_rejected_recursively=True,
-                arbitrary_nested_mapping_paths=ARBITRARY_RUNTIME_MAPPING_PATHS,
-                operation_specific_inner_schemas_registered=False,
+                operation_specific_inner_schema_paths=RUNTIME_INNER_SCHEMA_PATHS,
+                inner_schema_registry_version=(
+                    PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION
+                ),
+                inner_schema_registry_sha256=(
+                    PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256
+                ),
+                operation_specific_inner_schemas_registered=True,
+                loaded_source_closure_enforced=True,
+                single_episode_task_session_enforced=True,
+                observation_stage_prior_action_bound=True,
+                verifier_receipt_causal_binding_enforced=True,
+                reset_operation_registered=True,
+                policy_screenshot_transport_contract=(
+                    POLICY_SCREENSHOT_TRANSPORT_CONTRACT
+                ),
+                policy_screenshot_root_identity_sha256=(
+                    self._policy_screenshot_root_identity_sha256
+                ),
+                policy_screenshot_root_bound_per_session=True,
+                canonical_wire_json_enforced=True,
+                runtime_client_ambiguous_failure_poisoned=True,
+                sealed_backend_config_hash_bound=True,
                 runtime_value_provenance_attested=False,
                 evaluator_operation_in_runtime_allowlist=False,
                 future_promotion_requirements=(
@@ -503,18 +647,22 @@ raise SystemExit(serve(config))
                 backend_source_sha256=source_hashes[
                     self._backend_source.relative_to(self._repo).as_posix()
                 ],
+                sealed_backend_config_sha256=self._sealed_backend_config_sha256,
                 endpoint_identity_sha256=hashlib.sha256(
                     str(self._endpoint).encode("utf-8")
                 ).hexdigest(),
                 runtime_key_identity_sha256=hashlib.sha256(self._runtime_key).hexdigest(),
                 control_key_identity_sha256=hashlib.sha256(self._control_key).hexdigest(),
-                source_files=rows,
+                source_files=tuple(
+                    MappingProxyType(dict(row)) for row in rows
+                ),
                 source_set_sha256=sha256_json(list(rows)),
                 external_deployment_authority=False,
             )
         except BaseException:
             self.stop(force=True)
             raise
+        self._launch_receipt_sha256 = sha256_json(self._receipt.to_dict())
         return self._receipt
 
     def stop(self, *, force: bool = False) -> None:
@@ -568,13 +716,18 @@ raise SystemExit(serve(config))
         evaluator_pid = int(process.pid)
         self._process = None
         shutil.rmtree(self._temp_root, ignore_errors=True)
-        if self._receipt is not None and graceful and exit_code == 0:
+        if (
+            self._receipt is not None
+            and self._launch_receipt_sha256 is not None
+            and graceful
+            and exit_code == 0
+        ):
             self._cleanup_receipt = ProcessBrokerCleanupReceipt(
                 schema_version=PROCESS_BROKER_CLEANUP_RECEIPT_SCHEMA_VERSION,
                 record_type="ProcessIsolatedPageBrokerCleanupReceipt",
                 claim_scope="LOCAL_ARCHITECTURE_EVIDENCE_NOT_DEPLOYMENT_AUTHORITY",
                 status="LOCAL_CLEANUP_PASS",
-                launch_receipt_sha256=sha256_json(self._receipt.to_dict()),
+                launch_receipt_sha256=self._launch_receipt_sha256,
                 session_identity_sha256=hashlib.sha256(
                     self._session_id.encode("utf-8")
                 ).hexdigest(),

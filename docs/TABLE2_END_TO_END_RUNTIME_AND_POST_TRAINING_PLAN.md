@@ -8,19 +8,22 @@
 
 **Plan status:** Core offline runtime/evidence architecture and the task/source/
 deployment-preflight gates are implemented, including research-locked claim,
-audit, and companion-diagnostic controls. The complete Table 2 suite passes
-1,171 tests. The pinned WebArena 0--49 source audit currently blocks
+audit, and companion-diagnostic controls. The current integrated Table 2 suite
+passes **1,276/1,276 tests**, including the strict process-broker, handoff,
+Kaggle prepare-only, live-evidence replay, and package-validation paths. The pinned
+WebArena 0--49 source audit currently blocks
 handoff because 47 tasks require an unsupported assistant-answer/STOP
 interface. Strict live-capability, provider-installation, evaluator, memory,
 and artifact-package binding is implemented across handoff, frozen campaign,
 validation, and production launch. Its genuine measured external evidence and
 the other pilot inputs are still unavailable. This document does not claim any
-live browser-evaluation result. A source-bound process architecture now places
-the browser/evaluator owner in a distinct OS process and exposes only
-authenticated, operation-whitelisted runtime IPC. Its local launch/cleanup
+live browser-evaluation result. A source-bound local process-broker architecture
+and deterministic fixture now place their browser/evaluator owner in a distinct
+OS process and expose only authenticated, operation-whitelisted runtime IPC.
+That architecture is not yet wired to a real WebArena production backend. Its local launch/cleanup
 receipts are explicitly not deployment authority, and the older same-process
 broker remains fixture-only. The frozen runner records
-`BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, so production still fails
+`BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, so production still fails
 before provider import. No live campaign may run until the actual campaign
 host supplies a separately authenticated receipt under a registered external
 trust anchor.
@@ -34,8 +37,9 @@ sandbox, runtime-inaccessible evaluator memory/filesystem state, an allowlisted
 scrubbed evaluator environment with no inherited runtime/provider secrets,
 authenticated peer identity, and cleanup under the same controls. No trust
 anchor for that receipt exists in the current schema.
-Exact operation-specific contracts for the three arbitrary nested mapping paths
-and runtime-visible value-provenance evidence are also unregistered blockers.
+Exact operation-specific contracts are now source-registered for all eight
+runtime request/result schema paths. Runtime-visible value provenance remains unregistered:
+schema conformance cannot prove where a permitted scalar value originated.
 
 **Scope:** Work that can proceed while DGX training runs, followed by the exact post-training evaluation sequence
 
@@ -589,7 +593,9 @@ Table 2 analysis only when E0-E3 all completed under the same frozen protocol.
 ## 5. Implemented additive runtime architecture
 
 Implementation must be additive. Existing training modules and active DGX
-configs remain unchanged.
+configs remain unchanged. The tree below is a responsibility-oriented,
+non-exhaustive inventory; the tracked Git tree is the authority for the full
+file list.
 
 ```text
 src/web_agent/runtime/
@@ -609,6 +615,7 @@ src/web_agent/runtime/
     duplicate_audit.py
     deadline.py
     model_calls.py
+    pc01_live_integration.py
     qwen2vl_pc01.py
     state_reset.py
     recovery/
@@ -631,6 +638,8 @@ src/web_agent/memory/
     calibration_builder.py
     frozen_store.py
     joint_duplicate_audit.py
+    kaggle_prepare_only.py
+    kaggle_transport_staging.py
     manifest.py
     preparation.py
     verification.py
@@ -650,13 +659,24 @@ src/web_agent/eval/table2/
     handoff_authority.py
     live_compatibility.py
     live_deployment.py
+    live_deployment_validation.py
+    live_page_broker_assembly.py
     locked_mount_preflight.py
     package_validator.py
+    paper_claims.py
     pc01_artifacts.py
     pc01_checkpoint_compatibility.py
     pc01_processor_parity.py
+    pc01_companion_diagnostics.py
+    pc01_pillar2_diagnostics.py
+    pillar1_diagnostics.py ... pillar4_diagnostics.py
     pilot_task_exclusion.py
     production_runner.py
+    process_broker.py
+    process_broker_protocol.py
+    process_broker_runtime.py
+    process_broker_worker.py
+    public_task_registry.py
     resolved_config.py
     sealed_page_broker.py
     selection_evidence.py
@@ -697,12 +717,17 @@ scripts/
     prepare_table2_split_preflight.py
     prepare_table2_p4.py
     run_table2_joint_duplicate_audit.py
+    run_table2_p4_kaggle_prepare_only.py
+    stage_table2_p4_kaggle_transport.py
     build_table2_memory.py
     prepare_table2_handoff.py
     freeze_table2_campaign.py
     run_table2_smoke.py
     run_table2_evaluation.py
     validate_table2_artifacts.py
+    validate_table2_live_deployment.py
+    validate_table2_p4_kaggle_output.py
+    validate_table2_paper_claims.py
     summarize_table2.py
 
 tests/table2/
@@ -2189,30 +2214,63 @@ are separate inputs; their five shared origins must agree exactly.
    externally trusted DGX startup/per-block receipt.
 
 4. The deployment owner then supplies real evidence for exactly seven live
-   capabilities and validates the
-   `table2-pc01-live-deployment-v2` manifest with
-   `load_pc01_live_deployment_manifest` in
-   `src/web_agent/eval/table2/live_deployment.py`. This is measured evidence,
-   so no fixture or repository command fabricates it. The manifest binds the
+   capabilities and validates the `table2-pc01-live-deployment-v2` manifest
+   with the tracked replay command below. This is measured evidence, so the
+   command does not create the manifest, fabricate readiness evidence, perform
+   an external review, or establish a trust anchor. The manifest and evidence
+   root must be independently supplied absolute paths outside the source
+   checkout.
+
+   ```bash
+   PYTHONPATH=src python3 scripts/validate_table2_live_deployment.py \
+     --repository-root "$PWD" \
+     --manifest /secure/table2-inputs/pc01-live-deployment/manifest.json \
+     --evidence-root /secure/table2-inputs/pc01-live-deployment/evidence
+   ```
+
+   The command reuses the production validator by copying only referenced
+   bytes into a temporary directory and deleting that temporary staging copy
+   on exit. It does not mutate the supplied manifest or evidence tree, but it
+   is not a promise of zero filesystem activity. Its stdout is only
+   `table2-live-deployment-validation-summary-v1`; it fixes
+   `paper_table_status` to `N/R` and all of `dispatch_authorized`,
+   `handoff_authorized`, and `cross_binding_performed` to `false`. The summary
+   is never a readiness receipt or handoff input. In particular, this replay
+   does not cross-bind the package to the authenticated WebArena task source,
+   resolved task export, action-interface audit, host/topology preflight,
+   selected checkpoint, or P4 store. `prepare_table2_handoff.py` performs those
+   later bindings and can still reject evidence that passed this local replay.
+
+   The manifest binds the
    validation-disabled BrowserGym path, six-field start-state application,
    exclusive control, reset, live observation/action mapping, safety and fault
    classification, recovery planning, efficiency accounting, the typed
    same-process sealed-page engineering fixture, and cleanup on success,
    evaluator error, and runtime abort. That broker demonstrates reviewed-code
    message flow only; it is not live-campaign authority. A separate AF_UNIX,
-   HMAC-authenticated process architecture now provides four allowlisted
-   operations, exact outer request/result envelopes, recursive registered
+   HMAC-authenticated process architecture now provides five allowlisted
+   runtime operations (`reset`, `observe`, `execute`, `terminal`, and `close`),
+   exact outer request/result envelopes, recursive registered
    sensitive-key rejection, peer-process checks, distinct control credentials,
    authenticated PID/source-bound readiness, and source/session-bound lifecycle
-   receipts. The `action`, `observation`, and `execution` inner values remain
-   arbitrary mappings: a neutral key can carry content of unknown provenance,
-   so the local evidence does not prove semantic oracle isolation. The
+   receipts. All eight request/result schema paths now require the exact
+   registered reset request/receipt, `ConcreteAction`, BrowserGym causal
+   `Observation`, action-bound `AdapterExecution`, verifier-receipt binding,
+   and opaque terminal-signal records, including their closed nested mappings.
+   Browser screenshots are restricted to a per-session, root-confined,
+   read-only, content-addressed PNG channel. One broker session is fixed to one
+   episode/task; post-action and post-recovery observations are bound to the
+   immediately pending action, each reset/post-state must receive its exact
+   causal verifier receipt before execution or close can continue, and
+   readiness rejects repository-local imports outside the authenticated source
+   closure. A permitted scalar such as visible browser text can still carry
+   content of unknown origin, so local schema evidence does not prove runtime
+   value provenance or semantic oracle isolation. The
    handoff/runner
    source attestation includes those sources but records local architecture
    evidence as unpromotable. Production remains stopped until an externally
    authenticated deployment receipt proves the actual host used the boundary
-   and exact operation-specific inner schemas plus runtime-visible value
-   provenance are registered.
+   and runtime-visible value provenance is independently attested.
    If the frozen campaign cannot reopen and
    validate the manifest and every readiness file, stop before handoff.
 
@@ -2247,6 +2305,31 @@ are separate inputs; their five shared origins must agree exactly.
 The input JSON uses schema `table2-handoff-input-v1` and contains these
 operator-supplied fields:
 
+The top-level key set is fail-closed. The currently runnable
+`table2-handoff-input-v1` path is the PC-01 provisional pilot; the checked
+`three_candidate_final` protocol remains a non-authorizing template and is
+explicitly rejected by the campaign access boundary. A later final handoff
+requires a newly materialized runnable final protocol after the registered
+validation-only comparison. Structurally, every handoff input requires exactly
+the common fields `schema_version`, `campaign_config`, `dependency_lock`,
+`environment`, `evaluator`, `resolved_task_export`,
+`webarena_task_interface_audit`, `webarena_task_source`,
+`webarena_site_url_map`, `webarena_service_url_map`,
+`webarena_host_preflight`, `webarena_deployment_topology`,
+`pc01_live_deployment_manifest`, `pc01_live_deployment_evidence_root`,
+`duplicate_audit`, `joint_duplicate_assignment_package`,
+`p4_preparation_package`, `joint_duplicate_provenance_manifest`,
+`selection_evidence`, `models`, `memory_manifests`, and `runner`. A raw JSON
+task source additionally requires
+`authorized_raw_webarena_task_source_sha256`; the pinned wheel/ZIP form forbids
+that field. `SPLIT_LOCAL_BROWSER_DGX_INFERENCE` additionally requires
+`expected_dgx_model_runtime_identity` and `expected_bridge_identity`, while
+`SINGLE_DGX_HOST` forbids both. `pc01_provisional` additionally requires
+`pc01_checkpoint_compatibility_receipt`; the structurally reserved
+`three_candidate_final` form forbids that PC-01-only receipt, but this does not
+make the checked final template runnable. Missing, unknown, or conditionally
+out-of-scope top-level keys are rejected before handoff construction.
+
 - `campaign_config`, `dependency_lock`, `resolved_task_export`,
   `webarena_task_source`, `webarena_site_url_map`,
   `webarena_task_interface_audit`, and `duplicate_audit` artifact paths. The
@@ -2254,6 +2337,13 @@ operator-supplied fields:
   credential-free five-token URL map independently, exactly reproduces the
   submitted task export, and recomputes the action-interface audit; a claimed
   hash in a hand-written export or audit is insufficient;
+- `joint_duplicate_assignment_package`, `p4_preparation_package`, and
+  `joint_duplicate_provenance_manifest`, pointing respectively to the compact
+  joint duplicate-audit assignment, the executed prepare-only evidence, and
+  the cross-package provenance authority. The handoff revalidates their exact
+  source commit, selected model, task export, recovery registry, train-only
+  source identities, preparation receipt/sidecar, and final duplicate audit
+  before copying only the registered compact evidence;
 - `webarena_service_url_map`, `webarena_host_preflight`, and one registered
   `webarena_deployment_topology`. `SINGLE_DGX_HOST` accepts only a measured DGX
   host PASS and no split identities. `SPLIT_LOCAL_BROWSER_DGX_INFERENCE`
@@ -2266,12 +2356,16 @@ operator-supplied fields:
   this split topology can be frozen for compatibility review but cannot launch;
 - `pc01_live_deployment_manifest` and
   `pc01_live_deployment_evidence_root`, pointing to the independently measured
-  seven-capability manifest and the exact evidence package it references. The
-  handoff stages only the manifest, seven readiness records, and transitively
-  referenced evaluator-provenance files; symlinks, extra files, missing
-  sources, or changed bytes fail closed. The same binding is revalidated during
-  freeze, campaign validation, production-runner construction, and immediately
-  before every ordinary browser launch;
+  seven-capability manifest and the evidence package it references. The source
+  evidence directory may contain unrelated operator files: they are ignored,
+  never copied, and never treated as authority. Missing, changed, or unsafe
+  referenced source bytes and symlink ancestry still fail closed. The handoff
+  stages only the manifest, seven readiness records, and transitively
+  referenced evaluator-provenance files. That staged/frozen package has exact
+  recursive closure, so any unreferenced staged file, missing staged file, or
+  symlink fails closed. The same binding is revalidated during freeze, campaign
+  validation, production-runner construction, and immediately before every
+  ordinary browser launch;
 - for `pc01_provisional`, `selection_evidence` contains exactly the immutable
   PC-01 seed-42 run contract, complete report, checkpoint-saved resolved
   config, selected checkpoint identity, registered backbone config, and
@@ -2398,6 +2492,10 @@ runner entrypoint is registered and must not be substituted:
 ```bash
 test -z "$(git status --porcelain)"
 git rev-parse HEAD
+PYTHONPATH=src python3 scripts/validate_table2_live_deployment.py \
+  --repository-root "$PWD" \
+  --manifest /secure/table2-inputs/pc01-live-deployment/manifest.json \
+  --evidence-root /secure/table2-inputs/pc01-live-deployment/evidence
 PYTHONPATH=src python3 scripts/prepare_table2_p4.py validate-transfer \
   --store-dir /secure/table2-inputs/frozen-memory/seed_42 \
   --manifest /secure/table2-inputs/transfers/seed_42.transfer.json
@@ -2501,13 +2599,12 @@ immutable state. The receipt's scope is
 entrypoint is passed; it is not a sandbox or a hostile-code security claim.
 It also cannot repair the separate page-broker deployment-evidence gap: this
 source version records
-`BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, and both
+`BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, and both
 provider-boundary preparation and campaign execution stop before importing the
 provider factory.
 The commands above document the future sequence only; they are intentionally
-non-runnable until exact operation-specific inner schemas, value-provenance
-evidence, and a separately authenticated process-isolation deployment receipt
-and trust anchor are preregistered.
+non-runnable until value-provenance evidence and a separately authenticated
+process-isolation deployment receipt and trust anchor are preregistered.
 The credential capability root must be an existing non-symlink tree that is
 disjoint in both directions from the campaign and repository; filesystem root,
 campaign/source ancestors or descendants, and symlinked leaf/parent components
@@ -2537,12 +2634,15 @@ bindings must resolve to a repository source path whose current SHA-256 occurs
 in the frozen runner attestation. This catches accidental use of an unregistered
 backend, helper, evaluator, or measurement callback. External framework/model
 methods therefore need a thin attested repository
-wrapper instead of being injected directly. The evaluator remains an
-in-process, source-attested trusted component: the callable check and the
-before/after backend-state digest are scientific integrity controls, not an OS
-sandbox. Hostile attested Python could still inspect globals or arbitrary
-closure object graphs; evaluating adversarial third-party code would require a
-separate process/container and is outside this pilot's assurance scope.
+wrapper instead of being injected directly. In the currently wired production
+factory, the evaluator remains an in-process, source-attested trusted component:
+the callable check and the before/after backend-state digest are scientific
+integrity controls, not an OS sandbox. The separately tested process-broker
+fixture does not change that fact and cannot authorize live dispatch until a
+real WebArena backend is wired and independently attested. Hostile attested
+Python could still inspect globals or arbitrary closure object graphs;
+evaluating adversarial third-party code requires the registered external
+process/container authority described above.
 
 There is no additional Table 2 model seed: repeat neither the memory build nor
 the browser campaign for seeds 43--44. The only matched model seed is 42.
@@ -3053,8 +3153,12 @@ environment rather than collapsed into one failure bucket.
 - [x] Portable matched E0--E3 live-readiness receipt and dispatch guard
 - [x] Same-process broker retained only as reviewed-code engineering evidence
 - [x] Source-bound authenticated process-broker architecture and local lifecycle/adversarial tests
+- [x] All eight operation-specific request/result schemas, causal reset/action/verifier state, confined screenshot transport, and complete loaded-source closure registered and receipt-bound
 - [x] Semantic dependency-lock generator and fail-closed cross-validation
-- [ ] Exact operation-specific inner schemas and runtime-visible value-provenance authority registered
+- [ ] Real WebArena broker backend's complete transitive source closure registered and hash-bound
+- [ ] Broker IPC timeout frozen against measured live reset/settle behavior
+- [ ] Internal browser-error URL representation and cross-layer broker observation test registered
+- [ ] Runtime-visible value-provenance authority registered
 - [ ] Independently authenticated campaign-host isolation receipt and trust anchor (plus DGX startup/model-load/per-block receipts for split deployment)
 - [ ] Isolated live first-normal-block readiness probe PASS and target-local receipt frozen
 - [ ] Selected-checkpoint WebArena compatibility smoke PASS

@@ -27,6 +27,13 @@ UNIFIED VLM  (Y4,Y5,Y6):    VLM(image+text) -> Adapter Linear(D->768)  -> [768] 
 
 ## Layout
 
+The compact tree below is the historical training-oriented view, not a complete
+inventory. The additive browser experiment also lives under
+`configs/eval/table2/`, `benchmarks/table2/`,
+`src/web_agent/{runtime,benchmarks,memory,eval/table2}/`, `scripts/`, and
+`tests/table2/`; the tracked tree and the canonical Table 2 plan are the current
+authority.
+
 ```
 docs/        design docs (AGENT, SPEC, ARCHITECTURE, TRAINING, IMPLEMENTATION)
 configs/     one YAML per model (base.yaml + backbones/ ablations/ baselines/)

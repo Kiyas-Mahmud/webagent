@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 import shutil
+import stat
 from typing import Any
 
 from .common import (
@@ -1026,6 +1027,17 @@ def _measured_text(value: object, *, field: str) -> str:
     return value.strip()
 
 
+def _reject_symlink_ancestry(path: Path, *, field: str) -> None:
+    """Reject a symlink in any existing component of an authority path."""
+
+    absolute = path if path.is_absolute() else path.absolute()
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        if current.is_symlink():
+            raise SchemaError(f"{field} must not use symlink ancestry")
+
+
 def _source_path(
     repository_root: Path,
     relative_value: object,
@@ -1035,6 +1047,7 @@ def _source_path(
 ) -> Path:
     relative = safe_relative_path(str(relative_value or ""))
     unresolved = repository_root / relative
+    _reject_symlink_ancestry(unresolved, field=field)
     source = unresolved.resolve()
     if (
         unresolved.is_symlink()
@@ -1054,6 +1067,7 @@ def _evidence_path(evidence_root: Path, value: object, *, field: str) -> Path:
     if PurePosixPath(str(relative)).suffix != ".json":
         raise SchemaError(f"{field} must name a JSON evidence record")
     unresolved = evidence_root / relative
+    _reject_symlink_ancestry(unresolved, field=field)
     path = unresolved.resolve()
     if (
         unresolved.is_symlink()
@@ -1073,6 +1087,7 @@ def _evidence_artifact(
 ) -> Path:
     relative = safe_relative_path(str(value.get(path_field) or ""))
     unresolved = evidence_root / relative
+    _reject_symlink_ancestry(unresolved, field=path_field)
     path = unresolved.resolve()
     if (
         unresolved.is_symlink()
@@ -2104,9 +2119,29 @@ def stage_pc01_live_deployment_package(
     repository = Path(repository_root).resolve()
     unresolved_manifest = Path(manifest_path)
     unresolved_evidence = Path(evidence_root)
+    _reject_symlink_ancestry(
+        unresolved_manifest.absolute(), field="PC-01 live deployment manifest"
+    )
+    _reject_symlink_ancestry(
+        unresolved_evidence.absolute(), field="PC-01 live deployment evidence root"
+    )
     source_manifest = unresolved_manifest.resolve()
     source_evidence = unresolved_evidence.resolve()
     destination_root = Path(destination_artifact_root).resolve()
+    for source_tree, label in (
+        (source_evidence, "live-deployment evidence root"),
+        (source_manifest.parent, "live-deployment manifest directory"),
+        (repository, "repository root"),
+    ):
+        if (
+            destination_root == source_tree
+            or destination_root in source_tree.parents
+            or source_tree in destination_root.parents
+        ):
+            raise SchemaError(
+                "live-deployment staging destination must be tree-disjoint "
+                f"from the {label}"
+            )
     if unresolved_manifest.is_symlink() or not source_manifest.is_file():
         raise SchemaError("PC-01 live deployment manifest is unsafe or missing")
     if not source_evidence.is_dir() or unresolved_evidence.is_symlink():
@@ -2180,8 +2215,25 @@ def validate_pc01_live_deployment_binding(
         or not package_root.is_dir()
     ):
         raise SchemaError("frozen live-deployment package root is unsafe or missing")
-    if any(candidate.is_symlink() for candidate in package_root.rglob("*")):
-        raise SchemaError("frozen live-deployment package contains a symlink")
+    actual_files: set[str] = set()
+    actual_directories: set[str] = set()
+    for candidate in package_root.rglob("*"):
+        relative = candidate.relative_to(package_root).as_posix()
+        metadata = candidate.lstat()
+        if stat.S_ISLNK(metadata.st_mode):
+            raise SchemaError("frozen live-deployment package contains a symlink")
+        if stat.S_ISDIR(metadata.st_mode):
+            actual_directories.add(relative)
+        elif stat.S_ISREG(metadata.st_mode):
+            if metadata.st_nlink != 1:
+                raise SchemaError(
+                    "frozen live-deployment package contains a hard-linked file"
+                )
+            actual_files.add(relative)
+        else:
+            raise SchemaError(
+                "frozen live-deployment package contains a non-regular entry"
+            )
     manifest_path = package_root / "manifest.json"
     if manifest_path.is_symlink() or not manifest_path.is_file():
         raise SchemaError("frozen live-deployment manifest is unsafe or missing")
@@ -2200,14 +2252,19 @@ def validate_pc01_live_deployment_binding(
     expected_relatives = {
         str(row["relative_path"]) for row in expected["package_files"]
     }
-    actual_relatives = {
-        path.relative_to(package_root).as_posix()
-        for path in package_root.rglob("*")
-        if path.is_file()
-    }
-    if actual_relatives != expected_relatives:
+    if actual_files != expected_relatives:
         raise SchemaError(
             "live-deployment package contains missing or unreferenced evidence files"
+        )
+    expected_directories: set[str] = set()
+    for relative in expected_relatives:
+        parent = Path(relative).parent
+        while parent != Path("."):
+            expected_directories.add(parent.as_posix())
+            parent = parent.parent
+    if actual_directories != expected_directories:
+        raise SchemaError(
+            "live-deployment package directory closure differs from bound files"
         )
     source_files = tuple(
         (Path(repository_root).resolve() / row["relative_path"]).resolve()

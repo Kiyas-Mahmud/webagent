@@ -7,6 +7,14 @@
 the final primary backbone remains unselected pending the registered
 validation-only PC-01/PC-02/PC-03 comparison
 
+> **TABLE 2 SUPERSESSION NOTICE (2026-09-05):** This document remains useful
+> for broad evaluation motivation and related-work planning, but its hard-coded
+> Qwen E0 descriptions do not govern Table 2. Use
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md` for every E0--E3
+> system definition, model-promotion rule, task boundary, metric denominator,
+> and launch decision. E0 is the unadapted validation-selected backbone; PC-01
+> is provisional only, and Table 2 remains `N/R`.
+
 > **Current-state correction (2026-09-04):** Sections 3.1--3.3 preserve the
 > 2026-07-28 v2.7 mini snapshot and its then-current blockers; they are not the
 > present experiment state. PC-01 has since completed its Gold v2.8 seed-42

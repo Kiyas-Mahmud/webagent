@@ -91,6 +91,105 @@ fixed-name manifest directly at either supported source-dataset mount root,
 reads the declared dataset ID, and requires that the manifest actually resides
 at the corresponding `owner/slug` mount.
 
+## Operator-only Kaggle upload, run, and download
+
+The commands in this section are external operator actions. The repository does
+not execute them, authenticate to Kaggle, or retain Kaggle credentials. Run
+them only from an authenticated operator host and substitute the same exact
+owner used during staging:
+
+```bash
+TABLE2_P4_SOURCE_STAGE=/absolute/path/to/table2-p4-source-dataset
+TABLE2_P4_KERNEL_STAGE=/absolute/path/to/table2-p4-kernel
+TABLE2_P4_DOWNLOAD_DIR=/absolute/new/path/to/table2-p4-kaggle-download
+TABLE2_P4_SOURCE_DATASET=EXACT_OWNER/table2-p4-source-transport-v1
+TABLE2_P4_KERNEL=EXACT_OWNER/table2-p4-prepare-only-v1
+```
+
+First query the source dataset ID. It must not already exist: this protocol
+requires a newly created source-transport dataset whose first and only version
+is version 1. If this command reports an existing dataset, stop and resolve the
+identity conflict; do not call `kaggle datasets version` and do not attach an
+older dataset under the registered name.
+
+```bash
+kaggle datasets status "$TABLE2_P4_SOURCE_DATASET"
+```
+
+After confirming that the ID is unused, create it from the generated staging
+directory. Deliberately omit `--public`: the
+[official dataset CLI](https://github.com/Kaggle/kaggle-cli/blob/main/docs/datasets.md#kaggle-datasets-create)
+defines a newly created dataset as private unless `--public` is supplied.
+
+```bash
+kaggle datasets create -p "$TABLE2_P4_SOURCE_STAGE"
+kaggle datasets status "$TABLE2_P4_SOURCE_DATASET"
+kaggle datasets files "$TABLE2_P4_SOURCE_DATASET" --page-size 20
+```
+
+The status and file-list commands establish successful creation and the remote
+file names, but the documented CLI output is not an independent privacy or
+version attestation. Before pushing the kernel, the operator must open that
+exact dataset in Kaggle and record that it is **Private** and at version **1**.
+Stop if either value differs. Never use `--public`, never create a second
+dataset version, and do not treat the local `private-upload-policy.json` as
+proof of remote state.
+
+Then push the generated private CPU/no-internet kernel. Per the
+[official kernel CLI](https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md#kaggle-kernels-push),
+`push` uploads the code and metadata and starts the run. Do not add an
+accelerator override. Re-run the status command manually until Kaggle reports
+the latest run complete; a failed run is not evidence.
+
+```bash
+kaggle kernels push -p "$TABLE2_P4_KERNEL_STAGE"
+kaggle kernels status "$TABLE2_P4_KERNEL"
+kaggle kernels files "$TABLE2_P4_KERNEL" --page-size 200
+```
+
+Download all output pages into a new path. The path must not exist, and `-o` /
+`--force` is intentionally forbidden because it could mix or overwrite runs.
+
+```bash
+test ! -e "$TABLE2_P4_DOWNLOAD_DIR"
+kaggle kernels output "$TABLE2_P4_KERNEL" \
+  -p "$TABLE2_P4_DOWNLOAD_DIR" \
+  --page-size 200
+```
+
+The expected downloaded package is
+`$TABLE2_P4_DOWNLOAD_DIR/table2-p4-prepare-only-v1`. From the exact clean Git
+checkout whose commit was staged, strictly replay the outer receipt, SHA-256
+sidecar, inner package, source-file set, and clean-commit binding:
+
+```bash
+test -z "$(git status --porcelain)"
+PYTHONPATH=src python3 scripts/validate_table2_p4_kaggle_output.py \
+  --repository-root "$PWD" \
+  --output-root "$TABLE2_P4_DOWNLOAD_DIR/table2-p4-prepare-only-v1"
+```
+
+Only exit status 0 with `status: PASS`, `package_status: REVIEW_REQUIRED`, and
+`paper_table_status: N/R` is valid. Preserve the complete downloaded directory;
+the receipt is not valid without its sidecar and `preparation/` bytes. This
+validation authenticates the registered program output against the matching
+clean source checkout. It does not prove Kaggle platform behavior, reviewer
+independence, memory eligibility, or any Table 2 result.
+
+Replay also enforces the canonical recorded invocation and ordered UTC
+timestamps, exact CPU/no-model environment semantics, the two registered
+dataset identities/layouts, and exact agreement among dataset receipts,
+attached mounts, train-input descriptors, the inner read ledger, and the
+registered/embedded source authority. Environment, timestamp, and declared
+Kaggle-version fields remain wrapper attestations rather than independent
+platform measurements.
+
+The downloaded package root is an exact allowlist: it must contain only the
+receipt, its sidecar, and `preparation/`. Extra files, extra directories
+(including empty ones), symlinks, hard-linked receipt/sidecar or inner
+preparation files, and any extra or changed inner preparation entry fail before
+a successful validation result.
+
 ## No-argument Kaggle execution and authority boundary
 
 The generated kernel is deliberately no-argument. On Kaggle, `run.py`:

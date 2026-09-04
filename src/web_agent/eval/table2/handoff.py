@@ -128,6 +128,7 @@ from web_agent.eval.table2.package_validator import (
     _validate_environment_manifest,
     _validate_model_artifact_payloads,
     _validate_model_evidence_bundle,
+    _validate_protocol_access_boundary,
     _validate_model_memory_source_bindings,
     _validate_registered_joint_duplicate_memory_bindings,
     _validate_pc01_checkpoint_compatibility_readiness,
@@ -164,6 +165,132 @@ _TASK_TO_SERVICE_URL_KEYS = {
     "__MAP__": "WA_MAP",
 }
 
+_HANDOFF_INPUT_REQUIRED_COMMON_FIELDS = frozenset(
+    {
+        "schema_version",
+        "campaign_config",
+        "dependency_lock",
+        "environment",
+        "evaluator",
+        "resolved_task_export",
+        "webarena_task_interface_audit",
+        "webarena_task_source",
+        "webarena_site_url_map",
+        "webarena_service_url_map",
+        "webarena_host_preflight",
+        "webarena_deployment_topology",
+        "pc01_live_deployment_manifest",
+        "pc01_live_deployment_evidence_root",
+        "duplicate_audit",
+        "joint_duplicate_assignment_package",
+        "p4_preparation_package",
+        "joint_duplicate_provenance_manifest",
+        "selection_evidence",
+        "models",
+        "memory_manifests",
+        "runner",
+    }
+)
+_HANDOFF_INPUT_RAW_SOURCE_AUTHORITY_FIELD = (
+    "authorized_raw_webarena_task_source_sha256"
+)
+_HANDOFF_INPUT_SPLIT_FIELDS = frozenset(
+    {
+        "expected_dgx_model_runtime_identity",
+        "expected_bridge_identity",
+    }
+)
+_HANDOFF_INPUT_PC01_FIELDS = frozenset(
+    {"pc01_checkpoint_compatibility_receipt"}
+)
+_HANDOFF_INPUT_CONDITIONAL_FIELDS = frozenset(
+    {
+        _HANDOFF_INPUT_RAW_SOURCE_AUTHORITY_FIELD,
+        *_HANDOFF_INPUT_SPLIT_FIELDS,
+        *_HANDOFF_INPUT_PC01_FIELDS,
+    }
+)
+_HANDOFF_INPUT_ALL_FIELDS = (
+    _HANDOFF_INPUT_REQUIRED_COMMON_FIELDS | _HANDOFF_INPUT_CONDITIONAL_FIELDS
+)
+
+
+def validate_handoff_input_field_closure(
+    value: Mapping[str, Any],
+    *,
+    deployment_topology: str | None = None,
+    selection_mode: str | None = None,
+) -> dict[str, Any]:
+    """Reject unregistered, missing, or out-of-scope handoff input fields.
+
+    The initial call, before external paths are opened, checks the universal
+    vocabulary and required common fields. Once the frozen protocol has been
+    loaded, a second call closes topology- and selection-specific fields. A
+    raw task JSON also requires its separately authorized byte identity, while
+    a pinned wheel/ZIP container forbids that redundant authority field.
+    """
+
+    if not isinstance(value, Mapping):
+        raise SchemaError("handoff input must be a JSON object")
+    keys = set(value)
+    unknown = sorted(keys - _HANDOFF_INPUT_ALL_FIELDS)
+    missing = sorted(_HANDOFF_INPUT_REQUIRED_COMMON_FIELDS - keys)
+    if unknown or missing:
+        raise SchemaError(
+            "handoff input top-level field closure differs: "
+            f"missing={missing}, unknown={unknown}"
+        )
+
+    required = set(_HANDOFF_INPUT_REQUIRED_COMMON_FIELDS)
+    forbidden: set[str] = set()
+
+    task_source_text = str(value.get("webarena_task_source") or "")
+    if task_source_text != task_source_text.strip():
+        raise SchemaError(
+            "handoff input webarena_task_source cannot contain surrounding whitespace"
+        )
+    task_source = Path(task_source_text)
+    if task_source.suffix.casefold() in {".whl", ".zip"}:
+        forbidden.add(_HANDOFF_INPUT_RAW_SOURCE_AUTHORITY_FIELD)
+    else:
+        required.add(_HANDOFF_INPUT_RAW_SOURCE_AUTHORITY_FIELD)
+
+    declared_topology = str(
+        value.get("webarena_deployment_topology") or ""
+    ).strip()
+    if (
+        deployment_topology is not None
+        and deployment_topology != declared_topology
+    ):
+        raise SchemaError(
+            "handoff input deployment topology differs from validated context"
+        )
+    if declared_topology == SINGLE_HOST_TOPOLOGY:
+        forbidden.update(_HANDOFF_INPUT_SPLIT_FIELDS)
+    elif declared_topology == SPLIT_HOST_TOPOLOGY:
+        required.update(_HANDOFF_INPUT_SPLIT_FIELDS)
+    else:
+        raise SchemaError(
+            "handoff input requires one registered webarena_deployment_topology"
+        )
+
+    if selection_mode is not None:
+        if selection_mode == "pc01_provisional":
+            required.update(_HANDOFF_INPUT_PC01_FIELDS)
+        elif selection_mode == "three_candidate_final":
+            forbidden.update(_HANDOFF_INPUT_PC01_FIELDS)
+        else:
+            raise SchemaError("handoff input selection mode is not registered")
+
+    missing = sorted(required - keys)
+    out_of_scope = sorted(forbidden & keys)
+    if missing or out_of_scope:
+        raise SchemaError(
+            "handoff input conditional field closure differs: "
+            f"missing={missing}, out_of_scope={out_of_scope}"
+        )
+    return dict(value)
+
 
 def _validate_handoff_live_capability_source_planes(
     live_deployment: ValidatedPC01LiveDeployment,
@@ -195,6 +322,96 @@ def _spec_path(spec_path: Path, value: object, *, field: str) -> Path:
         raise SchemaError(f"handoff input requires {field}")
     path = Path(text)
     return (path if path.is_absolute() else spec_path.parent / path).absolute()
+
+
+def _read_handoff_spec(path: Path) -> dict[str, Any]:
+    """Read the handoff authority while rejecting duplicate keys at any depth."""
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise SchemaError(f"handoff input contains duplicate JSON key: {key}")
+            value[key] = item
+        return value
+
+    try:
+        value = json.loads(
+            path.read_text(encoding="utf-8"), object_pairs_hook=unique_object
+        )
+    except json.JSONDecodeError as exc:
+        raise SchemaError(f"handoff input is invalid JSON: {exc}") from exc
+    if not isinstance(value, dict):
+        raise SchemaError("handoff input must be a JSON object")
+    return value
+
+
+def _require_external_tree_disjoint(
+    source: Path, *, repository_root: Path, field: str
+) -> Path:
+    """Require measured evidence to be outside and unrelated to source Git."""
+
+    current = source
+    while True:
+        if current.is_symlink():
+            raise SchemaError(f"{field} must not use symlink ancestry")
+        if current.parent == current:
+            break
+        current = current.parent
+    try:
+        resolved = source.resolve(strict=True)
+    except OSError as exc:
+        raise SchemaError(f"{field} is absent or inaccessible") from exc
+    repo = repository_root.resolve(strict=True)
+    filesystem_root = Path(resolved.anchor)
+    if (
+        resolved == filesystem_root
+        or resolved == repo
+        or repo in resolved.parents
+        or resolved in repo.parents
+    ):
+        raise SchemaError(
+            f"{field} must be tree-disjoint measured evidence outside the source checkout"
+        )
+    if resolved.is_file() and resolved.stat().st_nlink != 1:
+        raise SchemaError(f"{field} must not be a hard-linked evidence file")
+    return resolved
+
+
+def _require_output_authority_disjoint(
+    output: Path,
+    *,
+    live_deployment_manifest: Path,
+    live_deployment_evidence_root: Path,
+) -> None:
+    """Reject a handoff destination that could mutate live evidence authority."""
+
+    for authority, label in (
+        (live_deployment_manifest.parent, "live-deployment manifest directory"),
+        (live_deployment_evidence_root, "live-deployment evidence root"),
+    ):
+        if (
+            output == authority
+            or authority in output.parents
+            or output in authority.parents
+        ):
+            raise Table2Error(f"handoff output must be tree-disjoint from the {label}")
+
+
+def _campaign_is_pilot(campaign: Mapping[str, Any]) -> bool:
+    """Require one exact campaign-kind/evidence-label profile."""
+
+    profile = (
+        str(campaign.get("campaign_kind") or ""),
+        str(campaign.get("evidence_label") or ""),
+    )
+    if profile == ("engineering_pilot", "PILOT_ONLY"):
+        return True
+    if profile == ("locked_final", "FINAL_LOCKED"):
+        return False
+    raise SchemaError(
+        "handoff campaign_kind/evidence_label profile is not registered"
+    )
 
 
 def _spec_identity(
@@ -1000,9 +1217,36 @@ def prepare_handoff(
         raise Table2Error("handoff output must be outside the source checkout")
     if output.exists():
         raise Table2Error(f"handoff output already exists and will not be overwritten: {output}")
-    spec = read_json(spec_path)
+    spec = _read_handoff_spec(spec_path)
     if spec.get("schema_version") != INPUT_SCHEMA_VERSION:
         raise SchemaError("handoff input schema version is not registered")
+    validate_handoff_input_field_closure(spec)
+    # Resolve and protect measured live-evidence authority before any handoff
+    # output directory is created.  The deeper staging validator repeats these
+    # checks, but it cannot undo a caller-visible directory created here.
+    live_deployment_manifest_source = _require_external_tree_disjoint(
+        _spec_path(
+            spec_path,
+            spec.get("pc01_live_deployment_manifest"),
+            field="pc01_live_deployment_manifest",
+        ),
+        repository_root=repo,
+        field="pc01_live_deployment_manifest",
+    )
+    live_deployment_evidence_root = _require_external_tree_disjoint(
+        _spec_path(
+            spec_path,
+            spec.get("pc01_live_deployment_evidence_root"),
+            field="pc01_live_deployment_evidence_root",
+        ),
+        repository_root=repo,
+        field="pc01_live_deployment_evidence_root",
+    )
+    _require_output_authority_disjoint(
+        output,
+        live_deployment_manifest=live_deployment_manifest_source,
+        live_deployment_evidence_root=live_deployment_evidence_root,
+    )
     commit = _git_commit_clean(repo)
 
     campaign_source = _spec_path(
@@ -1035,11 +1279,26 @@ def prepare_handoff(
     if not isinstance(selection_config, Mapping):
         raise SchemaError("frozen protocol lacks selection configuration")
     selection_mode = str(selection_config.get("mode") or "")
-    pilot_only = (
-        str(campaign.get("campaign_kind")) != "locked_final"
-        or str(campaign.get("evidence_label")) == "PILOT_ONLY"
+    pilot_only = _campaign_is_pilot(campaign)
+    _validate_protocol_access_boundary(
+        protocol,
+        campaign,
+        pilot_only=pilot_only,
     )
-    requires_pc01_checkpoint_compatibility = pilot_only
+    selection_is_pc01 = selection_mode == "pc01_provisional"
+    if selection_is_pc01 is not pilot_only:
+        raise SchemaError(
+            "handoff campaign profile and protocol selection mode disagree"
+        )
+    requires_pc01_checkpoint_compatibility = selection_is_pc01
+    deployment_topology = str(
+        spec.get("webarena_deployment_topology") or ""
+    ).strip()
+    validate_handoff_input_field_closure(
+        spec,
+        deployment_topology=deployment_topology,
+        selection_mode=selection_mode,
+    )
     registry_path = _resolve_input(repo, campaign["task_manifest"])
     active_task_registry = (
         load_public_development_task_registry(registry_path)
@@ -1099,9 +1358,6 @@ def prepare_handoff(
         spec.get("webarena_host_preflight"),
         field="webarena_host_preflight",
     )
-    deployment_topology = str(
-        spec.get("webarena_deployment_topology") or ""
-    ).strip()
     if deployment_topology not in {SINGLE_HOST_TOPOLOGY, SPLIT_HOST_TOPOLOGY}:
         raise SchemaError(
             "handoff input requires one registered webarena_deployment_topology"
@@ -1124,25 +1380,6 @@ def prepare_handoff(
         expected_dgx_model_runtime_identity=expected_dgx_identity,
         expected_bridge_identity=expected_bridge_identity,
     )
-    live_deployment_manifest_source = _spec_path(
-        spec_path,
-        spec.get("pc01_live_deployment_manifest"),
-        field="pc01_live_deployment_manifest",
-    )
-    live_deployment_evidence_root = _spec_path(
-        spec_path,
-        spec.get("pc01_live_deployment_evidence_root"),
-        field="pc01_live_deployment_evidence_root",
-    )
-    for source, field in (
-        (live_deployment_manifest_source, "pc01_live_deployment_manifest"),
-        (live_deployment_evidence_root, "pc01_live_deployment_evidence_root"),
-    ):
-        resolved = source.resolve()
-        if resolved == repo or repo in resolved.parents:
-            raise SchemaError(
-                f"{field} must be supplied from measured evidence outside the source checkout"
-            )
     output.mkdir(parents=True)
     staged_paper_claim_registry = output / "paper_claim_registry.json"
     _copy_exact(paper_claim_registry_source, staged_paper_claim_registry)
@@ -1422,7 +1659,7 @@ def prepare_handoff(
         campaign,
         matched_seeds=matched_seeds,
         repeat_count=len(campaign.get("repeat_ids", [])),
-        pilot_only=str(campaign.get("campaign_kind")) != "locked_final",
+        pilot_only=pilot_only,
     )
 
     runner_spec = spec.get("runner")

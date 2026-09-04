@@ -21,18 +21,28 @@ the later validation-only PC-01/PC-02/PC-03 selection and final freeze.
 
 **Current hard blocker:** the repository now contains a source-bound AF_UNIX
 process-broker architecture with HMAC-authenticated JSON messages, peer
-PID/UID checks, distinct runtime/control keys, four allowlisted operations,
+PID/UID checks, distinct runtime/control keys, five allowlisted runtime
+operations (`reset`, `observe`, `execute`, `terminal`, and `close`),
 exact outer request/result envelopes, recursive registered sensitive-key
 rejection, source- and PID-bound authenticated readiness, and authenticated
-cleanup receipts. Its `action`, `observation`, and `execution` inner values are
-still arbitrary mappings. A neutral key such as `content` can carry data whose
-origin cannot be inferred from the schema, so these checks do not establish
-semantic oracle isolation or value provenance.
+cleanup receipts. Its eight registered request/result schema paths enforce the
+exact reset request/receipt, `ConcreteAction`, BrowserGym causal `Observation`,
+action-bound `AdapterExecution`, verifier-receipt binding, and opaque terminal
+signal, including exact nested mappings. Screenshot paths are confined to one
+session-bound directory and must name read-only, content-addressed PNG bytes.
+The worker also fixes one episode/task identity per session, binds every
+post-state to the last executed normal/recovery action, requires the causal
+verifier receipt after reset and every post-state before execution or close,
+fails closed after a backend/result error, and refuses readiness if an executed
+repository module falls outside the authenticated source closure. A
+permitted scalar such as visible browser text can still carry data whose origin
+cannot be inferred from schema conformance, so these checks do not establish
+semantic oracle isolation or runtime value provenance.
 Its local fixture tests are key/envelope architecture evidence only. The active
 WebArena deployment has not supplied an independently authenticated receipt proving
 that these process/source/credential boundaries were used on the campaign
 host. Handoff therefore records
-`BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`; the canonical bootstrap still
+`BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`; the canonical bootstrap still
 stops before importing the provider factory. The older same-process broker is
 retained for engineering fixtures and is explicitly unpromotable. A
 self-authored Boolean, local test receipt, or copied receipt cannot lift this
@@ -46,11 +56,19 @@ UID or container/process sandbox, a filesystem policy that prevents runtime
 inspection of evaluator memory/state, an allowlisted scrubbed evaluator
 environment with no inherited runtime/provider secrets, authenticated peer
 identity, and cleanup under those same controls. Promotion additionally
-requires exact operation-specific schemas for all three arbitrary inner mapping
-paths and externally reviewable provenance showing where every runtime-visible
-value came from. The registered schema in this source version intentionally has
-neither those inner contracts nor a trust anchor capable of accepting a
-deployment receipt.
+requires externally reviewable provenance showing where every runtime-visible
+value came from. The registered schema in this source version has the exact
+inner contracts, but intentionally has neither that provenance authority nor a
+trust anchor capable of accepting a deployment receipt.
+
+Before a real WebArena backend can replace the deterministic broker fixture,
+its complete repository-local transitive source set must be enumerated and
+hash-bound (the current worker deliberately rejects any unregistered import),
+the per-request IPC timeout must be frozen against the live reset/settle
+budget, and observable internal browser-error URLs such as a narrowly defined
+`about:blank`/Chromium error state must receive an explicit schema mapping.
+Until those three integration details and their live cross-layer tests exist,
+fail-closed rejection is expected and is not an infrastructure rerun license.
 
 ## Freeze prerequisites
 
@@ -60,6 +78,31 @@ processor, checkpoint-compatibility receipt, runtime integration, tasks,
 environment, prompts, systems, protocol, dependency lock, and read-only P4
 memory must be byte-identical. Schedule and provenance bytes may differ only
 where the distinct campaign identity requires it.
+
+Before handoff, replay the independently supplied live-deployment manifest and
+evidence package from the clean repository root:
+
+```bash
+PYTHONPATH=src python3 scripts/validate_table2_live_deployment.py \
+  --repository-root "$PWD" \
+  --manifest /secure/table2-inputs/pc01-live-deployment/manifest.json \
+  --evidence-root /secure/table2-inputs/pc01-live-deployment/evidence
+```
+
+This command creates only an ephemeral staging copy and removes it on exit; it
+does not mutate the supplied manifest or evidence tree. It does not fabricate
+evidence, perform external review, authenticate a deployment, or cross-bind the
+package to tasks, topology, model, checkpoint, or P4 memory. Its stdout is a
+non-authorizing validation summary with `paper_table_status: N/R` and
+`dispatch_authorized`, `handoff_authorized`, and `cross_binding_performed` all
+`false`. It is not a readiness receipt and must not be inserted into the
+handoff input. The operator source evidence directory may contain unrelated
+files; the validator ignores and does not copy them. The resulting ephemeral
+package itself has exact file closure, as does the later staged/frozen package:
+an added or missing package file or any symlink invalidates it.
+The effective system temporary directory must also be an existing absolute,
+non-symlinked tree outside the repository, manifest directory, and evidence
+tree; otherwise validation stops before creating the ephemeral copy.
 
 For a split local-browser/DGX-inference deployment, the frozen semantic
 dependency lock must be `table2-semantic-dependency-lock-v2`. Its
@@ -86,6 +129,8 @@ Both runner attestations and their frozen `runner_source/` trees must include
 the exact current bytes for:
 
 - `src/web_agent/__init__.py`
+- `src/web_agent/benchmarks/__init__.py`
+- `src/web_agent/benchmarks/base.py`
 - `src/web_agent/eval/__init__.py`
 - `src/web_agent/eval/table2/__init__.py`
 - `src/web_agent/eval/table2/live_compatibility.py`
@@ -100,6 +145,10 @@ the exact current bytes for:
 - `src/web_agent/eval/table2/process_broker_protocol.py`
 - `src/web_agent/eval/table2/process_broker_runtime.py`
 - `src/web_agent/eval/table2/process_broker_worker.py`
+- `src/web_agent/runtime/__init__.py`
+- `src/web_agent/runtime/contracts.py`
+- `src/web_agent/runtime/deadline.py`
+- `src/web_agent/runtime/state_reset.py`
 
 The gate refuses to authorize the probe if any of these rows is absent, stale,
 symlinked, or different from both the frozen source and current clean source.

@@ -37,6 +37,8 @@ PC01_PAGE_BROKER_SECURITY_BLOCKED_BINDING = {
 }
 PC01_PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/__init__.py",
+    "src/web_agent/benchmarks/__init__.py",
+    "src/web_agent/benchmarks/base.py",
     "src/web_agent/eval/__init__.py",
     "src/web_agent/eval/table2/__init__.py",
     "src/web_agent/eval/table2/common.py",
@@ -44,14 +46,93 @@ PC01_PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/eval/table2/process_broker_protocol.py",
     "src/web_agent/eval/table2/process_broker_runtime.py",
     "src/web_agent/eval/table2/process_broker_worker.py",
+    "src/web_agent/runtime/__init__.py",
+    "src/web_agent/runtime/contracts.py",
+    "src/web_agent/runtime/deadline.py",
+    "src/web_agent/runtime/state_reset.py",
 )
-PC01_PROCESS_BROKER_ARBITRARY_MAPPING_PATHS = [
+PC01_PROCESS_BROKER_INNER_SCHEMA_PATHS = [
+    "runtime_reset.request",
+    "runtime_reset.result.observation",
+    "runtime_reset.result.reset_state_receipt",
     "runtime_execute.request.action",
     "runtime_observe.result.observation",
     "runtime_execute.result.execution",
+    "runtime_terminal.request.receipt_binding",
+    "runtime_terminal.result.opaque_terminal_signal",
 ]
+PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION = (
+    "table2-process-broker-inner-schema-registry-v2"
+)
+PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY = [
+    {
+        "path": "runtime_reset.request",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "WebArenaResetStateRequest",
+        "validator_id": "webarena-reset-request-fields-v1",
+    },
+    {
+        "path": "runtime_reset.result.observation",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "Observation",
+        "validator_id": (
+            "browsergym-causal-observation-request-bound-"
+            "root-confined-screenshot-v2"
+        ),
+    },
+    {
+        "path": "runtime_reset.result.reset_state_receipt",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "WebArenaResetStateReceipt",
+        "validator_id": "webarena-hashes-only-reset-receipt-bound-v1",
+    },
+    {
+        "path": "runtime_execute.request.action",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "ConcreteAction",
+        "validator_id": "six-class-live-browser-action-subset-v1",
+    },
+    {
+        "path": "runtime_observe.result.observation",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "Observation",
+        "validator_id": (
+            "browsergym-causal-observation-request-bound-"
+            "root-confined-screenshot-v2"
+        ),
+    },
+    {
+        "path": "runtime_execute.result.execution",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "AdapterExecution",
+        "validator_id": "adapter-execution-with-action-evidence-v1",
+    },
+    {
+        "path": "runtime_terminal.request.receipt_binding",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "VerifierReceiptBinding",
+        "validator_id": "causal-observation-action-receipt-binding-v1",
+    },
+    {
+        "path": "runtime_terminal.result.opaque_terminal_signal",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "OpaqueTerminalSignal",
+        "validator_id": "opaque-terminal-event-token-v1",
+    },
+]
+PC01_PROCESS_BROKER_SCREENSHOT_TRANSPORT_CONTRACT = (
+    "FIXTURE_NONE_OR_ROOT_CONFINED_READ_ONLY_CONTENT_ADDRESSED_PNG_V1"
+)
+PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256 = hashlib.sha256(
+    json.dumps(
+        PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+).hexdigest()
 PC01_PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS = [
-    "REGISTER_EXACT_OPERATION_SPECIFIC_INNER_SCHEMAS",
     "ATTEST_RUNTIME_VALUE_PROVENANCE",
     "REGISTER_EXTERNAL_DEPLOYMENT_RECEIPT_SCHEMA_AND_TRUST_ANCHOR",
 ]
@@ -821,9 +902,9 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         if isinstance(row, dict)
     }
     process_blocked = (
-        binding.get("schema_version") == "table2-pc01-page-broker-security-v3"
+        binding.get("schema_version") == "table2-pc01-page-broker-security-v5"
         and binding.get("status")
-        == "BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED"
+        == "BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED"
         and binding.get("claim_scope")
         == (
             "SOURCE_ATTESTED_DISTINCT_PROCESS_AND_KEY_ENVELOPE_ARCHITECTURE_"
@@ -834,9 +915,24 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         and binding.get("runtime_and_evaluator_process_roles_separate") is True
         and binding.get("outer_envelope_fields_exact") is True
         and binding.get("forbidden_named_keys_rejected_recursively") is True
-        and binding.get("arbitrary_nested_mapping_paths")
-        == PC01_PROCESS_BROKER_ARBITRARY_MAPPING_PATHS
-        and binding.get("operation_specific_inner_schemas_registered") is False
+        and binding.get("operation_specific_inner_schema_paths")
+        == PC01_PROCESS_BROKER_INNER_SCHEMA_PATHS
+        and binding.get("inner_schema_registry_version")
+        == PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION
+        and binding.get("inner_schema_registry_sha256")
+        == PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256
+        and binding.get("operation_specific_inner_schemas_registered") is True
+        and binding.get("loaded_source_closure_enforced") is True
+        and binding.get("single_episode_task_session_enforced") is True
+        and binding.get("observation_stage_prior_action_bound") is True
+        and binding.get("verifier_receipt_causal_binding_enforced") is True
+        and binding.get("reset_operation_registered") is True
+        and binding.get("policy_screenshot_transport_contract")
+        == PC01_PROCESS_BROKER_SCREENSHOT_TRANSPORT_CONTRACT
+        and binding.get("policy_screenshot_root_bound_per_session") is True
+        and binding.get("canonical_wire_json_enforced") is True
+        and binding.get("runtime_client_ambiguous_failure_poisoned") is True
+        and binding.get("sealed_backend_config_hash_bound") is True
         and binding.get("runtime_value_provenance_attested") is False
         and binding.get("evaluator_operation_in_runtime_allowlist") is False
         and binding.get("authenticated_outer_envelopes") is True
@@ -845,7 +941,7 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         == PC01_PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
         and binding.get("same_process_fixture_production_eligible") is False
         and binding.get("local_receipt_schema_version")
-        == "table2-process-page-broker-receipt-v2"
+        == "table2-process-page-broker-receipt-v4"
         and binding.get("local_cleanup_receipt_schema_version")
         == "table2-process-page-broker-cleanup-receipt-v1"
         and binding.get("external_deployment_receipt_schema_version") is None
@@ -880,8 +976,20 @@ def _bootstrap_assert_pc01_page_broker_isolation(
             "runtime_and_evaluator_process_roles_separate",
             "outer_envelope_fields_exact",
             "forbidden_named_keys_rejected_recursively",
-            "arbitrary_nested_mapping_paths",
+            "operation_specific_inner_schema_paths",
+            "inner_schema_registry_version",
+            "inner_schema_registry_sha256",
             "operation_specific_inner_schemas_registered",
+            "loaded_source_closure_enforced",
+            "single_episode_task_session_enforced",
+            "observation_stage_prior_action_bound",
+            "verifier_receipt_causal_binding_enforced",
+            "reset_operation_registered",
+            "policy_screenshot_transport_contract",
+            "policy_screenshot_root_bound_per_session",
+            "canonical_wire_json_enforced",
+            "runtime_client_ambiguous_failure_poisoned",
+            "sealed_backend_config_hash_bound",
             "runtime_value_provenance_attested",
             "evaluator_operation_in_runtime_allowlist",
             "authenticated_outer_envelopes",
@@ -904,9 +1012,9 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         )
     raise RuntimeError(
         "PC-01 live campaign is blocked before provider import: local broker "
-        "evidence covers distinct processes, exact outer envelopes, and named-key "
-        "rejection only; operation-specific inner schemas, runtime value provenance, "
-        "and a separately authenticated deployment receipt are required"
+        "evidence covers distinct processes, exact outer/inner schemas, and named-key "
+        "rejection; external runtime-value provenance and a separately authenticated "
+        "deployment receipt are still required"
     )
 
 

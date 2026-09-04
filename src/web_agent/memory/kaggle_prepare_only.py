@@ -25,6 +25,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from web_agent.memory.manifest import canonical_sha256, sha256_file
 from web_agent.memory.preparation import (
+    P4_SOURCE_AUTHORITY_SCHEMA_VERSION,
     P4PreparationPackage,
     prepare_p4_candidate_audit,
     validate_p4_preparation_package,
@@ -96,7 +97,21 @@ PREPARATION_OUTPUT_FILES = (
     "review_queue.jsonl",
     "source_authority.json",
 )
+DOWNLOADED_OUTPUT_ENTRIES = (
+    "execution_receipt.json",
+    "execution_receipt.sha256",
+    "preparation",
+)
 ALLOWED_OPERATIONS = ("audit-candidates", "validate-preparation")
+_RECEIPT_ARGV_FLAGS = (
+    "--repository-root",
+    "--config",
+    "--input-root",
+    "--output-root",
+    "--source-commit",
+    "--source-bundle",
+)
+_ENVIRONMENT_DEPENDENCIES = ("web-agent", "numpy", "pillow")
 
 
 class KaggleP4PrepareOnlyError(ValueError):
@@ -394,7 +409,12 @@ def resolve_registered_dataset_mounts(
 def _file_descriptor(path: Path) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         raise KaggleP4PrepareOnlyError(f"output is not a regular file: {path}")
-    return {"bytes": path.stat().st_size, "sha256": sha256_file(path)}
+    metadata = path.stat()
+    if metadata.st_nlink != 1:
+        raise KaggleP4PrepareOnlyError(
+            f"preparation output must not be hard-linked: {path}"
+        )
+    return {"bytes": metadata.st_size, "sha256": sha256_file(path)}
 
 
 def _regular_unlinked_file(path: str | Path, *, role: str) -> Path:
@@ -414,6 +434,58 @@ def _regular_unlinked_file(path: str | Path, *, role: str) -> Path:
     if metadata.st_nlink != 1:
         raise KaggleP4PrepareOnlyError(f"{role} must not be hard-linked")
     return candidate
+
+
+def _regular_directory_without_symlink_ancestry(
+    path: str | Path, *, role: str
+) -> Path:
+    candidate = Path(os.path.abspath(os.fspath(path)))
+    current = Path(candidate.anchor)
+    for part in candidate.parts[1:]:
+        current = current / part
+        try:
+            metadata = current.lstat()
+        except OSError as error:
+            raise KaggleP4PrepareOnlyError(f"{role} is missing") from error
+        if stat.S_ISLNK(metadata.st_mode):
+            raise KaggleP4PrepareOnlyError(f"{role} contains a symlink component")
+    metadata = candidate.lstat()
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise KaggleP4PrepareOnlyError(f"{role} must be a regular directory")
+    return candidate
+
+
+def _validate_downloaded_output_root(path: str | Path) -> tuple[Path, Path]:
+    """Close the downloaded wrapper tree before trusting its inner receipt."""
+
+    root = _regular_directory_without_symlink_ancestry(
+        path,
+        role="downloaded prepare-only output root",
+    )
+    try:
+        entries = tuple(root.iterdir())
+    except OSError as error:
+        raise KaggleP4PrepareOnlyError(
+            "downloaded prepare-only output root is inaccessible"
+        ) from error
+    if {entry.name for entry in entries} != set(DOWNLOADED_OUTPUT_ENTRIES):
+        raise KaggleP4PrepareOnlyError(
+            "downloaded prepare-only output root differs from the exact allowlist"
+        )
+
+    preparation = _regular_directory_without_symlink_ancestry(
+        root / "preparation",
+        role="downloaded prepare-only preparation directory",
+    )
+    _regular_unlinked_file(
+        root / "execution_receipt.json",
+        role="downloaded prepare-only execution receipt",
+    )
+    _regular_unlinked_file(
+        root / "execution_receipt.sha256",
+        role="downloaded prepare-only execution receipt sidecar",
+    )
+    return root, preparation
 
 
 def validate_compact_preparation_outputs(package_root: str | Path) -> dict[str, Any]:
@@ -472,6 +544,172 @@ def _dependency_versions() -> dict[str, str | None]:
         except metadata.PackageNotFoundError:
             result[distribution] = None
     return result
+
+
+def _canonical_absolute_path(value: object, *, field: str) -> str:
+    """Validate a portable, lexical absolute path without reopening it.
+
+    Receipt replay normally happens on a different host from the Kaggle run,
+    so original paths cannot be required to exist.  Their spelling can still
+    be exact and can be cross-bound to the recorded invocation and datasets.
+    """
+
+    if type(value) is not str or not value or value != value.strip() or "\x00" in value:
+        raise KaggleP4PrepareOnlyError(f"{field} must be a canonical absolute path")
+    path = Path(value)
+    if (
+        not path.is_absolute()
+        or str(path) != value
+        or os.path.normpath(value) != value
+    ):
+        raise KaggleP4PrepareOnlyError(f"{field} must be a canonical absolute path")
+    return value
+
+
+def _canonical_receipt_argv(
+    *,
+    repository_root: Path,
+    config_path: Path,
+    input_root: Path,
+    output_root: Path,
+    source_commit: str,
+    source_bundle: Path,
+) -> list[str]:
+    """Return the one normalized semantic invocation stored in a PASS receipt."""
+
+    return [
+        "--repository-root",
+        str(repository_root),
+        "--config",
+        str(config_path),
+        "--input-root",
+        str(input_root),
+        "--output-root",
+        str(output_root),
+        "--source-commit",
+        source_commit,
+        "--source-bundle",
+        str(source_bundle),
+    ]
+
+
+def _validate_receipt_argv(value: object) -> dict[str, str]:
+    if not isinstance(value, list) or len(value) != 2 * len(_RECEIPT_ARGV_FLAGS):
+        raise KaggleP4PrepareOnlyError(
+            "prepare-only receipt argv is not the canonical registered invocation"
+        )
+    parsed: dict[str, str] = {}
+    for index, flag in enumerate(_RECEIPT_ARGV_FLAGS):
+        flag_index = 2 * index
+        argument = value[flag_index + 1]
+        if value[flag_index] != flag or type(argument) is not str:
+            raise KaggleP4PrepareOnlyError(
+                "prepare-only receipt argv is not the canonical registered invocation"
+            )
+        parsed[flag.removeprefix("--").replace("-", "_")] = argument
+    for field in (
+        "repository_root",
+        "config",
+        "input_root",
+        "output_root",
+        "source_bundle",
+    ):
+        parsed[field] = _canonical_absolute_path(
+            parsed[field], field=f"receipt.argv.{field}"
+        )
+    commit = parsed["source_commit"]
+    if (
+        len(commit) != 40
+        or any(character not in "0123456789abcdef" for character in commit)
+    ):
+        raise KaggleP4PrepareOnlyError(
+            "receipt.argv.source_commit must be a full lowercase Git SHA"
+        )
+    return parsed
+
+
+def _validate_receipt_timestamps(receipt: Mapping[str, Any]) -> None:
+    parsed: list[datetime] = []
+    for field in ("started_at_utc", "ended_at_utc"):
+        value = receipt.get(field)
+        if type(value) is not str or not value:
+            raise KaggleP4PrepareOnlyError(
+                "prepare-only receipt timestamps are missing"
+            )
+        try:
+            timestamp = datetime.fromisoformat(value)
+        except ValueError as error:
+            raise KaggleP4PrepareOnlyError(
+                f"prepare-only receipt {field} is not canonical ISO-8601"
+            ) from error
+        if (
+            timestamp.tzinfo is None
+            or timestamp.utcoffset() != timezone.utc.utcoffset(timestamp)
+            or timestamp.isoformat() != value
+        ):
+            raise KaggleP4PrepareOnlyError(
+                f"prepare-only receipt {field} is not canonical UTC ISO-8601"
+            )
+        parsed.append(timestamp)
+    if parsed[1] < parsed[0]:
+        raise KaggleP4PrepareOnlyError(
+            "prepare-only receipt ended before it started"
+        )
+
+
+def _validate_receipt_environment(value: object) -> dict[str, Any]:
+    required = {
+        "python",
+        "implementation",
+        "platform",
+        "cpu_count",
+        "execution_resource",
+        "gpu_or_checkpoint_loaded_by_wrapper",
+        "dependencies",
+    }
+    if not isinstance(value, Mapping) or set(value) != required:
+        raise KaggleP4PrepareOnlyError(
+            "prepare-only receipt environment schema mismatch"
+        )
+    for field in ("python", "implementation", "platform"):
+        text = value.get(field)
+        if type(text) is not str or not text or text != text.strip():
+            raise KaggleP4PrepareOnlyError(
+                f"prepare-only receipt environment.{field} is malformed"
+            )
+    python_parts = str(value["python"]).split(".")
+    if len(python_parts) != 3 or not all(part.isdigit() for part in python_parts):
+        raise KaggleP4PrepareOnlyError(
+            "prepare-only receipt environment.python is malformed"
+        )
+    cpu_count = value.get("cpu_count")
+    if cpu_count is not None and (type(cpu_count) is not int or cpu_count < 1):
+        raise KaggleP4PrepareOnlyError(
+            "prepare-only receipt environment.cpu_count is malformed"
+        )
+    if (
+        value.get("execution_resource") != "CPU_ONLY_NO_MODEL_OR_CHECKPOINT"
+        or value.get("gpu_or_checkpoint_loaded_by_wrapper") is not False
+    ):
+        raise KaggleP4PrepareOnlyError(
+            "prepare-only receipt violates the fixed CPU/no-model boundary"
+        )
+    dependencies = value.get("dependencies")
+    if not isinstance(dependencies, Mapping) or set(dependencies) != set(
+        _ENVIRONMENT_DEPENDENCIES
+    ):
+        raise KaggleP4PrepareOnlyError(
+            "prepare-only receipt dependency inventory schema mismatch"
+        )
+    for name in _ENVIRONMENT_DEPENDENCIES:
+        version = dependencies[name]
+        if version is not None and (
+            type(version) is not str or not version or version != version.strip()
+        ):
+            raise KaggleP4PrepareOnlyError(
+                f"prepare-only receipt dependency version is malformed: {name}"
+            )
+    return dict(value)
 
 
 def _safe_git_environment() -> dict[str, str]:
@@ -595,6 +833,9 @@ def _validate_source_mapping(
     *,
     repository_root: Path,
     require_clean_git_checkout: bool = True,
+    recorded_repository_root: str | None = None,
+    recorded_source_commit: str | None = None,
+    recorded_source_bundle: str | None = None,
 ) -> dict[str, Any]:
     """Reopen the clean checkout and reproduce the executed-source binding."""
 
@@ -609,6 +850,18 @@ def _validate_source_mapping(
         "source_transport",
     }:
         raise KaggleP4PrepareOnlyError("prepare-only source receipt schema mismatch")
+    source_repository_root = _canonical_absolute_path(
+        value.get("repository_root"), field="source.repository_root"
+    )
+    expected_repository_root = (
+        str(repository_root)
+        if recorded_repository_root is None
+        else recorded_repository_root
+    )
+    if source_repository_root != expected_repository_root:
+        raise KaggleP4PrepareOnlyError(
+            "source.repository_root differs from the canonical invocation"
+        )
     commit = value.get("source_commit_supplied")
     if (
         type(commit) is not str
@@ -616,6 +869,10 @@ def _validate_source_mapping(
         or any(character not in "0123456789abcdef" for character in commit)
     ):
         raise KaggleP4PrepareOnlyError("source receipt lacks a full lowercase Git SHA")
+    if recorded_source_commit is not None and commit != recorded_source_commit:
+        raise KaggleP4PrepareOnlyError(
+            "source commit differs from the canonical invocation"
+        )
     if (
         value.get("repository_git_head") != commit
         or value.get("source_commit_verification") != SOURCE_COMMIT_VERIFICATION
@@ -704,6 +961,16 @@ def _validate_source_mapping(
             )
         ):
             raise KaggleP4PrepareOnlyError("source transport descriptor is invalid")
+        transport_path = _canonical_absolute_path(
+            transport.get("path"), field="source.source_transport.path"
+        )
+        if (
+            recorded_source_bundle is not None
+            and transport_path != recorded_source_bundle
+        ):
+            raise KaggleP4PrepareOnlyError(
+                "source transport path differs from the canonical invocation"
+            )
     return dict(value)
 
 
@@ -740,6 +1007,311 @@ def locate_prepare_only_execution_receipt(
             "preparation package requires exactly one outer execution receipt"
         )
     return candidates[0]
+
+
+def _load_strict_json_object(path: Path, *, role: str) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise KaggleP4PrepareOnlyError(f"{role} must be a regular non-symlink file")
+    try:
+        payload = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_json_without_duplicate_keys,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise KaggleP4PrepareOnlyError(f"invalid {role}: {error}") from error
+    if not isinstance(payload, dict):
+        raise KaggleP4PrepareOnlyError(f"{role} must be a JSON object")
+    return payload
+
+
+def _require_sha256(value: object, *, field: str) -> str:
+    if (
+        type(value) is not str
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise KaggleP4PrepareOnlyError(f"{field} must be a lowercase SHA-256")
+    return value
+
+
+def _validate_receipt_file_descriptor(
+    value: object,
+    *,
+    role: str,
+    recorded_path: str,
+    replay_path: Path,
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != {"path", "bytes", "sha256"}:
+        raise KaggleP4PrepareOnlyError(
+            f"prepare-only {role} descriptor is malformed"
+        )
+    if _canonical_absolute_path(value.get("path"), field=f"{role}.path") != recorded_path:
+        raise KaggleP4PrepareOnlyError(
+            f"prepare-only {role} path differs from the canonical invocation"
+        )
+    byte_count = value.get("bytes")
+    digest = _require_sha256(value.get("sha256"), field=f"{role}.sha256")
+    if type(byte_count) is not int or byte_count < 1:
+        raise KaggleP4PrepareOnlyError(
+            f"prepare-only {role} byte count is malformed"
+        )
+    if (
+        replay_path.is_symlink()
+        or not replay_path.is_file()
+        or replay_path.stat().st_size != byte_count
+        or sha256_file(replay_path) != digest
+    ):
+        raise KaggleP4PrepareOnlyError(
+            f"prepare-only {role} differs from the validated repository"
+        )
+    return dict(value)
+
+
+def _recorded_child(root: str, relative: str, *, field: str) -> str:
+    safe = _safe_relative(relative, field=field)
+    child = Path(root) if str(safe) == "." else Path(root).joinpath(*safe.parts)
+    return _canonical_absolute_path(str(child), field=field)
+
+
+def _validate_receipt_dataset_bindings(
+    receipt: Mapping[str, Any],
+    *,
+    invocation: Mapping[str, str],
+    preparation: Path,
+    repository: Path,
+) -> None:
+    """Close receipt datasets against registered inputs and inner evidence."""
+
+    recorded_repository = invocation["repository_root"]
+    expected_recorded_config = _recorded_child(
+        recorded_repository,
+        PREPARE_ONLY_CONFIG_RELATIVE,
+        field="receipt.config.path",
+    )
+    if invocation["config"] != expected_recorded_config:
+        raise KaggleP4PrepareOnlyError(
+            "receipt argv config is not the registered repository config"
+        )
+    _validate_receipt_file_descriptor(
+        receipt.get("config"),
+        role="config",
+        recorded_path=expected_recorded_config,
+        replay_path=repository / PREPARE_ONLY_CONFIG_RELATIVE,
+    )
+
+    inputs = receipt.get("inputs")
+    if not isinstance(inputs, Mapping) or set(inputs) != {
+        "source_authority",
+        "train_json_files",
+    }:
+        raise KaggleP4PrepareOnlyError("prepare-only receipt inputs schema mismatch")
+    expected_recorded_authority = _recorded_child(
+        recorded_repository,
+        SOURCE_AUTHORITY_RELATIVE,
+        field="receipt.inputs.source_authority.path",
+    )
+    authority_descriptor = _validate_receipt_file_descriptor(
+        inputs.get("source_authority"),
+        role="source authority",
+        recorded_path=expected_recorded_authority,
+        replay_path=repository / SOURCE_AUTHORITY_RELATIVE,
+    )
+
+    ledger = _load_strict_json_object(
+        preparation / "read_ledger.json", role="preparation read ledger"
+    )
+    inner_authority_path = preparation / "source_authority.json"
+    inner_authority = _load_strict_json_object(
+        inner_authority_path, role="preparation source authority"
+    )
+    replay_authority = _load_strict_json_object(
+        repository / SOURCE_AUTHORITY_RELATIVE,
+        role="registered replay source authority",
+    )
+    if inner_authority != replay_authority:
+        raise KaggleP4PrepareOnlyError(
+            "preparation source authority differs from the registered checkout"
+        )
+    if (
+        authority_descriptor["sha256"] != sha256_file(inner_authority_path)
+        or ledger.get("source_authority_sha256") != authority_descriptor["sha256"]
+    ):
+        raise KaggleP4PrepareOnlyError(
+            "receipt/read-ledger/source-authority hash binding mismatch"
+        )
+    authority_required = {
+        "authority_id",
+        "authority_version",
+        "dataset_id",
+        "dataset_version",
+        "schema_version",
+        "sources",
+    }
+    if set(inner_authority) != authority_required or (
+        inner_authority.get("schema_version") != P4_SOURCE_AUTHORITY_SCHEMA_VERSION
+        or inner_authority.get("dataset_id") != EXPECTED_DATASET_ID
+        or inner_authority.get("dataset_version") != EXPECTED_DATASET_VERSION
+    ):
+        raise KaggleP4PrepareOnlyError(
+            "preparation source authority differs from the registered dataset identity"
+        )
+
+    dataset_rows = receipt.get("datasets")
+    ledger_rows = ledger.get("train_json_files")
+    authority_rows = inner_authority.get("sources")
+    if not all(isinstance(rows, list) for rows in (dataset_rows, ledger_rows, authority_rows)):
+        raise KaggleP4PrepareOnlyError(
+            "prepare-only receipt dataset evidence must use ordered lists"
+        )
+    if not (
+        len(dataset_rows) == len(ledger_rows) == len(authority_rows) == len(EXPECTED_DATASETS)
+    ):
+        raise KaggleP4PrepareOnlyError(
+            "prepare-only receipt dataset count differs from the registered contract"
+        )
+
+    expected_train_inputs: list[dict[str, Any]] = []
+    expected_attached_mounts: list[dict[str, Any]] = []
+    dataset_fields = {
+        "role",
+        "slug",
+        "declared_kaggle_dataset_version",
+        "kaggle_platform_version_verification",
+        "mount_layout",
+        "resolved_mount_root",
+        "data_root_layout",
+        "resolved_data_root",
+        "train_json",
+        "train_json_sha256",
+        "train_json_bytes",
+    }
+    ledger_fields = {"role", "file_name", "records", "bytes", "sha256"}
+    authority_fields = {"role", "file_name", "records", "sha256"}
+    for index, spec in enumerate(EXPECTED_DATASETS):
+        dataset = dataset_rows[index]
+        ledger_row = ledger_rows[index]
+        authority_row = authority_rows[index]
+        if not isinstance(dataset, Mapping) or set(dataset) != dataset_fields:
+            raise KaggleP4PrepareOnlyError(
+                f"prepare-only receipt datasets[{index}] schema mismatch"
+            )
+        if not isinstance(ledger_row, Mapping) or set(ledger_row) != ledger_fields:
+            raise KaggleP4PrepareOnlyError(
+                f"preparation read-ledger train_json_files[{index}] schema mismatch"
+            )
+        if not isinstance(authority_row, Mapping) or set(authority_row) != authority_fields:
+            raise KaggleP4PrepareOnlyError(
+                f"preparation source-authority sources[{index}] schema mismatch"
+            )
+        if (
+            dataset.get("role") != spec.role
+            or dataset.get("slug") != spec.slug
+            or dataset.get("declared_kaggle_dataset_version")
+            != spec.kaggle_dataset_version
+            or dataset.get("kaggle_platform_version_verification")
+            != "DECLARED_ONLY_NOT_QUERIED_BY_WRAPPER"
+            or dataset.get("mount_layout") not in spec.mount_layouts
+            or dataset.get("data_root_layout") not in spec.data_root_layouts
+        ):
+            raise KaggleP4PrepareOnlyError(
+                f"prepare-only receipt datasets[{index}] identity/layout mismatch"
+            )
+
+        mount_root = _recorded_child(
+            invocation["input_root"],
+            str(dataset["mount_layout"]),
+            field=f"receipt.datasets[{index}].resolved_mount_root",
+        )
+        data_root = _recorded_child(
+            mount_root,
+            str(dataset["data_root_layout"]),
+            field=f"receipt.datasets[{index}].resolved_data_root",
+        )
+        train_json = _recorded_child(
+            data_root,
+            spec.train_json_relative_path,
+            field=f"receipt.datasets[{index}].train_json",
+        )
+        if (
+            _canonical_absolute_path(
+                dataset.get("resolved_mount_root"),
+                field=f"receipt.datasets[{index}].resolved_mount_root",
+            )
+            != mount_root
+            or _canonical_absolute_path(
+                dataset.get("resolved_data_root"),
+                field=f"receipt.datasets[{index}].resolved_data_root",
+            )
+            != data_root
+            or _canonical_absolute_path(
+                dataset.get("train_json"),
+                field=f"receipt.datasets[{index}].train_json",
+            )
+            != train_json
+        ):
+            raise KaggleP4PrepareOnlyError(
+                f"prepare-only receipt datasets[{index}] path binding mismatch"
+            )
+        byte_count = dataset.get("train_json_bytes")
+        digest = _require_sha256(
+            dataset.get("train_json_sha256"),
+            field=f"receipt.datasets[{index}].train_json_sha256",
+        )
+        if type(byte_count) is not int or byte_count < 1:
+            raise KaggleP4PrepareOnlyError(
+                f"receipt.datasets[{index}].train_json_bytes is malformed"
+            )
+        expected_file_name = Path(spec.train_json_relative_path).name
+        records = ledger_row.get("records")
+        if type(records) is not int or records < 0:
+            raise KaggleP4PrepareOnlyError(
+                f"preparation read-ledger records[{index}] is malformed"
+            )
+        expected_ledger = {
+            "role": spec.role,
+            "file_name": expected_file_name,
+            "records": records,
+            "bytes": byte_count,
+            "sha256": digest,
+        }
+        if dict(ledger_row) != expected_ledger:
+            raise KaggleP4PrepareOnlyError(
+                f"receipt dataset differs from read-ledger source {spec.role}"
+            )
+        expected_authority = {
+            "role": spec.role,
+            "file_name": expected_file_name,
+            "records": records,
+            "sha256": digest,
+        }
+        if dict(authority_row) != expected_authority:
+            raise KaggleP4PrepareOnlyError(
+                f"receipt dataset differs from source authority {spec.role}"
+            )
+        expected_train_inputs.append(
+            {
+                "role": spec.role,
+                "path": train_json,
+                "sha256": digest,
+                "bytes": byte_count,
+            }
+        )
+        expected_attached_mounts.append(
+            {
+                "slug": spec.slug,
+                "declared_kaggle_dataset_version": spec.kaggle_dataset_version,
+                "resolved_mount_root": mount_root,
+            }
+        )
+
+    if inputs.get("train_json_files") != expected_train_inputs:
+        raise KaggleP4PrepareOnlyError(
+            "receipt train inputs differ from registered dataset/read-ledger bindings"
+        )
+    if receipt.get("attached_mounts") != expected_attached_mounts:
+        raise KaggleP4PrepareOnlyError(
+            "receipt attached mounts differ from registered dataset bindings"
+        )
 
 
 def validate_prepare_only_execution_receipt(
@@ -820,58 +1392,29 @@ def validate_prepare_only_execution_receipt(
             raise KaggleP4PrepareOnlyError(
                 f"prepare-only receipt mismatch at {field}"
             )
-    if not all(
-        type(receipt.get(field)) is str and bool(receipt[field])
-        for field in ("started_at_utc", "ended_at_utc")
-    ):
-        raise KaggleP4PrepareOnlyError("prepare-only receipt timestamps are missing")
-    if not isinstance(receipt.get("argv"), list) or not all(
-        isinstance(value, str) for value in receipt["argv"]
-    ):
-        raise KaggleP4PrepareOnlyError("prepare-only receipt argv is malformed")
+    _validate_receipt_timestamps(receipt)
+    invocation = _validate_receipt_argv(receipt.get("argv"))
+    _validate_receipt_environment(receipt.get("environment"))
     _validate_source_mapping(
         receipt.get("source"),
         repository_root=repository,
         require_clean_git_checkout=require_clean_git_checkout,
+        recorded_repository_root=invocation["repository_root"],
+        recorded_source_commit=invocation["source_commit"],
+        recorded_source_bundle=invocation["source_bundle"],
     )
-
-    config = receipt.get("config")
-    authority = receipt.get("inputs", {}).get("source_authority") if isinstance(
-        receipt.get("inputs"), Mapping
-    ) else None
-    expected_inputs = (
-        (
-            config,
-            repository / PREPARE_ONLY_CONFIG_RELATIVE,
-            "config",
-        ),
-        (
-            authority,
-            repository / SOURCE_AUTHORITY_RELATIVE,
-            "source authority",
-        ),
-    )
-    for descriptor, path, role in expected_inputs:
-        if not isinstance(descriptor, Mapping) or set(descriptor) != {
-            "path",
-            "bytes",
-            "sha256",
-        }:
-            raise KaggleP4PrepareOnlyError(
-                f"prepare-only {role} descriptor is malformed"
-            )
-        if path.is_symlink() or not path.is_file() or descriptor.get(
-            "sha256"
-        ) != sha256_file(path) or descriptor.get("bytes") != path.stat().st_size:
-            raise KaggleP4PrepareOnlyError(
-                f"prepare-only {role} differs from the validated repository"
-            )
 
     validated_package = validate_p4_preparation_package(preparation)
     if validated_package.status != "REVIEW_REQUIRED":
         raise KaggleP4PrepareOnlyError(
             "receipt is attached to a non-reviewable preparation package"
         )
+    _validate_receipt_dataset_bindings(
+        receipt,
+        invocation=invocation,
+        preparation=preparation,
+        repository=repository,
+    )
     expected_outputs = validate_compact_preparation_outputs(preparation)
     if receipt.get("outputs") != expected_outputs:
         raise KaggleP4PrepareOnlyError(
@@ -909,6 +1452,72 @@ def validate_prepare_only_execution_receipt(
         ],
         "source_commit": receipt["source"]["source_commit_supplied"],
     }
+
+
+def _build_downloaded_output_validation_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Validate a downloaded Table 2 Kaggle P4 prepare-only output "
+            "against the exact clean source checkout that produced it."
+        )
+    )
+    parser.add_argument("--repository-root", type=Path, required=True)
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        required=True,
+        help=(
+            "downloaded table2-p4-prepare-only-v1 directory containing "
+            "execution_receipt.json, its sidecar, and preparation/"
+        ),
+    )
+    return parser
+
+
+def validate_downloaded_output_main(argv: Sequence[str] | None = None) -> int:
+    """CLI boundary for strict replay of a downloaded outer receipt."""
+
+    args = _build_downloaded_output_validation_parser().parse_args(argv)
+    output_root = args.output_root
+    try:
+        output_root, preparation = _validate_downloaded_output_root(output_root)
+        binding = validate_prepare_only_execution_receipt(
+            preparation_root=preparation,
+            repository_root=args.repository_root,
+            require_clean_git_checkout=True,
+        )
+    except (KaggleP4PrepareOnlyError, OSError, TypeError, ValueError) as error:
+        print(
+            json.dumps(
+                {
+                    "status": "FAIL",
+                    "validation_scope": (
+                        "DOWNLOADED_PREPARE_ONLY_RECEIPT_AND_OUTPUT_BYTES"
+                    ),
+                    "paper_table_status": PAPER_TABLE_STATUS,
+                    "error": str(error),
+                },
+                sort_keys=True,
+            )
+        )
+        return 2
+    print(
+        json.dumps(
+            {
+                "status": "PASS",
+                "validation_scope": (
+                    "DOWNLOADED_PREPARE_ONLY_RECEIPT_AND_OUTPUT_BYTES"
+                ),
+                "package_status": "REVIEW_REQUIRED",
+                "paper_table_status": PAPER_TABLE_STATUS,
+                "output_root": str(output_root.resolve()),
+                **binding,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -1030,6 +1639,18 @@ def _run_prepare_only_impl(
         ) != source:
             raise KaggleP4PrepareOnlyError(
                 "source checkout or Git-bundle transport changed during preparation"
+            )
+        expected_argv = _canonical_receipt_argv(
+            repository_root=repository,
+            config_path=Path(config_path).resolve(),
+            input_root=input_path,
+            output_root=destination,
+            source_commit=str(source["source_commit_supplied"]),
+            source_bundle=Path(str(source["source_transport"]["path"])),
+        )
+        if list(argv) != expected_argv:
+            raise KaggleP4PrepareOnlyError(
+                "prepare-only invocation does not match the canonical registered argv"
             )
         status = "REVIEW_REQUIRED"
     except Exception as error:  # receipt is required for every in-boundary failure

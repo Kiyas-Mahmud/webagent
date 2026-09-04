@@ -91,6 +91,12 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   after causal provenance, successful-recovery/final-success, split,
   duplicate, and joint-WebArena audit evidence is complete. Validation/test
   reads, Gold-image transfer, and WebArena threshold tuning remain forbidden.
+- Downloaded P4 preparation receipts now undergo exact semantic replay, not
+  only self-hash verification. The validator closes canonical invocation paths
+  and UTC ordering, CPU/no-model semantics, registered dataset identities and
+  mount layouts, clean source/transport identity, and the dataset/input hashes,
+  sizes, and record counts against the inner read ledger and source authority.
+  These remain wrapper attestations, not independent Kaggle-platform proof.
 - Added a read-only P4 provenance attachment validator. It requires every
   preparation-queue candidate to be represented and binds admitted independent
   verification to the exact dataset/version/record and pre-action/action/
@@ -186,16 +192,24 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   superseded for new handoffs by the source-architecture record below; old
   records remain blocked rather than being silently promoted.
 - Added a distinct-process broker architecture for the future live deployment.
-  The sealed worker owns raw browser/evaluator state; runtime receives only four
-  authenticated outer operations/envelopes over an AF_UNIX channel. HMAC,
+  The sealed worker owns raw browser/evaluator state; runtime receives only five
+  authenticated operations (`reset`, `observe`, `execute`, `terminal`, and
+  `close`) over an AF_UNIX channel. HMAC,
   monotonic sequence/nonces, peer PID/UID checks, separate control credentials,
   source-bound launch receipts, and authenticated cleanup receipts are covered
   by adversarial local tests. These receipts are explicitly local architecture
-  evidence, not campaign-host authority. The four outer operations/envelopes and
-  registered sensitive-key rejection are source-tested, but action/observation/
-  execution inner mappings still lack operation-specific schemas and value
-  provenance. Local receipts are unpromotable; new handoffs record
-  `BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`. Split
+  evidence, not campaign-host authority. All eight registered request/result
+  schema paths, sensitive-key rejection, reset request/receipt,
+  `ConcreteAction`, BrowserGym causal `Observation`, action-bound
+  `AdapterExecution`, verifier-receipt binding, opaque terminal signal, and
+  root-confined content-addressed screenshot channel are source-tested and
+  receipt-bound. The isolated worker fixes one episode/task identity, binds
+  post states to the pending normal/recovery action, prevents execution or
+  clean close until each causal verifier receipt is present, and rejects
+  repository-local imports outside its authenticated source closure.
+  Runtime-visible scalar value provenance is
+  not externally attested. Local receipts are unpromotable; new handoffs record
+  `BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`. Split
   dispatch also records
   `BLOCKED_DGX_REMEASUREMENT_RECEIPT_AND_EXTERNAL_TRUST_ANCHOR_REQUIRED`. No live
   campaign is claimed.
@@ -232,28 +246,36 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   remain independent of sealed truth; agreement/discrepancy is recomputed.
   Pilot claims remain `N/R`, and `READY_FOR_TABLE2` cannot imply
   `READY_FOR_PAPER_CLAIMS`.
-- Current integrated verification is **1,171/1,171 Table 2 tests passing**. The three
+- Current integrated verification is **1,276/1,276 Table 2 tests passing**.
+  This includes the revised broker/bootstrap, strict downloaded Kaggle-output
+  closure, handoff input closure, and non-authorizing live-evidence replay. The three
   deterministic artifact-producing smokes also pass: six-action E0--E3 success
   chain, P1/P4 failure-memory intervention, and all 15 recovery scenarios x
   E0--E3 (60 diagnostic episodes). The authenticated WebArena export/audit was
   replayed from the pinned wheel and again reported 50 tasks, 47 incompatible,
-  3 compatible, and 13 fuzzy-judge tasks. Python compilation and all nine
-  user-facing Table 2 CLI help paths pass. The registered Kaggle bootstrap
+  3 compatible, and 13 fuzzy-judge tasks. Python compilation and all current
+  user-facing Table 2 CLI help paths pass in the registered project runtime.
+  The registered Kaggle bootstrap
   rejects all arguments by contract, and the shared companion bootstrap is
   import-only.
-- The full repository run reports **1,292 passing, 4 failing, 2 warnings**. The
+- The full repository run reports **1,397 passing, 4 failing, 2 warnings**. The
   four failures are the same pre-existing, out-of-scope checks: historical
   v2.3/v2.5 notebook stage literals, saved output in the historical v2.7 resume
   notebook, and a legacy model unit test that bypasses initialization and lacks
   the existing bbox flags. No training notebook or training configuration was
   changed to conceal them. These verification counts and fixture episodes are
   engineering evidence, not live-pilot results.
-- Remaining launch prerequisites are external: checkpoint-backed CUDA/model-
-  forward parity and live callbacks; authenticated Kaggle train/supplement
+- Remaining launch prerequisites include deployment-coupled repository work:
+  register the real WebArena broker backend's complete transitive source
+  closure, freeze its IPC timeout from measured live reset/settle behavior,
+  register a narrow browser-error observation mapping with a cross-layer test,
+  and add an externally reviewable runtime-value provenance authority. The
+  remaining external evidence includes checkpoint-backed CUDA/model-forward
+  parity and live callbacks; authenticated Kaggle train/supplement
   reads, independent recovery/final-success provenance, the frozen P4 store and
   joint duplicate audit; a user-approved compatible 50-task snapshot; passing
-  live WebArena services/reset/evaluator/mapper/credentials; registered
-  operation-specific inner schemas/value provenance and an externally trusted
+  live WebArena services/reset/evaluator/mapper/credentials; externally attested
+  runtime-value provenance and an externally trusted
   campaign-host process-isolation receipt for every topology; and, for split
   deployment, externally trusted DGX startup/model-load/per-block receipts. A
   matched first-normal E0--E3 readiness probe and target-local receipt must then
