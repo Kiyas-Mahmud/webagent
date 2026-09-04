@@ -1,0 +1,77 @@
+{
+  "schema_version": "table2.companion-diagnostic-registry.v1",
+  "artifact_role": "SCHEMA_ONLY_NO_INPUTS_NO_RESULTS",
+  "paper_table_status": "N/R",
+  "affects_primary_table2": false,
+  "registered_source_partitions": [
+    "train_diagnostic",
+    "validation_only",
+    "public_development",
+    "completed_public_pilot_campaign"
+  ],
+  "locked_test_partitions_allowed": false,
+  "statistics": {
+    "confidence": 0.95,
+    "interval_method": "percentile_task_cluster_bootstrap",
+    "cluster_unit": "task_id",
+    "default_samples": 10000,
+    "default_seed": 20250831
+  },
+  "canonical_binding": {
+    "promotion_status": "BLOCKED_AUTHORITATIVE_INPUT_PROVENANCE_REQUIRED",
+    "canonical_evidence_role_available": false,
+    "model_id": "qwen2vl_2b_gold_v2_8_dgx",
+    "model_revision": "895c3a49bc3fa70a340399125c650a463535e71c",
+    "checkpoint_sha256": "9eaab6d24719b7bce8d0dd2ccf9169c3ddf83e0a800714a84531679c0c94895a",
+    "resolved_config_sha256": "d014050287ae2142e1c2111cff8b00de214dc3f416fedb49504edde8bd61007f",
+    "processor_contract_sha256": "b3c9f629a3c4ce6ab7bb71b27c7e0b560e3e21c51a19d1235fd4a507ba437797",
+    "model_seed": 42,
+    "selection_scope": "validation_only",
+    "exact_adapter_module": "web_agent.eval.table2.pc01_companion_diagnostics",
+    "requires_exact_clean_repository_commit": true,
+    "requires_exact_factory_and_predictor_source_hashes": true,
+    "requires_authoritative_source_manifest_access_ledger_and_record_replay": true,
+    "p4_requires_checkpoint_backed_embedding_execution_evidence": true
+  },
+  "pillars": {
+    "P1": {
+      "input_schema": "table2.pillar1-diagnostic-input.v1",
+      "report_schema": "table2.pillar1-diagnostic-report.v1",
+      "canonical_class": "PC01Pillar1DiagnosticPredictor",
+      "input_stage": "frozen_post_action_and_executed_recovery",
+      "runtime_side_effects_allowed": false,
+      "operational_recovery_claim_allowed": false
+    },
+    "P3": {
+      "input_schema": "table2.pillar3-diagnostic-input.v1",
+      "report_schema": "table2.pillar3-diagnostic-report.v1",
+      "canonical_class": "PC01Pillar3DiagnosticPredictor",
+      "input_stage": "frozen_pre_action",
+      "action_classes": [
+        "CLICK",
+        "TYPE",
+        "SELECT",
+        "SCROLL",
+        "NAVIGATE",
+        "PRESS_KEY"
+      ],
+      "invalid_output_policy": "one_rejected_executor_request_no_repair",
+      "runtime_side_effects_allowed": false
+    },
+    "P4": {
+      "input_schema": "table2.pillar4-diagnostic-input.v1",
+      "report_schema": "table2.pillar4-diagnostic-report.v1",
+      "canonical_class": "PC01Pillar4DiagnosticRetriever",
+      "embedding_provider_id": "selected-checkpoint-memory-embedding",
+      "embedding_provider_version": "v1",
+      "embedding_provider_module": "web_agent.runtime.qwen2vl_pc01",
+      "embedding_provider_qualname": "_SelectedCheckpointRuntime.memory_embedding",
+      "input_stage": "frozen_post_action_failure_embedding",
+      "embedding_dimension": 768,
+      "retrieval_top_k": 3,
+      "memory_source": "frozen_train_only_successful_recovery_store",
+      "evaluation_writes_allowed": false,
+      "end_to_end_memory_benefit_claim_allowed": false
+    }
+  }
+}

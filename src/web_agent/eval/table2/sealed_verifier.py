@@ -15,6 +15,7 @@ import hmac
 import inspect
 import os
 from pathlib import Path
+import re
 import secrets
 from typing import Any
 
@@ -73,12 +74,237 @@ FORBIDDEN_RUNTIME_EVIDENCE_KEYS = frozenset(
         "ground_truth",
         "success_evidence",
         "progress_evidence",
+        "reward",
+        "done",
+        "terminated",
+        "truncated",
+        "evaluator_reward",
     }
 )
 _NORMALIZED_FORBIDDEN_RUNTIME_EVIDENCE_KEYS = frozenset(
     "".join(character for character in key.lower() if character.isalnum())
     for key in FORBIDDEN_RUNTIME_EVIDENCE_KEYS
 )
+# Opaque verifier references and learned causal predictions are admitted only
+# through the exact allowlist below; evaluator counts and memory-eligibility
+# truth are never globally exempted. Token-aware matching rejects cosmetic
+# wrappers without treating words such as ``task_successor`` as hidden truth.
+_FORBIDDEN_RUNTIME_IDENTIFIER_PHRASES = (
+    ("oracle",),
+    ("verifier",),
+    ("task", "success"),
+    ("task", "progress"),
+    ("ground", "truth"),
+    ("relevance", "label"),
+    ("reference", "action"),
+    ("reference", "answer"),
+    ("reference", "trajectory"),
+    ("expected", "action"),
+    ("expected", "target"),
+    ("correct", "action"),
+    ("correct", "target"),
+    ("success", "label"),
+    ("failure", "label"),
+    ("recovery", "label"),
+    ("task", "reward"),
+    ("evaluator", "reward"),
+    ("verified", "failure"),
+    ("verified", "agent", "failure"),
+    ("verified", "success"),
+    ("verified", "progress"),
+    ("recovery", "success"),
+    ("failure", "resolved"),
+    ("incident", "resolved"),
+    ("registered", "progress"),
+    ("memory", "relevance"),
+    ("relevant", "ids"),
+    ("success", "evidence"),
+    ("progress", "evidence"),
+    ("future", "state"),
+    ("future", "screenshot"),
+)
+_RUNTIME_COSMETIC_WRAPPER_PREFIXES = frozenset(
+    {
+        "env",
+        "environment",
+        "episode",
+        "evaluator",
+        "final",
+        "hidden",
+        "is",
+        "official",
+        "oracle",
+        "posthoc",
+        "reported",
+        "sealed",
+    }
+)
+_RUNTIME_COSMETIC_WRAPPER_SUFFIXES = frozenset(
+    {
+        "annotation",
+        "answer",
+        "evidence",
+        "flag",
+        "label",
+        "output",
+        "result",
+        "reward",
+        "score",
+        "trajectory",
+        "truth",
+        "value",
+    }
+)
+_NORMALIZED_ALLOWED_RUNTIME_EVIDENCE_KEYS = frozenset(
+    {
+        "verifiereventid",
+        "verifiertokensha256",
+        "predictedfailureresolved",
+    }
+)
+_NORMALIZED_INDIRECT_CONTROL_KEYS = frozenset(
+    {
+        "attribute",
+        "attributename",
+        "attributes",
+        "attributenames",
+        "column",
+        "columnname",
+        "columns",
+        "columnnames",
+        "field",
+        "fieldname",
+        "fields",
+        "fieldnames",
+        "feature",
+        "featurename",
+        "features",
+        "featurenames",
+        "keyname",
+        "keynames",
+        "label",
+        "labelname",
+        "labels",
+        "labelnames",
+        "metric",
+        "metricname",
+        "metrics",
+        "metricnames",
+        "property",
+        "propertyname",
+        "properties",
+        "propertynames",
+    }
+)
+
+
+def _runtime_identifier_tokens(value: object) -> tuple[str, ...]:
+    rendered = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", str(value))
+    return tuple(token.lower() for token in re.findall(r"[A-Za-z0-9]+", rendered))
+
+
+def _runtime_contains_phrase(
+    tokens: tuple[str, ...], phrase: tuple[str, ...]
+) -> bool:
+    width = len(phrase)
+    return any(tokens[index : index + width] == phrase for index in range(len(tokens) - width + 1))
+
+
+def _runtime_wrapped_compound(normalized: str, compound: str) -> bool:
+    start = normalized.find(compound)
+    if start < 0:
+        return False
+    prefix = normalized[:start]
+    suffix = normalized[start + len(compound) :]
+    return bool(prefix or suffix) and _runtime_segmented_affix(
+        prefix, _RUNTIME_COSMETIC_WRAPPER_PREFIXES
+    ) and _runtime_segmented_affix(
+        suffix, _RUNTIME_COSMETIC_WRAPPER_SUFFIXES
+    )
+
+
+def _runtime_segmented_affix(value: str, vocabulary: frozenset[str]) -> bool:
+    if not value:
+        return True
+    reachable = {0}
+    for start in range(len(value)):
+        if start not in reachable:
+            continue
+        for token in vocabulary:
+            if value.startswith(token, start):
+                reachable.add(start + len(token))
+    return len(value) in reachable
+
+
+def _runtime_is_indirect_control_key(key_token: str) -> bool:
+    if key_token in _NORMALIZED_INDIRECT_CONTROL_KEYS:
+        return True
+    return any(
+        key_token.endswith(base)
+        and _runtime_segmented_affix(
+            key_token[: -len(base)],
+            _RUNTIME_COSMETIC_WRAPPER_PREFIXES,
+        )
+        for base in _NORMALIZED_INDIRECT_CONTROL_KEYS
+    )
+
+
+def _runtime_evidence_key_matches(raw_key: object) -> set[str]:
+    normalized = "".join(
+        character for character in str(raw_key).lower() if character.isalnum()
+    )
+    if normalized in _NORMALIZED_ALLOWED_RUNTIME_EVIDENCE_KEYS:
+        return set()
+    tokens = _runtime_identifier_tokens(raw_key)
+    matches: set[str] = set()
+    if normalized in _NORMALIZED_FORBIDDEN_RUNTIME_EVIDENCE_KEYS:
+        matches.add(normalized)
+    for phrase in _FORBIDDEN_RUNTIME_IDENTIFIER_PHRASES:
+        compound = "".join(phrase)
+        if _runtime_contains_phrase(tokens, phrase) or compound in tokens:
+            matches.add(compound)
+        elif _runtime_wrapped_compound(normalized, compound):
+            matches.add(compound)
+    if _runtime_wrapped_compound(normalized, "verification"):
+        matches.add("verification")
+    for raw_signal in ("done", "reward", "terminated", "truncated"):
+        if _runtime_wrapped_compound(normalized, raw_signal):
+            matches.add(raw_signal)
+    # Causal post-state hashes may be logged. Only evaluator-like wrappers of
+    # that phrase are rejected here; the pre-action policy guard is stricter.
+    if _runtime_wrapped_compound(normalized, "stateafter"):
+        matches.add("stateafter")
+    return matches
+
+
+def _runtime_indirect_identifiers(key_token: str, value: Any) -> tuple[str, ...]:
+    if not _runtime_is_indirect_control_key(key_token):
+        return ()
+
+    def collect(item: Any) -> list[str]:
+        identifiers: list[str] = []
+        if isinstance(item, str):
+            identifiers.append(item)
+        elif isinstance(item, (list, tuple)):
+            for nested in item:
+                if isinstance(nested, (str, Mapping, list, tuple)):
+                    identifiers.extend(collect(nested))
+        elif isinstance(item, Mapping):
+            for nested_key, nested_value in item.items():
+                nested_token = "".join(
+                    character
+                    for character in str(nested_key).lower()
+                    if character.isalnum()
+                )
+                if nested_token in {"name", "names"} or _runtime_is_indirect_control_key(
+                    nested_token
+                ):
+                    identifiers.extend(collect(nested_value))
+                elif isinstance(nested_value, (Mapping, list, tuple)):
+                    identifiers.extend(collect(nested_value))
+        return identifiers
+
+    return tuple(collect(value))
 
 
 class SealedVerifierSink:
@@ -458,18 +684,32 @@ def assert_no_verifier_evidence(record: Mapping[str, Any], *, context: str) -> N
 
     def walk(value: Any, location: str) -> None:
         if isinstance(value, Mapping):
-            normalized = {
-                "".join(character for character in str(key).lower() if character.isalnum())
-                for key in value
-            }
-            overlap = _NORMALIZED_FORBIDDEN_RUNTIME_EVIDENCE_KEYS.intersection(normalized)
-            if overlap:
-                raise SchemaError(
-                    f"{context}{location} leaks sealed verifier keys: {sorted(overlap)}"
-                )
             for key, item in value.items():
+                if not str(key).isascii():
+                    raise SchemaError(
+                        f"{context}{location}.{key} uses a non-ASCII control-plane key"
+                    )
+                normalized = "".join(
+                    character
+                    for character in str(key).lower()
+                    if character.isalnum()
+                )
+                if normalized in _NORMALIZED_ALLOWED_RUNTIME_EVIDENCE_KEYS:
+                    walk(item, f"{location}.{key}")
+                    continue
+                matches = _runtime_evidence_key_matches(key)
+                for identifier in _runtime_indirect_identifiers(normalized, item):
+                    if not identifier.isascii():
+                        matches.add("nonasciiidentifier")
+                    else:
+                        matches.update(_runtime_evidence_key_matches(identifier))
+                if matches:
+                    raise SchemaError(
+                        f"{context}{location}.{key} leaks sealed verifier keys: "
+                        f"{sorted(matches)}"
+                    )
                 walk(item, f"{location}.{key}")
-        elif isinstance(value, list):
+        elif isinstance(value, (list, tuple)):
             for index, item in enumerate(value):
                 walk(item, f"{location}[{index}]")
 

@@ -24,6 +24,10 @@ from .common import (
     sha256_file,
     sha256_json,
 )
+from .process_broker_protocol import (
+    ARBITRARY_RUNTIME_MAPPING_PATHS,
+    PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS,
+)
 
 
 RUNNER_ATTESTATION_SCHEMA_VERSION = "table2-evaluation-runner-attestation-v2"
@@ -42,11 +46,31 @@ PC01_PAGE_BROKER_SECURITY_FIELD = "pc01_page_broker_security"
 PC01_PAGE_BROKER_SECURITY_SCHEMA_VERSION = (
     "table2-pc01-page-broker-security-v1"
 )
+PC01_PROCESS_BROKER_SECURITY_SCHEMA_VERSION = (
+    "table2-pc01-page-broker-security-v3"
+)
 PC01_PAGE_BROKER_SECURITY_CLAIM_SCOPE = (
     "REVIEWED_CODE_DATAFLOW_ONLY_NOT_PROCESS_ISOLATION"
 )
 PC01_PAGE_BROKER_SECURITY_BLOCKED_STATUS = (
     "BLOCKED_EXTERNAL_PROCESS_ISOLATION_REQUIRED"
+)
+PC01_PROCESS_BROKER_SECURITY_CLAIM_SCOPE = (
+    "SOURCE_ATTESTED_DISTINCT_PROCESS_AND_KEY_ENVELOPE_ARCHITECTURE_"
+    "NOT_VALUE_PROVENANCE_OR_DEPLOYMENT_AUTHORITY"
+)
+PC01_PROCESS_BROKER_SECURITY_BLOCKED_STATUS = (
+    "BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED"
+)
+PC01_PROCESS_BROKER_SOURCE_PATHS = (
+    "src/web_agent/__init__.py",
+    "src/web_agent/eval/__init__.py",
+    "src/web_agent/eval/table2/__init__.py",
+    "src/web_agent/eval/table2/common.py",
+    "src/web_agent/eval/table2/process_broker.py",
+    "src/web_agent/eval/table2/process_broker_protocol.py",
+    "src/web_agent/eval/table2/process_broker_runtime.py",
+    "src/web_agent/eval/table2/process_broker_worker.py",
 )
 EVALUATION_RUNNER_SCOPE = "FROZEN_EVALUATION_RUNNER"
 ENGINEERING_SMOKE_SCOPE = "ENGINEERING_SMOKE_ONLY"
@@ -115,16 +139,106 @@ def blocked_pc01_page_broker_security_binding() -> dict[str, Any]:
     }
 
 
-def validate_pc01_page_broker_security_binding(value: object) -> dict[str, Any]:
-    """Validate the exact fail-closed broker-security non-claim."""
+def process_isolated_pc01_page_broker_security_binding(
+    *, source_hashes: Mapping[str, str]
+) -> dict[str, Any]:
+    """Bind the implemented process architecture without self-authorizing it.
+
+    These rows attest distinct local processes, exact outer envelopes, and
+    recursive named-key rejection only. The three nested action/observation/
+    execution mappings have neither operation-specific schemas nor value-
+    provenance evidence. A real deployment also requires a separately
+    authenticated external receipt proving that its processes used the reviewed
+    bytes and boundaries. This repository has no registered trust anchor for
+    such a receipt, so dispatch stays false.
+    """
+
+    rows: list[dict[str, str]] = []
+    for relative in PC01_PROCESS_BROKER_SOURCE_PATHS:
+        digest = source_hashes.get(relative)
+        if not is_sha256(digest):
+            raise SchemaError(
+                f"PC-01 process-broker source is absent from attestation: {relative}"
+            )
+        rows.append({"relative_path": relative, "sha256": str(digest)})
+    rows.sort(key=lambda row: row["relative_path"])
+    return {
+        "schema_version": PC01_PROCESS_BROKER_SECURITY_SCHEMA_VERSION,
+        "status": PC01_PROCESS_BROKER_SECURITY_BLOCKED_STATUS,
+        "claim_scope": PC01_PROCESS_BROKER_SECURITY_CLAIM_SCOPE,
+        "architecture": "separate_process_af_unix_json_hmac_sha256_peercred_v1",
+        "runtime_and_evaluator_process_roles_separate": True,
+        "outer_envelope_fields_exact": True,
+        "forbidden_named_keys_rejected_recursively": True,
+        "arbitrary_nested_mapping_paths": list(ARBITRARY_RUNTIME_MAPPING_PATHS),
+        "operation_specific_inner_schemas_registered": False,
+        "runtime_value_provenance_attested": False,
+        "evaluator_operation_in_runtime_allowlist": False,
+        "authenticated_outer_envelopes": True,
+        "role_separated_authentication": True,
+        "future_promotion_requirements": list(
+            PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
+        ),
+        "same_process_fixture_production_eligible": False,
+        "local_receipt_schema_version": "table2-process-page-broker-receipt-v2",
+        "local_cleanup_receipt_schema_version": (
+            "table2-process-page-broker-cleanup-receipt-v1"
+        ),
+        "architecture_source_files": rows,
+        "architecture_source_set_sha256": sha256_json(rows),
+        "external_deployment_receipt_schema_version": None,
+        "external_deployment_receipt_present": False,
+        "external_trust_anchor_registered": False,
+        "production_dispatch_authorized": False,
+    }
+
+
+def validate_pc01_page_broker_security_binding(
+    value: object, *, source_hashes: Mapping[str, str] | None = None
+) -> dict[str, Any]:
+    """Validate either registered fail-closed broker-security non-claim."""
 
     expected = blocked_pc01_page_broker_security_binding()
-    if not isinstance(value, Mapping) or dict(value) != expected:
+    if isinstance(value, Mapping) and dict(value) == expected:
+        return expected
+    if not isinstance(value, Mapping):
+        raise SchemaError(
+            "PC-01 page-broker security binding must be an object"
+        )
+    if value.get("schema_version") == PC01_PAGE_BROKER_SECURITY_SCHEMA_VERSION:
         raise SchemaError(
             "PC-01 page-broker security binding must record the current "
             "same-process, non-isolated production blocker exactly"
         )
-    return expected
+    rows = value.get("architecture_source_files")
+    if not isinstance(rows, list):
+        raise SchemaError("PC-01 process-broker source binding is absent")
+    derived_hashes: dict[str, str] = {}
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, Mapping) or set(row) != {"relative_path", "sha256"}:
+            raise SchemaError("PC-01 process-broker source row is malformed")
+        relative = str(row.get("relative_path") or "")
+        digest = row.get("sha256")
+        if relative in derived_hashes or not is_sha256(digest):
+            raise SchemaError("PC-01 process-broker source row is duplicate/invalid")
+        derived_hashes[relative] = str(digest)
+        normalized.append({"relative_path": relative, "sha256": str(digest)})
+    expected_v2 = process_isolated_pc01_page_broker_security_binding(
+        source_hashes=derived_hashes
+    )
+    if dict(value) != expected_v2:
+        raise SchemaError(
+            "PC-01 process-broker security binding must record the exact "
+            "source-attested, externally unpromoted architecture"
+        )
+    if source_hashes is not None:
+        for row in normalized:
+            if source_hashes.get(row["relative_path"]) != row["sha256"]:
+                raise SchemaError(
+                    "PC-01 process-broker source differs from runner attestation"
+                )
+    return expected_v2
 
 
 def assert_pc01_page_broker_production_authorized(value: object) -> None:
@@ -132,10 +246,19 @@ def assert_pc01_page_broker_production_authorized(value: object) -> None:
 
     binding = validate_pc01_page_broker_security_binding(value)
     if binding["production_dispatch_authorized"] is not True:
+        if binding["schema_version"] == PC01_PAGE_BROKER_SECURITY_SCHEMA_VERSION:
+            raise SchemaError(
+                "PC-01 live campaign is blocked: the same-process broker requires "
+                "externally evidenced process isolation before any provider or "
+                "browser runtime loads"
+            )
         raise SchemaError(
-            "PC-01 live campaign is blocked: the in-process page broker is only "
-            "a reviewed-code dataflow fixture; externally evidenced process "
-            "isolation is required before any provider or browser runtime loads"
+            "PC-01 live campaign is blocked: local broker architecture/source "
+            "evidence does not attest nested-map semantics or value provenance "
+            "and is not external deployment authority; exact operation-specific "
+            "inner schemas plus a registered, independently authenticated "
+            "deployment receipt are required "
+            "before any provider or browser runtime loads"
         )
     raise SchemaError(
         "PC-01 page-broker authority is unsupported by this registered schema"
@@ -562,7 +685,10 @@ def validate_runner_attestation_payload(
             },
         )
         validate_pc01_page_broker_security_binding(
-            payload.get(PC01_PAGE_BROKER_SECURITY_FIELD)
+            payload.get(PC01_PAGE_BROKER_SECURITY_FIELD),
+            source_hashes={
+                row["relative_path"]: row["sha256"] for row in normalized_rows
+            },
         )
     elif provider_binding is not None:
         raise SchemaError(
@@ -689,8 +815,13 @@ def assert_clean_git_checkout(repository_root: Path) -> str:
 def validate_dependency_lock_for_environment(
     environment_path: Path,
     environment: Mapping[str, Any] | None = None,
+    *,
+    remeasure_current_host: bool = False,
+    remeasure_host_role: str | None = None,
+    supplied_runtime_identity: Mapping[str, Any] | None = None,
+    require_dispatch_authority: bool = False,
 ) -> Path:
-    """Verify the lock file named and hashed by one environment manifest."""
+    """Verify dependency-lock bytes *and* measured semantic host identity."""
 
     environment_path = environment_path.resolve()
     if environment is None:
@@ -708,14 +839,69 @@ def validate_dependency_lock_for_environment(
         raise SchemaError("dependency lock is missing or symlinked")
     if sha256_file(candidate) != expected:
         raise SchemaError("dependency lock hash differs from environment")
+    # A matching opaque file hash is not dependency evidence.  Reopen the
+    # independently validated host preflight, then require the lock's Python,
+    # platform, package, Playwright and Chromium values to agree exactly.
+    from .dependency_lock import (
+        assert_split_dispatch_authority_registered,
+        read_and_validate_semantic_dependency_lock,
+        validate_current_host_against_semantic_dependency_lock,
+    )
+    from .webarena_preflight_binding import validate_bound_deployment_preflight
+
+    preflight = validate_bound_deployment_preflight(
+        environment,
+        artifact_root=environment_path.parent,
+    )
+    lock = read_and_validate_semantic_dependency_lock(
+        candidate,
+        environment=environment,
+        deployment_preflight=preflight.evidence,
+        deployment_topology=str(preflight.binding["deployment_topology"]),
+    )
+    if (
+        remeasure_host_role is not None or supplied_runtime_identity is not None
+    ) and not remeasure_current_host:
+        raise SchemaError(
+            "dependency host role can be selected only with current-host remeasurement"
+        )
+    if remeasure_current_host:
+        from .dependency_lock import BROWSER_HOST_ROLE
+        from .split_deployment_preflight import SPLIT_HOST_TOPOLOGY
+
+        topology = lock.get("deployment_topology")
+        role = remeasure_host_role
+        if topology == SPLIT_HOST_TOPOLOGY and role is None:
+            # This function executes in the campaign/browser process. The DGX
+            # inference process must independently invoke the same validator
+            # with remeasure_host_role="dgx_host" at startup and per block.
+            role = BROWSER_HOST_ROLE
+        validate_current_host_against_semantic_dependency_lock(
+            lock,
+            host_role=role,
+            supplied_runtime_identity=supplied_runtime_identity,
+        )
+    if require_dispatch_authority:
+        assert_split_dispatch_authority_registered(lock)
     return candidate
 
 
-def validate_frozen_dependency_lock(campaign_root: Path) -> Path:
+def validate_frozen_dependency_lock(
+    campaign_root: Path,
+    *,
+    remeasure_current_host: bool = False,
+    remeasure_host_role: str | None = None,
+    supplied_runtime_identity: Mapping[str, Any] | None = None,
+    require_dispatch_authority: bool = False,
+) -> Path:
     """Verify the exact dependency-lock bytes copied into an evaluation package."""
 
     return validate_dependency_lock_for_environment(
-        campaign_root.resolve() / "frozen" / "environment.json"
+        campaign_root.resolve() / "frozen" / "environment.json",
+        remeasure_current_host=remeasure_current_host,
+        remeasure_host_role=remeasure_host_role,
+        supplied_runtime_identity=supplied_runtime_identity,
+        require_dispatch_authority=require_dispatch_authority,
     )
 
 
@@ -829,7 +1015,11 @@ def verify_runner_before_execution(
     if runner_entrypoint != attestation.get("runner_entrypoint"):
         raise SchemaError("CLI/direct runner entrypoint differs from frozen attestation")
 
-    validate_frozen_dependency_lock(campaign_root)
+    validate_frozen_dependency_lock(
+        campaign_root,
+        remeasure_current_host=True,
+        require_dispatch_authority=True,
+    )
 
     target = _runner_target(runner)
     source_name = inspect.getsourcefile(target) or inspect.getfile(target)

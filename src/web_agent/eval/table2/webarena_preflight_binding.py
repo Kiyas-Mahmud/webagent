@@ -49,7 +49,8 @@ def _semantic_validate(
 ) -> dict[str, Any]:
     # Kept behind one dispatcher so SINGLE_DGX_HOST can never fall through to
     # the split-host schema.  The split validator itself requires both exact
-    # expected identities before it will authorize that topology.
+    # expected identities before it will validate split compatibility. Dispatch
+    # authority is a separate fail-closed execution-guard decision.
     from .split_deployment_preflight import (
         validate_webarena_deployment_preflight,
     )

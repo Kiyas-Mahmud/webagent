@@ -96,6 +96,11 @@ _FORBIDDEN_KEY_TOKENS = {
     "verifiedsuccess",
     "verifiedprogress",
     "tasksuccess",
+    "reward",
+    "done",
+    "terminated",
+    "truncated",
+    "evaluatorreward",
 }
 
 _FORBIDDEN_SEALED_KEY_TOKENS = {
@@ -119,16 +124,281 @@ _FORBIDDEN_SEALED_KEY_TOKENS = {
     "failuretypegroundtruth",
     "recoverystrategygroundtruth",
     "relevancelabel",
+    "futurescreenshot",
+    "futurestate",
     "taskreward",
     "failureresolved",
     "verifiedsuccess",
     "verifiedprogress",
     "tasksuccess",
+    "reward",
+    "done",
+    "terminated",
+    "truncated",
+    "evaluatorreward",
+}
+
+# Match semantic identifier tokens rather than arbitrary substrings. This still
+# rejects ``official_task_success`` while avoiding collisions such as
+# ``task_successor_id`` or ``email_verification_status``. The live browser
+# mapper separately constrains page-state keys to a positive schema.
+_FORBIDDEN_IDENTIFIER_PHRASES = (
+    ("oracle",),
+    ("verifier",),
+    ("task", "success"),
+    ("task", "progress"),
+    ("ground", "truth"),
+    ("relevance", "label"),
+    ("reference", "action"),
+    ("reference", "answer"),
+    ("reference", "trajectory"),
+    ("expected", "action"),
+    ("expected", "target"),
+    ("correct", "action"),
+    ("correct", "target"),
+    ("success", "label"),
+    ("failure", "label"),
+    ("recovery", "label"),
+    ("task", "reward"),
+    ("evaluator", "reward"),
+    ("verified", "failure"),
+    ("verified", "agent", "failure"),
+    ("verified", "success"),
+    ("verified", "progress"),
+    ("recovery", "success"),
+    ("failure", "resolved"),
+    ("incident", "resolved"),
+    ("registered", "progress"),
+    ("memory", "relevance"),
+    ("relevant", "ids"),
+    ("success", "evidence"),
+    ("progress", "evidence"),
+)
+_FUTURE_IDENTIFIER_PHRASES = (
+    ("future", "state"),
+    ("future", "screenshot"),
+)
+_COSMETIC_WRAPPER_PREFIXES = {
+    "env",
+    "environment",
+    "episode",
+    "evaluator",
+    "final",
+    "hidden",
+    "is",
+    "official",
+    "oracle",
+    "posthoc",
+    "reported",
+    "sealed",
+}
+_COSMETIC_WRAPPER_SUFFIXES = {
+    "annotation",
+    "answer",
+    "evidence",
+    "flag",
+    "label",
+    "output",
+    "result",
+    "reward",
+    "score",
+    "trajectory",
+    "truth",
+    "value",
+}
+_ALLOWED_PRE_ACTION_KEY_TOKENS = {"predictedfailureresolved"}
+_ALLOWED_POST_ACTION_KEY_TOKENS = {
+    "predictedfailureresolved",
+    # P1 is intentionally post-action and consumes the executed causal state.
+    # Cosmetic wrappers such as ``official_state_after`` remain forbidden.
+    "stateafter",
+}
+_INDIRECT_CONTROL_KEY_TOKENS = {
+    "attribute",
+    "attributename",
+    "attributes",
+    "attributenames",
+    "column",
+    "columnname",
+    "columns",
+    "columnnames",
+    "field",
+    "fieldname",
+    "fields",
+    "fieldnames",
+    "feature",
+    "featurename",
+    "features",
+    "featurenames",
+    "keyname",
+    "keynames",
+    "label",
+    "labelname",
+    "labels",
+    "labelnames",
+    "metric",
+    "metricname",
+    "metrics",
+    "metricnames",
+    "property",
+    "propertyname",
+    "properties",
+    "propertynames",
 }
 
 
 def _normalise_key(key: object) -> str:
     return re.sub(r"[^a-z0-9]", "", str(key).lower())
+
+
+def _identifier_tokens(value: object) -> tuple[str, ...]:
+    rendered = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", str(value))
+    return tuple(token.lower() for token in re.findall(r"[A-Za-z0-9]+", rendered))
+
+
+def _contains_identifier_phrase(
+    tokens: tuple[str, ...], phrase: tuple[str, ...]
+) -> bool:
+    width = len(phrase)
+    return any(tokens[index : index + width] == phrase for index in range(len(tokens) - width + 1))
+
+
+def _wrapped_compound_match(normalised: str, compound: str) -> bool:
+    start = normalised.find(compound)
+    if start < 0:
+        return False
+    prefix = normalised[:start]
+    suffix = normalised[start + len(compound) :]
+    return bool(prefix or suffix) and _segmented_affix(
+        prefix, _COSMETIC_WRAPPER_PREFIXES
+    ) and _segmented_affix(suffix, _COSMETIC_WRAPPER_SUFFIXES)
+
+
+def _segmented_affix(value: str, vocabulary: set[str]) -> bool:
+    if not value:
+        return True
+    reachable = {0}
+    for start in range(len(value)):
+        if start not in reachable:
+            continue
+        for token in vocabulary:
+            if value.startswith(token, start):
+                reachable.add(start + len(token))
+    return len(value) in reachable
+
+
+def _is_indirect_control_key(key_token: str) -> bool:
+    if key_token in _INDIRECT_CONTROL_KEY_TOKENS:
+        return True
+    return any(
+        key_token.endswith(base)
+        and _segmented_affix(
+            key_token[: -len(base)],
+            _COSMETIC_WRAPPER_PREFIXES,
+        )
+        for base in _INDIRECT_CONTROL_KEY_TOKENS
+    )
+
+
+def _collect_indirect_identifiers(value: Any) -> list[str]:
+    identifiers: list[str] = []
+    if isinstance(value, str):
+        identifiers.append(value)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            if isinstance(item, str):
+                identifiers.append(item)
+            elif isinstance(item, (Mapping, list, tuple)):
+                identifiers.extend(_collect_indirect_identifiers(item))
+    elif isinstance(value, Mapping):
+        for nested_key, nested_value in value.items():
+            nested_token = _normalise_key(nested_key)
+            if nested_token in {"name", "names"} or _is_indirect_control_key(
+                nested_token
+            ):
+                identifiers.extend(_collect_indirect_identifiers(nested_value))
+            elif isinstance(nested_value, (Mapping, list, tuple)):
+                identifiers.extend(_collect_indirect_identifiers(nested_value))
+    return identifiers
+
+
+def _forbidden_key_matches(
+    raw_key: object,
+    normalised: str,
+    *,
+    exact_tokens: set[str],
+    allowed_tokens: set[str],
+    allow_causal_state_after: bool,
+) -> set[str]:
+    if normalised in allowed_tokens:
+        return set()
+    tokens = _identifier_tokens(raw_key)
+    matches: set[str] = set()
+    if normalised in exact_tokens:
+        matches.add(normalised)
+    for phrase in (*_FORBIDDEN_IDENTIFIER_PHRASES, *_FUTURE_IDENTIFIER_PHRASES):
+        compound = "".join(phrase)
+        if _contains_identifier_phrase(tokens, phrase) or compound in tokens:
+            matches.add(compound)
+        elif _wrapped_compound_match(normalised, compound):
+            matches.add(compound)
+    # ``verification`` alone is evaluator-like, but may appear causally in a
+    # browser-origin name such as ``email_verification_status``. Reject it only
+    # as an exact field or when cosmetically wrapped.
+    if _wrapped_compound_match(normalised, "verification"):
+        matches.add("verification")
+    for raw_signal in ("done", "reward", "terminated", "truncated"):
+        if _wrapped_compound_match(normalised, raw_signal):
+            matches.add(raw_signal)
+    state_after = _contains_identifier_phrase(tokens, ("state", "after")) or (
+        "stateafter" in tokens
+    )
+    if not allow_causal_state_after and state_after:
+        matches.add("stateafter")
+    elif _wrapped_compound_match(normalised, "stateafter"):
+        matches.add("stateafter")
+    return matches
+
+
+def _assert_ascii_control_key(key: object, *, path: str) -> None:
+    rendered = str(key)
+    if not rendered.isascii():
+        raise CausalBoundaryError(
+            f"non-ASCII control-plane field at {path}.{rendered}"
+        )
+
+
+def _forbidden_indirect_value(
+    key_token: str,
+    value: Any,
+    *,
+    exact_tokens: set[str],
+    allowed_tokens: set[str],
+) -> set[str]:
+    """Detect truth-field names hidden in common metadata envelopes.
+
+    Browser text and form values are not scanned. Only source-controlled
+    metadata-name fields (for example ``field_name``) receive this check.
+    """
+
+    if not _is_indirect_control_key(key_token):
+        return set()
+    identifiers = _collect_indirect_identifiers(value)
+    matches: set[str] = set()
+    for identifier in identifiers:
+        if not identifier.isascii():
+            matches.add("nonasciiidentifier")
+            continue
+        matches.update(
+            _forbidden_key_matches(
+                identifier,
+                _normalise_key(identifier),
+                exact_tokens=exact_tokens,
+                allowed_tokens=allowed_tokens,
+                allow_causal_state_after=False,
+            )
+        )
+    return matches
 
 
 def assert_oracle_blind_mapping(
@@ -141,15 +411,24 @@ def assert_oracle_blind_mapping(
     def visit(item: Any, path: str) -> None:
         if isinstance(item, Mapping):
             for key, nested in item.items():
+                _assert_ascii_control_key(key, path=path)
                 normalised = _normalise_key(key)
-                if normalised in _FORBIDDEN_KEY_TOKENS or any(
-                    token in normalised
-                    for token in (
-                        "oracleanswer",
-                        "referencetrajectory",
-                        "groundtruth",
+                matches = _forbidden_key_matches(
+                    key,
+                    normalised,
+                    exact_tokens=_FORBIDDEN_KEY_TOKENS,
+                    allowed_tokens=_ALLOWED_PRE_ACTION_KEY_TOKENS,
+                    allow_causal_state_after=False,
+                )
+                matches.update(
+                    _forbidden_indirect_value(
+                        normalised,
+                        nested,
+                        exact_tokens=_FORBIDDEN_KEY_TOKENS,
+                        allowed_tokens=_ALLOWED_PRE_ACTION_KEY_TOKENS,
                     )
-                ):
+                )
+                if matches:
                     raise CausalBoundaryError(
                         f"forbidden sealed/future field at {path}.{key}"
                     )
@@ -171,15 +450,24 @@ def assert_sealed_truth_blind_mapping(
     def visit(item: Any, path: str) -> None:
         if isinstance(item, Mapping):
             for key, nested in item.items():
+                _assert_ascii_control_key(key, path=path)
                 normalised = _normalise_key(key)
-                if normalised in _FORBIDDEN_SEALED_KEY_TOKENS or any(
-                    token in normalised
-                    for token in (
-                        "oracleanswer",
-                        "referencetrajectory",
-                        "groundtruth",
+                matches = _forbidden_key_matches(
+                    key,
+                    normalised,
+                    exact_tokens=_FORBIDDEN_SEALED_KEY_TOKENS,
+                    allowed_tokens=_ALLOWED_POST_ACTION_KEY_TOKENS,
+                    allow_causal_state_after=True,
+                )
+                matches.update(
+                    _forbidden_indirect_value(
+                        normalised,
+                        nested,
+                        exact_tokens=_FORBIDDEN_SEALED_KEY_TOKENS,
+                        allowed_tokens=_ALLOWED_POST_ACTION_KEY_TOKENS,
                     )
-                ):
+                )
+                if matches:
                     raise CausalBoundaryError(
                         f"forbidden sealed field at {path}.{key}"
                     )

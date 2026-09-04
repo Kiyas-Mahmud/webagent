@@ -5,14 +5,21 @@ from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Any
 import threading
 
 import pytest
 
-from web_agent.eval.table2.common import sha256_bytes, sha256_file, sha256_json
+from web_agent.eval.table2.common import (
+    SchemaError,
+    sha256_bytes,
+    sha256_file,
+    sha256_json,
+)
 from web_agent.eval.table2.pillar2_diagnostics import (
+    CANONICAL_INPUT_PROVENANCE_STATUS,
     DiagnosticBackendIdentity,
     DiagnosticCondition,
     DiagnosticExample,
@@ -20,6 +27,7 @@ from web_agent.eval.table2.pillar2_diagnostics import (
     DiagnosticTextState,
     ENGINEERING_EVIDENCE_ROLE,
     ImageArtifact,
+    INPUT_PROVENANCE_BLOCKED_PROMOTION,
     NEUTRAL_TEXT_ID,
     PILLAR2_EVIDENCE_ROLE,
     PAPER_TABLE_STATUS,
@@ -29,6 +37,7 @@ from web_agent.eval.table2.pillar2_diagnostics import (
     PostDiagnosticView,
     PreDiagnosticPrediction,
     PreDiagnosticView,
+    _canonical_pc01_error,
     run_pillar2_diagnostics,
     validate_pillar2_diagnostic_report,
     validate_pillar2_diagnostic_package,
@@ -686,6 +695,23 @@ def test_cli_imports_project_code_only_after_clean_git_gate():
     )
 
 
+def test_cli_help_discloses_input_provenance_blocked_status() -> None:
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "run_table2_pillar2_diagnostics.py"
+    )
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=script.parents[1],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert INPUT_PROVENANCE_BLOCKED_PROMOTION in result.stdout
+
+
 class _FakeBatchBuilder:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -824,3 +850,157 @@ def test_pc01_adapter_uses_exact_pre_and_action_conditioned_post_streams(tmp_pat
     assert runtime.batch.calls[1]["executed_action"] == ""
     assert runtime.batch.calls[1]["action_value"] == ""
     assert len(runtime.batch.calls[1]["observations"]) == 2
+
+
+def _clean_repository_receipt(
+    repository_root: Path, identity: DiagnosticBackendIdentity
+) -> dict[str, Any]:
+    return {
+        "status": "CLEAN_VERIFIED",
+        "repository_root_sha256": sha256_bytes(
+            str(repository_root.resolve()).encode("utf-8")
+        ),
+        "repository_commit": identity.repository_commit,
+        "git_status_porcelain_sha256": sha256_bytes(b""),
+    }
+
+
+def test_exact_pc01_runs_only_as_clean_input_provenance_blocked_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    diagnostic, image_root = _diagnostic(tmp_path)
+    identity = _canonical_pc01_identity(diagnostic.backend_identity)
+    diagnostic = replace(
+        diagnostic,
+        backend_identity=identity,
+        bootstrap_samples=10_000,
+        evidence_role=ENGINEERING_EVIDENCE_ROLE,
+    )
+    predictor = PC01Pillar2DiagnosticPredictor(
+        runtime=_FakePC01Runtime(identity), identity=identity
+    )
+    repository_root = tmp_path / "clean-repository"
+    repository_root.mkdir()
+    clean_receipt = _clean_repository_receipt(repository_root, identity)
+
+    monkeypatch.setattr(
+        "web_agent.eval.table2.pillar2_diagnostics.verify_clean_repository",
+        lambda root, *, expected_commit: dict(clean_receipt),
+    )
+    monkeypatch.setattr(
+        "web_agent.eval.table2.pillar2_diagnostics._verify_committed_repository_source",
+        lambda root, source, *, expected_commit: "src/exact-pc01-p2.py",
+    )
+
+    report = run_pillar2_diagnostics(
+        diagnostic,
+        image_root=image_root,
+        predictor=predictor,
+        repository_root=repository_root,
+    )
+    assert report["evidence_role"] == ENGINEERING_EVIDENCE_ROLE
+    assert report["promotion_status"] == INPUT_PROVENANCE_BLOCKED_PROMOTION
+    assert report["repository_verification"] == clean_receipt
+    assert report["paper_table_status"] == "N/R"
+    validate_pillar2_diagnostic_report(report)
+
+    package_dir = tmp_path / "p2-exact-engineering-package"
+    written = write_pillar2_diagnostic_package(
+        package_dir, diagnostic=diagnostic, report=report
+    )
+    assert written["promotion_status"] == INPUT_PROVENANCE_BLOCKED_PROMOTION
+    validated = validate_pillar2_diagnostic_package(package_dir)
+    assert validated["status"] == "PASS"
+    assert validated["paper_table_status"] == "N/R"
+
+
+def test_exact_pc01_input_provenance_block_cannot_use_uncommitted_escape(
+    tmp_path: Path,
+) -> None:
+    diagnostic, image_root = _diagnostic(tmp_path)
+    identity = _canonical_pc01_identity(diagnostic.backend_identity)
+    diagnostic = replace(
+        diagnostic,
+        backend_identity=identity,
+        bootstrap_samples=10_000,
+        evidence_role=ENGINEERING_EVIDENCE_ROLE,
+    )
+    predictor = PC01Pillar2DiagnosticPredictor(
+        runtime=_FakePC01Runtime(identity), identity=identity
+    )
+
+    with pytest.raises(
+        Pillar2DiagnosticError,
+        match="exact PC-01 P2 diagnostics.*clean repository verification",
+    ):
+        run_pillar2_diagnostics(
+            diagnostic,
+            image_root=image_root,
+            predictor=predictor,
+            allow_uncommitted_engineering=True,
+        )
+
+
+def test_exact_pc01_blocked_report_cannot_hide_or_fabricate_source_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    diagnostic, image_root = _diagnostic(tmp_path)
+    identity = _canonical_pc01_identity(diagnostic.backend_identity)
+    diagnostic = replace(
+        diagnostic,
+        backend_identity=identity,
+        bootstrap_samples=10_000,
+        evidence_role=ENGINEERING_EVIDENCE_ROLE,
+    )
+    predictor = PC01Pillar2DiagnosticPredictor(
+        runtime=_FakePC01Runtime(identity), identity=identity
+    )
+    repository_root = tmp_path / "clean-repository"
+    repository_root.mkdir()
+    clean_receipt = _clean_repository_receipt(repository_root, identity)
+    monkeypatch.setattr(
+        "web_agent.eval.table2.pillar2_diagnostics.verify_clean_repository",
+        lambda root, *, expected_commit: dict(clean_receipt),
+    )
+    monkeypatch.setattr(
+        "web_agent.eval.table2.pillar2_diagnostics._verify_committed_repository_source",
+        lambda root, source, *, expected_commit: "src/exact-pc01-p2.py",
+    )
+    report = run_pillar2_diagnostics(
+        diagnostic,
+        image_root=image_root,
+        predictor=predictor,
+        repository_root=repository_root,
+    )
+
+    hidden = deepcopy(report)
+    hidden["promotion_status"] = "UNPROMOTABLE"
+    with pytest.raises(SchemaError, match="must remain input-provenance blocked"):
+        validate_pillar2_diagnostic_report(hidden)
+
+    uncommitted = deepcopy(report)
+    uncommitted["repository_verification"] = {
+        "status": "ENGINEERING_UNCOMMITTED_UNPROMOTABLE",
+        "repository_root_sha256": None,
+        "repository_commit": identity.repository_commit,
+        "git_status_porcelain_sha256": None,
+    }
+    with pytest.raises(SchemaError, match="lacks clean Git verification"):
+        validate_pillar2_diagnostic_report(uncommitted)
+
+    generic_workspace = tmp_path / "generic"
+    generic_workspace.mkdir()
+    generic, generic_root = _diagnostic(generic_workspace)
+    generic_report = _run_pillar2_fixture(
+        generic,
+        image_root=generic_root,
+        predictor=DeterministicP2Predictor(generic.backend_identity),
+    )
+    fabricated = deepcopy(generic_report)
+    fabricated["promotion_status"] = INPUT_PROVENANCE_BLOCKED_PROMOTION
+    with pytest.raises(SchemaError, match="generic P2 diagnostics"):
+        validate_pillar2_diagnostic_report(fabricated)
+
+    assert CANONICAL_INPUT_PROVENANCE_STATUS in str(
+        _canonical_pc01_error(identity)
+    )

@@ -60,6 +60,10 @@ PILLAR2_PACKAGE_SCHEMA_VERSION = "table2.pillar2-diagnostic-package.v1"
 PILLAR2_BACKEND_SCHEMA_VERSION = "table2.pillar2-diagnostic-backend.v1"
 PILLAR2_EVIDENCE_ROLE = "P2_COMPANION_MECHANISM_EVIDENCE"
 ENGINEERING_EVIDENCE_ROLE = "ENGINEERING_DIAGNOSTIC_ONLY_UNPROMOTABLE"
+CANONICAL_INPUT_PROVENANCE_STATUS = (
+    "BLOCKED_AUTHORITATIVE_INPUT_PROVENANCE_REQUIRED"
+)
+INPUT_PROVENANCE_BLOCKED_PROMOTION = "UNPROMOTABLE_INPUT_PROVENANCE_BLOCKED"
 PAPER_TABLE_STATUS = "N/R"
 NEUTRAL_TEXT_ID = "fixed-neutral-text-state-v1"
 PILLAR2_BOOTSTRAP_CONFIDENCE = 0.95
@@ -120,7 +124,7 @@ ALLOWED_SOURCE_PARTITIONS = frozenset(
         "train_diagnostic",
         "validation_only",
         "public_development",
-        "completed_frozen_campaign",
+        "completed_public_pilot_campaign",
     }
 )
 ACTION_LABELS = tuple(ACTION_TYPE)
@@ -1060,7 +1064,13 @@ def _canonical_pc01_error(
 ) -> str | None:
     from .pc01_pillar2_diagnostics import canonical_pc01_backend_error
 
-    return canonical_pc01_backend_error(identity, predictor=predictor)
+    backend_error = canonical_pc01_backend_error(identity, predictor=predictor)
+    if backend_error is not None:
+        return backend_error
+    return (
+        f"{CANONICAL_INPUT_PROVENANCE_STATUS}: P2 requires replay of an "
+        "authoritative frozen source manifest, access ledger, and source-record bytes"
+    )
 
 
 def _neutral_image_for(
@@ -1553,6 +1563,10 @@ def run_pillar2_diagnostics(
         diagnostic.backend_identity, predictor=predictor
     )
     canonical_pc01 = canonical_error is None
+    provenance_blocked = bool(
+        canonical_error
+        and canonical_error.startswith(CANONICAL_INPUT_PROVENANCE_STATUS)
+    )
     expected_role = (
         PILLAR2_EVIDENCE_ROLE if canonical_pc01 else ENGINEERING_EVIDENCE_ROLE
     )
@@ -1561,7 +1575,7 @@ def run_pillar2_diagnostics(
             "diagnostic evidence role is inconsistent with its predictor: "
             f"expected {expected_role}; canonical check: {canonical_error or 'PASS'}"
         )
-    if canonical_pc01 and (
+    if (canonical_pc01 or provenance_blocked) and (
         diagnostic.bootstrap_samples != PILLAR2_BOOTSTRAP_SAMPLES
         or diagnostic.bootstrap_confidence != PILLAR2_BOOTSTRAP_CONFIDENCE
         or diagnostic.bootstrap_seed != PILLAR2_BOOTSTRAP_SEED
@@ -1572,6 +1586,11 @@ def run_pillar2_diagnostics(
             "semantics"
         )
     if repository_receipt is None:
+        if provenance_blocked:
+            raise Pillar2DiagnosticError(
+                "exact PC-01 P2 diagnostics with blocked input provenance require "
+                "clean repository verification"
+            )
         if allow_uncommitted_engineering and not canonical_pc01:
             repository_receipt = {
                 "status": "ENGINEERING_UNCOMMITTED_UNPROMOTABLE",
@@ -1841,7 +1860,11 @@ def run_pillar2_diagnostics(
         "promotion_status": (
             "CANONICAL_PC01_COMPANION_EVIDENCE"
             if canonical_pc01
-            else "UNPROMOTABLE"
+            else (
+                INPUT_PROVENANCE_BLOCKED_PROMOTION
+                if provenance_blocked
+                else "UNPROMOTABLE"
+            )
         ),
         "paper_table_status": PAPER_TABLE_STATUS,
         "affects_primary_table2": False,
@@ -2245,6 +2268,10 @@ def validate_pillar2_diagnostic_report(report: Mapping[str, Any]) -> None:
         raise SchemaError("P2 diagnostic report backend identity is absent")
     backend = DiagnosticBackendIdentity.from_mapping(backend_value)
     canonical_error = _canonical_pc01_error(backend)
+    provenance_blocked = bool(
+        canonical_error
+        and canonical_error.startswith(CANONICAL_INPUT_PROVENANCE_STATUS)
+    )
     if role == PILLAR2_EVIDENCE_ROLE:
         if canonical_error is not None:
             raise SchemaError(
@@ -2254,6 +2281,13 @@ def validate_pillar2_diagnostic_report(report: Mapping[str, Any]) -> None:
             raise SchemaError("canonical PC-01 P2 promotion status changed")
         if report["registered_seed"] != backend.model_seed:
             raise SchemaError("canonical PC-01 diagnostic seed changed")
+    elif provenance_blocked:
+        if promotion_status != INPUT_PROVENANCE_BLOCKED_PROMOTION:
+            raise SchemaError(
+                "exact PC-01 P2 evidence must remain input-provenance blocked"
+            )
+        if report["registered_seed"] != backend.model_seed:
+            raise SchemaError("input-provenance-blocked PC-01 diagnostic seed changed")
     elif promotion_status != "UNPROMOTABLE":
         raise SchemaError("generic P2 diagnostics must remain unpromotable")
     repository = report.get("repository_verification")
@@ -2266,9 +2300,11 @@ def validate_pillar2_diagnostic_report(report: Mapping[str, Any]) -> None:
         raise SchemaError("P2 repository verification receipt is malformed")
     if repository["repository_commit"] != backend.repository_commit:
         raise SchemaError("P2 repository receipt cites another commit")
-    if role == PILLAR2_EVIDENCE_ROLE:
+    if role == PILLAR2_EVIDENCE_ROLE or provenance_blocked:
         if repository["status"] != "CLEAN_VERIFIED":
-            raise SchemaError("canonical PC-01 evidence lacks clean Git verification")
+            raise SchemaError(
+                "exact PC-01 P2 evidence lacks clean Git verification"
+            )
         _require_sha256(
             repository["repository_root_sha256"],
             context="repository_root_sha256",
@@ -2319,11 +2355,11 @@ def validate_pillar2_diagnostic_report(report: Mapping[str, Any]) -> None:
         or bootstrap["contribution_unit"] != "diagnostic_example"
     ):
         raise SchemaError("P2 diagnostic bootstrap registration changed")
-    if role == PILLAR2_EVIDENCE_ROLE and (
+    if (role == PILLAR2_EVIDENCE_ROLE or provenance_blocked) and (
         bootstrap["samples"] != PILLAR2_BOOTSTRAP_SAMPLES
         or bootstrap["base_seed"] != PILLAR2_BOOTSTRAP_SEED
     ):
-        raise SchemaError("canonical PC-01 bootstrap registration changed")
+        raise SchemaError("exact PC-01 bootstrap registration changed")
     claim_scope = report.get("claim_scope")
     if not isinstance(claim_scope, Mapping) or claim_scope != PILLAR2_CLAIM_SCOPE:
         raise SchemaError("P2 diagnostic claim scope was broadened")
@@ -2631,7 +2667,11 @@ def validate_pillar2_diagnostic_package(
             ENGINEERING_EVIDENCE_ROLE,
         }
         or manifest["promotion_status"]
-        not in {"CANONICAL_PC01_COMPANION_EVIDENCE", "UNPROMOTABLE"}
+        not in {
+            "CANONICAL_PC01_COMPANION_EVIDENCE",
+            INPUT_PROVENANCE_BLOCKED_PROMOTION,
+            "UNPROMOTABLE",
+        }
         or manifest["paper_table_status"] != PAPER_TABLE_STATUS
         or manifest["affects_primary_table2"] is not False
         or manifest["runtime_outputs_consumed"] is not False

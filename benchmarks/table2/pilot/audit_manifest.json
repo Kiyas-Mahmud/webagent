@@ -1,11 +1,95 @@
 {
   "schema_version": "1.0",
-  "manifest_id": "table2-blinded-audit-20-v1",
+  "manifest_id": "table2-outcome-label-hidden-audit-20-v2",
   "evidence_label": "PILOT_ONLY",
-  "blinded": true,
+  "blinding_mode": "OUTCOME_LABELS_HIDDEN_SYSTEM_CONDITION_VISIBLE",
   "selection_occurs_after_episode_completion": true,
   "selection_seed": 12022025,
   "total_target": 20,
+  "reviewer_codebook": {
+    "schema_version": "table2-manual-audit-reviewer-codebook-v2",
+    "codebook_id": "table2-outcome-label-hidden-reviewer-codebook-v2",
+    "label_vector_order": [
+      "task_outcome",
+      "recovery_outcome",
+      "memory_effect",
+      "failure_attribution",
+      "intervention_assessment"
+    ],
+    "fields": [
+      {
+        "name": "task_outcome",
+        "allowed_labels": ["SUCCESS", "FAILURE", "UNDETERMINABLE"],
+        "semantics": {
+          "SUCCESS": "Observable episode evidence establishes completion of the assigned browser task.",
+          "FAILURE": "Observable episode evidence establishes that the assigned browser task was not completed.",
+          "UNDETERMINABLE": "Available artifacts are insufficient to establish either success or failure; success must not be inferred."
+        }
+      },
+      {
+        "name": "recovery_outcome",
+        "allowed_labels": ["SUCCESSFUL_RECOVERY", "FAILED_RECOVERY", "NO_RECOVERY_ATTEMPT", "UNDETERMINABLE"],
+        "semantics": {
+          "SUCCESSFUL_RECOVERY": "An executed recovery resolved the observed failure and the post-recovery evidence shows restored progress.",
+          "FAILED_RECOVERY": "A recovery was executed but did not resolve the observed failure within the registered recovery window.",
+          "NO_RECOVERY_ATTEMPT": "The reviewed episode contains no executed recovery attempt.",
+          "UNDETERMINABLE": "The artifacts do not support a reliable recovery-outcome decision."
+        }
+      },
+      {
+        "name": "memory_effect",
+        "allowed_labels": ["MEMORY_HELP", "MEMORY_HARM", "NO_DEMONSTRABLE_MEMORY_EFFECT", "NOT_APPLICABLE", "UNDETERMINABLE"],
+        "semantics": {
+          "MEMORY_HELP": "Paired causal evidence attributes a better E3 outcome to an admitted frozen-memory intervention.",
+          "MEMORY_HARM": "Paired causal evidence attributes a worse E3 outcome to an admitted frozen-memory intervention.",
+          "NO_DEMONSTRABLE_MEMORY_EFFECT": "The paired evidence does not demonstrate either help or harm from frozen memory.",
+          "NOT_APPLICABLE": "The reviewed evidence has no admitted frozen-memory intervention suitable for an E2/E3 effect judgment.",
+          "UNDETERMINABLE": "A memory-effect judgment is applicable but the available paired artifacts are insufficient."
+        }
+      },
+      {
+        "name": "failure_attribution",
+        "allowed_labels": ["NO_FAILURE_OBSERVED", "BBOX_OR_PARAMETER_FAILURE", "LOOP_FAILURE", "OTHER_AGENT_FAILURE", "ENVIRONMENT_OR_INFRASTRUCTURE_FAILURE", "MIXED_FAILURE", "UNDETERMINABLE"],
+        "semantics": {
+          "NO_FAILURE_OBSERVED": "No failure is supported by the reviewed observable evidence.",
+          "BBOX_OR_PARAMETER_FAILURE": "The primary supported failure is target grounding or concrete action-parameter resolution.",
+          "LOOP_FAILURE": "The primary supported failure is repeated non-progressing agent behavior.",
+          "OTHER_AGENT_FAILURE": "The primary supported failure is agent-caused but is neither bbox/parameter failure nor a loop.",
+          "ENVIRONMENT_OR_INFRASTRUCTURE_FAILURE": "The primary supported failure is external to the agent policy or recovery mechanism.",
+          "MIXED_FAILURE": "Agent and environment causes are both materially supported and cannot be separated as the primary cause.",
+          "UNDETERMINABLE": "The available artifacts do not support a reliable primary failure attribution."
+        }
+      },
+      {
+        "name": "intervention_assessment",
+        "allowed_labels": ["JUSTIFIED_INTERVENTION", "UNNECESSARY_INTERVENTION", "NO_INTERVENTION", "UNDETERMINABLE"],
+        "semantics": {
+          "JUSTIFIED_INTERVENTION": "An intervention was executed in response to observable failure or non-progress evidence.",
+          "UNNECESSARY_INTERVENTION": "An intervention was executed without observable evidence that it was needed.",
+          "NO_INTERVENTION": "The reviewed episode contains no recovery or memory intervention.",
+          "UNDETERMINABLE": "The artifacts are insufficient to judge whether an executed intervention was necessary."
+        }
+      }
+    ],
+    "label_object_rule": "exactly_one_registered_string_label_for_every_ordered_field_no_extra_fields",
+    "disagreement_rule": "true_if_any_ordered_label_value_differs_between_exactly_two_reviewers",
+    "agreement_unit": "complete_ordered_label_vector_per_selected_episode",
+    "agreement_method": "unweighted_cohen_kappa_over_complete_ordered_label_vectors_v1",
+    "composite_exact_agreement_method": "complete_ordered_label_vector_exact_agreement_v1",
+    "per_field_agreement_method": "unweighted_cohen_kappa_per_registered_field_v1",
+    "final_vs_sealed_comparison_method": "adjudicated_labels_vs_selected_sealed_evidence_counts_v1",
+    "kappa_weighting": "unweighted",
+    "undefined_kappa": {
+      "status": "UNDEFINED",
+      "reason": "EXPECTED_AGREEMENT_EQUALS_ONE",
+      "condition": "expected_chance_agreement_equals_one"
+    },
+    "applicability_rules": [
+      "NO_RECOVERY_ATTEMPT_if_and_only_if_selected_evidence_has_no_executed_recovery",
+      "NOT_APPLICABLE_memory_effect_if_and_only_if_no_E3_admitted_memory_intervention_with_paired_E2_evidence",
+      "NO_INTERVENTION_if_and_only_if_selected_evidence_has_neither_executed_recovery_nor_admitted_memory_intervention"
+    ]
+  },
   "strata": [
     {"name": "ordinary_success", "target": 5, "selection": "lowest deterministic hash among eligible episodes"},
     {"name": "terminal_failure", "target": 5, "selection": "lowest deterministic hash among eligible episodes"},

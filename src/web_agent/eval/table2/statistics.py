@@ -18,6 +18,8 @@ REGISTERED_CONTRASTS: tuple[tuple[str, str], ...] = (
     ("E1", "E2"),
     ("E2", "E3"),
 )
+DESCRIPTIVE_TOTAL_SYSTEM_CONTRASTS: tuple[tuple[str, str], ...] = (("E0", "E3"),)
+COMPUTED_CONTRASTS = REGISTERED_CONTRASTS + DESCRIPTIVE_TOTAL_SYSTEM_CONTRASTS
 
 
 def cluster_bootstrap(
@@ -99,7 +101,7 @@ def compute_paired_contrasts(
         "base_seed": seed,
         "contrasts": {},
     }
-    for left, right in REGISTERED_CONTRASTS:
+    for left, right in COMPUTED_CONTRASTS:
         contrast_name = f"{right}_minus_{left}"
         pair_rows = [
             {
@@ -154,13 +156,22 @@ def compute_paired_contrasts(
                 "unit": "paired_block",
                 "inference_role": "descriptive_only",
             }
-            metric_results["task_success"]["task_clustered_significance"] = (
-                _task_clustered_success_significance(
-                    pair_rows,
-                    left=left,
-                    right=right,
-                )
+            significance = _task_clustered_success_significance(
+                pair_rows,
+                left=left,
+                right=right,
             )
+            metric_results["task_success"]["task_clustered_significance"] = significance
+            if (left, right) in REGISTERED_CONTRASTS:
+                significance["inference_role"] = "registered_holm_family_member"
+                metric_results["task_success"]["analysis_role"] = (
+                    "registered_adjacent_inferential_contrast"
+                )
+            else:
+                significance["inference_role"] = "descriptive_unadjusted_only"
+                metric_results["task_success"]["analysis_role"] = (
+                    "descriptive_total_system_contrast"
+                )
         output["contrasts"][contrast_name] = metric_results
 
     task_success_p_values = {
@@ -168,6 +179,8 @@ def compute_paired_contrasts(
             "exact_sign_two_sided_p"
         ]
         for name, metrics in output["contrasts"].items()
+        if name
+        in {f"{right}_minus_{left}" for left, right in REGISTERED_CONTRASTS}
         if "task_success" in metrics
         and metrics["task_success"]["task_clustered_significance"][
             "exact_sign_two_sided_p"
@@ -183,6 +196,9 @@ def compute_paired_contrasts(
         "family": "registered_task_success_contrasts",
         "method": "Holm",
         "hypothesis_count": len(task_success_p_values),
+        "contrast_names": [
+            f"{right}_minus_{left}" for left, right in REGISTERED_CONTRASTS
+        ],
         "unadjusted_test": "exact_two_sided_sign_test",
         "inference_unit": "task_id",
         "within_task_aggregation": (

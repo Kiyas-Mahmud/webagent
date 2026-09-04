@@ -6,10 +6,17 @@ This package implements the registered Phase J Pillar 2 diagnostics without
 changing training or the E0–E3 experiment. It is deliberately offline and may
 run only after the source actions are frozen.
 
-Only an exact, authenticated PC-01 run produces
-`P2_COMPANION_MECHANISM_EVIDENCE`. A generic predictor or deterministic fixture
-is forcibly labelled `ENGINEERING_DIAGNOSTIC_ONLY_UNPROMOTABLE` with promotion
-status `UNPROMOTABLE`; changing its label fails validation. Neither status
+Current promotion is fail-closed as
+`BLOCKED_AUTHORITATIVE_INPUT_PROVENANCE_REQUIRED`. Exact PC-01 backend/source
+identity does not by itself prove the input examples' source partition, zero
+locked-test reads, labels, or opaque source-record hashes. Until a new
+registered authority replays the frozen source manifest, access ledger, and
+source-record bytes, every exact or generic run is forcibly labelled
+`ENGINEERING_DIAGNOSTIC_ONLY_UNPROMOTABLE`. An exact PC-01 run from the
+registered clean source receives the more specific promotion status
+`UNPROMOTABLE_INPUT_PROVENANCE_BLOCKED`; a generic run remains
+`UNPROMOTABLE`. Changing either label or using the exact-PC-01 blocked status
+with an uncommitted/generic source fails validation. Neither status
 creates a Table 2 row, modifies a Table 2 metric, triggers recovery, queries or
 writes memory, or claims operational recovery. The paper’s Table 2 status
 remains `N/R` during the PC-01 pilot.
@@ -66,7 +73,7 @@ include the estimate, 95% interval bounds, confidence, registered interval
 method, inference/cluster/contribution units, number of task clusters,
 bootstrap counts and seed, interval status, and an explicit reason when the
 interval is unavailable. Intervals use 10,000 deterministic percentile
-resamples of whole `task_id` clusters for canonical PC-01 evidence. A metric
+resamples of whole `task_id` clusters under the registered PC-01 settings. A metric
 with no eligible examples is `NOT_APPLICABLE`; one with fewer than two task
 clusters has a point estimate but no CI. Package validation recomputes every
 summary from the per-example records.
@@ -77,21 +84,24 @@ The command’s standard-library bootstrap first requires the exact repository
 top level, the manifest’s full 40-character commit, and an empty
 `git status --porcelain=v1 --untracked-files=all`. This happens before any
 `web_agent` or deployment predictor import and is repeated immediately before
-the predictor import and after inference/package validation. A canonical run
-cannot bypass this gate.
+the predictor import and after inference/package validation. The exact PC-01
+input-provenance-blocked run cannot bypass this gate; the direct API's generic
+test-fixture escape can never emit that status.
 
 The source-attested factory must be a top-level, zero-argument callable that
 returns an object implementing `Pillar2DiagnosticPredictor`. The factory and
 exact predictor-class source files are hash-checked before inference and again
 afterward.
 
-For canonical PC-01 evidence, the factory must return the exact
+For exact PC-01 engineering diagnostics, the factory must return the exact
 `PC01Pillar2DiagnosticPredictor` class from its registered module/source and
 must call `load_pc01_pillar2_diagnostic_predictor`. The identity is pinned to
 the registered PC-01 model ID/revision, epoch-6 checkpoint SHA-256, canonical
 resolved-config SHA-256, authenticated processor-contract SHA-256, model seed
 42, validation-only selection, and frozen evaluation mode. A look-alike class,
-subclass, generic adapter, or changed constant remains unpromotable. The
+subclass, generic adapter, or changed constant remains unpromotable. Even the
+exact adapter remains unpromotable until authoritative input provenance is
+implemented. The
 adapter reuses the authenticated checkpoint loader, exact processor streams,
 and existing model heads. The deployment wrapper supplies frozen artifact
 paths; it must not read the diagnostic manifest, labels, evaluator output, or

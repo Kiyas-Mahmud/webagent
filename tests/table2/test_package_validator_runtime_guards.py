@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,12 @@ from web_agent.benchmarks.webarena import (
     WebArenaManualRescueCheck,
     WebArenaManualRescueReceipt,
 )
-from web_agent.eval.table2.common import SchemaError, atomic_write_json
+from web_agent.eval.table2.common import (
+    SCHEMA_VERSION,
+    SchemaError,
+    atomic_write_json,
+    sha256_file,
+)
 from web_agent.eval.table2.execution_guard import (
     PC01_PROVIDER_BOUNDARY_CLAIM_SCOPE,
     PC01_PROVIDER_INSTALLATION_RECEIPT_SCHEMA_VERSION,
@@ -17,6 +23,7 @@ from web_agent.eval.table2.execution_guard import (
     PRODUCTION_RUNNER_ENTRYPOINT,
 )
 from web_agent.eval.table2.package_validator import (
+    RUNTIME_FILES,
     _validate_abort_terminal_semantics,
     _validate_evaluator_backend_guards,
     _validate_final_evidence,
@@ -24,12 +31,80 @@ from web_agent.eval.table2.package_validator import (
     _validate_manual_rescue_guard_events,
     _validate_pc01_provider_installation_ledger,
     _provider_campaign_state_sha256,
+    _validate_runtime_artifact_hashes,
+    _verify_runtime_event_stream,
 )
 from web_agent.runtime.contracts import canonical_sha256
+from web_agent.runtime.event_log import HashChainedEventLog
 
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
+
+
+def test_table2_runtime_event_envelope_rejects_unregistered_context_field(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "actions.jsonl"
+    log = HashChainedEventLog(
+        path,
+        stream="actions",
+        episode_id="episode-1",
+        context={
+            "system_id": "E2",
+            "task_id": "task-1",
+            "repeat_id": 0,
+            "matched_seed": 42,
+            "unregistered_context": "must-not-enter-package",
+        },
+    )
+    log.append("normal_action", {"fixture": True})
+    with pytest.raises(SchemaError, match="event envelope has extra/missing"):
+        _verify_runtime_event_stream(path, "actions", "episode-1")
+
+
+def test_runtime_artifact_closure_rejects_unregistered_json_but_allows_hash_named_png(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    for name in set(RUNTIME_FILES) - {"artifact_hashes.json"}:
+        path = runtime / name
+        path.write_bytes(b"" if name.endswith(".jsonl") else b"{}\n")
+    screenshot_bytes = b"registered screenshot"
+    screenshot_sha256 = hashlib.sha256(screenshot_bytes).hexdigest()
+    screenshot = runtime / "screenshots" / f"000001-{screenshot_sha256}.png"
+    screenshot.parent.mkdir()
+    screenshot.write_bytes(screenshot_bytes)
+    extra = runtime / "renamed_truth_envelope.json"
+    extra.write_text('{"field":{"metadata":{"name":"task_success"}}}\n')
+    files = {
+        str(path.relative_to(runtime)): sha256_file(path)
+        for path in runtime.rglob("*")
+        if path.is_file()
+    }
+    atomic_write_json(
+        runtime / "artifact_hashes.json",
+        {
+            "schema_version": SCHEMA_VERSION,
+            "hash_algorithm": "sha256",
+            "files": files,
+        },
+    )
+    with pytest.raises(SchemaError, match="unregistered extra file"):
+        _validate_runtime_artifact_hashes(runtime, system_id="E2")
+
+    extra.unlink()
+    files.pop("renamed_truth_envelope.json")
+    atomic_write_json(
+        runtime / "artifact_hashes.json",
+        {
+            "schema_version": SCHEMA_VERSION,
+            "hash_algorithm": "sha256",
+            "files": files,
+        },
+    )
+    _validate_runtime_artifact_hashes(runtime, system_id="E2")
 
 
 def _provider_installation_fixture(root: Path) -> tuple[dict, dict]:

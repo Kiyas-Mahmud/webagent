@@ -79,6 +79,14 @@ at `REVIEW_REQUIRED`; it does not perform any operation from Section 2 or 3.
 For the registered PC-01 source authority, the wrapper is mandatory: a direct
 `prepare_table2_p4.py audit-candidates` output without the wrapper's clean-
 commit execution receipt is not accepted by the joint audit or store builder.
+The linked document now defines the self-starting route: an explicit-ID local
+stager creates one private source-dataset directory and one private kernel
+directory, but performs no upload or remote run. Kaggle executes only the
+generated no-argument `run.py`; that tracked bootstrap verifies and clones the
+sole Git bundle from the attached transport dataset before invoking the
+wrapper. The bundle/manifest are transport only. Registered evidence remains
+authoritative only when later receipt replay matches the expected clean commit
+and executed-source hashes.
 
 The following command documents the underlying operation for local/synthetic
 diagnostics only. For registered evidence, run the wrapper command in the
@@ -86,10 +94,10 @@ linked prepare-only document instead:
 
 ```bash
 PYTHONPATH=src python scripts/prepare_table2_p4.py audit-candidates \
-  --gold-train-json /kaggle/input/web-gold-40k/split_train.json \
-  --gold-data-root /kaggle/input/web-gold-40k \
-  --supplement-train-json /kaggle/input/gold-40k-retry/data/supplement_train.json \
-  --supplement-data-root /kaggle/input/gold-40k-retry \
+  --gold-train-json /kaggle/input/web-gold-40k/final_data_set_40k/split_train.json \
+  --gold-data-root /kaggle/input/web-gold-40k/final_data_set_40k \
+  --supplement-train-json /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle/data/supplement_train.json \
+  --supplement-data-root /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle \
   --dataset-id web-gold-v2.8 \
   --dataset-version pc01-train-0522807d-supplement-67ade5e9 \
   --source-authority configs/eval/table2/p4_source_authority_v1.json \
@@ -173,8 +181,8 @@ PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py build-assignme
   --config configs/eval/table2/joint_duplicate_audit_v1.json \
   --source-authority configs/eval/table2/p4_source_authority_v1.json \
   --preparation-package /kaggle/working/table2-p4-prepare-only-v1/preparation \
-  --gold-train-json /kaggle/input/web-gold-40k/split_train.json \
-  --supplement-train-json /kaggle/input/gold-40k-retry/data/supplement_train.json \
+  --gold-train-json /kaggle/input/web-gold-40k/final_data_set_40k/split_train.json \
+  --supplement-train-json /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
   --approved-task-registry /kaggle/working/table2/evidence/approved-pilot-task-registry.json \
   --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
@@ -209,8 +217,8 @@ PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py validate-assig
   --config configs/eval/table2/joint_duplicate_audit_v1.json \
   --source-authority configs/eval/table2/p4_source_authority_v1.json \
   --preparation-package /kaggle/working/table2-p4-prepare-only-v1/preparation \
-  --gold-train-json /kaggle/input/web-gold-40k/split_train.json \
-  --supplement-train-json /kaggle/input/gold-40k-retry/data/supplement_train.json \
+  --gold-train-json /kaggle/input/web-gold-40k/final_data_set_40k/split_train.json \
+  --supplement-train-json /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
   --approved-task-registry /kaggle/working/table2/evidence/approved-pilot-task-registry.json \
   --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
@@ -269,8 +277,8 @@ PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py finalize-audit
   --config configs/eval/table2/joint_duplicate_audit_v1.json \
   --source-authority configs/eval/table2/p4_source_authority_v1.json \
   --preparation-package /kaggle/working/table2-p4-prepare-only-v1/preparation \
-  --gold-train-json /kaggle/input/web-gold-40k/split_train.json \
-  --supplement-train-json /kaggle/input/gold-40k-retry/data/supplement_train.json \
+  --gold-train-json /kaggle/input/web-gold-40k/final_data_set_40k/split_train.json \
+  --supplement-train-json /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
   --approved-task-registry /kaggle/working/table2/evidence/approved-pilot-task-registry.json \
   --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
@@ -306,8 +314,8 @@ and manifest-resolved identity without editing the scientific memory rules.
 PYTHONPATH=src python scripts/build_table2_memory.py \
   --config /kaggle/working/table2/selected/resolved_config.json \
   --checkpoint /kaggle/working/table2/selected/best_e6_outcome-mcc0.624.ckpt \
-  --data-root /kaggle/input/web-gold-40k \
-  --supplement-root /kaggle/input/gold-40k-retry \
+  --data-root /kaggle/input/web-gold-40k/final_data_set_40k \
+  --supplement-root /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle \
   --provenance-manifest /kaggle/working/table2/evidence/table2-memory-provenance-v1.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
   --webarena-task-source /kaggle/input/<pinned-webarena-source>/libwebarena-0.0.4-py3-none-any.whl \

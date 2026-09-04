@@ -4,6 +4,12 @@ protocol_status: DEVELOPMENT_FROZEN
 evidence_label: PILOT_ONLY
 paper_table_status: N/R
 
+paper_claims:
+  registry: configs/eval/table2/paper_claim_registry_v1.json
+  registry_id: table2-research-locked-claims-v1
+  pre_evaluation_status: N/R
+  pilot_resolution_forbidden: true
+
 selection:
   mode: pc01_provisional
   candidate_ids: [qwen2vl_2b_gold_v2_8_dgx]

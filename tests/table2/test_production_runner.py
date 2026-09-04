@@ -14,6 +14,7 @@ from web_agent.eval.table2 import production_runner as production_runner_module
 
 from web_agent.eval.table2 import execution_guard
 from web_agent.eval.table2.common import SchemaError, sha256_file, sha256_json
+from web_agent.eval.table2.dependency_lock import build_semantic_dependency_lock
 from web_agent.eval.table2.execution_guard import (
     EVALUATION_RUNNER_SCOPE,
     PC01_PAGE_BROKER_SECURITY_BLOCKED_STATUS,
@@ -31,6 +32,12 @@ from web_agent.eval.table2.execution_guard import (
 from web_agent.eval.table2.live_deployment import (
     LIVE_DEPLOYMENT_BINDING_FIELD,
     stage_pc01_live_deployment_package,
+)
+from web_agent.eval.table2.webarena_preflight import PINNED_WEBARENA_PACKAGES
+from web_agent.eval.table2.split_deployment_preflight import (
+    SINGLE_HOST_TOPOLOGY,
+    SPLIT_HOST_TOPOLOGY,
+    build_dgx_model_runtime_identity,
 )
 from web_agent.eval.table2.package_validator import (
     PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD,
@@ -742,14 +749,71 @@ def test_evaluation_cli_bootstrap_closes_source_and_dependency_bytes(
     frozen_source = campaign / "frozen/runner_source" / relative
     frozen_source.parent.mkdir(parents=True)
     frozen_source.write_bytes(script.read_bytes())
+    preflight = {
+        "host": {
+            "system": evaluation_cli.platform.system(),
+            "release": evaluation_cli.platform.release(),
+            "machine": evaluation_cli.platform.machine(),
+            "python_version": evaluation_cli.platform.python_version(),
+            "python_executable_sha256": sha256_file(Path(sys.executable)),
+        },
+        "package_check": {
+            "status": "PASS",
+            "packages": [
+                {
+                    "distribution": name,
+                    "expected_version": version,
+                    "actual_version": version,
+                    "status": "PASS",
+                }
+                for name, version in sorted(PINNED_WEBARENA_PACKAGES.items())
+            ]
+        },
+        "browser_check": {
+            "status": "PASS",
+            "browser": "chromium",
+            "browser_version": "fixture-chromium",
+            "viewport": {"width": 1280, "height": 720},
+            "device_scale_factor": 1,
+        },
+    }
+    environment = {
+        "benchmark": "webarena",
+        "benchmark_version": "fixture-benchmark",
+        "benchmark_revision": "fixture-revision",
+        "operating_system": f"fixture-{evaluation_cli.platform.system()}",
+        "browser": "chromium",
+        "browser_version": "fixture-chromium",
+        "playwright_version": PINNED_WEBARENA_PACKAGES["playwright"],
+        "controller_id": "fixture-controller",
+        "controller_version": "fixture-controller-v1",
+        "environment_adapter_id": "fixture-adapter",
+        "environment_adapter_version": "fixture-adapter-v1",
+        "container_digest": "sha256:fixture",
+    }
+    (campaign / "frozen/webarena_deployment_preflight.json").write_text(
+        json.dumps(preflight), encoding="utf-8"
+    )
     dependency_lock = campaign / "frozen/dependency.lock"
-    dependency_lock.write_bytes(b"locked-dependencies\n")
+    dependency_lock.write_text(
+        json.dumps(
+            build_semantic_dependency_lock(
+                environment=environment,
+                deployment_preflight=preflight,
+                deployment_topology=SINGLE_HOST_TOPOLOGY,
+            )
+        ),
+        encoding="utf-8",
+    )
+    environment.update(
+        {
+            "dependency_lock_relative_path": "dependency.lock",
+            "dependency_lock_sha256": sha256_file(dependency_lock),
+        }
+    )
     (campaign / "frozen/environment.json").write_text(
         json.dumps(
-            {
-                "dependency_lock_relative_path": "dependency.lock",
-                "dependency_lock_sha256": sha256_file(dependency_lock),
-            }
+            environment
         ),
         encoding="utf-8",
     )
@@ -780,6 +844,11 @@ def test_evaluation_cli_bootstrap_closes_source_and_dependency_bytes(
         return commit if command[1:3] == ["rev-parse", "HEAD"] else ""
 
     monkeypatch.setattr(evaluation_cli.subprocess, "check_output", clean_output)
+    monkeypatch.setattr(
+        evaluation_cli.importlib_metadata,
+        "version",
+        lambda distribution: PINNED_WEBARENA_PACKAGES[distribution],
+    )
     evaluation_cli._bootstrap_verify_evaluation_source(
         campaign,
         runner_entrypoint=runner_entrypoint,
@@ -790,6 +859,130 @@ def test_evaluation_cli_bootstrap_closes_source_and_dependency_bytes(
         evaluation_cli._bootstrap_verify_evaluation_source(
             campaign,
             runner_entrypoint=runner_entrypoint,
+        )
+
+
+def test_evaluation_cli_bootstrap_remeasures_split_browser_but_blocks_dispatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    browser_host = {
+        "system": evaluation_cli.platform.system(),
+        "release": evaluation_cli.platform.release(),
+        "machine": evaluation_cli.platform.machine(),
+        "python_version": evaluation_cli.platform.python_version(),
+        "python_executable_sha256": sha256_file(Path(sys.executable)),
+    }
+    local = {
+        "host": browser_host,
+        "package_check": {
+            "status": "PASS",
+            "packages": [
+                {
+                    "distribution": name,
+                    "expected_version": version,
+                    "actual_version": version,
+                    "status": "PASS",
+                }
+                for name, version in sorted(PINNED_WEBARENA_PACKAGES.items())
+            ],
+        },
+        "browser_check": {
+            "status": "PASS",
+            "browser": "chromium",
+            "browser_version": "fixture-chromium",
+            "viewport": {"width": 1280, "height": 720},
+            "device_scale_factor": 1,
+        },
+    }
+    dgx_dependencies = {
+        "host": {
+            "system": "Linux",
+            "release": "fixture-dgx-release",
+            "machine": "aarch64",
+            "python_version": "3.12.3",
+            "python_executable_sha256": "a" * 64,
+        },
+        "packages": [
+            {"distribution": "accelerate", "version": "1.0.0"},
+            {"distribution": "bitsandbytes", "version": "0.49.0"},
+            {"distribution": "peft", "version": "0.18.0"},
+            {"distribution": "torch", "version": "2.13.0"},
+            {"distribution": "transformers", "version": "4.57.6"},
+        ],
+    }
+    dgx = build_dgx_model_runtime_identity(
+        host_identity_sha256=sha256_json(dgx_dependencies["host"]),
+        dependency_identity=dgx_dependencies,
+        runtime_identity=evaluation_cli.PC01_SPLIT_RUNTIME_IDENTITY,
+        runtime_source_files=[
+            {"relative_path": "src/runtime.py", "sha256": "c" * 64}
+        ],
+        runtime_environment={
+            "python_version": "3.12.3",
+            "python_executable_sha256": "a" * 64,
+            "torch_version": "2.13.0",
+            "transformers_version": "4.57.6",
+            "cuda_available": True,
+            "cuda_runtime_version": "13.0",
+            "device_type": "cuda",
+            "device_name": "NVIDIA GB10",
+            "device_count": 1,
+            "container_digest": "sha256:" + "d" * 64,
+        },
+    )
+    preflight = {
+        "local_browser_preflight": local,
+        "dgx_model_runtime_identity": dgx,
+    }
+    environment = {
+        "benchmark": "webarena",
+        "benchmark_version": "fixture-benchmark",
+        "benchmark_revision": "fixture-revision",
+        "operating_system": f"fixture-{evaluation_cli.platform.system()}",
+        "browser": "chromium",
+        "browser_version": "fixture-chromium",
+        "playwright_version": PINNED_WEBARENA_PACKAGES["playwright"],
+        "controller_id": "fixture-controller",
+        "controller_version": "v1",
+        "environment_adapter_id": "fixture-adapter",
+        "environment_adapter_version": "v1",
+        "container_digest": "sha256:fixture",
+    }
+    lock = build_semantic_dependency_lock(
+        environment=environment,
+        deployment_preflight=preflight,
+        deployment_topology=SPLIT_HOST_TOPOLOGY,
+    )
+    campaign = tmp_path / "split-campaign"
+    (campaign / "frozen").mkdir(parents=True)
+    (campaign / "frozen/webarena_deployment_preflight.json").write_text(
+        json.dumps(preflight), encoding="utf-8"
+    )
+    lock_path = campaign / "frozen/dependency.lock"
+    lock_path.write_text(json.dumps(lock), encoding="utf-8")
+    monkeypatch.setattr(
+        evaluation_cli.importlib_metadata,
+        "version",
+        lambda name: PINNED_WEBARENA_PACKAGES[name],
+    )
+    with pytest.raises(RuntimeError, match="split deployment dispatch is blocked"):
+        evaluation_cli._bootstrap_validate_semantic_dependency_lock(
+            campaign_root=campaign,
+            environment=environment,
+            dependency_lock=lock_path,
+        )
+
+    missing = json.loads(json.dumps(preflight))
+    del missing["dgx_model_runtime_identity"]["dependency_identity"]
+    (campaign / "frozen/webarena_deployment_preflight.json").write_text(
+        json.dumps(missing), encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match="DGX dependency/runtime inventory"):
+        evaluation_cli._bootstrap_validate_semantic_dependency_lock(
+            campaign_root=campaign,
+            environment=environment,
+            dependency_lock=lock_path,
         )
 
 

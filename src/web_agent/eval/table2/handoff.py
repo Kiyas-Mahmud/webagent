@@ -35,11 +35,17 @@ from web_agent.eval.table2.execution_guard import (
     EVALUATION_RUNNER_SCOPE,
     FROZEN_DEPENDENCY_LOCK_RELATIVE_PATH,
     PC01_PAGE_BROKER_SECURITY_FIELD,
+    PC01_PROCESS_BROKER_SOURCE_PATHS,
     PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD,
     RUNNER_ATTESTATION_SCHEMA_VERSION,
-    blocked_pc01_page_broker_security_binding,
+    process_isolated_pc01_page_broker_security_binding,
     validate_pc01_provider_bootstrap_binding,
     validate_runner_attestation_payload,
+)
+from web_agent.eval.table2.dependency_lock import (
+    BROWSER_HOST_ROLE,
+    DGX_HOST_ROLE,
+    read_and_validate_semantic_dependency_lock,
 )
 from web_agent.eval.table2.locked_mount_preflight import (
     LOCKED_MOUNT_ATTESTATION_FIELD,
@@ -52,6 +58,11 @@ from web_agent.eval.table2.live_deployment import (
     stage_pc01_live_deployment_package,
     validate_evaluator_requirements_resolved_snapshot_binding,
     validate_live_capability_source_plane_disjointness,
+)
+from web_agent.eval.table2.paper_claims import (
+    SOURCE_REGISTRY_RELATIVE_PATH as PAPER_CLAIM_REGISTRY_SOURCE_RELATIVE_PATH,
+    validate_claim_registry,
+    validate_claim_registry_binding,
 )
 from web_agent.eval.table2.selection_evidence import stage_selection_evidence
 from web_agent.eval.table2.task_interface_audit import (
@@ -478,6 +489,19 @@ def _build_environment(
     ):
         raise SchemaError(
             "environment browser identity differs from measured WebArena preflight"
+        )
+    dependency_authority = read_and_validate_semantic_dependency_lock(
+        frozen_lock,
+        environment=environment,
+        deployment_preflight=preflight_evidence,
+        deployment_topology=deployment_topology,
+    )
+    if deployment_topology == SPLIT_HOST_TOPOLOGY and not all(
+        isinstance(dependency_authority.get(role), Mapping)
+        for role in (BROWSER_HOST_ROLE, DGX_HOST_ROLE)
+    ):
+        raise SchemaError(
+            "split handoff requires separate browser-host and DGX-host dependency inventories"
         )
     _validate_environment_manifest(environment, protocol=protocol)
     atomic_write_json(output_path, environment)
@@ -990,6 +1014,23 @@ def prepare_handoff(
     protocol_path = _resolve_input(repo, campaign["protocol"])
     protocol = load_yaml(protocol_path)
     _validate_registered_protocol(protocol)
+    protocol_claims = protocol.get("paper_claims")
+    if not isinstance(protocol_claims, Mapping):
+        raise SchemaError("handoff protocol lacks paper-claim registry binding")
+    configured_claim_registry = campaign.get("paper_claim_registry")
+    if configured_claim_registry is None:
+        raise SchemaError("handoff campaign lacks paper_claim_registry")
+    paper_claim_registry_source = _resolve_input(
+        repo, configured_claim_registry
+    )
+    protocol_claim_registry_source = _resolve_input(
+        repo, str(protocol_claims.get("registry", ""))
+    )
+    paper_claim_registry_binding = validate_claim_registry_binding(
+        campaign_registry_path=paper_claim_registry_source,
+        protocol_registry_path=protocol_claim_registry_source,
+        protocol_registry_id=protocol_claims.get("registry_id"),
+    )
     selection_config = protocol.get("selection")
     if not isinstance(selection_config, Mapping):
         raise SchemaError("frozen protocol lacks selection configuration")
@@ -1103,6 +1144,13 @@ def prepare_handoff(
                 f"{field} must be supplied from measured evidence outside the source checkout"
             )
     output.mkdir(parents=True)
+    staged_paper_claim_registry = output / "paper_claim_registry.json"
+    _copy_exact(paper_claim_registry_source, staged_paper_claim_registry)
+    validate_claim_registry(staged_paper_claim_registry)
+    if sha256_file(staged_paper_claim_registry) != paper_claim_registry_binding[
+        "registry_sha256"
+    ]:
+        raise SchemaError("staged paper-claim registry changed during handoff")
     environment_path, evaluator_source, live_deployment = _build_environment(
         spec=spec,
         spec_path=spec_path,
@@ -1438,8 +1486,10 @@ def prepare_handoff(
         AUDIT_TOOL_SOURCE_RELATIVE_PATH,
         str(JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH),
         str(P4_SOURCE_AUTHORITY_RELATIVE_PATH),
+        str(PAPER_CLAIM_REGISTRY_SOURCE_RELATIVE_PATH),
         *AUDIT_TOOL_DEPENDENCY_RELATIVE_PATHS,
         *EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS,
+        *PC01_PROCESS_BROKER_SOURCE_PATHS,
     }
     required_sources.update(
         str(path.relative_to(repo))
@@ -1516,7 +1566,11 @@ def prepare_handoff(
         "runtime_integration_entrypoint": integration_entrypoint,
         PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD: provider_bootstrap,
         PC01_PAGE_BROKER_SECURITY_FIELD: (
-            blocked_pc01_page_broker_security_binding()
+            process_isolated_pc01_page_broker_security_binding(
+                source_hashes={
+                    row["relative_path"]: row["sha256"] for row in source_rows
+                }
+            )
         ),
         "repository_commit": commit,
         "primary_source_relative_path": primary_relative,
@@ -1545,6 +1599,7 @@ def prepare_handoff(
             "runtime_integration_entrypoint": integration_entrypoint,
             "runtime_integration_source": integration_relative,
             "checkpoint_selection_evidence": str(selection_evidence_path),
+            "paper_claim_registry": str(staged_paper_claim_registry),
             "joint_duplicate_assignment_package": str(
                 joint_evidence_root / "assignment"
             ),
@@ -1582,6 +1637,7 @@ def prepare_handoff(
         "environment_manifest": str(environment_path),
         "runner_attestation": str(attestation_path),
         "checkpoint_selection_evidence": str(selection_evidence_path),
+        "paper_claim_registry": str(staged_paper_claim_registry),
         "model_manifests": [str(model_by_seed[seed]) for seed in sorted(model_by_seed)],
         "memory_manifests": [str(memory_by_seed[seed]) for seed in sorted(memory_by_seed)],
     }
@@ -1601,6 +1657,10 @@ def prepare_handoff(
         "campaign_mode": "evaluation",
         "selection_mode": selection_mode,
         "matched_seeds": matched_seeds,
+        "paper_claim_registry_id": paper_claim_registry_binding["registry_id"],
+        "paper_claim_registry_sha256": paper_claim_registry_binding[
+            "registry_sha256"
+        ],
         LIVE_DEPLOYMENT_BINDING_FIELD: live_deployment.binding,
         PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD: (
             checkpoint_compatibility_binding

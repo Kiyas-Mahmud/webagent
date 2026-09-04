@@ -280,7 +280,22 @@ class PC01ProviderBootstrapContext:
             value = getattr(self, field)
             if not isinstance(value, Mapping):
                 raise PC01LiveIntegrationError(f"provider bootstrap {field} is invalid")
-            assert_oracle_blind_mapping(value, location=f"provider_bootstrap.{field}")
+            oracle_guard_value: Mapping[str, Any] = value
+            if field == "runtime_capability_authority" and isinstance(
+                value.get("capabilities"), Mapping
+            ):
+                # Capability map keys are separately constrained by the exact
+                # six-item registry. Guard the fixed row schemas without
+                # globally exempting the safety capability whose registered
+                # ID contains the word ``oracle``.
+                oracle_guard_value = {
+                    **value,
+                    "capabilities": list(value["capabilities"].values()),
+                }
+            assert_oracle_blind_mapping(
+                oracle_guard_value,
+                location=f"provider_bootstrap.{field}",
+            )
             _reject_bootstrap_paths(value, location=f"provider_bootstrap.{field}")
             object.__setattr__(self, field, _deep_freeze(value))
         if (

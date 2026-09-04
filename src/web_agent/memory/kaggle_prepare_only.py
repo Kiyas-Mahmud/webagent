@@ -17,6 +17,7 @@ import os
 from pathlib import Path, PurePosixPath
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -31,7 +32,7 @@ from web_agent.memory.preparation import (
 
 
 CONFIG_SCHEMA_VERSION = "table2-p4-kaggle-prepare-config-v1"
-RECEIPT_SCHEMA_VERSION = "table2-p4-kaggle-prepare-receipt-v2"
+RECEIPT_SCHEMA_VERSION = "table2-p4-kaggle-prepare-receipt-v3"
 MODE = "P4_PREPARE_ONLY"
 PAPER_TABLE_STATUS = "N/R"
 SOURCE_AUTHORITY_RELATIVE = "configs/eval/table2/p4_source_authority_v1.json"
@@ -74,9 +75,12 @@ EXECUTED_SOURCE_RELATIVE_PATHS = (
 SOURCE_COMMIT_VERIFICATION = (
     "MATCHED_CLEAN_REPOSITORY_GIT_HEAD_AND_EXECUTED_SOURCE_SET"
 )
-SOURCE_ARCHIVE_EVIDENCE_ROLE = (
-    "TRANSPORT_ONLY_NOT_EXECUTED_NOT_SOURCE_AUTHORITY"
+SOURCE_TRANSPORT_EVIDENCE_ROLE = (
+    "GIT_BUNDLE_TRANSPORT_NOT_SCIENTIFIC_SOURCE_AUTHORITY"
 )
+# Compatibility import name only; receipt schema v3 calls this evidence a
+# source transport and accepts only a verified Git bundle.
+SOURCE_ARCHIVE_EVIDENCE_ROLE = SOURCE_TRANSPORT_EVIDENCE_ROLE
 PREPARATION_EXECUTION_RECEIPT_VALIDATED = (
     "VALIDATED_REGISTERED_KAGGLE_PREPARE_ONLY_RECEIPT"
 )
@@ -393,6 +397,25 @@ def _file_descriptor(path: Path) -> dict[str, Any]:
     return {"bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 
+def _regular_unlinked_file(path: str | Path, *, role: str) -> Path:
+    candidate = Path(os.path.abspath(os.fspath(path)))
+    current = Path(candidate.anchor)
+    for part in candidate.parts[1:]:
+        current = current / part
+        try:
+            metadata = current.lstat()
+        except OSError as error:
+            raise KaggleP4PrepareOnlyError(f"{role} is missing") from error
+        if stat.S_ISLNK(metadata.st_mode):
+            raise KaggleP4PrepareOnlyError(f"{role} contains a symlink component")
+    metadata = candidate.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise KaggleP4PrepareOnlyError(f"{role} must be a regular file")
+    if metadata.st_nlink != 1:
+        raise KaggleP4PrepareOnlyError(f"{role} must not be hard-linked")
+    return candidate
+
+
 def validate_compact_preparation_outputs(package_root: str | Path) -> dict[str, Any]:
     """Enforce the compact preparation-only file allowlist and size ceiling."""
 
@@ -451,11 +474,36 @@ def _dependency_versions() -> dict[str, str | None]:
     return result
 
 
+def _safe_git_environment() -> dict[str, str]:
+    return {
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_TERMINAL_PROMPT": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": os.defpath,
+        "TZ": "UTC",
+    }
+
+
+def _system_git_executable() -> str:
+    candidate = shutil.which("git", path=os.defpath)
+    if candidate is None:
+        raise KaggleP4PrepareOnlyError("system-default Git executable is unavailable")
+    resolved = Path(candidate).resolve()
+    if not resolved.is_file() or not os.access(resolved, os.X_OK):
+        raise KaggleP4PrepareOnlyError(
+            "system-default Git executable is not a regular executable"
+        )
+    return str(resolved)
+
+
 def _source_receipt(
     *,
     repository_root: Path,
     source_commit: str | None,
-    source_archive: str | Path | None,
+    source_bundle: str | Path | None,
 ) -> dict[str, Any]:
     commit = None if source_commit is None else source_commit.strip().lower()
     if commit is None:
@@ -469,11 +517,12 @@ def _source_receipt(
 
     def git(*arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["git", "-C", str(repository_root), *arguments],
+            [_system_git_executable(), "-C", str(repository_root), *arguments],
             check=False,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=120,
+            env=_safe_git_environment(),
         )
 
     inside = git("rev-parse", "--is-inside-work-tree")
@@ -507,18 +556,27 @@ def _source_receipt(
             )
         source_rows.append({"relative_path": relative, "sha256": sha256_file(path)})
 
-    archive: dict[str, Any] | None = None
-    if source_archive is not None:
-        path = Path(source_archive)
-        if path.is_symlink() or not path.is_file():
+    transport: dict[str, Any] | None = None
+    if source_bundle is not None:
+        resolved = _regular_unlinked_file(source_bundle, role="source bundle")
+        verify = git("bundle", "verify", str(resolved))
+        if verify.returncode != 0:
+            raise KaggleP4PrepareOnlyError("source transport failed git bundle verify")
+        heads = git("bundle", "list-heads", str(resolved))
+        if heads.returncode != 0 or heads.stdout.strip().splitlines() != [
+            f"{commit} HEAD"
+        ]:
             raise KaggleP4PrepareOnlyError(
-                "source archive must be a regular non-symlink file"
+                "source bundle must advertise exactly the supplied commit as HEAD"
             )
-        resolved = path.resolve(strict=True)
-        archive = {
+        transport = {
             "path": str(resolved),
             **_file_descriptor(resolved),
-            "evidence_role": SOURCE_ARCHIVE_EVIDENCE_ROLE,
+            "format": "git_bundle",
+            "bundle_head": commit,
+            "evidence_role": SOURCE_TRANSPORT_EVIDENCE_ROLE,
+            "scientific_source_authority": False,
+            "repository_authentication": SOURCE_COMMIT_VERIFICATION,
         }
     return {
         "repository_root": str(repository_root),
@@ -528,7 +586,7 @@ def _source_receipt(
         "repository_clean": True,
         "executed_source_files": source_rows,
         "executed_source_set_sha256": canonical_sha256(source_rows),
-        "source_archive": archive,
+        "source_transport": transport,
     }
 
 
@@ -548,7 +606,7 @@ def _validate_source_mapping(
         "repository_clean",
         "executed_source_files",
         "executed_source_set_sha256",
-        "source_archive",
+        "source_transport",
     }:
         raise KaggleP4PrepareOnlyError("prepare-only source receipt schema mismatch")
     commit = value.get("source_commit_supplied")
@@ -569,11 +627,12 @@ def _validate_source_mapping(
 
     def git(*arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["git", "-C", str(repository_root), *arguments],
+            [_system_git_executable(), "-C", str(repository_root), *arguments],
             check=False,
             capture_output=True,
             text=True,
             timeout=10,
+            env=_safe_git_environment(),
         )
 
     if require_clean_git_checkout:
@@ -604,32 +663,47 @@ def _validate_source_mapping(
         raise KaggleP4PrepareOnlyError(
             "executed source file set differs from the clean checkout"
         )
-    archive = value.get("source_archive")
-    if archive is not None:
-        if not isinstance(archive, Mapping) or set(archive) != {
+    transport = value.get("source_transport")
+    if transport is None:
+        raise KaggleP4PrepareOnlyError(
+            "registered prepare-only evidence requires Git-bundle transport"
+        )
+    if transport is not None:
+        if not isinstance(transport, Mapping) or set(transport) != {
             "path",
             "bytes",
             "sha256",
+            "format",
+            "bundle_head",
             "evidence_role",
+            "scientific_source_authority",
+            "repository_authentication",
         }:
-            raise KaggleP4PrepareOnlyError("source archive descriptor is malformed")
-        if archive.get("evidence_role") != SOURCE_ARCHIVE_EVIDENCE_ROLE:
+            raise KaggleP4PrepareOnlyError("source transport descriptor is malformed")
+        if (
+            transport.get("format") != "git_bundle"
+            or transport.get("bundle_head") != commit
+            or transport.get("evidence_role") != SOURCE_TRANSPORT_EVIDENCE_ROLE
+            or transport.get("scientific_source_authority") is not False
+            or transport.get("repository_authentication")
+            != SOURCE_COMMIT_VERIFICATION
+        ):
             raise KaggleP4PrepareOnlyError(
-                "source archive was incorrectly promoted to source authority"
+                "source transport role or commit binding is invalid"
             )
         if (
-            type(archive.get("path")) is not str
-            or not archive["path"]
-            or type(archive.get("bytes")) is not int
-            or archive["bytes"] < 0
-            or type(archive.get("sha256")) is not str
-            or len(archive["sha256"]) != 64
+            type(transport.get("path")) is not str
+            or not transport["path"]
+            or type(transport.get("bytes")) is not int
+            or transport["bytes"] < 1
+            or type(transport.get("sha256")) is not str
+            or len(transport["sha256"]) != 64
             or any(
                 character not in "0123456789abcdef"
-                for character in archive["sha256"]
+                for character in transport["sha256"]
             )
         ):
-            raise KaggleP4PrepareOnlyError("source archive descriptor is invalid")
+            raise KaggleP4PrepareOnlyError("source transport descriptor is invalid")
     return dict(value)
 
 
@@ -856,7 +930,7 @@ def _run_prepare_only_impl(
     output_root: str | Path,
     argv: Sequence[str],
     source_commit: str | None = None,
-    source_archive: str | Path | None = None,
+    source_bundle: str | Path | None = None,
     prepare: Callable[..., P4PreparationPackage],
     validate: Callable[[str | Path], P4PreparationPackage],
 ) -> PrepareOnlyExecution:
@@ -909,8 +983,12 @@ def _run_prepare_only_impl(
         source = _source_receipt(
             repository_root=repository,
             source_commit=source_commit,
-            source_archive=source_archive,
+            source_bundle=source_bundle,
         )
+        if source["source_transport"] is None:
+            raise KaggleP4PrepareOnlyError(
+                "registered prepare-only execution requires --source-bundle"
+            )
         source_authority = repository / SOURCE_AUTHORITY_RELATIVE
         if source_authority.is_symlink() or not source_authority.is_file():
             raise KaggleP4PrepareOnlyError(
@@ -942,6 +1020,17 @@ def _run_prepare_only_impl(
         # Reopen the checkout after preparation so the receipt cannot bless a
         # source tree that changed while the candidate package was produced.
         _validate_source_mapping(source, repository_root=repository)
+        # Reopen and rehash the Git bundle as well as the source checkout.
+        # Later receipt replay may legitimately lack the transport dataset, so
+        # this byte-level recheck happens inside the original Kaggle boundary.
+        if _source_receipt(
+            repository_root=repository,
+            source_commit=source_commit,
+            source_bundle=source_bundle,
+        ) != source:
+            raise KaggleP4PrepareOnlyError(
+                "source checkout or Git-bundle transport changed during preparation"
+            )
         status = "REVIEW_REQUIRED"
     except Exception as error:  # receipt is required for every in-boundary failure
         error_payload = {
@@ -1050,9 +1139,16 @@ def run_prepare_only(
     output_root: str | Path,
     argv: Sequence[str],
     source_commit: str | None = None,
+    source_bundle: str | Path | None = None,
     source_archive: str | Path | None = None,
 ) -> PrepareOnlyExecution:
     """Run only authenticated candidate preparation followed by validation."""
+
+    if source_bundle is not None and source_archive is not None:
+        raise KaggleP4PrepareOnlyError(
+            "supply source_bundle only; source_archive is a deprecated alias"
+        )
+    transport = source_bundle if source_bundle is not None else source_archive
 
     return _run_prepare_only_impl(
         repository_root=repository_root,
@@ -1061,7 +1157,7 @@ def run_prepare_only(
         output_root=output_root,
         argv=argv,
         source_commit=source_commit,
-        source_archive=source_archive,
+        source_bundle=transport,
         prepare=prepare_p4_candidate_audit,
         validate=validate_p4_preparation_package,
     )
@@ -1082,7 +1178,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path("/kaggle/working/table2-p4-prepare-only-v1"),
     )
     parser.add_argument("--source-commit")
-    parser.add_argument("--source-archive", type=Path)
+    parser.add_argument(
+        "--source-bundle",
+        "--source-archive",
+        dest="source_bundle",
+        type=Path,
+        help=(
+            "Git-bundle transport evidence; --source-archive is a deprecated "
+            "compatibility spelling and still requires a Git bundle"
+        ),
+    )
     return parser
 
 
@@ -1101,7 +1206,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_root=args.output_root,
             argv=arguments,
             source_commit=args.source_commit,
-            source_archive=args.source_archive,
+            source_bundle=args.source_bundle,
         )
     except KaggleP4PrepareOnlyError as error:
         print(json.dumps({"status": "FAIL", "error": str(error)}, sort_keys=True))

@@ -383,8 +383,16 @@ def validate_runtime_capability_authority(
         "capability_set_sha256": sha256_json(ordered_rows),
     }
     try:
+        # Capability IDs are validated above against the exact registry. Pass
+        # their rows as a sequence so the safety capability named
+        # ``oracle_blind_browser_mapping`` is not mistaken for evaluator data,
+        # without granting that spelling as a global policy-input exception.
+        oracle_guard_view = {
+            **result,
+            "capabilities": list(normalized.values()),
+        }
         assert_oracle_blind_mapping(
-            result,
+            oracle_guard_view,
             location="frozen_runtime_context.runtime_capability_authority",
         )
     except ValueError as exc:

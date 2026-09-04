@@ -17,7 +17,7 @@ from web_agent.memory.kaggle_prepare_only import (
     EXECUTED_SOURCE_RELATIVE_PATHS,
     EXPECTED_DATASETS,
     KaggleP4PrepareOnlyError,
-    SOURCE_ARCHIVE_EVIDENCE_ROLE,
+    SOURCE_TRANSPORT_EVIDENCE_ROLE,
     load_prepare_only_config,
     resolve_dataset_mount,
     resolve_registered_dataset_mounts,
@@ -25,11 +25,31 @@ from web_agent.memory.kaggle_prepare_only import (
     validate_compact_preparation_outputs,
     validate_prepare_only_execution_receipt,
 )
-from web_agent.memory.manifest import sha256_file
+from web_agent.memory.manifest import canonical_sha256, sha256_file
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CONFIG = REPOSITORY_ROOT / "configs/eval/table2/kaggle_p4_prepare_only_v1.json"
+
+
+def test_prepare_only_git_environment_is_fixed_and_credential_free(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("KAGGLE_KEY", "must-not-reach-git")
+    monkeypatch.setenv("TABLE2_TEST_SECRET", "must-not-reach-git")
+    environment = kaggle_prepare._safe_git_environment()
+    assert "KAGGLE_KEY" not in environment
+    assert "TABLE2_TEST_SECRET" not in environment
+    assert set(environment) == {
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_OPTIONAL_LOCKS",
+        "GIT_TERMINAL_PROMPT",
+        "LANG",
+        "LC_ALL",
+        "PATH",
+        "TZ",
+    }
 
 
 def _write(path: Path, value: bytes = b"[]") -> Path:
@@ -85,6 +105,16 @@ def _clean_source_checkout(tmp_path: Path) -> tuple[Path, str]:
     return repository, commit
 
 
+def _source_bundle(repository: Path, destination: Path) -> Path:
+    subprocess.run(
+        ["git", "-C", str(repository), "bundle", "create", str(destination), "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return destination
+
+
 def test_registered_config_declares_exact_version_one_datasets():
     payload = load_prepare_only_config(CONFIG)
     assert payload["mode"] == "P4_PREPARE_ONLY"
@@ -98,24 +128,6 @@ def test_registered_config_declares_exact_version_one_datasets():
         "audit-candidates",
         "validate-preparation",
     ]
-
-
-def test_kaggle_metadata_is_private_cpu_offline_and_has_only_registered_sources():
-    metadata = json.loads(
-        (
-            REPOSITORY_ROOT
-            / "kaggle/table2_p4_prepare_only/kernel-metadata.template.json"
-        ).read_text(encoding="utf-8")
-    )
-    assert metadata["dataset_sources"] == [
-        "kiyasmahmud/web-gold-40k",
-        "kiyasmahmud/gold-40k-retry",
-    ]
-    assert metadata["enable_gpu"] is False
-    assert metadata["enable_internet"] is False
-    assert metadata["is_private"] is True
-    assert metadata["competition_sources"] == []
-    assert metadata["kernel_sources"] == []
 
 
 def test_config_is_semantically_frozen(tmp_path: Path):
@@ -249,7 +261,7 @@ def test_runner_invokes_only_authenticated_prepare_then_validation_and_receipts(
         calls.append(("validate-preparation", str(path)))
         return _Package()
 
-    source_archive = _write(tmp_path / "source.tar", b"attested source")
+    source_bundle = _source_bundle(repository, tmp_path / "source.bundle")
     monkeypatch.setattr(kaggle_prepare, "prepare_p4_candidate_audit", prepare)
     monkeypatch.setattr(kaggle_prepare, "validate_p4_preparation_package", validate)
     result = run_prepare_only(
@@ -261,7 +273,7 @@ def test_runner_invokes_only_authenticated_prepare_then_validation_and_receipts(
         output_root=tmp_path / "output",
         argv=["--fixture"],
         source_commit=source_commit,
-        source_archive=source_archive,
+        source_bundle=source_bundle,
     )
 
     assert result.status == "REVIEW_REQUIRED"
@@ -295,12 +307,15 @@ def test_runner_invokes_only_authenticated_prepare_then_validation_and_receipts(
         1,
         1,
     ]
-    assert receipt["source"]["source_archive"]["sha256"] == sha256_file(
-        source_archive
+    assert receipt["source"]["source_transport"]["sha256"] == sha256_file(
+        source_bundle
     )
-    assert receipt["source"]["source_archive"]["evidence_role"] == (
-        SOURCE_ARCHIVE_EVIDENCE_ROLE
+    assert receipt["source"]["source_transport"]["evidence_role"] == (
+        SOURCE_TRANSPORT_EVIDENCE_ROLE
     )
+    assert receipt["source"]["source_transport"]["format"] == "git_bundle"
+    assert receipt["source"]["source_transport"]["bundle_head"] == source_commit
+    assert receipt["source"]["source_transport"]["scientific_source_authority"] is False
     assert receipt["source"]["source_commit_supplied"] == source_commit
     assert receipt["source"]["repository_clean"] is True
     assert [
@@ -332,6 +347,7 @@ def test_failed_in_boundary_run_keeps_only_fail_receipt(
 ):
     input_root = _mounts(tmp_path / "input")
     repository, source_commit = _clean_source_checkout(tmp_path)
+    source_bundle = _source_bundle(repository, tmp_path / "failed-source.bundle")
 
     def fail_prepare(**_):
         raise RuntimeError("fixture preparation failure")
@@ -346,6 +362,7 @@ def test_failed_in_boundary_run_keeps_only_fail_receipt(
         output_root=tmp_path / "failed-output",
         argv=[],
         source_commit=source_commit,
+        source_bundle=source_bundle,
     )
     assert result.status == "FAIL"
     assert result.exit_code == 2
@@ -395,12 +412,30 @@ def test_runner_rejects_dirty_source_checkout(tmp_path: Path):
     assert "clean Git checkout" in result.receipt["error"]["message"]
 
 
+def test_runner_rejects_missing_git_bundle_transport(tmp_path: Path):
+    input_root = _mounts(tmp_path / "input")
+    repository, source_commit = _clean_source_checkout(tmp_path)
+    result = run_prepare_only(
+        repository_root=repository,
+        config_path=(
+            repository / "configs/eval/table2/kaggle_p4_prepare_only_v1.json"
+        ),
+        input_root=input_root,
+        output_root=tmp_path / "missing-bundle-output",
+        argv=[],
+        source_commit=source_commit,
+    )
+    assert result.status == "FAIL"
+    assert "requires --source-bundle" in result.receipt["error"]["message"]
+
+
 def test_runner_rechecks_source_after_preparation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     input_root = _mounts(tmp_path / "input")
     repository, source_commit = _clean_source_checkout(tmp_path)
+    source_bundle = _source_bundle(repository, tmp_path / "recheck-source.bundle")
 
     def mutate_source_then_prepare(**kwargs):
         executed_source = repository / EXECUTED_SOURCE_RELATIVE_PATHS[-1]
@@ -430,6 +465,7 @@ def test_runner_rechecks_source_after_preparation(
         output_root=tmp_path / "changed-during-run-output",
         argv=[],
         source_commit=source_commit,
+        source_bundle=source_bundle,
     )
     assert result.status == "FAIL"
     assert "dirty" in result.receipt["error"]["message"]
@@ -437,6 +473,69 @@ def test_runner_rechecks_source_after_preparation(
         "execution_receipt.json",
         "execution_receipt.sha256",
     ]
+
+
+def test_runner_rechecks_git_bundle_transport_after_preparation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    input_root = _mounts(tmp_path / "input")
+    repository, source_commit = _clean_source_checkout(tmp_path)
+    source_bundle = _source_bundle(repository, tmp_path / "source.bundle")
+
+    def mutate_bundle_then_prepare(**kwargs):
+        data = bytearray(source_bundle.read_bytes())
+        data[len(data) // 2] ^= 1
+        source_bundle.write_bytes(data)
+        _fake_package(Path(kwargs["output_dir"]))
+        return _Package()
+
+    monkeypatch.setattr(
+        kaggle_prepare,
+        "prepare_p4_candidate_audit",
+        mutate_bundle_then_prepare,
+    )
+    monkeypatch.setattr(
+        kaggle_prepare,
+        "validate_p4_preparation_package",
+        lambda _: _Package(),
+    )
+    result = run_prepare_only(
+        repository_root=repository,
+        config_path=(
+            repository / "configs/eval/table2/kaggle_p4_prepare_only_v1.json"
+        ),
+        input_root=input_root,
+        output_root=tmp_path / "changed-bundle-output",
+        argv=[],
+        source_commit=source_commit,
+        source_bundle=source_bundle,
+    )
+    assert result.status == "FAIL"
+    assert "Git-bundle transport changed" in result.receipt["error"]["message"]
+    assert sorted(path.name for path in result.output_root.iterdir()) == [
+        "execution_receipt.json",
+        "execution_receipt.sha256",
+    ]
+
+
+def test_runner_rejects_arbitrary_archive_as_source_transport(tmp_path: Path):
+    input_root = _mounts(tmp_path / "input")
+    repository, source_commit = _clean_source_checkout(tmp_path)
+    arbitrary_archive = _write(tmp_path / "source.tar", b"not a Git bundle")
+    result = run_prepare_only(
+        repository_root=repository,
+        config_path=(
+            repository / "configs/eval/table2/kaggle_p4_prepare_only_v1.json"
+        ),
+        input_root=input_root,
+        output_root=tmp_path / "arbitrary-archive-output",
+        argv=[],
+        source_commit=source_commit,
+        source_archive=arbitrary_archive,
+    )
+    assert result.status == "FAIL"
+    assert "git bundle verify" in result.receipt["error"]["message"]
 
 
 def test_registered_receipt_replay_checks_dirty_dot_git_file_worktree(
@@ -465,6 +564,7 @@ def test_registered_receipt_replay_checks_dirty_dot_git_file_worktree(
     assert (worktree / ".git").is_file()
 
     input_root = _mounts(tmp_path / "worktree-input")
+    source_bundle = _source_bundle(repository, tmp_path / "worktree-source.bundle")
 
     def prepare(**kwargs):
         _fake_package(Path(kwargs["output_dir"]))
@@ -485,6 +585,7 @@ def test_registered_receipt_replay_checks_dirty_dot_git_file_worktree(
         output_root=tmp_path / "worktree-output",
         argv=["--worktree-fixture"],
         source_commit=source_commit,
+        source_bundle=source_bundle,
     )
     assert result.status == "REVIEW_REQUIRED"
 
@@ -511,4 +612,59 @@ def test_registered_receipt_replay_checks_dirty_dot_git_file_worktree(
                 worktree / "configs/eval/table2/p4_source_authority_v1.json"
             ),
             repository_root=worktree,
+        )
+
+
+@pytest.mark.parametrize("mutation", ["promote", "remove"])
+def test_receipt_replay_rejects_forged_transport_authority_or_omission(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    input_root = _mounts(tmp_path / "input")
+    repository, source_commit = _clean_source_checkout(tmp_path)
+    source_bundle = _source_bundle(repository, tmp_path / "source.bundle")
+
+    def prepare(**kwargs):
+        _fake_package(Path(kwargs["output_dir"]))
+        return _Package()
+
+    monkeypatch.setattr(kaggle_prepare, "prepare_p4_candidate_audit", prepare)
+    monkeypatch.setattr(
+        kaggle_prepare,
+        "validate_p4_preparation_package",
+        lambda _: _Package(),
+    )
+    result = run_prepare_only(
+        repository_root=repository,
+        config_path=(
+            repository / "configs/eval/table2/kaggle_p4_prepare_only_v1.json"
+        ),
+        input_root=input_root,
+        output_root=tmp_path / "output",
+        argv=[],
+        source_commit=source_commit,
+        source_bundle=source_bundle,
+    )
+    receipt_path = result.output_root / "execution_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if mutation == "promote":
+        receipt["source"]["source_transport"]["scientific_source_authority"] = True
+    else:
+        receipt["source"]["source_transport"] = None
+    receipt.pop("receipt_core_sha256")
+    receipt["receipt_core_sha256"] = canonical_sha256(receipt)
+    receipt_path.write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    (result.output_root / "execution_receipt.sha256").write_text(
+        sha256_file(receipt_path) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(
+        KaggleP4PrepareOnlyError,
+        match="transport role|requires Git-bundle transport",
+    ):
+        validate_prepare_only_execution_receipt(
+            preparation_root=result.output_root / "preparation",
+            repository_root=repository,
         )

@@ -31,7 +31,11 @@ from web_agent.runtime.contracts import (
 )
 from web_agent.runtime.decision import DecisionCombiner
 from web_agent.runtime.executor import Executor
-from web_agent.runtime.observation import CausalBoundaryError, assert_oracle_blind_mapping
+from web_agent.runtime.observation import (
+    CausalBoundaryError,
+    assert_oracle_blind_mapping,
+    assert_sealed_truth_blind_mapping,
+)
 from web_agent.runtime.policy import CallablePolicyAdapter, PolicyKind
 from web_agent.runtime.protocol import REGISTERED_BUDGETS
 from web_agent.runtime.recovery.controller import CallableRecoveryActionPlanner
@@ -55,6 +59,164 @@ def test_eval_guard_rejects_oracle_truth_in_any_runtime_record():
         assert_no_verifier_evidence(
             {"event": {"task_success": True}}, context="runtime canary"
         )
+
+
+@pytest.mark.parametrize(
+    "alias",
+    (
+        "official_task_success",
+        "OFFICIAL-TASK.SUCCESS",
+        "sealed_oracle_result",
+        "Sealed Oracle.Result",
+        "posthoc_relevance_label",
+        "postHoc-Relevance.Label",
+        "official_verified_failure",
+        "sealed_verifier_result",
+        "posthoc_recovery_success",
+        "official_state_after",
+        "posthoc_expected_action",
+        "official_verified_agent_failure",
+        "official_incident_resolved",
+        "official_future_state",
+        "posthoc_future_screenshot",
+        "tasksuccessflag",
+        "reportedtasksuccess",
+        "oracleanswer",
+        "verifierresult",
+        "groundtruthvalue",
+        "futurestatevalue",
+        "expectedactionvalue",
+        "reward",
+        "done",
+        "terminated",
+        "truncated",
+        "evaluator_reward",
+        "officialreportedtasksuccess",
+        "tasksuccessresultflag",
+        "officialposthocfuturestate",
+        "episode_done_flag",
+        "is_done",
+        "terminated_flag",
+        "truncated_flag",
+    ),
+)
+def test_prefixed_suffixed_and_punctuated_oracle_aliases_are_rejected(alias: str):
+    payload = {"page_state": {"visible": [{alias: True}]}}
+    with pytest.raises(CausalBoundaryError):
+        assert_oracle_blind_mapping(payload)
+    with pytest.raises(CausalBoundaryError):
+        assert_sealed_truth_blind_mapping(payload)
+    with pytest.raises(Exception):
+        assert_no_verifier_evidence(payload, context="runtime alias canary")
+
+
+def test_alias_guard_preserves_registered_causal_prediction_fields():
+    causal_payload = {
+        "executor_status": "ACCEPTED",
+        "transition": {
+            "predicted_failure": True,
+            "failure_probability": 0.8,
+            "failure_type": "NO_EFFECT",
+            "needs_recovery": True,
+            "recovery_strategy": "REPLAN",
+            "predicted_failure_resolved": False,
+            "predicted_progress": True,
+            "progress_bar_text": "2 of 3 complete",
+        },
+    }
+    assert_oracle_blind_mapping(causal_payload)
+    assert_sealed_truth_blind_mapping(causal_payload)
+    assert_no_verifier_evidence(causal_payload, context="causal prediction fields")
+
+
+def test_runtime_guard_allows_only_exact_registered_opaque_fields():
+    registered_runtime_payload = {
+        "verifier_event_id": "opaque-event-id",
+        "verifier_token_sha256": "a" * 64,
+        "transition": {"predicted_failure_resolved": False},
+    }
+    assert_no_verifier_evidence(
+        registered_runtime_payload,
+        context="registered runtime evidence",
+    )
+    for leaked in (
+        {"verified_failure_event_count": 1},
+        {"memory_candidate": {"verified_recovery_success": True}},
+        {"memory_candidate": {"final_task_success": True}},
+        {"official_final_task_success": True},
+    ):
+        with pytest.raises(Exception):
+            assert_no_verifier_evidence(
+                leaked,
+                context="current-task truth cannot use memory provenance names",
+            )
+
+
+def test_indirect_metadata_envelope_and_unicode_alias_are_rejected():
+    payloads = (
+        {"field_name": "task_success", "value": True},
+        {"field_names": ["task_success"], "values": [True]},
+        {"field": {"name": "task_success", "value": True}},
+        {"field": {"metadata": {"name": "task_success", "value": True}}},
+        {"feature_name": "task_success", "value": True},
+        {"official_field_name": "task_success", "value": True},
+        {"official_reported_field_name": "task_success", "value": True},
+        {"field_name": "\u043eracle_success", "value": True},
+        {"\u043eracle_success": True},  # Cyrillic small-o prefix.
+    )
+    for payload in payloads:
+        with pytest.raises(CausalBoundaryError):
+            assert_oracle_blind_mapping(payload)
+        with pytest.raises(CausalBoundaryError):
+            assert_sealed_truth_blind_mapping(payload)
+        with pytest.raises(Exception):
+            assert_no_verifier_evidence(
+                payload,
+                context="runtime indirect/unicode canary",
+            )
+
+
+def test_browser_visible_text_values_are_not_mistaken_for_control_plane_keys():
+    payload = {
+        "visible_controls": [
+            {
+                "name": "task_success",
+                "text": "oracle_database_status",
+                "candidate_options": ["reference_answer_input"],
+            }
+        ]
+    }
+    assert_oracle_blind_mapping(payload)
+    assert_sealed_truth_blind_mapping(payload)
+    assert_no_verifier_evidence(payload, context="browser visible text")
+
+
+def test_token_matching_avoids_substring_collisions_but_keeps_temporal_boundary():
+    benign = {
+        "unexpected_action_count": 0,
+        "incorrect_target_count": 0,
+        "email_verification_status": "pending",
+        "task_successor_id": "next-task",
+        "recovery_successor_state": "ready",
+        "final_task_successor_id": "still-not-an-outcome",
+    }
+    assert_oracle_blind_mapping(benign)
+    assert_sealed_truth_blind_mapping(benign)
+    assert_no_verifier_evidence(benign, context="token collision canary")
+
+    causal_post_state = {"state_after_sha256": "a" * 64}
+    with pytest.raises(CausalBoundaryError):
+        assert_oracle_blind_mapping(causal_post_state)
+    assert_sealed_truth_blind_mapping(causal_post_state)
+    assert_no_verifier_evidence(causal_post_state, context="causal post-state hash")
+    final_causal_post_state = {"final_state_after_sha256": "b" * 64}
+    with pytest.raises(CausalBoundaryError):
+        assert_oracle_blind_mapping(final_causal_post_state)
+    assert_sealed_truth_blind_mapping(final_causal_post_state)
+    assert_no_verifier_evidence(
+        final_causal_post_state,
+        context="final causal post-state hash",
+    )
 
 
 def test_runtime_decision_and_memory_contracts_have_no_oracle_or_relevance_inputs():

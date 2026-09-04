@@ -8,6 +8,8 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
+import tempfile
 from typing import Any
 
 from .common import (
@@ -26,14 +28,22 @@ from .execution_guard import validate_analysis_source_identity
 from .package_validator import (
     DRAFT_PILOT_STATUS,
     FINAL_READY_STATUS,
+    MANUAL_AUDIT_BLINDING_MODE,
+    MANUAL_AUDIT_CASE_CATEGORIES,
+    MANUAL_AUDIT_MANIFEST_ID,
+    _derive_manual_audit_selection_evidence,
+    _load_audit_json_without_duplicate_keys,
+    _load_selected_analysis_records_unchecked,
     load_selected_analysis_records,
     load_yaml,
+    validate_manual_audit_reviewer_codebook,
     validate_manual_adjudication_completion,
     validate_campaign,
     write_csv,
 )
 from .retrieval_metrics import compute_retrieval_diagnostics
 from .schedule import SYSTEM_IDS
+from .sealed_verifier import assert_no_verifier_evidence
 from .statistics import compute_clustered_ratio_contrasts, compute_paired_contrasts
 
 
@@ -93,18 +103,6 @@ RETRIEVAL_METRIC_FIELDS = (
     "display",
     "publication_status",
 )
-MANUAL_AUDIT_CASE_CATEGORIES = (
-    "successful_recovery",
-    "failed_recovery",
-    "memory_help",
-    "memory_harm",
-    "environment_failure",
-    "bbox_or_parameter_failure",
-    "loop",
-    "unnecessary_intervention",
-)
-
-
 def summarize_campaign(
     campaign_dir: str | Path,
     *,
@@ -237,7 +235,8 @@ def summarize_campaign(
         confidence=float(statistics_cfg.get("confidence_level", 0.95)),
         seed=int(statistics_cfg.get("seed", 20250831)),
     )
-    # Selection is outcome-blinded and must exist before reviewers can work.
+    # Official outcome labels are hidden while system condition remains visible;
+    # selection must exist before reviewers can work.
     # It is therefore the final permitted write before the publication gate.
     audit_selection = build_manual_audit_selection(root, records)
     campaign_manifest = read_json(root / "campaign_manifest.json")
@@ -328,8 +327,8 @@ def _summary_publication_status(
     except (FileNotFoundError, OSError, TypeError, ValueError, KeyError, SchemaError) as exc:
         boundary = "final PILOT_ONLY" if pilot else "locked-final"
         raise Table2Error(
-            f"{boundary} summary/export requires completed, signed, hash-bound "
-            f"blinded human adjudication: {exc}"
+            f"{boundary} summary/export requires completed, human-attested, "
+            f"hash-bound outcome-label-hidden adjudication: {exc}"
         ) from exc
     return "PILOT_ONLY" if pilot else validation_status
 
@@ -702,14 +701,25 @@ def build_manual_audit_selection(
     campaign_dir: str | Path,
     records: Mapping[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
-    """Create the deterministic, outcome-blinded post-completion audit sample."""
+    """Create the deterministic post-completion, outcome-label-hidden sample."""
 
     root = Path(campaign_dir).resolve()
+    raw_records = _load_selected_analysis_records_unchecked(root)
+    if canonical_json_bytes(records) != canonical_json_bytes(raw_records):
+        raise SchemaError(
+            "manual-audit caller records differ from immutable selected raw evidence"
+        )
+    records = raw_records
     definition = read_json(root / "frozen" / "benchmark" / "audit_manifest.json")
-    if definition.get("blinded") is not True or definition.get(
-        "selection_occurs_after_episode_completion"
-    ) is not True:
-        raise SchemaError("manual audit definition is not blinded/post-completion")
+    codebook_binding = validate_manual_audit_reviewer_codebook(definition)
+    if (
+        definition.get("manifest_id") != MANUAL_AUDIT_MANIFEST_ID
+        or definition.get("blinding_mode") != MANUAL_AUDIT_BLINDING_MODE
+        or definition.get("selection_occurs_after_episode_completion") is not True
+    ):
+        raise SchemaError(
+            "manual audit definition has the wrong blinding mode/completion boundary"
+        )
     strata_definition = definition.get("strata")
     if not isinstance(strata_definition, list):
         raise SchemaError("manual audit definition lacks strata")
@@ -732,61 +742,10 @@ def build_manual_audit_selection(
     ):
         raise SchemaError("manual audit required case categories differ from registration")
 
-    episodes = [
-        dict(row)
-        for row in records["episodes"]
-        if str(row.get("task_partition")) == "normal"
-    ]
-    by_episode = {str(row["episode_id"]): row for row in episodes}
-    attempt_episode_ids = {
-        str(row["episode_id"]) for row in records["recovery_attempts"]
-    }
-    verified_failure_episode_ids = {
-        str(row["episode_id"])
-        for row in records["failure_incidents"]
-        if strict_bool(
-            row["verified_agent_failure"], context="audit.verified_agent_failure"
-        )
-    }
-    systems_by_block: dict[str, dict[str, dict[str, Any]]] = {}
-    for episode in episodes:
-        systems_by_block.setdefault(str(episode["block_id"]), {})[
-            str(episode["system_id"])
-        ] = episode
-    disagreement_pairs: dict[str, str] = {}
-    for systems in systems_by_block.values():
-        if "E2" not in systems or "E3" not in systems:
-            continue
-        if strict_bool(systems["E2"]["task_success"], context="audit.E2.success") != strict_bool(
-            systems["E3"]["task_success"], context="audit.E3.success"
-        ):
-            disagreement_pairs[str(systems["E3"]["episode_id"])] = str(
-                systems["E2"]["episode_id"]
-            )
-
-    categories_by_episode = _manual_audit_categories(
-        episodes,
-        recovery_attempts=records["recovery_attempts"],
-        failure_incidents=records["failure_incidents"],
-        memory_queries=records["memory_queries"],
-    )
-
-    candidates: dict[str, list[str]] = {
-        "ordinary_success": [
-            str(row["episode_id"])
-            for row in episodes
-            if strict_bool(row["task_success"], context="audit.task_success")
-            and str(row["episode_id"]) not in attempt_episode_ids
-            and str(row["episode_id"]) not in verified_failure_episode_ids
-        ],
-        "terminal_failure": [
-            str(row["episode_id"])
-            for row in episodes
-            if not strict_bool(row["task_success"], context="audit.task_success")
-        ],
-        "recovery": sorted(attempt_episode_ids.intersection(by_episode)),
-        "e2_e3_disagreement": sorted(disagreement_pairs),
-    }
+    derived = _derive_manual_audit_selection_evidence(records)
+    by_episode = derived["episodes_by_id"]
+    evidence_by_episode = derived["evidence_by_episode"]
+    candidates = derived["candidates"]
     seed = int(definition["selection_seed"])
     campaign_id = str(read_json(root / "campaign_manifest.json")["campaign_id"])
 
@@ -812,7 +771,7 @@ def build_manual_audit_selection(
     used: set[str] = set()
     selected_by_stratum: dict[str, list[str]] = {}
     for stratum in priority:
-        eligible = [episode for episode in set(candidates[stratum]) if episode not in used]
+        eligible = [episode for episode in candidates[stratum] if episode not in used]
         ordered = sorted(eligible, key=lambda episode: (score(stratum, episode), episode))
         selected = ordered[: targets[stratum]]
         selected_by_stratum[stratum] = selected
@@ -822,6 +781,7 @@ def build_manual_audit_selection(
     for stratum, selected in selected_by_stratum.items():
         for episode_id in selected:
             episode = by_episode[episode_id]
+            evidence = evidence_by_episode[episode_id]
             labeled.append(
                 {
                     "episode_id": episode_id,
@@ -829,37 +789,58 @@ def build_manual_audit_selection(
                     "task_id": str(episode["task_id"]),
                     "system_id": str(episode["system_id"]),
                     "stratum": stratum,
-                    "task_success": strict_bool(
-                        episode["task_success"], context="audit.task_success"
-                    ),
-                    "loop_detected": strict_bool(
-                        episode["loop_detected"], context="audit.loop_detected"
-                    ),
-                    "has_verified_failure": episode_id in verified_failure_episode_ids,
-                    "has_recovery_attempt": episode_id in attempt_episode_ids,
-                    "paired_episode_id": disagreement_pairs.get(episode_id),
-                    "case_categories": sorted(categories_by_episode[episode_id]),
+                    **evidence,
                     "selection_score": score(stratum, episode_id),
                 }
             )
-    labeled.sort(key=lambda row: (score("blinded-order", row["episode_id"]), row["episode_id"]))
+    labeled.sort(
+        key=lambda row: (
+            score("audit-presentation-order", row["episode_id"]),
+            row["episode_id"],
+        )
+    )
+    audit_root = root / "manual_audit"
+    reviewer_packet_root = audit_root / "reviewer_packets"
+    if reviewer_packet_root.is_symlink():
+        raise SchemaError("manual-audit reviewer packet root must not be a symlink")
+    if reviewer_packet_root.exists():
+        shutil.rmtree(reviewer_packet_root)
+    reviewer_packet_root.mkdir(parents=True, exist_ok=True)
     public_selected: list[dict[str, Any]] = []
     for index, row in enumerate(labeled, start=1):
         audit_id = f"audit-{index:02d}"
         row["audit_id"] = audit_id
+        primary_source = root / _episode_artifact_path(
+            root, str(row["block_id"]), str(row["system_id"])
+        )
+        paired_source = (
+            root / _episode_artifact_path(root, str(row["block_id"]), "E2")
+            if row["paired_e2_episode_id"] is not None
+            else None
+        )
+        packet_paths = _write_manual_audit_reviewer_packet(
+            root=root,
+            reviewer_packet_root=reviewer_packet_root,
+            campaign_id=campaign_id,
+            audit_id=audit_id,
+            primary_source=primary_source,
+            primary_episode_id=str(row["episode_id"]),
+            primary_system_id=str(row["system_id"]),
+            task_id=str(row["task_id"]),
+            paired_e2_source=paired_source,
+            paired_e2_episode_id=row["paired_e2_episode_id"],
+        )
         public_selected.append(
             {
                 "audit_id": audit_id,
                 "episode_id": row["episode_id"],
                 "block_id": row["block_id"],
+                "task_id": row["task_id"],
                 "system_id": row["system_id"],
-                "artifact_path": _episode_artifact_path(
-                    root, str(row["block_id"]), str(row["system_id"])
-                ),
+                **packet_paths,
             }
         )
 
-    audit_root = root / "manual_audit"
     sealed_root = audit_root / "sealed"
     sealed_root.mkdir(parents=True, exist_ok=True)
     os.chmod(sealed_root, 0o700)
@@ -868,6 +849,7 @@ def build_manual_audit_selection(
         "schema_version": SCHEMA_VERSION,
         "manifest_id": definition["manifest_id"],
         "campaign_id": campaign_id,
+        **codebook_binding,
         "offline_sealed_labels": True,
         "labels": labeled,
     }
@@ -892,9 +874,10 @@ def build_manual_audit_selection(
         "schema_version": SCHEMA_VERSION,
         "manifest_id": definition["manifest_id"],
         "campaign_id": campaign_id,
+        **codebook_binding,
         "selection_algorithm": "sha256-lowest-v1",
         "selection_seed": seed,
-        "blinded": True,
+        "blinding_mode": MANUAL_AUDIT_BLINDING_MODE,
         "outcome_labels_location": "sealed/selection_labels.json",
         "outcome_labels_sha256": sha256_file(labels_path),
         "total_target": int(definition["total_target"]),
@@ -905,7 +888,8 @@ def build_manual_audit_selection(
             {
                 "name": category,
                 "eligible_count": sum(
-                    category in values for values in categories_by_episode.values()
+                    category in values
+                    for values in derived["categories_by_episode"].values()
                 ),
                 "selected_count": sum(
                     category in set(row["case_categories"]) for row in labeled
@@ -913,7 +897,8 @@ def build_manual_audit_selection(
                 "status": (
                     "NOT_APPLICABLE"
                     if not any(
-                        category in values for values in categories_by_episode.values()
+                        category in values
+                        for values in derived["categories_by_episode"].values()
                     )
                     else "COVERED"
                     if any(category in set(row["case_categories"]) for row in labeled)
@@ -936,12 +921,21 @@ def _manual_audit_categories(
     failure_incidents: list[dict[str, Any]],
     memory_queries: list[dict[str, Any]],
 ) -> dict[str, set[str]]:
-    """Derive only evidence-backed audit categories; never synthesize a case."""
+    """Derive evidence-backed case categories for compatibility fixtures.
+
+    Production audit selection does not trust these caller-supplied
+    projections: ``build_manual_audit_selection`` reopens the immutable
+    campaign records through ``_derive_manual_audit_selection_evidence``. This
+    helper retains the existing pure category-contract API and cannot
+    authorize a selected audit case.
+    """
 
     categories = {str(row["episode_id"]): set() for row in episodes}
     for episode in episodes:
         episode_id = str(episode["episode_id"])
-        if strict_bool(episode["environment_failure"], context="audit.environment_failure"):
+        if strict_bool(
+            episode["environment_failure"], context="audit.environment_failure"
+        ):
             categories[episode_id].add("environment_failure")
         if strict_bool(episode["loop_detected"], context="audit.loop_detected"):
             categories[episode_id].add("loop")
@@ -990,10 +984,245 @@ def _episode_artifact_path(root: Path, block_id: str, system_id: str) -> str:
         if str(resolution.get("block_id")) != block_id or resolution.get("status") != "INCLUDED":
             continue
         selected = int(resolution["selected_attempt_id"])
-        matches.append(resolution_path.parent / f"rerun_{selected}" / system_id)
+        matches.append(
+            resolution_path.parent / f"rerun_{selected}" / system_id / "runtime"
+        )
     if len(matches) != 1:
         raise SchemaError(f"manual audit episode does not resolve to one package: {block_id}/{system_id}")
     return str(matches[0].relative_to(root))
+
+
+def _write_manual_audit_reviewer_packet(
+    *,
+    root: Path,
+    reviewer_packet_root: Path,
+    campaign_id: str,
+    audit_id: str,
+    primary_source: Path,
+    primary_episode_id: str,
+    primary_system_id: str,
+    task_id: str,
+    paired_e2_source: Path | None,
+    paired_e2_episode_id: Any,
+) -> dict[str, str | None]:
+    """Copy only runtime-side evidence into a reviewer packet.
+
+    The source campaign has already passed runtime/oracle-separation validation.
+    Copying into a dedicated packet prevents the public selection from pointing
+    at an ``E*/`` directory whose sibling ``sealed/`` tree contains official
+    outcome/evaluator labels.
+    """
+
+    packet_root = reviewer_packet_root / audit_id
+    resolved_packet_parent = reviewer_packet_root.resolve()
+    if packet_root.resolve().parent != resolved_packet_parent:
+        raise SchemaError("manual-audit reviewer packet escaped its registered root")
+    temporary = Path(
+        tempfile.mkdtemp(prefix=f".{audit_id}.", dir=reviewer_packet_root)
+    )
+
+    def copy_runtime(
+        source: Path,
+        destination_name: str,
+        *,
+        expected_episode_id: str,
+    ) -> dict[str, str]:
+        if source.is_symlink() or source.absolute() != source.resolve():
+            raise SchemaError("manual-audit packet source traverses a symlink")
+        source = source.resolve()
+        if source.name != "runtime" or not source.is_dir():
+            raise SchemaError("manual-audit packet source is not a runtime directory")
+        summary = read_json(source / "episode_summary.json")
+        if summary.get("episode_id") != expected_episode_id:
+            raise SchemaError("manual-audit packet source has the wrong episode ID")
+        assert_no_verifier_evidence(
+            summary, context=str(source / "episode_summary.json")
+        )
+        destination = temporary / destination_name
+        destination.mkdir()
+        copied: dict[str, str] = {}
+        for path in sorted(source.rglob("*")):
+            if path.is_symlink():
+                raise SchemaError("manual-audit runtime evidence contains a symlink")
+            if not path.is_file():
+                continue
+            relative = path.relative_to(source)
+            if "sealed" in {part.lower() for part in relative.parts}:
+                raise SchemaError("manual-audit runtime evidence contains a sealed path")
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+            if target.suffix == ".json":
+                value = _load_audit_json_without_duplicate_keys(
+                    target.read_text(encoding="utf-8"), context=str(target)
+                )
+                assert_no_verifier_evidence(
+                    {"packet_value": value}, context=str(target)
+                )
+            elif target.suffix == ".jsonl":
+                with target.open(encoding="utf-8") as handle:
+                    for line_number, line in enumerate(handle, start=1):
+                        if not line.strip():
+                            continue
+                        value = _load_audit_json_without_duplicate_keys(
+                            line, context=f"{target}:{line_number}"
+                        )
+                        assert_no_verifier_evidence(
+                            {"packet_value": value},
+                            context=f"{target}:{line_number}",
+                        )
+            copied[str(relative)] = sha256_file(target)
+        if not copied:
+            raise SchemaError("manual-audit reviewer packet would be empty")
+        return copied
+
+    try:
+        task_context = _manual_audit_task_context(root, task_id=task_id)
+        atomic_write_json(temporary / "task_context.json", task_context, mode=0o600)
+        task_context_sha256 = sha256_file(temporary / "task_context.json")
+        primary_files = copy_runtime(
+            primary_source,
+            "primary_runtime",
+            expected_episode_id=primary_episode_id,
+        )
+        paired_files: dict[str, str] | None = None
+        if paired_e2_source is not None:
+            if type(paired_e2_episode_id) is not str or not paired_e2_episode_id:
+                raise SchemaError("manual-audit paired E2 identity is invalid")
+            paired_files = copy_runtime(
+                paired_e2_source,
+                "paired_e2_runtime",
+                expected_episode_id=paired_e2_episode_id,
+            )
+        elif paired_e2_episode_id is not None:
+            raise SchemaError("manual-audit paired E2 source/identity disagree")
+        manifest = {
+            "schema_version": "table2-manual-audit-reviewer-packet-v1",
+            "campaign_id": campaign_id,
+            "audit_id": audit_id,
+            "blinding_mode": MANUAL_AUDIT_BLINDING_MODE,
+            "system_condition_visible": True,
+            "official_outcome_labels_included": False,
+            "sealed_evaluator_files_included": False,
+            "task_context": {
+                "task_id": task_id,
+                "packet_relative_path": "task_context.json",
+                "sha256": task_context_sha256,
+                "context_status": task_context["context_status"],
+                "source_task_snapshot_sha256": task_context[
+                    "source_task_snapshot_sha256"
+                ],
+                "source_task_record_sha256": task_context[
+                    "source_task_record_sha256"
+                ],
+            },
+            "primary": {
+                "episode_id": primary_episode_id,
+                "system_id": primary_system_id,
+                "packet_relative_path": "primary_runtime",
+                "source_runtime_relative_path": str(primary_source.relative_to(root)),
+                "files": primary_files,
+            },
+            "paired_e2": (
+                {
+                    "episode_id": paired_e2_episode_id,
+                    "system_id": "E2",
+                    "packet_relative_path": "paired_e2_runtime",
+                    "source_runtime_relative_path": str(
+                        paired_e2_source.relative_to(root)
+                    ),
+                    "files": paired_files,
+                }
+                if paired_e2_source is not None
+                else None
+            ),
+        }
+        atomic_write_json(temporary / "packet_manifest.json", manifest, mode=0o600)
+        if packet_root.exists():
+            shutil.rmtree(packet_root)
+        os.replace(temporary, packet_root)
+        os.chmod(packet_root, 0o700)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    return {
+        "task_context_path": str((packet_root / "task_context.json").relative_to(root)),
+        "artifact_path": str(
+            (packet_root / "primary_runtime").relative_to(root)
+        ),
+        "paired_e2_artifact_path": (
+            str((packet_root / "paired_e2_runtime").relative_to(root))
+            if paired_e2_source is not None
+            else None
+        ),
+    }
+
+
+def _manual_audit_task_context(root: Path, *, task_id: str) -> dict[str, Any]:
+    """Project one frozen task into a reviewer-safe, oracle-free context."""
+
+    candidates = sorted((root / "frozen").glob("task_manifest.*"))
+    if len(candidates) != 1 or candidates[0].is_symlink():
+        raise SchemaError("manual-audit task context lacks one frozen task snapshot")
+    source = candidates[0]
+    payload = _load_audit_json_without_duplicate_keys(
+        source.read_text(encoding="utf-8"), context=str(source)
+    )
+    if isinstance(payload, dict) and isinstance(payload.get("tasks"), list):
+        rows = payload["tasks"]
+    elif isinstance(payload, list):
+        rows = payload
+    else:
+        raise SchemaError("manual-audit frozen task snapshot is malformed")
+    matches = [
+        row
+        for row in rows
+        if isinstance(row, Mapping) and row.get("task_id") == task_id
+    ]
+    if len(matches) != 1:
+        raise SchemaError("manual-audit task context does not resolve one task")
+    task = dict(matches[0])
+    instruction = task.get("instruction")
+    start_state = task.get("start_state")
+    campaign_mode = read_json(root / "campaign_manifest.json").get("campaign_mode")
+    if type(instruction) is str and instruction.strip() and isinstance(
+        start_state, Mapping
+    ):
+        observable_start_context = {
+            "sites": start_state.get("sites"),
+            "start_url": start_state.get("start_url"),
+            "geolocation": start_state.get("geolocation"),
+            "require_login": start_state.get("require_login"),
+            "require_reset": start_state.get("require_reset"),
+        }
+        context_status = "AVAILABLE"
+    elif campaign_mode == "smoke":
+        instruction = None
+        observable_start_context = None
+        context_status = "UNAVAILABLE_ENGINEERING_SMOKE_ONLY"
+    else:
+        raise SchemaError(
+            "manual-audit evaluation task lacks reviewer-safe instruction/start context"
+        )
+    value = {
+        "schema_version": "table2-manual-audit-task-context-v1",
+        "task_id": task_id,
+        "context_status": context_status,
+        "instruction": instruction,
+        "observable_start_context": observable_start_context,
+        "excluded_source_fields": [
+            "evaluator",
+            "eval",
+            "reference_answer",
+            "reference_answers",
+            "task_config",
+            "storage_state",
+        ],
+        "source_task_snapshot_sha256": sha256_file(source),
+        "source_task_record_sha256": sha256_json(task),
+    }
+    assert_no_verifier_evidence({"task_context": value}, context="task_context.json")
+    return value
 
 
 def _resolve_results_dir(

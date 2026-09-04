@@ -13,7 +13,7 @@ claim. The package cannot run the joint Gold/WebArena duplicate audit, author
 or validate external provenance, load a checkpoint, create embeddings, build a
 memory store, or calculate Table 2. The paper table therefore remains `N/R`.
 
-The two declared Kaggle inputs are fixed to dataset version **1**:
+The two scientific data inputs are fixed to dataset version **1**:
 
 - `kiyasmahmud/web-gold-40k`, version 1;
 - `kiyasmahmud/gold-40k-retry`, version 1.
@@ -23,6 +23,12 @@ version. The runner records version 1 as a declaration and authenticates the
 actual training JSON bytes against
 `configs/eval/table2/p4_source_authority_v1.json`. A version declaration is not
 substituted for that content check.
+
+The generated kernel metadata also attaches one private source-transport
+dataset whose exact ID is supplied by the operator. That third dataset is not
+a scientific dataset or source authority. It carries one Git bundle and one
+versioned transport manifest so the otherwise self-contained Kaggle script can
+materialize the registered repository while internet access remains disabled.
 
 ## Accepted read-only mount layouts
 
@@ -45,37 +51,79 @@ discovery may inspect names, but only `split_train.json`,
 candidates are opened by the preparation operation. Validation and test JSON
 files have no CLI argument and are never opened.
 
-## Running from an attested source checkout
+## Generate the two local staging directories
 
-Do not publish or run this template from a moving branch or an extracted tree
-with unknown Git state. Stage a clean Git checkout at the exact full commit in
-Kaggle, attach the two datasets, then run:
+Start from the final, clean repository commit that is intended to execute. The
+stager requires explicit Kaggle `owner/slug` IDs and an explicit source-dataset
+version of `1`; it rejects placeholders, a dirty or symlinked repository,
+nested outputs, and every pre-existing output path:
 
 ```bash
-PYTHONPATH=src python scripts/run_table2_p4_kaggle_prepare_only.py \
-  --repository-root /kaggle/working/webagent \
-  --config configs/eval/table2/kaggle_p4_prepare_only_v1.json \
-  --input-root /kaggle/input \
-  --output-root /kaggle/working/table2-p4-prepare-only-v1 \
-  --source-commit FULL_40_CHARACTER_COMMIT \
-  --source-archive /kaggle/input/ATTESTED_SOURCE_MOUNT/table2-source.tar
+PYTHONPATH=src python scripts/stage_table2_p4_kaggle_transport.py \
+  --repository-root /absolute/path/to/clean/webagent \
+  --source-dataset-id EXACT_OWNER/table2-p4-source-transport-v1 \
+  --source-dataset-version 1 \
+  --kernel-id EXACT_OWNER/table2-p4-prepare-only-v1 \
+  --source-output-dir /absolute/new/path/table2-p4-source-dataset \
+  --kernel-output-dir /absolute/new/path/table2-p4-kernel
 ```
 
-`--source-commit` is mandatory for a successful run. It must be a full
-lowercase 40-character Git SHA, must equal `HEAD`, and the checkout must be
-clean, including untracked files. The runner hashes the exact local source-file
-set used by the prepare-only process before work begins and revalidates that
-same set after preparation. `--source-archive` is optional; if supplied, it is
-hashed only as transport evidence. The archive is never executed, extracted,
-or treated as source authority.
+Both complete IDs are mandatory; only the explicitly supplied owner varies,
+while the two registered slugs are fixed. This command creates local files
+only. It does not authenticate to Kaggle,
+create a dataset, push a kernel, or start a run. The generated source-dataset
+directory contains `dataset-metadata.json`, a private-upload policy, exactly one
+`table2-p4-git-bundle-transport-v1.json`, and exactly one `.bundle`. Kaggle's
+dataset metadata format has no privacy field; dataset creation is private by
+default, and the generated policy requires the operator to avoid `--public`
+and verify privacy on Kaggle before attaching it, consistent with the
+[official dataset CLI contract](https://github.com/Kaggle/kaggle-cli/blob/main/docs/datasets.md#kaggle-datasets-create).
+The generated kernel directory contains only `run.py` and
+`kernel-metadata.json`; the latter sets
+`is_private: true`, disables GPU, TPU, and internet, and declares the two Gold
+inputs plus the explicitly supplied source-transport dataset.
 
-For a Kaggle script, stage
-`kaggle/table2_p4_prepare_only/run.py` together with the exact repository
-source and start from
-`kaggle/table2_p4_prepare_only/kernel-metadata.template.json`. Replace only the
-metadata `id`. The template disables GPU and internet and declares exactly the
-two datasets. It is a local staging template; this repository does not publish
-or launch a Kaggle kernel and needs no Kaggle credentials.
+Only the metadata-named kernel `code_file` is sent as script source by the
+[official Kaggle CLI implementation](https://github.com/Kaggle/kaggle-cli/blob/main/src/kaggle/api/kaggle_api_extended.py#L6551-L6569).
+Therefore the bootstrap does not assume that an arbitrary sibling configuration
+file will appear at runtime. Its fixed, tracked `run.py` discovers exactly one
+fixed-name manifest directly at either supported source-dataset mount root,
+reads the declared dataset ID, and requires that the manifest actually resides
+at the corresponding `owner/slug` mount.
+
+## No-argument Kaggle execution and authority boundary
+
+The generated kernel is deliberately no-argument. On Kaggle, `run.py`:
+
+1. refuses every CLI argument and every existing fixed checkout or output;
+2. finds exactly one versioned manifest and exactly one Git bundle under its
+   declared source-dataset mount;
+3. rejects path escape, symlink, hard-link, non-regular-file, byte-count,
+   SHA-256, manifest-schema, dataset-ID, and version mismatch;
+4. requires source-dataset version `1`, runs `git bundle verify`, and requires
+   the bundle to advertise exactly one full commit as `HEAD`;
+5. clones with `git clone --no-local` into the absent fixed checkout, checks out
+   that commit at detached `HEAD`, and verifies a clean worktree;
+6. verifies that the executing bootstrap bytes match both the manifest and the
+   bootstrap tracked by the cloned commit; and
+7. invokes the registered prepare-only runner with the exact commit and bundle
+   path as transport evidence.
+
+The manifest hash is intentionally not embedded into the Git commit: doing so
+would create a commit/hash circularity. The manifest and bundle are
+materialized transport, not scientific source authority. A caller can replace
+transport bytes only by producing a different bundle/commit identity. The
+inner runner then independently requires the supplied full commit to equal a
+clean repository `HEAD`, hashes the exact executed-source set before work,
+rechecks both source and bundle after work, and records those identities in the
+receipt. Later joint-audit/handoff replay must match the expected source commit
+and executed-source hashes; it must never promote the transport manifest or
+dataset merely because their internal hashes are self-consistent.
+
+For a direct non-Kaggle diagnostic invocation, the equivalent inner interface
+uses `--source-bundle` (the old `--source-archive` spelling is a deprecated
+alias and still accepts only a verified Git bundle). Direct invocation does not
+replace the registered no-argument Kaggle route.
 
 ## Output and receipt
 
@@ -99,9 +147,12 @@ No image, checkpoint, model, provenance manifest, embedding, or memory-store
 file is allowed. The preparation directory has a 512 MiB fail-closed size
 ceiling. The receipt records the exact dataset declarations and resolved roots,
 input and output hashes, the required clean commit and exact executed-source
-set, any optional transport-archive hash, argv, a small
+set, the required Git-bundle transport hash, argv, a small
 dependency/environment inventory, timestamps, stage outcomes, and scientific
-non-claims. A failed in-boundary run retains only its receipt and checksum.
+non-claims. Receipt schema v3 calls the required descriptor `source_transport`,
+identifies its format as `git_bundle`, records the exact bundle `HEAD`, and
+sets `scientific_source_authority: false`. A failed in-boundary run retains
+only its receipt and checksum.
 
 Keep `execution_receipt.json` and `execution_receipt.sha256` beside the
 `preparation/` directory during every later transfer. The registered joint

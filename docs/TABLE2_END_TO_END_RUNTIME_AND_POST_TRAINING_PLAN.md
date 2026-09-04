@@ -7,20 +7,35 @@
 **Plan date:** 2026-08-30
 
 **Plan status:** Core offline runtime/evidence architecture and the task/source/
-deployment-preflight gates are implemented and the complete Table 2 suite
-passes 965 tests. The pinned WebArena 0--49 source audit currently blocks
+deployment-preflight gates are implemented, including research-locked claim,
+audit, and companion-diagnostic controls. The complete Table 2 suite passes
+1,171 tests. The pinned WebArena 0--49 source audit currently blocks
 handoff because 47 tasks require an unsupported assistant-answer/STOP
 interface. Strict live-capability, provider-installation, evaluator, memory,
 and artifact-package binding is implemented across handoff, frozen campaign,
 validation, and production launch. Its genuine measured external evidence and
 the other pilot inputs are still unavailable. This document does not claim any
-live browser-evaluation result. A causal-boundary audit also confirmed that the
-current page broker is same-process reviewed-code engineering machinery, not an
-enforced isolation boundary: both typed capabilities remain importable in one
-interpreter. The frozen runner records that limitation and production fails
-before provider import. No live campaign may run until a separately
-authenticated process-isolated broker implementation and receipt are added
-under a new registered schema.
+live browser-evaluation result. A source-bound process architecture now places
+the browser/evaluator owner in a distinct OS process and exposes only
+authenticated, operation-whitelisted runtime IPC. Its local launch/cleanup
+receipts are explicitly not deployment authority, and the older same-process
+broker remains fixture-only. The frozen runner records
+`BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, so production still fails
+before provider import. No live campaign may run until the actual campaign
+host supplies a separately authenticated receipt under a registered external
+trust anchor.
+
+The implemented worker remains a same-UID child and inherits its launch
+environment. Its receipt therefore proves local address-space/message-flow
+architecture only, never hostile-runtime isolation or secret confidentiality.
+Any future externally trusted deployment receipt must bind the exact
+source/session and independently prove a separate UID or container/process
+sandbox, runtime-inaccessible evaluator memory/filesystem state, an allowlisted
+scrubbed evaluator environment with no inherited runtime/provider secrets,
+authenticated peer identity, and cleanup under the same controls. No trust
+anchor for that receipt exists in the current schema.
+Exact operation-specific contracts for the three arbitrary nested mapping paths
+and runtime-visible value-provenance evidence are also unregistered blockers.
 
 **Scope:** Work that can proceed while DGX training runs, followed by the exact post-training evaluation sequence
 
@@ -102,8 +117,11 @@ strongly related papers are context only and are never copied into Table 2.
 ### 0.2 Current implementation boundary
 
 The additive runtime, evaluator, evidence package, deterministic browser
-fixtures, and 15-scenario recovery harness are implemented. Their checks are
-engineering verification only. Before the registered 260-episode PC-01
+fixtures, 15-scenario recovery harness, P1--P4 companion-diagnostic generators,
+outcome-label-hidden audit validators, and research-locked paper-claim authority
+are implemented. Their checks and any future pilot outputs are engineering
+evidence only; no companion score or paper value is claimed. Before the
+registered 260-episode PC-01
 engineering pilot may start, the authenticated handoff, campaign-freeze, and
 post-freeze live-readiness sequence must establish all of the following:
 
@@ -145,7 +163,8 @@ post-freeze live-readiness sequence must establish all of the following:
   oracle-blind page observation. The generic adapter accepts this integration
   as a frozen callback; the campaign cannot substitute fixture evidence or
   start without a live mapper that has passed its schema/canary smoke;
-- the complete resolved 50-task export and the preregistered blinded-audit
+- the complete resolved 50-task export and the preregistered
+  outcome-label-hidden audit
   sampling/adjudication protocol. Human audit labels are created only after
   episode execution and enter only the sealed evaluation path;
 - a separate frozen readiness-probe campaign that completes the exact first
@@ -178,10 +197,12 @@ recorded in `docs/TABLE2_PILOT_TASK_INTERFACE_DECISION.md`.
 
 The pilot is also blocked on measured WebArena services, sealed-evaluator
 compatibility evidence, reset callbacks, the genuine joint train/WebArena
-duplicate audit, secrets/credentials, the frozen P4 store, the complete live
-capability manifest, and the preregistered audit protocol. Until every input
-exists and the task-interface gate passes, evaluation stops before browser
-reset and the paper Table 2 remains `N/R`.
+duplicate audit, secrets/credentials, the frozen P4 store, and the complete
+live-capability manifest. The registered outcome-label-hidden audit protocol
+must be frozen before launch; its reviewer/adjudicator evidence is created only
+after execution and gates promotion from `DRAFT_PILOT_ONLY` to `PILOT_ONLY`.
+Until all launch inputs exist and the task-interface gate passes, evaluation
+stops before browser reset and the paper Table 2 remains `N/R`.
 
 ### 0.3 Isolated browser-stack diagnostic
 
@@ -201,8 +222,76 @@ python3 -m pip install -e '.[table2]'
 python3 -m playwright install chromium
 ```
 
-Record the resulting Python/package/browser versions in the dependency lock
-before freezing the campaign. Installing the browser stack does not authorize
+Generate the versioned semantic lock from the measured environment and frozen
+deployment preflight before handoff:
+
+```bash
+PYTHONPATH=src python3 scripts/build_table2_dependency_lock.py \
+  --environment /secure/table2/environment-input.json \
+  --deployment-preflight /secure/table2/webarena-deployment-preflight.json \
+  --deployment-topology SINGLE_DGX_HOST \
+  --output /secure/table2/dependency.lock
+```
+
+For `SPLIT_LOCAL_BROWSER_DGX_INFERENCE`, the supplied DGX model-runtime record
+must use `table2-dgx-model-runtime-identity-v2`. It accepts only the registered
+PC-01 seed-42 checkpoint, checkpoint-saved configuration, Qwen base revision and
+snapshot, and processor-contract hashes. It also carries an explicit sorted
+source-file inventory and a typed CUDA/runtime/container record; their hashes
+are derived from those nested records rather than accepted as free-standing
+caller values. Python, PyTorch, and Transformers values must agree with the
+DGX dependency inventory, and `host_identity_sha256` is recomputed from its host
+record. A legacy record containing only opaque hashes cannot build a split
+dependency lock. This is still a caller-supplied comparison record, not proof
+that the current remote process generated those measurements.
+
+Build the split lock from the validated split preflight, then remeasure it on
+each physical host (the same frozen environment/preflight/lock inputs must be
+available to both commands):
+
+```bash
+PYTHONPATH=src python3 scripts/build_table2_dependency_lock.py \
+  --environment /secure/table2/environment-input.json \
+  --deployment-preflight /secure/table2/split-deployment-preflight.json \
+  --deployment-topology SPLIT_LOCAL_BROWSER_DGX_INFERENCE \
+  --output /secure/table2/dependency.lock
+
+# On the local browser/control host.
+PYTHONPATH=src python3 scripts/build_table2_dependency_lock.py \
+  --environment /secure/table2/environment-input.json \
+  --deployment-preflight /secure/table2/split-deployment-preflight.json \
+  --deployment-topology SPLIT_LOCAL_BROWSER_DGX_INFERENCE \
+  --output /secure/table2/dependency.lock --validate \
+  --remeasure-host-role browser_host
+
+# Comparison step in the DGX inference process environment. This command
+# measures Python/platform/packages, but only compares the supplied runtime JSON.
+PYTHONPATH=src python3 scripts/build_table2_dependency_lock.py \
+  --environment /secure/table2/environment-input.json \
+  --deployment-preflight /secure/table2/split-deployment-preflight.json \
+  --deployment-topology SPLIT_LOCAL_BROWSER_DGX_INFERENCE \
+  --output /secure/table2/dependency.lock --validate \
+  --remeasure-host-role dgx_host \
+  --supplied-dgx-runtime-identity /secure/table2-measured/current-dgx-runtime-identity.json
+```
+
+The browser bootstrap repeats `browser_host` validation, and the browser/live
+capability gate repeats the browser runtime check before every physical block.
+The future DGX inference service must own separate `dgx_host` remeasurement at
+service startup, before model load, and before every physical block. A
+promotable receipt must bind the campaign ID, physical block ID, fresh challenge
+nonce, semantic-lock hash, DGX host/runtime identities, phase, and issue time.
+The browser process cannot claim that remote check on the DGX's behalf. No
+receipt schema or external trust anchor is registered in this source version,
+so the split lock records
+`BLOCKED_DGX_REMEASUREMENT_RECEIPT_AND_EXTERNAL_TRUST_ANCHOR_REQUIRED` and both
+the execution guard and standard-library bootstrap reject split dispatch.
+
+The validator cross-checks measured Python/platform identity, all five pinned
+package versions, Chromium/version/viewport, Playwright, BrowserGym/WebArena,
+and the environment's browser/controller/adapter/benchmark identity. The real
+host lock remains an external artifact; repository fixtures do not satisfy it.
+Installing the browser stack does not authorize
 access to locked tasks or establish service, reset, credential, evaluator, or
 campaign readiness.
 
@@ -1603,7 +1692,8 @@ supporting evidence rather than the headline result.
 Every rate must show `numerator/denominator` in the supplement or machine-
 readable result package.
 
-Before the preregistered blinded audit is completed and signed, generated
+Before the preregistered outcome-label-hidden audit is completed and
+human-attested, generated
 aggregates are labelled `DRAFT_PILOT_ONLY`. After that audit they may be
 labelled `PILOT_ONLY`. Neither label authorizes paper values: the headline
 Table 2 remains `N/R` until the later frozen final-paper campaign is complete.
@@ -1640,7 +1730,8 @@ Each system's `runtime/` package contains:
 Each paired `sealed/` package contains the independent verifier events and
 post-execution relevance annotations that runtime code is forbidden to read.
 Campaign-level aggregates contain the episode CSV, exact metric numerators and
-denominators, retrieval diagnostics, statistics, provenance, and the blinded
+denominators, retrieval diagnostics, statistics, provenance, and the
+outcome-label-hidden
 human-audit selection manifest.
 
 Canonical JSONL records use monotonic event IDs, explicit foreign keys, and a
@@ -1752,6 +1843,10 @@ Every system attempts the same task IDs and registered repetitions. Use:
   E0-vs-E1, E1-vs-E2, and E2-vs-E3. A contrast with no non-zero task effects
   receives the valid maximally non-significant value `p=1`, so the planned
   family never changes in response to the observed outcomes.
+
+The E0-vs-E3 total-system task-success contrast uses the same paired task-level
+analysis, but remains outside the three-comparison Holm family and cannot be
+attributed to an individual pillar.
 
 Exact duplicate rows for the same task, fixed matched model seed 42, and repeat are
 collapsed before the task effect is calculated, so copying an observation
@@ -1965,12 +2060,13 @@ missing inputs, placeholder/unknown environment values, unverified audit
 evidence, hash drift, noncanonical processor contracts, or an incomplete task
 export. It does not infer any external value.
 
-The supplied dependency lock is copied byte-for-byte to
+The supplied semantic dependency lock is copied byte-for-byte to
 `dependency.lock` in the handoff and then to `frozen/dependency.lock` in the
 campaign. `environment.json`, the campaign artifact-hash closure, package
 validation, the pre-import evaluation CLI check, and the per-block execution
-guard all verify the same SHA-256. A path or hash alone is not accepted as
-dependency evidence.
+guard all verify the same SHA-256 and replay semantic equality against the
+frozen measured preflight and environment. A path, package file, or hash alone
+is not accepted as dependency evidence.
 
 ### 16.0.1 Measured task-interface result and current stop condition
 
@@ -2040,10 +2136,18 @@ are separate inputs; their five shared origins must agree exactly.
 
 3. On a task-compatible protocol, test the DGX as the preferred single host:
 
+   In the same shell, set the reset index only from the frozen, user-approved
+   public task registry; the placeholder must never be guessed or restored to
+   the currently incompatible index 0:
+
+   ```bash
+   APPROVED_PUBLIC_RESET_TASK_INDEX='<approved upstream task index>'
+   ```
+
    ```bash
    PYTHONPATH=src python3 scripts/preflight_table2_webarena.py \
      --service-url-map /secure/webarena/seven-service-url-map.json \
-     --live-reset-task-index 0 \
+     --live-reset-task-index ${APPROVED_PUBLIC_RESET_TASK_INDEX} \
      --output /secure/table2-inputs/dgx-webarena-preflight.json
    ```
 
@@ -2060,21 +2164,29 @@ are separate inputs; their five shared origins must agree exactly.
      --expected-dgx-runtime-identity /secure/table2-authority/dgx-runtime-identity.json \
      --bridge-identity /secure/table2-measured/bridge-identity.json \
      --expected-bridge-identity /secure/table2-authority/bridge-identity.json \
-     --exchanges /secure/table2-measured/oracle-blind-bridge-exchanges.json \
-     --live-reset-task-index 0 \
+     --exchanges /secure/table2-measured/redacted-bridge-envelope-records.json \
+     --live-reset-task-index ${APPROVED_PUBLIC_RESET_TASK_INDEX} \
      --output /secure/table2-inputs/split-deployment-preflight.json
    PYTHONPATH=src python3 scripts/prepare_table2_split_preflight.py validate \
      --artifact /secure/table2-inputs/split-deployment-preflight.json \
      --service-url-map /secure/webarena/seven-service-url-map.json \
      --expected-dgx-runtime-identity /secure/table2-authority/dgx-runtime-identity.json \
      --expected-bridge-identity /secure/table2-authority/bridge-identity.json \
-     --live-reset-task-index 0
+     --live-reset-task-index ${APPROVED_PUBLIC_RESET_TASK_INDEX}
    ```
 
-   The actual and expected identity files must be distinct authorities. The
-   split artifact includes a hash-chained request/response transcript and must
-   report zero reward, oracle, evaluator, progress, failure-label, or other
-   forbidden fields crossing into the model plane.
+   The input and pinned comparison files must be distinct files. That separation
+   is not an external trust anchor. The split artifact accepts only the exact
+   versioned redacted envelope metadata (`schema_version`, request ID,
+   registered operation, and opaque payload SHA-256), binds matching response
+   IDs/operations, scans envelope keys recursively for registered reward/oracle/
+   evaluator aliases, and writes a hash chain without raw request IDs. It does
+   **not** observe the payload named by a digest, prove that the payload was
+   semantically oracle-free, or authenticate endpoint origin. The v2 DGX record
+   described above must include the typed DGX host/package/model/source/runtime
+   inventories. Handoff and the standard-library bootstrap reject a missing or
+   legacy inventory, but split dispatch remains blocked because there is no
+   externally trusted DGX startup/per-block receipt.
 
 4. The deployment owner then supplies real evidence for exactly seven live
    capabilities and validates the
@@ -2085,13 +2197,23 @@ are separate inputs; their five shared origins must agree exactly.
    validation-disabled BrowserGym path, six-field start-state application,
    exclusive control, reset, live observation/action mapping, safety and fault
    classification, recovery planning, efficiency accounting, the typed
-   same-process sealed-page engineering broker, and cleanup on success,
+   same-process sealed-page engineering fixture, and cleanup on success,
    evaluator error, and runtime abort. That broker demonstrates reviewed-code
-   message flow only; it is not live-campaign authority. The handoff/runner
-   source attestation must include the implementation and broker sources, plus
-   the exact blocked security non-claim. Production remains stopped until an
-   externally authenticated process-isolation implementation and receipt
-   replace that unpromotable binding. If the frozen campaign cannot reopen and
+   message flow only; it is not live-campaign authority. A separate AF_UNIX,
+   HMAC-authenticated process architecture now provides four allowlisted
+   operations, exact outer request/result envelopes, recursive registered
+   sensitive-key rejection, peer-process checks, distinct control credentials,
+   authenticated PID/source-bound readiness, and source/session-bound lifecycle
+   receipts. The `action`, `observation`, and `execution` inner values remain
+   arbitrary mappings: a neutral key can carry content of unknown provenance,
+   so the local evidence does not prove semantic oracle isolation. The
+   handoff/runner
+   source attestation includes those sources but records local architecture
+   evidence as unpromotable. Production remains stopped until an externally
+   authenticated deployment receipt proves the actual host used the boundary
+   and exact operation-specific inner schemas plus runtime-visible value
+   provenance are registered.
+   If the frozen campaign cannot reopen and
    validate the manifest and every readiness file, stop before handoff.
 
    The sealed evaluator evidence must call `libwebarena==0.0.4` an independently
@@ -2136,7 +2258,12 @@ operator-supplied fields:
   `webarena_deployment_topology`. `SINGLE_DGX_HOST` accepts only a measured DGX
   host PASS and no split identities. `SPLIT_LOCAL_BROWSER_DGX_INFERENCE`
   additionally requires distinct frozen `expected_dgx_model_runtime_identity`
-  and `expected_bridge_identity` authorities and a validated split preflight;
+  and `expected_bridge_identity` authorities, a validated split preflight, and
+  a v2 semantic dependency lock containing separate `browser_host` and
+  `dgx_host` identities, the per-process remeasurement responsibilities, and
+  the explicit non-authorizing DGX dispatch-receipt requirement. Because this
+  source version has no registered external receipt schema or trust anchor,
+  this split topology can be frozen for compatibility review but cannot launch;
 - `pc01_live_deployment_manifest` and
   `pc01_live_deployment_evidence_root`, pointing to the independently measured
   seven-capability manifest and the exact evidence package it references. The
@@ -2372,12 +2499,15 @@ immutable state. The receipt's scope is
 `REVIEWED_CODE_ORACLE_FREE_DATAFLOW_ONLY`: it records a same-process factory and
 `kernel_filesystem_sandbox: false`. It proves which typed data the reviewed
 entrypoint is passed; it is not a sandbox or a hostile-code security claim.
-It also cannot repair the separate page-broker gap: this source version records
-`BLOCKED_EXTERNAL_PROCESS_ISOLATION_REQUIRED`, and both provider-boundary
-preparation and campaign execution stop before importing the provider factory.
+It also cannot repair the separate page-broker deployment-evidence gap: this
+source version records
+`BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, and both
+provider-boundary preparation and campaign execution stop before importing the
+provider factory.
 The commands above document the future sequence only; they are intentionally
-non-runnable until a separately authenticated process-isolated broker contract
-is implemented and preregistered.
+non-runnable until exact operation-specific inner schemas, value-provenance
+evidence, and a separately authenticated process-isolation deployment receipt
+and trust anchor are preregistered.
 The credential capability root must be an existing non-symlink tree that is
 disjoint in both directions from the campaign and repository; filesystem root,
 campaign/source ancestors or descendants, and symlinked leaf/parent components
@@ -2683,7 +2813,17 @@ These diagnostics must not alter the frozen primary Table 2 result.
 
 ### Phase K - Manual audit and error analysis
 
-Use a preregistered blinded sample containing:
+Use a preregistered sample with mode
+`OUTCOME_LABELS_HIDDEN_SYSTEM_CONDITION_VISIBLE`. Official evaluator/outcome
+labels are hidden from reviewers until independent labels are complete, but the
+system condition is intentionally visible; this is not condition blinding. The
+public selection points only to sanitized runtime-evidence packets and never to
+the sibling sealed evaluator tree. Each packet binds a reviewer-safe
+`task_context.json` containing the task ID, instruction, and only the necessary
+observable start context; evaluator configuration, reference answers, task
+configuration, and storage state are excluded. An E3 item with applicable
+memory-effect evidence also binds an exact sanitized E2 runtime packet. The
+sample contains:
 
 - successes;
 - failures;
@@ -2694,14 +2834,36 @@ Use a preregistered blinded sample containing:
 - bbox/parameter failures;
 - loops and unnecessary interventions.
 
-Record adjudicator agreement and retain the sample manifest. Do not relabel the
-evaluation dataset silently.
+The frozen `audit_manifest.json` contains the machine-readable reviewer
+codebook. Each of the two reviewers and the final adjudicated label must provide
+exactly one registered categorical value for every field in its registered
+order; extra fields, booleans, free text, and unregistered values are invalid.
+The review record's disagreement flag is reproduced from the two complete label
+vectors and cannot be supplied as authority. Composite exact agreement and
+unweighted Cohen's kappa are deterministically recomputed over those complete
+vectors, and unweighted Cohen's kappa is also recomputed separately for every
+registered field. If
+the empirical expected agreement equals one, kappa is JSON `null` with status
+`UNDEFINED` and the sole registered reason
+`EXPECTED_AGREEMENT_EQUALS_ONE`; otherwise its status is `DEFINED` and the
+undefined reason is JSON `null`. The codebook ID and canonical hash bind the
+selection, sealed adjudication, agreement, and completion artifacts. Plain
+reviewer/adjudicator identity strings are human attestations, not cryptographic
+signatures. Structural applicability rules only distinguish whether a recovery
+or memory intervention exists; they never force a reviewer to reproduce the
+sealed evaluator's outcome or attribution. After adjudication, a hash-bound
+comparison reports agreement, disagreement, undeterminable, and non-uniquely
+mappable counts for adjudicated task outcome and for recovery/memory fields
+where the sealed evidence supports a unique mapping. Human-versus-evaluator
+disagreement is retained as audit evidence and does not itself fail the audit.
+Retain all of those artifacts and do not relabel the evaluation dataset
+silently.
 
 ### Phase L - Fill Table 2 and freeze paper claims
 
 Table 2 remains `N/R` through every `PILOT_ONLY` run. It may be filled only
 from the later frozen final-paper campaign after all final episode packages,
-the final blinded audit, and final package validation pass.
+the final outcome-label-hidden audit, and final package validation pass.
 
 Permitted claims require:
 
@@ -2889,8 +3051,11 @@ environment rather than collapsed into one failure bucket.
 - [x] Deterministic fixture and 15-scenario recovery smokes PASS
 - [x] Production evaluation runner and live-evidence revalidation gates
 - [x] Portable matched E0--E3 live-readiness receipt and dispatch guard
-- [x] Same-process broker limitation frozen as reviewed-code engineering evidence; production blocked before provider import
-- [ ] Separately authenticated process-isolated page broker and deployment receipt
+- [x] Same-process broker retained only as reviewed-code engineering evidence
+- [x] Source-bound authenticated process-broker architecture and local lifecycle/adversarial tests
+- [x] Semantic dependency-lock generator and fail-closed cross-validation
+- [ ] Exact operation-specific inner schemas and runtime-visible value-provenance authority registered
+- [ ] Independently authenticated campaign-host isolation receipt and trust anchor (plus DGX startup/model-load/per-block receipts for split deployment)
 - [ ] Isolated live first-normal-block readiness probe PASS and target-local receipt frozen
 - [ ] Selected-checkpoint WebArena compatibility smoke PASS
 - [ ] Checkpoint, memory, and measured environment attestations frozen
@@ -2906,9 +3071,9 @@ environment rather than collapsed into one failure bucket.
 - [ ] One locked component-test campaign complete
 - [ ] Paired E0-E3 episodes complete
 - [ ] Metrics, confidence intervals, and paired tests complete
-- [ ] P2 causal/modality and P4 memory diagnostics complete
+- [ ] P1--P4 companion diagnostics executed from authoritative, source-replayed inputs
 - [ ] Efficiency and environment-failure reports complete
-- [ ] Blinded manual audit and error analysis complete
+- [ ] Outcome-label-hidden manual audit and error analysis complete
 - [ ] Final Table 2 filled from validated artifacts
 - [ ] Paper claims frozen and unsupported claims removed
 

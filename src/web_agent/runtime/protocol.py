@@ -78,6 +78,10 @@ REGISTERED_PROTOCOL_EVIDENCE_LABEL = "PILOT_ONLY"
 REGISTERED_PAPER_TABLE_STATUS = "N/R"
 REGISTERED_PC01_PILOT_PROTOCOL_ID = "table2-pc01-pilot-v1"
 REGISTERED_FINAL_PROTOCOL_ID = "table2-final-template-v1"
+REGISTERED_PAPER_CLAIM_REGISTRY = (
+    "configs/eval/table2/paper_claim_registry_v1.json"
+)
+REGISTERED_PAPER_CLAIM_REGISTRY_ID = "table2-research-locked-claims-v1"
 REGISTERED_PC01_SELECTION_MODE = "pc01_provisional"
 REGISTERED_FINAL_SELECTION_MODE = "three_candidate_final"
 REGISTERED_PC01_CANDIDATE_IDS = ("qwen2vl_2b_gold_v2_8_dgx",)
@@ -291,6 +295,22 @@ def validate_frozen_protocol_mapping(mapping: Mapping[str, Any]) -> None:
             "pilot or not-yet-runnable final-selection template"
         )
     require_exact(mapping, protocol_profile, location="protocol")
+    paper_claims = section("paper_claims")
+    registered_paper_claims = {
+        "registry": REGISTERED_PAPER_CLAIM_REGISTRY,
+        "registry_id": REGISTERED_PAPER_CLAIM_REGISTRY_ID,
+        "pre_evaluation_status": REGISTERED_PAPER_TABLE_STATUS,
+        "pilot_resolution_forbidden": True,
+    }
+    require_exact(
+        paper_claims,
+        registered_paper_claims,
+        location="paper_claims",
+    )
+    if set(paper_claims) != set(registered_paper_claims):
+        raise ValueError(
+            "frozen protocol paper_claims must contain exactly the registered keys"
+        )
     selection = section("selection")
     require_exact(selection, selection_profile, location="selection")
     configured_candidate_ids = selection.get("candidate_ids")
@@ -1061,6 +1081,7 @@ _PROTOCOL_TOP_KEYS = {
     "protocol_status",
     "evidence_label",
     "paper_table_status",
+    "paper_claims",
     "selection",
     "benchmark",
     "manual_rescue",

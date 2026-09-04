@@ -387,6 +387,46 @@ def test_pilot_manifests_register_exact_counts_without_locked_content():
     assert tasks["locked_test_content"] is False
     assert recovery["final_paper_evaluation_eligible"] is False
     assert sum(row["target"] for row in audit["strata"]) == audit["total_target"] == 20
+    codebook = audit["reviewer_codebook"]
+    assert audit["blinding_mode"] == (
+        "OUTCOME_LABELS_HIDDEN_SYSTEM_CONDITION_VISIBLE"
+    )
+    assert "blinded" not in audit
+    assert codebook["schema_version"] == "table2-manual-audit-reviewer-codebook-v2"
+    assert codebook["label_vector_order"] == [
+        field["name"] for field in codebook["fields"]
+    ]
+    assert codebook["agreement_method"] == (
+        "unweighted_cohen_kappa_over_complete_ordered_label_vectors_v1"
+    )
+    assert codebook["composite_exact_agreement_method"] == (
+        "complete_ordered_label_vector_exact_agreement_v1"
+    )
+    assert codebook["per_field_agreement_method"] == (
+        "unweighted_cohen_kappa_per_registered_field_v1"
+    )
+    assert codebook["final_vs_sealed_comparison_method"] == (
+        "adjudicated_labels_vs_selected_sealed_evidence_counts_v1"
+    )
+    assert codebook["applicability_rules"] == [
+        (
+            "NO_RECOVERY_ATTEMPT_if_and_only_if_selected_evidence_has_no_"
+            "executed_recovery"
+        ),
+        (
+            "NOT_APPLICABLE_memory_effect_if_and_only_if_no_E3_admitted_memory_"
+            "intervention_with_paired_E2_evidence"
+        ),
+        (
+            "NO_INTERVENTION_if_and_only_if_selected_evidence_has_neither_"
+            "executed_recovery_nor_admitted_memory_intervention"
+        ),
+    ]
+    assert codebook["undefined_kappa"] == {
+        "status": "UNDEFINED",
+        "reason": "EXPECTED_AGREEMENT_EQUALS_ONE",
+        "condition": "expected_chance_agreement_equals_one",
+    }
 
 
 def test_raw_artifact_and_locked_mount_rules_are_git_ignored():

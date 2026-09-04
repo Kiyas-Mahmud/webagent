@@ -606,6 +606,49 @@ def _normalize_episode_summary(
         "memory_index_size": ("memory_index_size", "index_size"),
         "training_gpu_hours": ("training_gpu_hours",),
     }
+    allowed_runner_fields = {
+        "schema_version",
+        "record_type",
+        "episode_id",
+        "protocol_id",
+        "system_id",
+        "task_id",
+        "repeat_id",
+        "rerun_id",
+        "model_seed",
+        "valid_for_primary",
+        "terminal_reason",
+        "executor_steps",
+        "normal_actions",
+        "recovery_actions",
+        "recovery_attempts",
+        "failure_incidents",
+        "memory_queries",
+        "memory_interventions",
+        "elapsed_seconds",
+        "model_call_count",
+        "reset_already_success",
+        "environment_failure",
+        "verifier_event_id",
+        "verifier_token_sha256",
+        "event_log_sha256",
+        "completed",
+        "infrastructure_invalid",
+        "runtime_terminal_reason",
+        "decision_latency_ms",
+        "provider_latency_ms",
+        "recovery_latency_ms",
+        "retrieval_latency_ms",
+    }
+    for destination, sources in aliases.items():
+        allowed_runner_fields.add(destination)
+        allowed_runner_fields.update(sources)
+    unknown_runner_fields = set(row) - allowed_runner_fields
+    if unknown_runner_fields:
+        raise SchemaError(
+            "runner summary contains unregistered fields: "
+            f"{sorted(unknown_runner_fields)}"
+        )
     normalized = dict(row)
     for destination, sources in aliases.items():
         if destination not in normalized:

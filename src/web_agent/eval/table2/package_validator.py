@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, fields as dataclass_fields
 from datetime import datetime, timezone
+from fractions import Fraction
 import csv
 import fcntl
 import hashlib
@@ -14,6 +15,7 @@ import math
 import os
 import platform
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -125,6 +127,13 @@ from .outcome_semantics import (
     normalize_runtime_terminal_reason,
     validate_primary_runtime_outcome,
 )
+from .paper_claims import (
+    FROZEN_REGISTRY_RELATIVE_PATH as FROZEN_PAPER_CLAIM_REGISTRY_RELATIVE_PATH,
+    REGISTRY_ID as PAPER_CLAIM_REGISTRY_ID,
+    SOURCE_REGISTRY_RELATIVE_PATH as PAPER_CLAIM_REGISTRY_SOURCE_RELATIVE_PATH,
+    validate_claim_registry,
+    validate_claim_registry_binding,
+)
 from .retrieval_metrics import compute_retrieval_diagnostics
 from .pilot_task_exclusion import (
     FROZEN_PILOT_TASK_EXCLUSION_RELATIVE_PATH,
@@ -197,6 +206,42 @@ RUNTIME_FILES = (
 )
 FINAL_READY_STATUS = "READY_FOR_TABLE2"
 DRAFT_PILOT_STATUS = "DRAFT_PILOT_ONLY"
+MANUAL_AUDIT_MANIFEST_ID = "table2-outcome-label-hidden-audit-20-v2"
+MANUAL_AUDIT_BLINDING_MODE = "OUTCOME_LABELS_HIDDEN_SYSTEM_CONDITION_VISIBLE"
+MANUAL_AUDIT_CODEBOOK_SCHEMA_VERSION = "table2-manual-audit-reviewer-codebook-v2"
+MANUAL_AUDIT_CODEBOOK_ID = "table2-outcome-label-hidden-reviewer-codebook-v2"
+MANUAL_AUDIT_AGREEMENT_METHOD = (
+    "unweighted_cohen_kappa_over_complete_ordered_label_vectors_v1"
+)
+MANUAL_AUDIT_COMPOSITE_AGREEMENT_METHOD = (
+    "complete_ordered_label_vector_exact_agreement_v1"
+)
+MANUAL_AUDIT_PER_FIELD_AGREEMENT_METHOD = (
+    "unweighted_cohen_kappa_per_registered_field_v1"
+)
+MANUAL_AUDIT_FINAL_VS_SEALED_METHOD = (
+    "adjudicated_labels_vs_selected_sealed_evidence_counts_v1"
+)
+MANUAL_AUDIT_KAPPA_DEFINED_STATUS = "DEFINED"
+MANUAL_AUDIT_KAPPA_UNDEFINED_STATUS = "UNDEFINED"
+MANUAL_AUDIT_KAPPA_UNDEFINED_REASON = "EXPECTED_AGREEMENT_EQUALS_ONE"
+MANUAL_AUDIT_CASE_CATEGORIES = (
+    "successful_recovery",
+    "failed_recovery",
+    "memory_help",
+    "memory_harm",
+    "environment_failure",
+    "bbox_or_parameter_failure",
+    "loop",
+    "unnecessary_intervention",
+)
+MANUAL_AUDIT_LABEL_FIELDS = (
+    "task_outcome",
+    "recovery_outcome",
+    "memory_effect",
+    "failure_attribution",
+    "intervention_assessment",
+)
 MODEL_PAYLOAD_ROLES = (
     "selected_checkpoint",
     "resolved_config",
@@ -306,14 +351,580 @@ EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS: tuple[str, ...] = tuple(
         (
             *LIVE_COMPATIBILITY_REQUIRED_SOURCE_RELATIVE_PATHS,
             *ANALYSIS_REQUIRED_SOURCE_RELATIVE_PATHS,
+            "scripts/build_table2_dependency_lock.py",
             "scripts/freeze_table2_campaign.py",
+            "scripts/validate_table2_paper_claims.py",
+            str(PAPER_CLAIM_REGISTRY_SOURCE_RELATIVE_PATH),
+            "src/web_agent/__init__.py",
+            "src/web_agent/eval/__init__.py",
+            "src/web_agent/eval/table2/__init__.py",
             "src/web_agent/eval/table2/handoff.py",
             "src/web_agent/eval/table2/handoff_authority.py",
+            "src/web_agent/eval/table2/dependency_lock.py",
+            "src/web_agent/eval/table2/paper_claims.py",
+            "src/web_agent/eval/table2/process_broker.py",
+            "src/web_agent/eval/table2/process_broker_protocol.py",
+            "src/web_agent/eval/table2/process_broker_runtime.py",
+            "src/web_agent/eval/table2/process_broker_worker.py",
             "src/web_agent/eval/table2/task_interface_audit.py",
             "src/web_agent/eval/table2/webarena_page_state_evaluator.py",
         )
     )
 )
+
+
+def _expected_manual_audit_reviewer_codebook() -> dict[str, Any]:
+    """Return the immutable categorical codebook registered for Table 2 review."""
+
+    return {
+        "schema_version": MANUAL_AUDIT_CODEBOOK_SCHEMA_VERSION,
+        "codebook_id": MANUAL_AUDIT_CODEBOOK_ID,
+        "label_vector_order": [
+            "task_outcome",
+            "recovery_outcome",
+            "memory_effect",
+            "failure_attribution",
+            "intervention_assessment",
+        ],
+        "fields": [
+            {
+                "name": "task_outcome",
+                "allowed_labels": ["SUCCESS", "FAILURE", "UNDETERMINABLE"],
+                "semantics": {
+                    "SUCCESS": (
+                        "Observable episode evidence establishes completion of the "
+                        "assigned browser task."
+                    ),
+                    "FAILURE": (
+                        "Observable episode evidence establishes that the assigned "
+                        "browser task was not completed."
+                    ),
+                    "UNDETERMINABLE": (
+                        "Available artifacts are insufficient to establish either "
+                        "success or failure; success must not be inferred."
+                    ),
+                },
+            },
+            {
+                "name": "recovery_outcome",
+                "allowed_labels": [
+                    "SUCCESSFUL_RECOVERY",
+                    "FAILED_RECOVERY",
+                    "NO_RECOVERY_ATTEMPT",
+                    "UNDETERMINABLE",
+                ],
+                "semantics": {
+                    "SUCCESSFUL_RECOVERY": (
+                        "An executed recovery resolved the observed failure and the "
+                        "post-recovery evidence shows restored progress."
+                    ),
+                    "FAILED_RECOVERY": (
+                        "A recovery was executed but did not resolve the observed "
+                        "failure within the registered recovery window."
+                    ),
+                    "NO_RECOVERY_ATTEMPT": (
+                        "The reviewed episode contains no executed recovery attempt."
+                    ),
+                    "UNDETERMINABLE": (
+                        "The artifacts do not support a reliable recovery-outcome "
+                        "decision."
+                    ),
+                },
+            },
+            {
+                "name": "memory_effect",
+                "allowed_labels": [
+                    "MEMORY_HELP",
+                    "MEMORY_HARM",
+                    "NO_DEMONSTRABLE_MEMORY_EFFECT",
+                    "NOT_APPLICABLE",
+                    "UNDETERMINABLE",
+                ],
+                "semantics": {
+                    "MEMORY_HELP": (
+                        "Paired causal evidence attributes a better E3 outcome to an "
+                        "admitted frozen-memory intervention."
+                    ),
+                    "MEMORY_HARM": (
+                        "Paired causal evidence attributes a worse E3 outcome to an "
+                        "admitted frozen-memory intervention."
+                    ),
+                    "NO_DEMONSTRABLE_MEMORY_EFFECT": (
+                        "The paired evidence does not demonstrate either help or harm "
+                        "from frozen memory."
+                    ),
+                    "NOT_APPLICABLE": (
+                        "The reviewed evidence has no admitted frozen-memory "
+                        "intervention suitable for an E2/E3 effect judgment."
+                    ),
+                    "UNDETERMINABLE": (
+                        "A memory-effect judgment is applicable but the available "
+                        "paired artifacts are insufficient."
+                    ),
+                },
+            },
+            {
+                "name": "failure_attribution",
+                "allowed_labels": [
+                    "NO_FAILURE_OBSERVED",
+                    "BBOX_OR_PARAMETER_FAILURE",
+                    "LOOP_FAILURE",
+                    "OTHER_AGENT_FAILURE",
+                    "ENVIRONMENT_OR_INFRASTRUCTURE_FAILURE",
+                    "MIXED_FAILURE",
+                    "UNDETERMINABLE",
+                ],
+                "semantics": {
+                    "NO_FAILURE_OBSERVED": (
+                        "No failure is supported by the reviewed observable evidence."
+                    ),
+                    "BBOX_OR_PARAMETER_FAILURE": (
+                        "The primary supported failure is target grounding or concrete "
+                        "action-parameter resolution."
+                    ),
+                    "LOOP_FAILURE": (
+                        "The primary supported failure is repeated non-progressing "
+                        "agent behavior."
+                    ),
+                    "OTHER_AGENT_FAILURE": (
+                        "The primary supported failure is agent-caused but is neither "
+                        "bbox/parameter failure nor a loop."
+                    ),
+                    "ENVIRONMENT_OR_INFRASTRUCTURE_FAILURE": (
+                        "The primary supported failure is external to the agent policy "
+                        "or recovery mechanism."
+                    ),
+                    "MIXED_FAILURE": (
+                        "Agent and environment causes are both materially supported and "
+                        "cannot be separated as the primary cause."
+                    ),
+                    "UNDETERMINABLE": (
+                        "The available artifacts do not support a reliable primary "
+                        "failure attribution."
+                    ),
+                },
+            },
+            {
+                "name": "intervention_assessment",
+                "allowed_labels": [
+                    "JUSTIFIED_INTERVENTION",
+                    "UNNECESSARY_INTERVENTION",
+                    "NO_INTERVENTION",
+                    "UNDETERMINABLE",
+                ],
+                "semantics": {
+                    "JUSTIFIED_INTERVENTION": (
+                        "An intervention was executed in response to observable failure "
+                        "or non-progress evidence."
+                    ),
+                    "UNNECESSARY_INTERVENTION": (
+                        "An intervention was executed without observable evidence that "
+                        "it was needed."
+                    ),
+                    "NO_INTERVENTION": (
+                        "The reviewed episode contains no recovery or memory "
+                        "intervention."
+                    ),
+                    "UNDETERMINABLE": (
+                        "The artifacts are insufficient to judge whether an executed "
+                        "intervention was necessary."
+                    ),
+                },
+            },
+        ],
+        "label_object_rule": (
+            "exactly_one_registered_string_label_for_every_ordered_field_no_extra_fields"
+        ),
+        "disagreement_rule": (
+            "true_if_any_ordered_label_value_differs_between_exactly_two_reviewers"
+        ),
+        "agreement_unit": "complete_ordered_label_vector_per_selected_episode",
+        "agreement_method": MANUAL_AUDIT_AGREEMENT_METHOD,
+        "composite_exact_agreement_method": (
+            MANUAL_AUDIT_COMPOSITE_AGREEMENT_METHOD
+        ),
+        "per_field_agreement_method": MANUAL_AUDIT_PER_FIELD_AGREEMENT_METHOD,
+        "final_vs_sealed_comparison_method": (
+            MANUAL_AUDIT_FINAL_VS_SEALED_METHOD
+        ),
+        "kappa_weighting": "unweighted",
+        "undefined_kappa": {
+            "status": MANUAL_AUDIT_KAPPA_UNDEFINED_STATUS,
+            "reason": MANUAL_AUDIT_KAPPA_UNDEFINED_REASON,
+            "condition": "expected_chance_agreement_equals_one",
+        },
+        "applicability_rules": [
+            (
+                "NO_RECOVERY_ATTEMPT_if_and_only_if_selected_evidence_has_no_"
+                "executed_recovery"
+            ),
+            (
+                "NOT_APPLICABLE_memory_effect_if_and_only_if_no_E3_admitted_memory_"
+                "intervention_with_paired_E2_evidence"
+            ),
+            (
+                "NO_INTERVENTION_if_and_only_if_selected_evidence_has_neither_"
+                "executed_recovery_nor_admitted_memory_intervention"
+            ),
+        ],
+    }
+
+
+def validate_manual_audit_reviewer_codebook(
+    audit_definition: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate the exact registered codebook and return its immutable binding."""
+
+    codebook = audit_definition.get("reviewer_codebook")
+    expected = _expected_manual_audit_reviewer_codebook()
+    if not isinstance(codebook, Mapping) or dict(codebook) != expected:
+        raise SchemaError("manual-audit reviewer codebook differs from registration")
+    return {
+        "reviewer_codebook_id": MANUAL_AUDIT_CODEBOOK_ID,
+        "reviewer_codebook_sha256": sha256_json(codebook),
+    }
+
+
+def _require_exact_json_object(
+    value: Any,
+    expected_keys: Sequence[str],
+    *,
+    context: str,
+) -> Mapping[str, Any]:
+    """Require an exact JSON-object key closure for audit evidence."""
+
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{context} must be a JSON object")
+    expected = set(expected_keys)
+    observed = set(value)
+    if observed != expected:
+        missing = sorted(expected - observed)
+        extra = sorted(observed - expected)
+        raise SchemaError(
+            f"{context} has the wrong exact key schema; "
+            f"missing={missing!r}, extra={extra!r}"
+        )
+    return value
+
+
+def _load_audit_json_without_duplicate_keys(
+    text: str,
+    *,
+    context: str,
+) -> Any:
+    """Parse reviewer evidence while rejecting duplicate JSON object keys."""
+
+    def object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        output: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in output:
+                raise SchemaError(f"{context} contains duplicate JSON key: {key}")
+            output[key] = value
+        return output
+
+    try:
+        return json.loads(text, object_pairs_hook=object_pairs)
+    except json.JSONDecodeError as exc:
+        raise SchemaError(f"{context} is invalid JSON: {exc}") from exc
+
+
+def _read_manual_audit_json(path: Path, *, context: str) -> Any:
+    if path.is_symlink() or not path.is_file():
+        raise SchemaError(f"{context} is absent or symlinked")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise SchemaError(f"{context} is not UTF-8 JSON") from exc
+    return _load_audit_json_without_duplicate_keys(text, context=context)
+
+
+def _audit_exact_bool(value: Any, *, context: str) -> bool:
+    """Reject integer/string lookalikes in human-audit JSON artifacts."""
+
+    if type(value) is not bool:
+        raise SchemaError(f"{context} must be an exact JSON boolean")
+    return value
+
+
+def _audit_exact_int(
+    value: Any,
+    *,
+    context: str,
+    minimum: int | None = None,
+) -> int:
+    if type(value) is not int or (minimum is not None and value < minimum):
+        suffix = f" >= {minimum}" if minimum is not None else ""
+        raise SchemaError(f"{context} must be an exact JSON integer{suffix}")
+    return value
+
+
+def _audit_nonempty_string(value: Any, *, context: str) -> str:
+    if type(value) is not str or not value.strip() or value != value.strip():
+        raise SchemaError(f"{context} must be a nonempty canonical JSON string")
+    return value
+
+
+def _audit_sha256(value: Any, *, context: str) -> str:
+    text = _audit_nonempty_string(value, context=context)
+    if not _is_sha256(text):
+        raise SchemaError(f"{context} must be a lowercase SHA-256 digest")
+    return text
+
+
+def _manual_audit_label_vector(
+    value: Any,
+    *,
+    audit_definition: Mapping[str, Any],
+    context: str,
+) -> tuple[str, ...]:
+    """Validate one reviewer/final label and return its registered ordered vector."""
+
+    validate_manual_audit_reviewer_codebook(audit_definition)
+    codebook = audit_definition["reviewer_codebook"]
+    field_order = tuple(codebook["label_vector_order"])
+    fields = codebook["fields"]
+    allowed_by_field = {
+        str(field["name"]): tuple(field["allowed_labels"]) for field in fields
+    }
+    if not isinstance(value, Mapping) or set(map(str, value)) != set(field_order):
+        raise SchemaError(
+            f"{context} must contain exactly the registered reviewer-codebook fields"
+        )
+    vector: list[str] = []
+    for field in field_order:
+        label = value.get(field)
+        if type(label) is not str or label not in allowed_by_field[field]:
+            raise SchemaError(
+                f"{context}.{field} is not a registered categorical label"
+            )
+        vector.append(label)
+    return tuple(vector)
+
+
+def _validate_manual_audit_label_applicability(
+    label: Mapping[str, Any],
+    *,
+    selected_evidence: Mapping[str, Any],
+    context: str,
+) -> None:
+    """Enforce registered applicability without replacing human judgments."""
+
+    has_recovery = _audit_exact_bool(
+        selected_evidence.get("has_recovery_attempt"),
+        context=f"{context}.selected_evidence.has_recovery_attempt",
+    )
+    has_memory = _audit_exact_bool(
+        selected_evidence.get("has_admitted_memory_intervention"),
+        context=f"{context}.selected_evidence.has_admitted_memory_intervention",
+    )
+    memory_applicable = _audit_exact_bool(
+        selected_evidence.get("memory_effect_applicable"),
+        context=f"{context}.selected_evidence.memory_effect_applicable",
+    )
+    recovery_outcome = label["recovery_outcome"]
+    if (recovery_outcome == "NO_RECOVERY_ATTEMPT") != (not has_recovery):
+        raise SchemaError(f"{context}.recovery_outcome violates evidence applicability")
+
+    memory_effect = label["memory_effect"]
+    if (memory_effect == "NOT_APPLICABLE") != (not memory_applicable):
+        raise SchemaError(f"{context}.memory_effect violates evidence applicability")
+
+    intervention = label["intervention_assessment"]
+    has_intervention = has_recovery or has_memory
+    if (intervention == "NO_INTERVENTION") != (not has_intervention):
+        raise SchemaError(
+            f"{context}.intervention_assessment violates evidence applicability"
+        )
+
+
+def _cohen_kappa_for_categories(
+    reviewer_a: Sequence[Any],
+    reviewer_b: Sequence[Any],
+) -> dict[str, Any]:
+    if not reviewer_a or len(reviewer_a) != len(reviewer_b):
+        raise SchemaError("manual-audit reviewer categories are empty or unequal")
+    sample_size = len(reviewer_a)
+    agreement_count = sum(
+        left == right for left, right in zip(reviewer_a, reviewer_b, strict=True)
+    )
+    observed = Fraction(agreement_count, sample_size)
+    left_counts = Counter(reviewer_a)
+    right_counts = Counter(reviewer_b)
+    expected = sum(
+        (
+            Fraction(left_counts.get(category, 0), sample_size)
+            * Fraction(right_counts.get(category, 0), sample_size)
+        )
+        for category in set(left_counts) | set(right_counts)
+    )
+    if expected == 1:
+        kappa: float | None = None
+        kappa_status = MANUAL_AUDIT_KAPPA_UNDEFINED_STATUS
+        undefined_reason: str | None = MANUAL_AUDIT_KAPPA_UNDEFINED_REASON
+    else:
+        kappa = float((observed - expected) / (1 - expected))
+        kappa_status = MANUAL_AUDIT_KAPPA_DEFINED_STATUS
+        undefined_reason = None
+    return {
+        "sample_size": sample_size,
+        "agreement_count": agreement_count,
+        "raw_agreement": float(observed),
+        "cohen_kappa": kappa,
+        "cohen_kappa_status": kappa_status,
+        "cohen_kappa_undefined_reason": undefined_reason,
+    }
+
+
+def _recompute_manual_audit_agreement(
+    reviewer_a: Sequence[tuple[str, ...]],
+    reviewer_b: Sequence[tuple[str, ...]],
+) -> dict[str, Any]:
+    """Recompute raw agreement and exact unweighted Cohen's kappa."""
+
+    if not reviewer_a or len(reviewer_a) != len(reviewer_b):
+        raise SchemaError("manual-audit reviewer vectors are empty or unequal")
+    composite = _cohen_kappa_for_categories(reviewer_a, reviewer_b)
+    per_field: list[dict[str, Any]] = []
+    for index, field_name in enumerate(MANUAL_AUDIT_LABEL_FIELDS):
+        field_result = _cohen_kappa_for_categories(
+            [vector[index] for vector in reviewer_a],
+            [vector[index] for vector in reviewer_b],
+        )
+        per_field.append(
+            {
+                "field": field_name,
+                **field_result,
+                "calculation_method": MANUAL_AUDIT_PER_FIELD_AGREEMENT_METHOD,
+            }
+        )
+    return {
+        "raw_agreement": composite["raw_agreement"],
+        "cohen_kappa": composite["cohen_kappa"],
+        "cohen_kappa_status": composite["cohen_kappa_status"],
+        "cohen_kappa_undefined_reason": composite[
+            "cohen_kappa_undefined_reason"
+        ],
+        "calculation_method": MANUAL_AUDIT_AGREEMENT_METHOD,
+        "composite_exact_agreement_count": composite["agreement_count"],
+        "composite_exact_agreement": composite["raw_agreement"],
+        "composite_exact_agreement_method": (
+            MANUAL_AUDIT_COMPOSITE_AGREEMENT_METHOD
+        ),
+        "per_field_agreement_method": MANUAL_AUDIT_PER_FIELD_AGREEMENT_METHOD,
+        "per_field_agreement": per_field,
+    }
+
+
+def _recompute_manual_audit_final_vs_sealed(
+    final_labels_by_id: Mapping[str, Mapping[str, Any]],
+    sealed_by_audit_id: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Disclose, without suppressing, adjudicated-vs-evaluator discrepancies.
+
+    The human labels remain independent judgments.  This comparison is a
+    post-adjudication diagnostic, not an applicability rule and not a
+    requirement that either source agree with the other.
+    """
+
+    if not final_labels_by_id or set(final_labels_by_id) != set(sealed_by_audit_id):
+        raise SchemaError(
+            "manual-audit final/sealed comparison has a missing or extra audit ID"
+        )
+
+    comparisons: dict[str, list[tuple[str | None, str]]] = {
+        "task_outcome": [],
+        "recovery_outcome": [],
+        "memory_effect": [],
+    }
+    for audit_id in sorted(final_labels_by_id):
+        final_label = final_labels_by_id[audit_id]
+        sealed = sealed_by_audit_id[audit_id]
+        categories_value = sealed.get("case_categories")
+        if (
+            not isinstance(categories_value, list)
+            or not all(type(value) is str for value in categories_value)
+        ):
+            raise SchemaError(
+                "manual-audit selected sealed case categories are malformed"
+            )
+        categories = set(categories_value)
+
+        task_success = _audit_exact_bool(
+            sealed.get("task_success"),
+            context=f"manual-audit sealed[{audit_id}].task_success",
+        )
+        comparisons["task_outcome"].append(
+            ("SUCCESS" if task_success else "FAILURE", final_label["task_outcome"])
+        )
+
+        has_recovery = _audit_exact_bool(
+            sealed.get("has_recovery_attempt"),
+            context=f"manual-audit sealed[{audit_id}].has_recovery_attempt",
+        )
+        if not has_recovery:
+            sealed_recovery: str | None = "NO_RECOVERY_ATTEMPT"
+        else:
+            recovery_categories = categories & {
+                "successful_recovery",
+                "failed_recovery",
+            }
+            sealed_recovery = (
+                "SUCCESSFUL_RECOVERY"
+                if recovery_categories == {"successful_recovery"}
+                else "FAILED_RECOVERY"
+                if recovery_categories == {"failed_recovery"}
+                else None
+            )
+        comparisons["recovery_outcome"].append(
+            (sealed_recovery, final_label["recovery_outcome"])
+        )
+
+        memory_applicable = _audit_exact_bool(
+            sealed.get("memory_effect_applicable"),
+            context=f"manual-audit sealed[{audit_id}].memory_effect_applicable",
+        )
+        if not memory_applicable:
+            sealed_memory: str | None = "NOT_APPLICABLE"
+        else:
+            memory_categories = categories & {"memory_help", "memory_harm"}
+            sealed_memory = (
+                "MEMORY_HELP"
+                if memory_categories == {"memory_help"}
+                else "MEMORY_HARM"
+                if memory_categories == {"memory_harm"}
+                else "NO_DEMONSTRABLE_MEMORY_EFFECT"
+                if not memory_categories
+                else None
+            )
+        comparisons["memory_effect"].append(
+            (sealed_memory, final_label["memory_effect"])
+        )
+
+    rows: list[dict[str, Any]] = []
+    for field_name in ("task_outcome", "recovery_outcome", "memory_effect"):
+        pairs = comparisons[field_name]
+        uniquely_mappable = [pair for pair in pairs if pair[0] is not None]
+        comparable = [pair for pair in uniquely_mappable if pair[1] != "UNDETERMINABLE"]
+        agreement_count = sum(sealed == human for sealed, human in comparable)
+        disagreement_count = len(comparable) - agreement_count
+        rows.append(
+            {
+                "field": field_name,
+                "eligible_count": len(pairs),
+                "uniquely_mappable_count": len(uniquely_mappable),
+                "comparable_count": len(comparable),
+                "agreement_count": agreement_count,
+                "disagreement_count": disagreement_count,
+                "human_undeterminable_count": sum(
+                    human == "UNDETERMINABLE" for _, human in uniquely_mappable
+                ),
+                "not_uniquely_mappable_count": len(pairs) - len(uniquely_mappable),
+            }
+        )
+    return {
+        "final_vs_sealed_comparison_method": MANUAL_AUDIT_FINAL_VS_SEALED_METHOD,
+        "final_vs_sealed_comparison": rows,
+    }
 
 
 @dataclass
@@ -683,6 +1294,21 @@ def freeze_campaign(
     protocol_source = _resolve_input(repo, campaign_config["protocol"])
     protocol = load_yaml(protocol_source)
     _validate_registered_protocol(protocol)
+    paper_claims = protocol.get("paper_claims")
+    if not isinstance(paper_claims, Mapping):
+        raise SchemaError("frozen protocol lacks its paper-claim registry binding")
+    configured_claim_registry = campaign_config.get("paper_claim_registry")
+    if configured_claim_registry is None:
+        raise SchemaError("campaign configuration lacks paper_claim_registry")
+    paper_claim_registry_source = _resolve_input(repo, configured_claim_registry)
+    protocol_claim_registry_source = _resolve_input(
+        repo, str(paper_claims.get("registry", ""))
+    )
+    paper_claim_registry_binding = validate_claim_registry_binding(
+        campaign_registry_path=paper_claim_registry_source,
+        protocol_registry_path=protocol_claim_registry_source,
+        protocol_registry_id=paper_claims.get("registry_id"),
+    )
     identifier = campaign_id or str(protocol.get("protocol_id", ""))
     if not identifier:
         raise SchemaError("campaign ID or protocol.protocol_id is required")
@@ -807,8 +1433,13 @@ def freeze_campaign(
     source_reads: list[tuple[str, Path]] = [
         ("campaign_configuration", config_source),
         ("protocol", protocol_source),
+        ("paper_claim_registry", paper_claim_registry_source),
         ("permanent_pilot_task_exclusion_registry", pilot_exclusion_source),
     ]
+    if protocol_claim_registry_source != paper_claim_registry_source:
+        source_reads.append(
+            ("registered_paper_claim_registry_source", protocol_claim_registry_source)
+        )
     if environment_source is not None:
         source_reads.append(("environment_manifest", environment_source))
     if dependency_lock_source is not None:
@@ -904,6 +1535,9 @@ def freeze_campaign(
         _reject_locked_mount_path(source, repo, protocol, pilot_only=pilot_only)
         benchmark_sources[key] = source
         source_reads.append((key, source))
+    validate_manual_audit_reviewer_codebook(
+        read_json(benchmark_sources["audit_manifest"])
+    )
     if environment_source is not None:
         environment_value = read_json(environment_source)
         evaluator_value = environment_value.get("evaluator")
@@ -1429,6 +2063,7 @@ def freeze_campaign(
             environment_manifest_path=environment_source,
             runner_attestation_path=runner_attestation_source,
             resolved_task_snapshot_path=resolved_task_source,
+            paper_claim_registry_path=paper_claim_registry_source,
             pc01_checkpoint_compatibility_receipt_path=(
                 checkpoint_compatibility_source
             ),
@@ -1439,6 +2074,7 @@ def freeze_campaign(
             "environment_manifest": environment_source,
             "runner_attestation": runner_attestation_source,
             "checkpoint_selection_evidence": selection_evidence_source,
+            "paper_claim_registry": paper_claim_registry_source,
             "pc01_checkpoint_compatibility_receipt": (
                 checkpoint_compatibility_source
             ),
@@ -1597,6 +2233,16 @@ def freeze_campaign(
             raise SchemaError("evaluation handoff authority was not validated")
         handoff_inventory_sha256 = sha256_json(handoff_authority["files"])
     copied.append(copy_freeze_input(protocol_source, frozen / "protocol.yaml"))
+    frozen_claim_registry = copy_freeze_input(
+        paper_claim_registry_source,
+        destination / FROZEN_PAPER_CLAIM_REGISTRY_RELATIVE_PATH,
+    )
+    validate_claim_registry(frozen_claim_registry)
+    if sha256_file(frozen_claim_registry) != paper_claim_registry_binding[
+        "registry_sha256"
+    ]:
+        raise SchemaError("frozen paper-claim registry bytes changed during copy")
+    copied.append(frozen_claim_registry)
     copied.append(
         copy_freeze_input(task_registry_source, frozen / "task_registry.json")
     )
@@ -1933,6 +2579,7 @@ def freeze_campaign(
             "environment_manifest",
             "runner_attestation",
             "checkpoint_selection_evidence",
+            "paper_claim_registry",
             "pc01_checkpoint_compatibility_receipt",
         ):
             raw_value = arguments.get(field)
@@ -1986,6 +2633,7 @@ def freeze_campaign(
             environment_manifest_path=environment_source,
             runner_attestation_path=runner_attestation_source,
             resolved_task_snapshot_path=resolved_task_source,
+            paper_claim_registry_path=paper_claim_registry_source,
             pc01_checkpoint_compatibility_receipt_path=(
                 checkpoint_compatibility_source
             ),
@@ -2081,6 +2729,7 @@ def freeze_campaign(
             environment_manifest_path=environment_source,
             runner_attestation_path=runner_attestation_source,
             resolved_task_snapshot_path=resolved_task_source,
+            paper_claim_registry_path=paper_claim_registry_source,
             pc01_checkpoint_compatibility_receipt_path=(
                 checkpoint_compatibility_source
             ),
@@ -2134,6 +2783,10 @@ def freeze_campaign(
         "evidence_label": "PILOT_ONLY" if pilot_only else "FINAL_LOCKED",
         "publication_status": publication_status,
         "paper_table_status": "N/R",
+        "paper_claim_registry_id": paper_claim_registry_binding["registry_id"],
+        "paper_claim_registry_sha256": paper_claim_registry_binding[
+            "registry_sha256"
+        ],
         "repository_commit": commit,
         "repository_dirty_at_freeze": dirty,
         "runner_identity_scope": (
@@ -2278,6 +2931,8 @@ def _validate_campaign_core(
                 "campaign_id",
                 "campaign_kind",
                 "publication_status",
+                "paper_claim_registry_id",
+                "paper_claim_registry_sha256",
                 "systems",
                 "matched_seeds",
                 "campaign_seed",
@@ -2365,6 +3020,33 @@ def _validate_campaign_core(
         campaign_config = load_yaml(root / "frozen" / "campaign.yaml")
         protocol = load_yaml(root / "frozen" / "protocol.yaml")
         _validate_registered_protocol(protocol)
+        frozen_claim_registry_path = (
+            root / FROZEN_PAPER_CLAIM_REGISTRY_RELATIVE_PATH
+        )
+        frozen_claim_registry = validate_claim_registry(
+            frozen_claim_registry_path
+        )
+        protocol_claims = protocol.get("paper_claims")
+        if not isinstance(protocol_claims, Mapping):
+            raise SchemaError("frozen protocol lost its paper-claim binding")
+        if (
+            frozen_claim_registry.get("registry_id")
+            != PAPER_CLAIM_REGISTRY_ID
+            or protocol_claims.get("registry_id") != PAPER_CLAIM_REGISTRY_ID
+            or manifest.get("paper_claim_registry_id")
+            != PAPER_CLAIM_REGISTRY_ID
+            or frozen_claim_registry.get("paper_table_status") != "N/R"
+            or manifest.get("paper_table_status") != "N/R"
+        ):
+            raise SchemaError("frozen paper-claim registry identity differs")
+        if manifest.get("paper_claim_registry_sha256") != sha256_file(
+            frozen_claim_registry_path
+        ):
+            raise SchemaError("frozen paper-claim registry hash differs")
+        if not isinstance(campaign_config.get("paper_claim_registry"), str) or not str(
+            campaign_config["paper_claim_registry"]
+        ).strip():
+            raise SchemaError("frozen campaign lost paper_claim_registry")
         pilot = str(manifest.get("evidence_label")) == "PILOT_ONLY"
         _validate_protocol_access_boundary(
             protocol,
@@ -5665,6 +6347,29 @@ def _validate_terminal_signal_receipts(
 
 
 def _verify_runtime_event_stream(path: Path, stream: str, episode_id: str) -> None:
+    allowed_envelope = {
+        "schema_version",
+        "record_type",
+        "stream",
+        "episode_id",
+        "system_id",
+        "task_id",
+        "repeat_id",
+        "matched_seed",
+        "event_id",
+        "sequence",
+        "previous_record_hash",
+        "event_type",
+        "timestamp_utc",
+        "payload",
+        "record_hash",
+    }
+    for index, record in enumerate(read_jsonl(path), start=1):
+        if set(record) != allowed_envelope:
+            raise SchemaError(
+                "runtime event envelope has extra/missing fields: "
+                f"{path}:{index}"
+            )
     try:
         from web_agent.runtime.event_log import verify_event_log
 
@@ -6120,6 +6825,17 @@ def _validate_runtime_artifact_hashes(runtime: Path, *, system_id: str) -> None:
     }
     if listed != actual:
         raise SchemaError(f"runtime artifact hash manifest lacks exact file closure: {runtime}")
+    allowed_regular = required_names | {"memory_queries.jsonl"}
+    for relative in sorted(actual - allowed_regular):
+        screenshot_match = re.fullmatch(
+            r"screenshots/[0-9]{6}-([0-9a-f]{64})\.png",
+            relative,
+        )
+        if screenshot_match is None or files.get(relative) != screenshot_match.group(1):
+            raise SchemaError(
+                "runtime artifact package contains an unregistered extra file: "
+                f"{runtime / relative}"
+            )
     for relative, expected in files.items():
         candidate = (runtime / str(relative)).resolve()
         if runtime.resolve() not in candidate.parents:
@@ -6142,6 +6858,7 @@ def _validate_frozen_hashes(root: Path, manifest: Mapping[str, Any]) -> None:
     required = {
         "frozen/campaign.yaml",
         "frozen/protocol.yaml",
+        str(FROZEN_PAPER_CLAIM_REGISTRY_RELATIVE_PATH),
         "frozen/environment.json",
         "frozen/provenance.json",
         "frozen/task_registry.json",
@@ -6604,7 +7321,8 @@ def _validate_aggregate_package(root: Path, report: ValidationReport) -> None:
                 SchemaError,
             ) as exc:
                 raise SchemaError(
-                    "final PILOT_ONLY aggregate requires completed blinded human "
+                    "final PILOT_ONLY aggregate requires completed, human-attested, "
+                    "outcome-label-hidden "
                     f"adjudication: {exc}"
                 ) from exc
     else:
@@ -7028,20 +7746,511 @@ def _validate_table_csv_guards(root: Path, publication_status: str) -> None:
                         raise SchemaError("pilot table exposes values instead of N/R")
 
 
+def _derive_manual_audit_selection_evidence(
+    records: Mapping[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Derive sampling strata/categories only from selected raw episode evidence."""
+
+    required_record_sets = {
+        "episodes",
+        "recovery_attempts",
+        "failure_incidents",
+        "memory_queries",
+        "schedule_attempts",
+    }
+    if set(records) != required_record_sets or not all(
+        isinstance(records[name], list) for name in required_record_sets
+    ):
+        raise SchemaError("manual-audit source records have the wrong exact schema")
+    episodes = [
+        dict(row)
+        for row in records["episodes"]
+        if row.get("task_partition") == "normal"
+    ]
+    by_episode: dict[str, dict[str, Any]] = {}
+    for row in episodes:
+        episode_id = _audit_nonempty_string(
+            row.get("episode_id"), context="manual-audit raw episode_id"
+        )
+        if episode_id in by_episode:
+            raise SchemaError("manual-audit raw evidence repeats an episode ID")
+        if row.get("system_id") not in SYSTEM_IDS:
+            raise SchemaError("manual-audit raw evidence has an invalid system ID")
+        by_episode[episode_id] = row
+
+    recovery_by_episode: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in records["recovery_attempts"]:
+        episode_id = str(row.get("episode_id", ""))
+        initiated = _audit_exact_bool(
+            row.get("initiated", True),
+            context="manual-audit raw recovery initiated",
+        )
+        if episode_id in by_episode and initiated:
+            recovery_by_episode[episode_id].append(dict(row))
+    incidents_by_episode: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in records["failure_incidents"]:
+        episode_id = str(row.get("episode_id", ""))
+        if episode_id in by_episode:
+            incidents_by_episode[episode_id].append(dict(row))
+    queries_by_episode: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in records["memory_queries"]:
+        episode_id = str(row.get("episode_id", ""))
+        if episode_id in by_episode:
+            queries_by_episode[episode_id].append(dict(row))
+
+    systems_by_block: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    for episode in episodes:
+        block_id = _audit_nonempty_string(
+            episode.get("block_id"), context="manual-audit raw block_id"
+        )
+        system_id = str(episode["system_id"])
+        if system_id in systems_by_block[block_id]:
+            raise SchemaError("manual-audit raw evidence repeats a block/system cell")
+        systems_by_block[block_id][system_id] = episode
+
+    paired_e2_by_e3: dict[str, str] = {}
+    disagreements: set[str] = set()
+    for systems in systems_by_block.values():
+        if "E2" not in systems or "E3" not in systems:
+            continue
+        e2 = systems["E2"]
+        e3 = systems["E3"]
+        e3_id = str(e3["episode_id"])
+        paired_e2_by_e3[e3_id] = str(e2["episode_id"])
+        e2_success = _audit_exact_bool(
+            e2.get("task_success"), context="manual-audit raw E2 task_success"
+        )
+        e3_success = _audit_exact_bool(
+            e3.get("task_success"), context="manual-audit raw E3 task_success"
+        )
+        if e2_success != e3_success:
+            disagreements.add(e3_id)
+
+    categories_by_episode: dict[str, set[str]] = {
+        episode_id: set() for episode_id in by_episode
+    }
+    evidence_by_episode: dict[str, dict[str, Any]] = {}
+    failure_markers = ("BBOX", "GROUND", "TARGET", "PARAMETER", "INVALID_ACTION")
+    for episode_id, episode in by_episode.items():
+        task_success = _audit_exact_bool(
+            episode.get("task_success"), context="manual-audit raw task_success"
+        )
+        loop_detected = _audit_exact_bool(
+            episode.get("loop_detected"), context="manual-audit raw loop_detected"
+        )
+        environment_failure = _audit_exact_bool(
+            episode.get("environment_failure"),
+            context="manual-audit raw environment_failure",
+        )
+        if environment_failure:
+            categories_by_episode[episode_id].add("environment_failure")
+        if loop_detected:
+            categories_by_episode[episode_id].add("loop")
+
+        attempts = recovery_by_episode.get(episode_id, [])
+        for attempt in attempts:
+            verified_failure = _audit_exact_bool(
+                attempt.get("verified_failure_present", False),
+                context="manual-audit raw verified_failure_present",
+            )
+            successful = _audit_exact_bool(
+                attempt.get("successful", False),
+                context="manual-audit raw recovery successful",
+            )
+            if not verified_failure:
+                categories_by_episode[episode_id].add("unnecessary_intervention")
+            elif successful:
+                categories_by_episode[episode_id].add("successful_recovery")
+            else:
+                categories_by_episode[episode_id].add("failed_recovery")
+
+        admitted_memory_intervention = False
+        for query in queries_by_episode.get(episode_id, []):
+            admitted = _audit_exact_bool(
+                query.get("admitted", False),
+                context="manual-audit raw memory admitted",
+            )
+            admitted_memory_intervention = admitted_memory_intervention or admitted
+            if admitted and query.get("useful_intervention") is True:
+                categories_by_episode[episode_id].add("memory_help")
+            if admitted and query.get("harmful_intervention") is True:
+                categories_by_episode[episode_id].add("memory_harm")
+
+        verified_failure = False
+        for incident in incidents_by_episode.get(episode_id, []):
+            verified_failure = verified_failure or _audit_exact_bool(
+                incident.get("verified_agent_failure", False),
+                context="manual-audit raw verified_agent_failure",
+            )
+            descriptor = " ".join(
+                str(incident.get(key, ""))
+                for key in (
+                    "failure_type",
+                    "failure_kind",
+                    "diagnosis",
+                    "error_kind",
+                )
+            ).upper()
+            if any(marker in descriptor for marker in failure_markers):
+                categories_by_episode[episode_id].add(
+                    "bbox_or_parameter_failure"
+                )
+
+        system_id = str(episode["system_id"])
+        paired_e2_episode_id = paired_e2_by_e3.get(episode_id)
+        memory_effect_applicable = bool(
+            system_id == "E3"
+            and paired_e2_episode_id is not None
+            and admitted_memory_intervention
+        )
+        has_failure_evidence = bool(
+            not task_success
+            or verified_failure
+            or loop_detected
+            or environment_failure
+        )
+        evidence_by_episode[episode_id] = {
+            "task_success": task_success,
+            "loop_detected": loop_detected,
+            "environment_failure": environment_failure,
+            "has_verified_failure": verified_failure,
+            "has_recovery_attempt": bool(attempts),
+            "has_admitted_memory_intervention": admitted_memory_intervention,
+            "memory_effect_applicable": memory_effect_applicable,
+            "has_failure_evidence": has_failure_evidence,
+            "paired_e2_episode_id": paired_e2_episode_id,
+            "e2_e3_task_outcome_disagreement": episode_id in disagreements,
+            "case_categories": sorted(categories_by_episode[episode_id]),
+        }
+
+    recovery_episode_ids = set(recovery_by_episode)
+    verified_failure_episode_ids = {
+        episode_id
+        for episode_id, evidence in evidence_by_episode.items()
+        if evidence["has_verified_failure"]
+    }
+    candidates = {
+        "ordinary_success": {
+            episode_id
+            for episode_id, episode in by_episode.items()
+            if evidence_by_episode[episode_id]["task_success"]
+            and episode_id not in recovery_episode_ids
+            and episode_id not in verified_failure_episode_ids
+        },
+        "terminal_failure": {
+            episode_id
+            for episode_id, evidence in evidence_by_episode.items()
+            if not evidence["task_success"]
+        },
+        "recovery": set(recovery_episode_ids),
+        "e2_e3_disagreement": set(disagreements),
+    }
+    return {
+        "episodes_by_id": by_episode,
+        "evidence_by_episode": evidence_by_episode,
+        "categories_by_episode": categories_by_episode,
+        "candidates": candidates,
+    }
+
+
+def _runtime_file_hashes_for_manual_audit(source: Path) -> dict[str, str]:
+    if (
+        source.is_symlink()
+        or source.absolute() != source.resolve()
+        or not source.is_dir()
+        or source.name not in {"runtime", "primary_runtime", "paired_e2_runtime"}
+    ):
+        raise SchemaError("manual-audit reviewer source is not a runtime directory")
+    output: dict[str, str] = {}
+    for path in sorted(source.rglob("*")):
+        if path.is_symlink():
+            raise SchemaError("manual-audit reviewer evidence contains a symlink")
+        if not path.is_file():
+            continue
+        relative = path.relative_to(source)
+        if "sealed" in {part.lower() for part in relative.parts}:
+            raise SchemaError("manual-audit reviewer evidence includes a sealed path")
+        if path.suffix == ".json":
+            payload = _load_audit_json_without_duplicate_keys(
+                path.read_text(encoding="utf-8"), context=str(path)
+            )
+            assert_no_verifier_evidence(
+                {"packet_value": payload}, context=str(path)
+            )
+        elif path.suffix == ".jsonl":
+            with path.open(encoding="utf-8") as handle:
+                for line_number, line in enumerate(handle, start=1):
+                    if not line.strip():
+                        continue
+                    payload = _load_audit_json_without_duplicate_keys(
+                        line, context=f"{path}:{line_number}"
+                    )
+                    assert_no_verifier_evidence(
+                        {"packet_value": payload},
+                        context=f"{path}:{line_number}",
+                    )
+        output[str(relative)] = sha256_file(path)
+    if not output:
+        raise SchemaError("manual-audit reviewer evidence is empty")
+    return output
+
+
+def _validate_manual_audit_reviewer_packet(
+    *,
+    root: Path,
+    campaign_id: str,
+    audit_id: str,
+    primary_source: Path,
+    primary_episode_id: str,
+    primary_system_id: str,
+    task_id: str,
+    task_context_path: Any,
+    artifact_path: Any,
+    paired_e2_source: Path | None,
+    paired_e2_episode_id: str | None,
+    paired_e2_artifact_path: Any,
+) -> None:
+    packet_root = root / "manual_audit" / "reviewer_packets" / audit_id
+    if packet_root.is_symlink() or not packet_root.is_dir():
+        raise SchemaError("manual-audit reviewer packet is absent or symlinked")
+    manifest_path = packet_root / "packet_manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise SchemaError("manual-audit reviewer packet manifest is absent")
+    if manifest_path.stat().st_mode & 0o077:
+        raise SchemaError("manual-audit reviewer packet manifest is not private")
+    manifest = _read_manual_audit_json(
+        manifest_path, context="manual-audit reviewer packet manifest"
+    )
+    _require_exact_json_object(
+        manifest,
+        (
+            "schema_version",
+            "campaign_id",
+            "audit_id",
+            "blinding_mode",
+            "system_condition_visible",
+            "official_outcome_labels_included",
+            "sealed_evaluator_files_included",
+            "task_context",
+            "primary",
+            "paired_e2",
+        ),
+        context="manual-audit reviewer packet manifest",
+    )
+    if (
+        manifest["schema_version"] != "table2-manual-audit-reviewer-packet-v1"
+        or manifest["campaign_id"] != campaign_id
+        or manifest["audit_id"] != audit_id
+        or manifest["blinding_mode"] != MANUAL_AUDIT_BLINDING_MODE
+        or _audit_exact_bool(
+            manifest["system_condition_visible"],
+            context="manual-audit packet.system_condition_visible",
+        )
+        is not True
+        or _audit_exact_bool(
+            manifest["official_outcome_labels_included"],
+            context="manual-audit packet.official_outcome_labels_included",
+        )
+        is not False
+        or _audit_exact_bool(
+            manifest["sealed_evaluator_files_included"],
+            context="manual-audit packet.sealed_evaluator_files_included",
+        )
+        is not False
+    ):
+        raise SchemaError("manual-audit reviewer packet has a false blinding claim")
+
+    task_context_binding = _require_exact_json_object(
+        manifest["task_context"],
+        (
+            "task_id",
+            "packet_relative_path",
+            "sha256",
+            "context_status",
+            "source_task_snapshot_sha256",
+            "source_task_record_sha256",
+        ),
+        context="manual-audit reviewer packet task_context",
+    )
+    expected_task_context_path = packet_root / "task_context.json"
+    if (
+        task_context_binding["task_id"] != task_id
+        or task_context_binding["packet_relative_path"] != "task_context.json"
+        or task_context_path != str(expected_task_context_path.relative_to(root))
+        or expected_task_context_path.is_symlink()
+        or not expected_task_context_path.is_file()
+        or expected_task_context_path.stat().st_mode & 0o077
+        or _audit_sha256(
+            task_context_binding["sha256"],
+            context="manual-audit task_context.sha256",
+        )
+        != sha256_file(expected_task_context_path)
+    ):
+        raise SchemaError("manual-audit reviewer task context binding differs")
+    from .summary import _manual_audit_task_context
+
+    expected_task_context = _manual_audit_task_context(root, task_id=task_id)
+    observed_task_context = _read_manual_audit_json(
+        expected_task_context_path, context="manual-audit reviewer task context"
+    )
+    if canonical_json_bytes(observed_task_context) != canonical_json_bytes(
+        expected_task_context
+    ):
+        raise SchemaError("manual-audit task context differs from frozen task snapshot")
+    for key in (
+        "context_status",
+        "source_task_snapshot_sha256",
+        "source_task_record_sha256",
+    ):
+        if task_context_binding[key] != expected_task_context[key]:
+            raise SchemaError(f"manual-audit task context binding differs: {key}")
+    assert_no_verifier_evidence(
+        {"task_context": observed_task_context}, context=str(expected_task_context_path)
+    )
+
+    def validate_side(
+        value: Any,
+        *,
+        role: str,
+        source: Path,
+        episode_id: str,
+        system_id: str,
+        public_path: Any,
+    ) -> None:
+        side = _require_exact_json_object(
+            value,
+            (
+                "episode_id",
+                "system_id",
+                "packet_relative_path",
+                "source_runtime_relative_path",
+                "files",
+            ),
+            context=f"manual-audit reviewer packet {role}",
+        )
+        packet_relative_name = (
+            "primary_runtime" if role == "primary" else "paired_e2_runtime"
+        )
+        expected_packet_path = packet_root / packet_relative_name
+        expected_public_path = str(expected_packet_path.relative_to(root))
+        if (
+            side["episode_id"] != episode_id
+            or side["system_id"] != system_id
+            or side["packet_relative_path"] != packet_relative_name
+            or side["source_runtime_relative_path"] != str(source.relative_to(root))
+            or public_path != expected_public_path
+        ):
+            raise SchemaError(f"manual-audit reviewer packet {role} binding differs")
+        files = side["files"]
+        if not isinstance(files, Mapping) or not files:
+            raise SchemaError(f"manual-audit reviewer packet {role} file map is invalid")
+        for relative, digest in files.items():
+            if type(relative) is not str or not relative or not _is_sha256(digest):
+                raise SchemaError(
+                    f"manual-audit reviewer packet {role} file map is invalid"
+                )
+            candidate = Path(relative)
+            if candidate.is_absolute() or ".." in candidate.parts:
+                raise SchemaError("manual-audit reviewer packet file path escapes")
+        source_hashes = _runtime_file_hashes_for_manual_audit(source)
+        packet_hashes = _runtime_file_hashes_for_manual_audit(expected_packet_path)
+        if dict(files) != source_hashes or packet_hashes != source_hashes:
+            raise SchemaError(
+                f"manual-audit reviewer packet {role} differs from runtime evidence"
+            )
+        summary = _read_manual_audit_json(
+            expected_packet_path / "episode_summary.json",
+            context=f"manual-audit reviewer packet {role} episode summary",
+        )
+        if summary.get("episode_id") != episode_id:
+            raise SchemaError("manual-audit reviewer packet episode identity differs")
+        assert_no_verifier_evidence(
+            summary, context=str(expected_packet_path / "episode_summary.json")
+        )
+
+    validate_side(
+        manifest["primary"],
+        role="primary",
+        source=primary_source,
+        episode_id=primary_episode_id,
+        system_id=primary_system_id,
+        public_path=artifact_path,
+    )
+    if paired_e2_source is None:
+        if (
+            manifest["paired_e2"] is not None
+            or paired_e2_episode_id is not None
+            or paired_e2_artifact_path is not None
+        ):
+            raise SchemaError("manual-audit reviewer packet has an unexpected E2 pair")
+    else:
+        if paired_e2_episode_id is None:
+            raise SchemaError("manual-audit reviewer packet lacks the paired E2 identity")
+        validate_side(
+            manifest["paired_e2"],
+            role="paired_e2",
+            source=paired_e2_source,
+            episode_id=paired_e2_episode_id,
+            system_id="E2",
+            public_path=paired_e2_artifact_path,
+        )
+    allowed_packet_files = {
+        "packet_manifest.json",
+        "task_context.json",
+        *(f"primary_runtime/{relative}" for relative in manifest["primary"]["files"]),
+        *(
+            f"paired_e2_runtime/{relative}"
+            for relative in (
+                manifest["paired_e2"]["files"]
+                if isinstance(manifest["paired_e2"], Mapping)
+                else {}
+            )
+        ),
+    }
+    actual_packet_files = {
+        str(path.relative_to(packet_root))
+        for path in packet_root.rglob("*")
+        if path.is_file()
+    }
+    if actual_packet_files != allowed_packet_files:
+        raise SchemaError("manual-audit reviewer packet lacks exact file closure")
+
+
 def _validate_manual_audit_package(root: Path) -> None:
-    definition = read_json(root / "frozen" / "benchmark" / "audit_manifest.json")
+    campaign = read_json(root / "campaign_manifest.json")
+    campaign_id = _audit_nonempty_string(
+        campaign.get("campaign_id"), context="campaign_manifest.campaign_id"
+    )
+    definition = _read_manual_audit_json(
+        root / "frozen" / "benchmark" / "audit_manifest.json",
+        context="frozen manual-audit definition",
+    )
+    codebook_binding = validate_manual_audit_reviewer_codebook(definition)
+    if (
+        definition.get("manifest_id") != MANUAL_AUDIT_MANIFEST_ID
+        or definition.get("blinding_mode") != MANUAL_AUDIT_BLINDING_MODE
+        or definition.get("selection_occurs_after_episode_completion") is not True
+    ):
+        raise SchemaError("manual audit frozen definition differs from registration")
     selection_path = root / "manual_audit" / "selection_manifest.json"
     labels_path = root / "manual_audit" / "sealed" / "selection_labels.json"
-    selection = read_json(selection_path)
-    labels = read_json(labels_path)
-    require_keys(
+    selection = _read_manual_audit_json(
+        selection_path, context="manual-audit selection manifest"
+    )
+    labels = _read_manual_audit_json(
+        labels_path, context="manual-audit sealed selection labels"
+    )
+    _require_exact_json_object(
         selection,
         (
+            "schema_version",
             "manifest_id",
             "campaign_id",
+            "reviewer_codebook_id",
+            "reviewer_codebook_sha256",
             "selection_algorithm",
             "selection_seed",
-            "blinded",
+            "blinding_mode",
             "outcome_labels_location",
             "outcome_labels_sha256",
             "total_target",
@@ -7053,101 +8262,222 @@ def _validate_manual_audit_package(root: Path) -> None:
         ),
         context="manual audit selection",
     )
+    _require_exact_json_object(
+        labels,
+        (
+            "schema_version",
+            "manifest_id",
+            "campaign_id",
+            "reviewer_codebook_id",
+            "reviewer_codebook_sha256",
+            "offline_sealed_labels",
+            "labels",
+        ),
+        context="manual audit sealed labels",
+    )
+    selection_seed = _audit_exact_int(
+        selection["selection_seed"],
+        context="manual audit selection_seed",
+        minimum=0,
+    )
+    _audit_sha256(
+        selection["outcome_labels_sha256"],
+        context="manual audit outcome_labels_sha256",
+    )
+    if selection["campaign_id"] != campaign_id:
+        raise SchemaError("manual audit selection has the wrong campaign ID")
     if (
-        selection["manifest_id"] != definition["manifest_id"]
-        or selection["selection_seed"] != definition["selection_seed"]
+        selection["schema_version"] != SCHEMA_VERSION
+        or selection["manifest_id"] != definition["manifest_id"]
+        or selection_seed != definition["selection_seed"]
         or selection["total_target"] != definition["total_target"]
         or selection["selection_algorithm"] != "sha256-lowest-v1"
-        or selection["blinded"] is not True
+        or selection["blinding_mode"] != MANUAL_AUDIT_BLINDING_MODE
         or selection["outcome_labels_location"] != "sealed/selection_labels.json"
     ):
         raise SchemaError("manual audit selection differs from its frozen definition")
+    for key, expected in codebook_binding.items():
+        if selection.get(key) != expected or labels.get(key) != expected:
+            raise SchemaError(f"manual audit {key} differs from its frozen definition")
+    if (
+        labels.get("schema_version") != SCHEMA_VERSION
+        or labels.get("manifest_id") != definition["manifest_id"]
+        or labels.get("campaign_id") != campaign_id
+        or _audit_exact_bool(
+            labels.get("offline_sealed_labels"),
+            context="manual audit labels.offline_sealed_labels",
+        )
+        is not True
+    ):
+        raise SchemaError("manual audit sealed selection labels are malformed")
     if labels_path.stat().st_mode & 0o077:
         raise SchemaError("manual audit outcome labels are not private")
     if sha256_file(labels_path) != selection["outcome_labels_sha256"]:
         raise SchemaError("manual audit outcome-label hash mismatch")
     selected = selection["selected"]
-    label_rows = labels.get("labels")
+    label_rows = labels["labels"]
     if not isinstance(selected, list) or not isinstance(label_rows, list):
         raise SchemaError("manual audit selected/label rows must be arrays")
-    selected_ids = [str(row.get("audit_id", "")) for row in selected]
-    label_ids = [str(row.get("audit_id", "")) for row in label_rows]
+    for row in selected:
+        _require_exact_json_object(
+            row,
+            (
+                "audit_id",
+                "episode_id",
+                "block_id",
+                "task_id",
+                "system_id",
+                "task_context_path",
+                "artifact_path",
+                "paired_e2_artifact_path",
+            ),
+            context="manual audit selected row",
+        )
+    sealed_label_keys = (
+        "episode_id",
+        "block_id",
+        "task_id",
+        "system_id",
+        "stratum",
+        "task_success",
+        "loop_detected",
+        "environment_failure",
+        "has_verified_failure",
+        "has_recovery_attempt",
+        "has_admitted_memory_intervention",
+        "memory_effect_applicable",
+        "has_failure_evidence",
+        "paired_e2_episode_id",
+        "e2_e3_task_outcome_disagreement",
+        "case_categories",
+        "selection_score",
+        "audit_id",
+    )
+    for row in label_rows:
+        _require_exact_json_object(
+            row, sealed_label_keys, context="manual audit sealed label row"
+        )
+    selected_ids = [
+        _audit_nonempty_string(row["audit_id"], context="manual audit audit_id")
+        for row in selected
+    ]
+    label_ids = [
+        _audit_nonempty_string(row["audit_id"], context="manual audit label audit_id")
+        for row in label_rows
+    ]
+    total_target = _audit_exact_int(
+        selection["total_target"], context="manual audit total_target", minimum=0
+    )
+    selected_count = _audit_exact_int(
+        selection["selected_count"], context="manual audit selected_count", minimum=0
+    )
+    total_shortfall = _audit_exact_int(
+        selection["total_shortfall"], context="manual audit total_shortfall", minimum=0
+    )
     if (
         len(selected_ids) != len(set(selected_ids))
         or set(selected_ids) != set(label_ids)
-        or int(selection["selected_count"]) != len(selected_ids)
-        or int(selection["total_shortfall"]) != int(selection["total_target"]) - len(selected_ids)
+        or selected_count != len(selected_ids)
+        or total_shortfall != total_target - len(selected_ids)
     ):
         raise SchemaError("manual audit public/sealed selection identities disagree")
-    public_episodes = {str(row.get("episode_id")) for row in selected}
+    public_episodes = {
+        _audit_nonempty_string(
+            row["episode_id"], context="manual audit selected episode_id"
+        )
+        for row in selected
+    }
     if len(public_episodes) != len(selected):
         raise SchemaError("manual audit repeats an episode")
-    public_by_id = {str(row["audit_id"]): row for row in selected}
-    sealed_by_id = {str(row["audit_id"]): row for row in label_rows}
+    public_by_id = {row["audit_id"]: row for row in selected}
+    sealed_by_id = {row["audit_id"]: row for row in label_rows}
+
+    raw_records = _load_selected_analysis_records_unchecked(root)
+    derived = _derive_manual_audit_selection_evidence(raw_records)
+    raw_by_episode = derived["episodes_by_id"]
+    evidence_by_episode = derived["evidence_by_episode"]
+    schedule_by_block = {
+        str(row["block_id"]): row
+        for row in read_jsonl(root / "schedule" / "schedule.jsonl")
+    }
     for audit_id in selected_ids:
         public = public_by_id[audit_id]
         sealed_row = sealed_by_id[audit_id]
-        for key in ("episode_id", "block_id", "system_id"):
-            if str(public.get(key)) != str(sealed_row.get(key)):
+        for key in ("episode_id", "block_id", "task_id", "system_id"):
+            if public[key] != sealed_row[key]:
                 raise SchemaError(f"manual audit public/sealed {key} mismatch: {audit_id}")
-        relative = Path(str(public.get("artifact_path", "")))
-        if relative.is_absolute() or ".." in relative.parts:
-            raise SchemaError("manual audit artifact path escapes campaign")
-        package = (root / relative).resolve()
-        if root not in package.parents or not package.is_dir():
-            raise SchemaError("manual audit artifact path does not resolve inside campaign")
-        runtime_summary = read_json(package / "runtime" / "episode_summary.json")
-        if str(runtime_summary.get("episode_id")) != str(public["episode_id"]):
-            raise SchemaError("manual audit artifact path points to another episode")
+        episode_id = sealed_row["episode_id"]
+        raw_episode = raw_by_episode.get(episode_id)
+        if raw_episode is None:
+            raise SchemaError("manual audit selected episode is absent from raw evidence")
+        for key in ("block_id", "task_id", "system_id"):
+            if sealed_row[key] != raw_episode[key]:
+                raise SchemaError(
+                    f"manual audit sealed {key} differs from selected raw evidence"
+                )
+        for key, expected in evidence_by_episode[episode_id].items():
+            if canonical_json_bytes(sealed_row[key]) != canonical_json_bytes(expected):
+                raise SchemaError(
+                    "manual audit sealed evidence differs from immutable selected "
+                    f"raw evidence: {audit_id}.{key}"
+                )
+        schedule_row = schedule_by_block.get(sealed_row["block_id"])
+        if schedule_row is None:
+            raise SchemaError("manual audit block is absent from the frozen schedule")
+        block_base = _block_base(root, schedule_row)
+        resolution = read_json(block_base / "resolution.json")
+        if resolution.get("status") != "INCLUDED":
+            raise SchemaError("manual audit selected a non-included block")
+        selected_attempt_id = _audit_exact_int(
+            resolution.get("selected_attempt_id"),
+            context="manual audit selected_attempt_id",
+            minimum=0,
+        )
+        primary_source = (
+            _system_package(
+                block_base, selected_attempt_id, sealed_row["system_id"]
+            )
+            / "runtime"
+        )
+        paired_e2_episode_id = sealed_row["paired_e2_episode_id"]
+        if paired_e2_episode_id is not None:
+            paired_e2_episode_id = _audit_nonempty_string(
+                paired_e2_episode_id,
+                context="manual audit paired_e2_episode_id",
+            )
+        paired_e2_source = (
+            _system_package(block_base, selected_attempt_id, "E2") / "runtime"
+            if paired_e2_episode_id is not None
+            else None
+        )
+        _validate_manual_audit_reviewer_packet(
+            root=root,
+            campaign_id=campaign_id,
+            audit_id=audit_id,
+            primary_source=primary_source,
+            primary_episode_id=episode_id,
+            primary_system_id=sealed_row["system_id"],
+            task_id=sealed_row["task_id"],
+            task_context_path=public["task_context_path"],
+            artifact_path=public["artifact_path"],
+            paired_e2_source=paired_e2_source,
+            paired_e2_episode_id=paired_e2_episode_id,
+            paired_e2_artifact_path=public["paired_e2_artifact_path"],
+        )
+    reviewer_packet_root = root / "manual_audit" / "reviewer_packets"
+    packet_ids = {
+        path.name for path in reviewer_packet_root.iterdir() if path.is_dir()
+    }
+    if packet_ids != set(selected_ids) or any(
+        path.is_symlink() or not path.is_dir()
+        for path in reviewer_packet_root.iterdir()
+    ):
+        raise SchemaError("manual-audit reviewer packet directory closure differs")
 
-    with (root / "aggregate" / "episodes.csv").open(
-        encoding="utf-8", newline=""
-    ) as handle:
-        episode_rows = [
-            row
-            for row in csv.DictReader(handle)
-            if str(row.get("task_partition")) == "normal"
-        ]
-    aggregate_by_episode = {str(row["episode_id"]): row for row in episode_rows}
-    if len(aggregate_by_episode) != len(episode_rows):
-        raise SchemaError("aggregate episodes contain duplicate episode IDs")
-    attempts = {
-        episode_id
-        for episode_id, row in aggregate_by_episode.items()
-        if int(row.get("recovery_attempt_count", 0)) > 0
-    }
-    verified_failures = {
-        episode_id
-        for episode_id, row in aggregate_by_episode.items()
-        if int(row.get("verified_failure_event_count", 0)) > 0
-    }
-    systems_by_block: dict[str, dict[str, dict[str, str]]] = defaultdict(dict)
-    for row in episode_rows:
-        systems_by_block[str(row["block_id"])][str(row["system_id"])] = row
-    disagreements = {
-        str(systems["E3"]["episode_id"])
-        for systems in systems_by_block.values()
-        if "E2" in systems
-        and "E3" in systems
-        and strict_bool(systems["E2"]["task_success"], context="audit.E2.success")
-        != strict_bool(systems["E3"]["task_success"], context="audit.E3.success")
-    }
-    candidates = {
-        "ordinary_success": {
-            episode_id
-            for episode_id, row in aggregate_by_episode.items()
-            if strict_bool(row["task_success"], context="audit.task_success")
-            and episode_id not in attempts
-            and episode_id not in verified_failures
-        },
-        "terminal_failure": {
-            episode_id
-            for episode_id, row in aggregate_by_episode.items()
-            if not strict_bool(row["task_success"], context="audit.task_success")
-        },
-        "recovery": attempts,
-        "e2_e3_disagreement": disagreements,
-    }
+    # The aggregate CSV is deliberately not an audit authority. Sampling and
+    # category coverage are replayed from the included runtime packages joined
+    # with their sealed verifier streams above.
+    candidates = derived["candidates"]
     priority = (
         "e2_e3_disagreement",
         "recovery",
@@ -7155,7 +8485,10 @@ def _validate_manual_audit_package(root: Path) -> None:
         "ordinary_success",
     )
     frozen_targets = {
-        str(row["name"]): int(row["target"]) for row in definition["strata"]
+        str(row["name"]): _audit_exact_int(
+            row["target"], context="manual audit frozen target", minimum=0
+        )
+        for row in definition["strata"]
     }
     expected_selected: dict[str, list[str]] = {}
     used: set[str] = set()
@@ -7166,8 +8499,8 @@ def _validate_manual_audit_package(root: Path) -> None:
                 sha256_json(
                     {
                         "algorithm": "sha256-lowest-v1",
-                        "campaign_id": str(selection["campaign_id"]),
-                        "selection_seed": int(selection["selection_seed"]),
+                        "campaign_id": campaign_id,
+                        "selection_seed": selection["selection_seed"],
                         "stratum": stratum,
                         "episode_id": episode_id,
                     }
@@ -7177,6 +8510,41 @@ def _validate_manual_audit_package(root: Path) -> None:
         )
         expected_selected[stratum] = ordered[: frozen_targets[stratum]]
         used.update(expected_selected[stratum])
+    expected_presentation = sorted(
+        (
+            (episode_id, stratum)
+            for stratum, episode_ids in expected_selected.items()
+            for episode_id in episode_ids
+        ),
+        key=lambda value: (
+            sha256_json(
+                {
+                    "algorithm": "sha256-lowest-v1",
+                    "campaign_id": campaign_id,
+                    "selection_seed": selection_seed,
+                    "stratum": "audit-presentation-order",
+                    "episode_id": value[0],
+                }
+            ),
+            value[0],
+        ),
+    )
+    if len(expected_presentation) != len(label_rows):
+        raise SchemaError("manual audit selected row count differs from raw replay")
+    for index, ((episode_id, stratum), sealed_row, public_row) in enumerate(
+        zip(expected_presentation, label_rows, selected, strict=True), start=1
+    ):
+        expected_audit_id = f"audit-{index:02d}"
+        if (
+            sealed_row["audit_id"] != expected_audit_id
+            or public_row["audit_id"] != expected_audit_id
+            or sealed_row["episode_id"] != episode_id
+            or public_row["episode_id"] != episode_id
+            or sealed_row["stratum"] != stratum
+        ):
+            raise SchemaError(
+                "manual audit presentation order/identity differs from raw replay"
+            )
     actual_selected: dict[str, set[str]] = defaultdict(set)
     for row in label_rows:
         actual_selected[str(row.get("stratum"))].add(str(row.get("episode_id")))
@@ -7187,33 +8555,34 @@ def _validate_manual_audit_package(root: Path) -> None:
             )
     label_by_stratum: dict[str, int] = defaultdict(int)
     required_categories = definition.get("required_case_categories")
-    registered_categories = (
-        "successful_recovery",
-        "failed_recovery",
-        "memory_help",
-        "memory_harm",
-        "environment_failure",
-        "bbox_or_parameter_failure",
-        "loop",
-        "unnecessary_intervention",
-    )
     if not isinstance(required_categories, list) or tuple(required_categories) != (
-        registered_categories
+        MANUAL_AUDIT_CASE_CATEGORIES
     ):
         raise SchemaError("manual audit required categories differ from registration")
     selected_category_counts: dict[str, int] = defaultdict(int)
-    campaign_id = str(selection["campaign_id"])
     for row in label_rows:
-        for key in ("task_success", "loop_detected", "has_verified_failure", "has_recovery_attempt"):
-            if type(row.get(key)) is not bool:
-                raise SchemaError(f"manual audit label {key} must be an exact boolean")
-        stratum = str(row.get("stratum", ""))
+        for key in (
+            "task_success",
+            "loop_detected",
+            "environment_failure",
+            "has_verified_failure",
+            "has_recovery_attempt",
+            "has_admitted_memory_intervention",
+            "memory_effect_applicable",
+            "has_failure_evidence",
+            "e2_e3_task_outcome_disagreement",
+        ):
+            _audit_exact_bool(row[key], context=f"manual audit label {key}")
+        stratum = _audit_nonempty_string(
+            row["stratum"], context="manual audit label stratum"
+        )
         label_by_stratum[stratum] += 1
-        case_categories = row.get("case_categories")
+        case_categories = row["case_categories"]
         if (
             not isinstance(case_categories, list)
-            or len(case_categories) != len(set(map(str, case_categories)))
-            or not set(map(str, case_categories)).issubset(registered_categories)
+            or not all(type(value) is str for value in case_categories)
+            or case_categories != sorted(set(case_categories))
+            or not set(case_categories).issubset(MANUAL_AUDIT_CASE_CATEGORIES)
         ):
             raise SchemaError("manual audit case_categories are invalid")
         for category in case_categories:
@@ -7222,7 +8591,7 @@ def _validate_manual_audit_package(root: Path) -> None:
             {
                 "algorithm": "sha256-lowest-v1",
                 "campaign_id": campaign_id,
-                "selection_seed": int(selection["selection_seed"]),
+                "selection_seed": selection["selection_seed"],
                 "stratum": stratum,
                 "episode_id": str(row["episode_id"]),
             }
@@ -7231,49 +8600,106 @@ def _validate_manual_audit_package(root: Path) -> None:
             raise SchemaError("manual audit deterministic selection score mismatch")
     if not isinstance(selection["strata"], list):
         raise SchemaError("manual audit strata must be an array")
+    expected_strata_order = [str(row["name"]) for row in definition["strata"]]
+    if [row.get("name") for row in selection["strata"]] != expected_strata_order:
+        raise SchemaError("manual audit strata order differs from registration")
     for row in selection["strata"]:
-        name = str(row.get("name", ""))
+        _require_exact_json_object(
+            row,
+            (
+                "name",
+                "target",
+                "eligible_count_before_cross_stratum_deduplication",
+                "selected_count",
+                "shortfall",
+                "substitution_allowed",
+            ),
+            context="manual audit stratum row",
+        )
+        name = _audit_nonempty_string(row["name"], context="manual audit stratum")
         target = frozen_targets.get(name)
-        if target is None or int(row.get("target", -1)) != target:
+        if target is None or _audit_exact_int(
+            row["target"], context="manual audit target", minimum=0
+        ) != target:
             raise SchemaError("manual audit target differs from frozen stratum")
-        selected_count = int(row.get("selected_count", -1))
+        stratum_selected_count = _audit_exact_int(
+            row["selected_count"],
+            context="manual audit stratum selected_count",
+            minimum=0,
+        )
         if (
-            selected_count != label_by_stratum.get(name, 0)
-            or int(row.get("shortfall", -1)) != target - selected_count
-            or row.get("substitution_allowed") is not False
+            _audit_exact_int(
+                row["eligible_count_before_cross_stratum_deduplication"],
+                context="manual audit stratum eligible_count",
+                minimum=0,
+            )
+            != len(candidates[name])
+            or stratum_selected_count != label_by_stratum.get(name, 0)
+            or _audit_exact_int(
+                row["shortfall"], context="manual audit stratum shortfall", minimum=0
+            )
+            != target - stratum_selected_count
+            or _audit_exact_bool(
+                row["substitution_allowed"],
+                context="manual audit stratum substitution_allowed",
+            )
+            is not False
         ):
             raise SchemaError("manual audit shortfall/substitution record is invalid")
-        if name != "e2_e3_disagreement" and selected_count != target:
+        if name != "e2_e3_disagreement" and stratum_selected_count != target:
             raise SchemaError(
-                f"manual audit requires five {name} cases; observed {selected_count}"
+                f"manual audit requires five {name} cases; observed {stratum_selected_count}"
             )
     coverage = selection["category_coverage"]
     if not isinstance(coverage, list) or [row.get("name") for row in coverage] != list(
-        registered_categories
+        MANUAL_AUDIT_CASE_CATEGORIES
     ):
         raise SchemaError("manual audit category coverage has the wrong registered closure")
-    final_campaign = (
-        read_json(root / "campaign_manifest.json").get("campaign_kind") == "locked_final"
-    )
+    final_campaign = campaign.get("campaign_kind") == "locked_final"
     for row in coverage:
-        category = str(row["name"])
-        eligible = row.get("eligible_count")
-        selected_count = row.get("selected_count")
+        _require_exact_json_object(
+            row,
+            (
+                "name",
+                "eligible_count",
+                "selected_count",
+                "status",
+                "substitution_allowed",
+            ),
+            context="manual audit category coverage row",
+        )
+        category = _audit_nonempty_string(
+            row["name"], context="manual audit coverage category"
+        )
+        eligible = _audit_exact_int(
+            row["eligible_count"], context="manual audit eligible_count", minimum=0
+        )
+        category_selected_count = _audit_exact_int(
+            row["selected_count"],
+            context="manual audit category selected_count",
+            minimum=0,
+        )
+        expected_eligible = sum(
+            category in categories
+            for categories in derived["categories_by_episode"].values()
+        )
         if (
-            type(eligible) is not int
-            or eligible < 0
-            or type(selected_count) is not int
-            or selected_count < 0
-            or selected_count > eligible
-            or selected_count != selected_category_counts.get(category, 0)
-            or row.get("substitution_allowed") is not False
+            eligible != expected_eligible
+            or category_selected_count > eligible
+            or category_selected_count
+            != selected_category_counts.get(category, 0)
+            or _audit_exact_bool(
+                row["substitution_allowed"],
+                context="manual audit coverage substitution_allowed",
+            )
+            is not False
         ):
             raise SchemaError(f"manual audit category coverage is invalid: {category}")
         expected_status = (
             "NOT_APPLICABLE"
             if eligible == 0
             else "COVERED"
-            if selected_count > 0
+            if category_selected_count > 0
             else "SHORTFALL_NO_SUBSTITUTION"
         )
         if row.get("status") != expected_status:
@@ -7282,7 +8708,6 @@ def _validate_manual_audit_package(root: Path) -> None:
             raise SchemaError(
                 f"locked-final manual audit missed an available required case: {category}"
             )
-    campaign = read_json(root / "campaign_manifest.json")
     if (
         campaign.get("campaign_kind") == "locked_final"
         and campaign.get("evidence_label") != "PILOT_ONLY"
@@ -7293,31 +8718,336 @@ def _validate_manual_audit_package(root: Path) -> None:
 def validate_manual_adjudication_completion(
     campaign_dir: str | Path,
 ) -> dict[str, Any]:
-    """Validate signed, hash-bound human review required for final evidence."""
+    """Validate hash-bound, human-attested review required for final evidence."""
 
     root = Path(campaign_dir).resolve()
     campaign = read_json(root / "campaign_manifest.json")
+    campaign_id = _audit_nonempty_string(
+        campaign.get("campaign_id"), context="campaign_manifest.campaign_id"
+    )
+    audit_definition = _read_manual_audit_json(
+        root / "frozen" / "benchmark" / "audit_manifest.json",
+        context="frozen human-audit definition",
+    )
+    codebook_binding = validate_manual_audit_reviewer_codebook(audit_definition)
+    if (
+        audit_definition.get("manifest_id") != MANUAL_AUDIT_MANIFEST_ID
+        or audit_definition.get("blinding_mode") != MANUAL_AUDIT_BLINDING_MODE
+    ):
+        raise SchemaError("human audit frozen definition differs from registration")
     selection_path = root / "manual_audit" / "selection_manifest.json"
+    labels_path = root / "manual_audit" / "sealed" / "selection_labels.json"
     adjudication_path = root / "manual_audit" / "sealed" / "adjudication.json"
     agreement_path = root / "manual_audit" / "agreement.json"
     completion_path = root / "manual_audit" / "completion_manifest.json"
-    selection = read_json(selection_path)
-    adjudication = read_json(adjudication_path)
-    agreement = read_json(agreement_path)
-    completion = read_json(completion_path)
+    for path in (
+        selection_path,
+        labels_path,
+        adjudication_path,
+        agreement_path,
+        completion_path,
+    ):
+        if path.is_symlink() or not path.is_file():
+            raise SchemaError(f"manual-audit artifact is absent or symlinked: {path}")
+    selection = _read_manual_audit_json(
+        selection_path, context="human adjudication selection"
+    )
+    labels = _read_manual_audit_json(
+        labels_path, context="human adjudication sealed selection labels"
+    )
+    adjudication = _read_manual_audit_json(
+        adjudication_path, context="manual-audit adjudication"
+    )
+    agreement = _read_manual_audit_json(
+        agreement_path, context="manual-audit agreement"
+    )
+    completion = _read_manual_audit_json(
+        completion_path, context="manual-audit completion"
+    )
 
-    campaign_id = str(campaign["campaign_id"])
+    _require_exact_json_object(
+        selection,
+        (
+            "schema_version",
+            "manifest_id",
+            "campaign_id",
+            "reviewer_codebook_id",
+            "reviewer_codebook_sha256",
+            "selection_algorithm",
+            "selection_seed",
+            "blinding_mode",
+            "outcome_labels_location",
+            "outcome_labels_sha256",
+            "total_target",
+            "selected_count",
+            "total_shortfall",
+            "strata",
+            "category_coverage",
+            "selected",
+        ),
+        context="human adjudication selection",
+    )
+    _require_exact_json_object(
+        labels,
+        (
+            "schema_version",
+            "manifest_id",
+            "campaign_id",
+            "reviewer_codebook_id",
+            "reviewer_codebook_sha256",
+            "offline_sealed_labels",
+            "labels",
+        ),
+        context="human adjudication sealed selection labels",
+    )
     selection_hash = sha256_file(selection_path)
+    if selection["campaign_id"] != campaign_id:
+        raise SchemaError("human adjudication selection has the wrong campaign ID")
+    if (
+        selection["schema_version"] != SCHEMA_VERSION
+        or selection["manifest_id"] != audit_definition.get("manifest_id")
+        or selection["blinding_mode"] != MANUAL_AUDIT_BLINDING_MODE
+    ):
+        raise SchemaError("human adjudication selection has the wrong audit manifest ID")
+    if (
+        labels["schema_version"] != SCHEMA_VERSION
+        or labels["manifest_id"] != audit_definition.get("manifest_id")
+        or labels["campaign_id"] != campaign_id
+        or _audit_exact_bool(
+            labels["offline_sealed_labels"],
+            context="human adjudication labels.offline_sealed_labels",
+        )
+        is not True
+        or selection["outcome_labels_location"] != "sealed/selection_labels.json"
+        or sha256_file(labels_path)
+        != _audit_sha256(
+            selection["outcome_labels_sha256"],
+            context="human adjudication outcome_labels_sha256",
+        )
+    ):
+        raise SchemaError("human adjudication sealed selection labels are invalid")
+    for key, expected in codebook_binding.items():
+        if selection.get(key) != expected or labels.get(key) != expected:
+            raise SchemaError(f"human adjudication selection has the wrong {key}")
+    selected_rows = selection["selected"]
+    label_rows = labels["labels"]
+    if not isinstance(selected_rows, list) or not isinstance(label_rows, list):
+        raise SchemaError("human adjudication selection rows must be arrays")
+    for row in selected_rows:
+        _require_exact_json_object(
+            row,
+            (
+                "audit_id",
+                "episode_id",
+                "block_id",
+                "task_id",
+                "system_id",
+                "task_context_path",
+                "artifact_path",
+                "paired_e2_artifact_path",
+            ),
+            context="human adjudication selected row",
+        )
+        for key in (
+            "audit_id",
+            "episode_id",
+            "block_id",
+            "task_id",
+            "system_id",
+            "task_context_path",
+            "artifact_path",
+        ):
+            _audit_nonempty_string(
+                row[key], context=f"human adjudication selected row.{key}"
+            )
+        paired_path = row["paired_e2_artifact_path"]
+        if paired_path is not None:
+            _audit_nonempty_string(
+                paired_path,
+                context="human adjudication selected row.paired_e2_artifact_path",
+            )
+    sealed_label_keys = (
+        "episode_id",
+        "block_id",
+        "task_id",
+        "system_id",
+        "stratum",
+        "task_success",
+        "loop_detected",
+        "environment_failure",
+        "has_verified_failure",
+        "has_recovery_attempt",
+        "has_admitted_memory_intervention",
+        "memory_effect_applicable",
+        "has_failure_evidence",
+        "paired_e2_episode_id",
+        "e2_e3_task_outcome_disagreement",
+        "case_categories",
+        "selection_score",
+        "audit_id",
+    )
+    for row in label_rows:
+        _require_exact_json_object(
+            row,
+            sealed_label_keys,
+            context="human adjudication sealed selection label row",
+        )
+        for key in (
+            "episode_id",
+            "block_id",
+            "task_id",
+            "system_id",
+            "stratum",
+            "audit_id",
+        ):
+            _audit_nonempty_string(
+                row[key],
+                context=f"human adjudication sealed selection label row.{key}",
+            )
+        for key in (
+            "task_success",
+            "loop_detected",
+            "environment_failure",
+            "has_verified_failure",
+            "has_recovery_attempt",
+            "has_admitted_memory_intervention",
+            "memory_effect_applicable",
+            "has_failure_evidence",
+            "e2_e3_task_outcome_disagreement",
+        ):
+            _audit_exact_bool(
+                row[key],
+                context=f"human adjudication sealed selection label row.{key}",
+            )
+        paired_episode = row["paired_e2_episode_id"]
+        if paired_episode is not None:
+            _audit_nonempty_string(
+                paired_episode,
+                context=(
+                    "human adjudication sealed selection label row."
+                    "paired_e2_episode_id"
+                ),
+            )
+        case_categories = row["case_categories"]
+        if (
+            not isinstance(case_categories, list)
+            or not all(type(value) is str for value in case_categories)
+            or case_categories != sorted(set(case_categories))
+            or not set(case_categories).issubset(MANUAL_AUDIT_CASE_CATEGORIES)
+        ):
+            raise SchemaError(
+                "human adjudication sealed selection case categories are invalid"
+            )
+        _audit_sha256(
+            row["selection_score"],
+            context="human adjudication sealed selection label row.selection_score",
+        )
     selected_ids = {
-        str(row.get("audit_id", "")) for row in selection.get("selected", [])
+        _audit_nonempty_string(row["audit_id"], context="human audit audit_id")
+        for row in selected_rows
     }
-    selected_count = int(selection.get("selected_count", -1))
+    sealed_by_audit_id = {
+        _audit_nonempty_string(row["audit_id"], context="human audit label audit_id"): row
+        for row in label_rows
+    }
+    selected_count = _audit_exact_int(
+        selection["selected_count"],
+        context="human adjudication selected_count",
+        minimum=1,
+    )
+    total_target = _audit_exact_int(
+        selection["total_target"],
+        context="human adjudication total_target",
+        minimum=1,
+    )
+    total_shortfall = _audit_exact_int(
+        selection["total_shortfall"],
+        context="human adjudication total_shortfall",
+        minimum=0,
+    )
+    _audit_exact_int(
+        selection["selection_seed"],
+        context="human adjudication selection_seed",
+        minimum=0,
+    )
     if (
         not selected_ids
-        or "" in selected_ids
         or len(selected_ids) != selected_count
+        or len(sealed_by_audit_id) != selected_count
+        or set(sealed_by_audit_id) != selected_ids
+        or total_target != selected_count + total_shortfall
+        or not isinstance(selection["strata"], list)
+        or not isinstance(selection["category_coverage"], list)
     ):
         raise SchemaError("human adjudication requires a valid nonempty audit selection")
+
+    _require_exact_json_object(
+        adjudication,
+        (
+            "schema_version",
+            "campaign_id",
+            "selection_manifest_sha256",
+            "reviewer_codebook_id",
+            "reviewer_codebook_sha256",
+            "status",
+            "all_selected_items_reviewed",
+            "all_disagreements_resolved",
+            "reviewer_ids",
+            "adjudicator_id",
+            "attested_by",
+            "attested_at_utc",
+            "records",
+        ),
+        context="manual-audit adjudication",
+    )
+    _require_exact_json_object(
+        agreement,
+        (
+            "schema_version",
+            "campaign_id",
+            "selection_manifest_sha256",
+            "reviewer_codebook_id",
+            "reviewer_codebook_sha256",
+            "status",
+            "reviewer_ids",
+            "sample_size",
+            "disagreement_count",
+            "adjudicated_disagreement_count",
+            "raw_agreement",
+            "cohen_kappa",
+            "cohen_kappa_status",
+            "cohen_kappa_undefined_reason",
+            "calculation_method",
+            "composite_exact_agreement_count",
+            "composite_exact_agreement",
+            "composite_exact_agreement_method",
+            "per_field_agreement_method",
+            "per_field_agreement",
+            "final_vs_sealed_comparison_method",
+            "final_vs_sealed_comparison",
+            "attested_by",
+            "attested_at_utc",
+        ),
+        context="manual-audit agreement",
+    )
+    _require_exact_json_object(
+        completion,
+        (
+            "schema_version",
+            "campaign_id",
+            "selection_manifest_sha256",
+            "reviewer_codebook_id",
+            "reviewer_codebook_sha256",
+            "completion_status",
+            "adjudication_relative_path",
+            "adjudication_sha256",
+            "agreement_relative_path",
+            "agreement_sha256",
+            "attested_by",
+            "attested_at_utc",
+        ),
+        context="manual-audit completion",
+    )
 
     for label, value in (
         ("adjudication", adjudication),
@@ -7326,107 +9056,298 @@ def validate_manual_adjudication_completion(
     ):
         if value.get("schema_version") != SCHEMA_VERSION:
             raise SchemaError(f"manual-audit {label} schema version is invalid")
-        if str(value.get("campaign_id")) != campaign_id:
+        if value.get("campaign_id") != campaign_id:
             raise SchemaError(f"manual-audit {label} has the wrong campaign ID")
-        if value.get("selection_manifest_sha256") != selection_hash:
+        if _audit_sha256(
+            value.get("selection_manifest_sha256"),
+            context=f"manual-audit {label}.selection_manifest_sha256",
+        ) != selection_hash:
             raise SchemaError(f"manual-audit {label} is not bound to the selection")
+        for key, expected in codebook_binding.items():
+            if value.get(key) != expected:
+                raise SchemaError(
+                    f"manual-audit {label} is not bound to the reviewer codebook: {key}"
+                )
 
-    if adjudication_path.stat().st_mode & 0o077:
+    if labels_path.stat().st_mode & 0o077 or adjudication_path.stat().st_mode & 0o077:
         raise SchemaError("human adjudication labels are not private")
     if adjudication.get("status") != "COMPLETE":
         raise SchemaError("human adjudication is not complete")
-    if strict_bool(
+    if _audit_exact_bool(
         adjudication.get("all_selected_items_reviewed"),
         context="adjudication.all_selected_items_reviewed",
     ) is not True:
         raise SchemaError("human adjudication has unreviewed selected items")
-    if strict_bool(
+    if _audit_exact_bool(
         adjudication.get("all_disagreements_resolved"),
         context="adjudication.all_disagreements_resolved",
     ) is not True:
         raise SchemaError("human adjudication has unresolved disagreements")
 
-    reviewer_ids = _signed_identity_list(
-        adjudication.get("reviewer_ids"), "adjudication.reviewer_ids", minimum=2
+    reviewer_vector = _two_reviewer_identity_vector(
+        adjudication.get("reviewer_ids"), "adjudication.reviewer_ids"
     )
-    adjudicator_id = str(adjudication.get("adjudicator_id", "")).strip()
-    if not adjudicator_id:
-        raise SchemaError("human adjudication requires an adjudicator identity")
-    adjudication_signers = _signed_identity_list(
-        adjudication.get("signed_by"), "adjudication.signed_by", minimum=2
+    reviewer_ids = set(reviewer_vector)
+    adjudicator_id = _audit_nonempty_string(
+        adjudication.get("adjudicator_id"),
+        context="adjudication.adjudicator_id",
     )
-    if not set(reviewer_ids).issubset(adjudication_signers) or adjudicator_id not in adjudication_signers:
-        raise SchemaError("human adjudication is not signed by all reviewers/adjudicator")
-    _validate_signed_at(adjudication.get("signed_at_utc"), "adjudication.signed_at_utc")
+    adjudication_attestors = _attested_identity_list(
+        adjudication.get("attested_by"), "adjudication.attested_by", minimum=3
+    )
+    if (
+        not set(reviewer_ids).issubset(adjudication_attestors)
+        or adjudicator_id not in adjudication_attestors
+    ):
+        raise SchemaError(
+            "human adjudication is not attested by all reviewers/adjudicator"
+        )
+    _validate_attested_at(
+        adjudication.get("attested_at_utc"), "adjudication.attested_at_utc"
+    )
 
     records = adjudication.get("records")
     if not isinstance(records, list) or len(records) != selected_count:
         raise SchemaError("human adjudication does not cover every selected item")
     record_ids: set[str] = set()
     disagreement_count = 0
-    for row in records:
-        if not isinstance(row, Mapping):
-            raise SchemaError("human adjudication record must be an object")
-        audit_id = str(row.get("audit_id", ""))
-        if not audit_id or audit_id in record_ids:
+    reviewer_labels_by_id: dict[str, list[tuple[str, ...]]] = {
+        reviewer_id: [] for reviewer_id in reviewer_vector
+    }
+    final_labels_by_id: dict[str, Mapping[str, Any]] = {}
+    for row in sorted(records, key=lambda value: str(value.get("audit_id", ""))):
+        _require_exact_json_object(
+            row,
+            (
+                "audit_id",
+                "reviewer_labels",
+                "final_label",
+                "disagreement",
+                "resolved",
+            ),
+            context="human adjudication record",
+        )
+        audit_id = _audit_nonempty_string(
+            row["audit_id"], context="human adjudication record.audit_id"
+        )
+        if audit_id in record_ids:
             raise SchemaError("human adjudication audit IDs are empty/duplicate")
         record_ids.add(audit_id)
-        if strict_bool(row.get("resolved"), context="adjudication.record.resolved") is not True:
+        if _audit_exact_bool(
+            row["resolved"], context="adjudication.record.resolved"
+        ) is not True:
             raise SchemaError(f"human adjudication item is unresolved: {audit_id}")
-        disagreement_count += strict_bool(
-            row.get("disagreement"), context="adjudication.record.disagreement"
-        )
-        reviewer_labels = row.get("reviewer_labels")
-        final_label = row.get("final_label")
+        reviewer_labels = row["reviewer_labels"]
+        final_label = row["final_label"]
         if (
             not isinstance(reviewer_labels, Mapping)
-            or set(map(str, reviewer_labels)) != set(reviewer_ids)
-            or not isinstance(final_label, Mapping)
-            or not final_label
+            or set(reviewer_labels) != set(reviewer_ids)
         ):
             raise SchemaError(f"human adjudication labels are incomplete: {audit_id}")
+        selected_evidence = sealed_by_audit_id.get(audit_id)
+        if selected_evidence is None:
+            raise SchemaError("human adjudication record is absent from selected evidence")
+        vectors = {
+            reviewer_id: _manual_audit_label_vector(
+                reviewer_labels[reviewer_id],
+                audit_definition=audit_definition,
+                context=f"adjudication.record[{audit_id}].reviewer_labels[{reviewer_id}]",
+            )
+            for reviewer_id in reviewer_vector
+        }
+        for reviewer_id in reviewer_vector:
+            _validate_manual_audit_label_applicability(
+                reviewer_labels[reviewer_id],
+                selected_evidence=selected_evidence,
+                context=(
+                    f"adjudication.record[{audit_id}].reviewer_labels[{reviewer_id}]"
+                ),
+            )
+        final_vector = _manual_audit_label_vector(
+            final_label,
+            audit_definition=audit_definition,
+            context=f"adjudication.record[{audit_id}].final_label",
+        )
+        _validate_manual_audit_label_applicability(
+            final_label,
+            selected_evidence=selected_evidence,
+            context=f"adjudication.record[{audit_id}].final_label",
+        )
+        final_labels_by_id[audit_id] = final_label
+        computed_disagreement = vectors[reviewer_vector[0]] != vectors[reviewer_vector[1]]
+        supplied_disagreement = _audit_exact_bool(
+            row["disagreement"], context="adjudication.record.disagreement"
+        )
+        if supplied_disagreement is not computed_disagreement:
+            raise SchemaError(
+                f"human adjudication disagreement differs from reviewer labels: {audit_id}"
+            )
+        if not computed_disagreement and final_vector != vectors[reviewer_vector[0]]:
+            raise SchemaError(
+                f"human adjudication changed an agreed reviewer label: {audit_id}"
+            )
+        disagreement_count += int(computed_disagreement)
+        for reviewer_id in reviewer_vector:
+            reviewer_labels_by_id[reviewer_id].append(vectors[reviewer_id])
     if record_ids != selected_ids:
-        raise SchemaError("human adjudication IDs differ from the blinded selection")
-
+        raise SchemaError(
+            "human adjudication IDs differ from the outcome-label-hidden selection"
+        )
     if agreement.get("status") != "COMPLETE":
         raise SchemaError("manual-audit agreement calculation is not complete")
-    agreement_reviewers = _signed_identity_list(
-        agreement.get("reviewer_ids"), "agreement.reviewer_ids", minimum=2
+    agreement_reviewers = _two_reviewer_identity_vector(
+        agreement.get("reviewer_ids"), "agreement.reviewer_ids"
     )
-    if set(agreement_reviewers) != set(reviewer_ids):
-        raise SchemaError("agreement reviewers differ from adjudication reviewers")
-    if type(agreement.get("sample_size")) is not int or agreement["sample_size"] != selected_count:
+    if agreement_reviewers != reviewer_vector:
+        raise SchemaError(
+            "agreement reviewer vector/order differs from adjudication reviewers"
+        )
+    if _audit_exact_int(
+        agreement["sample_size"], context="agreement.sample_size", minimum=1
+    ) != selected_count:
         raise SchemaError("agreement sample size differs from the audit selection")
     if (
-        type(agreement.get("disagreement_count")) is not int
-        or agreement["disagreement_count"] != disagreement_count
-        or type(agreement.get("adjudicated_disagreement_count")) is not int
-        or agreement["adjudicated_disagreement_count"] != disagreement_count
+        _audit_exact_int(
+            agreement["disagreement_count"],
+            context="agreement.disagreement_count",
+            minimum=0,
+        )
+        != disagreement_count
+        or _audit_exact_int(
+            agreement["adjudicated_disagreement_count"],
+            context="agreement.adjudicated_disagreement_count",
+            minimum=0,
+        )
+        != disagreement_count
     ):
         raise SchemaError("agreement disagreement counts are not fully adjudicated")
+    recomputed_agreement = _recompute_manual_audit_agreement(
+        reviewer_labels_by_id[reviewer_vector[0]],
+        reviewer_labels_by_id[reviewer_vector[1]],
+    )
+    recomputed_final_vs_sealed = _recompute_manual_audit_final_vs_sealed(
+        final_labels_by_id,
+        sealed_by_audit_id,
+    )
     raw_agreement = _bounded_number(
         agreement.get("raw_agreement"),
         "agreement.raw_agreement",
         lower=0.0,
         upper=1.0,
     )
-    expected_raw_agreement = (selected_count - disagreement_count) / selected_count
+    expected_raw_agreement = recomputed_agreement["raw_agreement"]
     if not math.isclose(raw_agreement, expected_raw_agreement, rel_tol=0.0, abs_tol=1e-12):
-        raise SchemaError("raw agreement disagrees with the adjudication records")
-    kappa = agreement.get("cohen_kappa")
-    if kappa is None:
-        if not str(agreement.get("cohen_kappa_undefined_reason", "")).strip():
-            raise SchemaError("undefined Cohen's kappa requires a reason")
+        raise SchemaError("raw agreement differs from recomputed reviewer vectors")
+    if agreement.get("calculation_method") != recomputed_agreement["calculation_method"]:
+        raise SchemaError("manual-audit agreement calculation method is not registered")
+    if agreement.get("cohen_kappa_status") != recomputed_agreement["cohen_kappa_status"]:
+        raise SchemaError("Cohen's kappa status differs from recomputed reviewer vectors")
+    if (
+        agreement.get("cohen_kappa_undefined_reason")
+        != recomputed_agreement["cohen_kappa_undefined_reason"]
+    ):
+        raise SchemaError("Cohen's kappa undefined reason is not the registered result")
+    expected_kappa = recomputed_agreement["cohen_kappa"]
+    supplied_kappa = agreement.get("cohen_kappa")
+    if expected_kappa is None:
+        if supplied_kappa is not None:
+            raise SchemaError("undefined Cohen's kappa must be null")
     else:
-        _bounded_number(kappa, "agreement.cohen_kappa", lower=-1.0, upper=1.0)
-    if not str(agreement.get("calculation_method", "")).strip():
-        raise SchemaError("agreement calculation method is missing")
-    agreement_signers = _signed_identity_list(
-        agreement.get("signed_by"), "agreement.signed_by", minimum=2
+        observed_kappa = _bounded_number(
+            supplied_kappa, "agreement.cohen_kappa", lower=-1.0, upper=1.0
+        )
+        if not math.isclose(
+            observed_kappa, expected_kappa, rel_tol=0.0, abs_tol=1e-12
+        ):
+            raise SchemaError("Cohen's kappa differs from recomputed reviewer vectors")
+    for key in (
+        "composite_exact_agreement_count",
+        "composite_exact_agreement",
+        "composite_exact_agreement_method",
+        "per_field_agreement_method",
+        "per_field_agreement",
+    ):
+        if canonical_json_bytes(agreement[key]) != canonical_json_bytes(
+            recomputed_agreement[key]
+        ):
+            raise SchemaError(
+                f"manual-audit agreement {key} differs from reviewer-vector replay"
+            )
+    for key in (
+        "final_vs_sealed_comparison_method",
+        "final_vs_sealed_comparison",
+    ):
+        if canonical_json_bytes(agreement[key]) != canonical_json_bytes(
+            recomputed_final_vs_sealed[key]
+        ):
+            raise SchemaError(
+                "manual-audit agreement "
+                f"{key} differs from adjudicated-vs-sealed replay"
+            )
+    per_field_rows = agreement["per_field_agreement"]
+    if not isinstance(per_field_rows, list):
+        raise SchemaError("manual-audit per-field agreement must be an array")
+    for row in per_field_rows:
+        _require_exact_json_object(
+            row,
+            (
+                "field",
+                "sample_size",
+                "agreement_count",
+                "raw_agreement",
+                "cohen_kappa",
+                "cohen_kappa_status",
+                "cohen_kappa_undefined_reason",
+                "calculation_method",
+            ),
+            context="manual-audit per-field agreement row",
+        )
+    comparison_rows = agreement["final_vs_sealed_comparison"]
+    if (
+        not isinstance(comparison_rows, list)
+        or [row.get("field") for row in comparison_rows]
+        != ["task_outcome", "recovery_outcome", "memory_effect"]
+    ):
+        raise SchemaError(
+            "manual-audit final-vs-sealed comparison has the wrong field closure"
+        )
+    for row in comparison_rows:
+        _require_exact_json_object(
+            row,
+            (
+                "field",
+                "eligible_count",
+                "uniquely_mappable_count",
+                "comparable_count",
+                "agreement_count",
+                "disagreement_count",
+                "human_undeterminable_count",
+                "not_uniquely_mappable_count",
+            ),
+            context="manual-audit final-vs-sealed comparison row",
+        )
+        for key in (
+            "eligible_count",
+            "uniquely_mappable_count",
+            "comparable_count",
+            "agreement_count",
+            "disagreement_count",
+            "human_undeterminable_count",
+            "not_uniquely_mappable_count",
+        ):
+            _audit_exact_int(
+                row[key],
+                context=f"manual-audit final-vs-sealed {row['field']}.{key}",
+                minimum=0,
+            )
+    agreement_attestors = _attested_identity_list(
+        agreement.get("attested_by"), "agreement.attested_by", minimum=2
     )
-    if not set(reviewer_ids).issubset(agreement_signers):
-        raise SchemaError("agreement output is not signed by every reviewer")
-    _validate_signed_at(agreement.get("signed_at_utc"), "agreement.signed_at_utc")
+    if not set(reviewer_ids).issubset(agreement_attestors):
+        raise SchemaError("agreement output is not attested by every reviewer")
+    _validate_attested_at(
+        agreement.get("attested_at_utc"), "agreement.attested_at_utc"
+    )
 
     expected_completion = {
         "completion_status": "HUMAN_ADJUDICATION_COMPLETE",
@@ -7435,37 +9356,65 @@ def validate_manual_adjudication_completion(
         "agreement_relative_path": "agreement.json",
         "agreement_sha256": sha256_file(agreement_path),
     }
+    _audit_sha256(
+        completion["adjudication_sha256"],
+        context="completion.adjudication_sha256",
+    )
+    _audit_sha256(
+        completion["agreement_sha256"], context="completion.agreement_sha256"
+    )
     for key, expected in expected_completion.items():
         if completion.get(key) != expected:
             raise SchemaError(f"manual-audit completion binding mismatch: {key}")
-    completion_signers = _signed_identity_list(
-        completion.get("signed_by"), "completion.signed_by", minimum=2
+    completion_attestors = _attested_identity_list(
+        completion.get("attested_by"), "completion.attested_by", minimum=3
     )
-    required_signers = set(reviewer_ids) | {adjudicator_id}
-    if not required_signers.issubset(completion_signers):
-        raise SchemaError("manual-audit completion lacks all human signatories")
-    _validate_signed_at(completion.get("signed_at_utc"), "completion.signed_at_utc")
+    required_attestors = set(reviewer_ids) | {adjudicator_id}
+    if not required_attestors.issubset(completion_attestors):
+        raise SchemaError("manual-audit completion lacks all human attestations")
+    _validate_attested_at(
+        completion.get("attested_at_utc"), "completion.attested_at_utc"
+    )
     return {
         "campaign_id": campaign_id,
         "selection_manifest_sha256": selection_hash,
+        **codebook_binding,
         "selected_count": selected_count,
         "reviewer_count": len(reviewer_ids),
         "disagreement_count": disagreement_count,
+        **recomputed_agreement,
+        **recomputed_final_vs_sealed,
         "completion_manifest_sha256": sha256_file(completion_path),
     }
 
 
-def _signed_identity_list(value: Any, context: str, *, minimum: int) -> set[str]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+def _attested_identity_list(value: Any, context: str, *, minimum: int) -> set[str]:
+    if not isinstance(value, list) or not all(type(item) is str for item in value):
         raise SchemaError(f"{context} must be an identity list")
-    identities = {item.strip() for item in value}
-    if "" in identities or len(identities) != len(value) or len(identities) < minimum:
-        raise SchemaError(f"{context} lacks distinct nonempty signatories")
+    identities = set(value)
+    if (
+        "" in identities
+        or any(item != item.strip() for item in identities)
+        or len(identities) != len(value)
+        or len(identities) < minimum
+    ):
+        raise SchemaError(f"{context} lacks distinct nonempty attestors")
     return identities
 
 
-def _validate_signed_at(value: Any, context: str) -> None:
-    text = str(value or "").strip()
+def _two_reviewer_identity_vector(value: Any, context: str) -> tuple[str, str]:
+    if not isinstance(value, list) or len(value) != 2 or not all(
+        type(item) is str and item and item == item.strip() for item in value
+    ):
+        raise SchemaError(f"{context} must contain exactly two reviewer identities")
+    identities = tuple(value)
+    if identities[0] == identities[1]:
+        raise SchemaError(f"{context} must contain two distinct nonempty reviewers")
+    return identities
+
+
+def _validate_attested_at(value: Any, context: str) -> None:
+    text = _audit_nonempty_string(value, context=context)
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
@@ -7661,6 +9610,21 @@ def _validate_frozen_handoff_binding(
         raise SchemaError("frozen handoff authority inventory is invalid")
     if sha256_json(inventory) != manifest.get("handoff_inventory_sha256"):
         raise SchemaError("frozen handoff inventory hash differs from campaign")
+    frozen_claim_registry_path = root / FROZEN_PAPER_CLAIM_REGISTRY_RELATIVE_PATH
+    if (
+        value.get("paper_claim_registry_id") != PAPER_CLAIM_REGISTRY_ID
+        or value.get("paper_claim_registry_id")
+        != manifest.get("paper_claim_registry_id")
+        or value.get("paper_claim_registry_sha256")
+        != manifest.get("paper_claim_registry_sha256")
+        or frozen_claim_registry_path.is_symlink()
+        or not frozen_claim_registry_path.is_file()
+        or value.get("paper_claim_registry_sha256")
+        != sha256_file(frozen_claim_registry_path)
+    ):
+        raise SchemaError(
+            "frozen handoff paper-claim registry identity differs from campaign"
+        )
     provenance = read_json(root / "frozen" / "provenance.json")
     provenance_sources = provenance.get("source_files")
     if not isinstance(provenance_sources, Mapping):
@@ -7702,6 +9666,7 @@ def _validate_frozen_handoff_binding(
         "environment_manifest",
         "runner_attestation",
         "checkpoint_selection_evidence",
+        "paper_claim_registry",
         "pc01_checkpoint_compatibility_receipt",
     ):
         raw_value = arguments.get(field)
@@ -7811,6 +9776,23 @@ def _validate_frozen_handoff_binding(
         raise SchemaError(
             "frozen checkpoint-selection authority is not bound to its "
             "canonical destination"
+        )
+    try:
+        claim_registry_relative = Path(
+            str(arguments["paper_claim_registry"])
+        ).resolve().relative_to(registered_root).as_posix()
+    except (KeyError, ValueError) as exc:
+        raise SchemaError(
+            "frozen paper-claim registry escaped its handoff package"
+        ) from exc
+    canonical_claim_registry_binding = {
+        "source_relative_path": claim_registry_relative,
+        "campaign_relative_path": str(FROZEN_PAPER_CLAIM_REGISTRY_RELATIVE_PATH),
+        "sha256": str(inventory.get(claim_registry_relative, "")),
+    }
+    if canonical_claim_registry_binding not in bindings:
+        raise SchemaError(
+            "frozen paper-claim registry is not bound to its canonical destination"
         )
 
 
@@ -9017,7 +10999,8 @@ def _validate_frozen_runner_attestation(
         raise SchemaError("frozen runner source-set hash mismatch")
     if attestation.get("runner_entrypoint") == PRODUCTION_RUNNER_ENTRYPOINT:
         validate_pc01_page_broker_security_binding(
-            attestation.get(PC01_PAGE_BROKER_SECURITY_FIELD)
+            attestation.get(PC01_PAGE_BROKER_SECURITY_FIELD),
+            source_hashes=source_hashes,
         )
     elif attestation.get(PC01_PAGE_BROKER_SECURITY_FIELD) is not None:
         raise SchemaError(

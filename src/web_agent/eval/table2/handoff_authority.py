@@ -15,6 +15,7 @@ import stat
 from typing import Any
 
 from .common import SchemaError, read_json, require_keys, sha256_file
+from .paper_claims import REGISTRY_ID as PAPER_CLAIM_REGISTRY_ID
 
 
 HANDOFF_BUNDLE_SCHEMA_VERSION = "table2-handoff-bundle-v1"
@@ -119,6 +120,7 @@ def validate_handoff_freeze_authority(
     environment_manifest_path: str | Path | None,
     runner_attestation_path: str | Path | None,
     resolved_task_snapshot_path: str | Path | None,
+    paper_claim_registry_path: str | Path | None,
     pc01_checkpoint_compatibility_receipt_path: str | Path | None,
 ) -> dict[str, Any]:
     """Replay one handoff inventory and bind every evaluation-freeze input.
@@ -148,6 +150,8 @@ def validate_handoff_freeze_authority(
             "campaign_mode",
             "selection_mode",
             "matched_seeds",
+            "paper_claim_registry_id",
+            "paper_claim_registry_sha256",
             "freeze_arguments",
             "files",
         ),
@@ -235,6 +239,7 @@ def validate_handoff_freeze_authority(
             "environment_manifest",
             "runner_attestation",
             "checkpoint_selection_evidence",
+            "paper_claim_registry",
             "model_manifests",
             "memory_manifests",
         ),
@@ -282,6 +287,22 @@ def validate_handoff_freeze_authority(
         package_root=package_root,
         inventory=registered_inventory,
     )
+    _require_same_path(
+        paper_claim_registry_path,
+        arguments["paper_claim_registry"],
+        field="paper_claim_registry",
+        package_root=package_root,
+        inventory=registered_inventory,
+    )
+    registered_claim_registry = _registered_path(
+        arguments["paper_claim_registry"], field="paper_claim_registry"
+    )
+    if (
+        value.get("paper_claim_registry_id") != PAPER_CLAIM_REGISTRY_ID
+        or value.get("paper_claim_registry_sha256")
+        != sha256_file(registered_claim_registry)
+    ):
+        raise SchemaError("handoff paper-claim registry identity differs")
     _require_same_path_list(
         model_manifest_paths,
         arguments["model_manifests"],

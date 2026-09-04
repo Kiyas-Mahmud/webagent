@@ -41,7 +41,23 @@ def test_registered_paired_contrasts_include_e2_e3_memory_regressions():
             })
 
     result = compute_paired_contrasts(rows, bootstrap_samples=100, seed=3)
-    assert set(result["contrasts"]) == {"E1_minus_E0", "E2_minus_E1", "E3_minus_E2"}
+    assert set(result["contrasts"]) == {
+        "E1_minus_E0",
+        "E2_minus_E1",
+        "E3_minus_E2",
+        "E3_minus_E0",
+    }
+    total = result["contrasts"]["E3_minus_E0"]["task_success"]
+    assert total["analysis_role"] == "descriptive_total_system_contrast"
+    total_significance = total["task_clustered_significance"]
+    assert total_significance["inference_role"] == "descriptive_unadjusted_only"
+    assert "holm_adjusted_p" not in total_significance
+    assert result["multiple_testing"]["contrast_names"] == [
+        "E1_minus_E0",
+        "E2_minus_E1",
+        "E3_minus_E2",
+    ]
+    assert result["multiple_testing"]["hypothesis_count"] == 3
     regression = result["paired_memory_regression_rate"]
     assert regression["numerator"] == 1
     assert regression["denominator"] == 2

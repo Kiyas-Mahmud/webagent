@@ -285,9 +285,15 @@ def test_paired_contrast_csv_keeps_significance_ratios_and_memory_harm(tmp_path)
         exported = list(csv.DictReader(handle))
 
     success_rows = [row for row in exported if row["metric"] == "task_success"]
-    assert len(success_rows) == 3
+    assert len(success_rows) == 4
     assert all(row["exact_sign_two_sided_p"] != "" for row in success_rows)
-    assert all(row["holm_adjusted_p"] != "" for row in success_rows)
+    adjacent = [row for row in success_rows if row["contrast"] != "E3_minus_E0"]
+    assert len(adjacent) == 3
+    assert all(row["holm_adjusted_p"] != "" for row in adjacent)
+    total_system = next(
+        row for row in success_rows if row["contrast"] == "E3_minus_E0"
+    )
+    assert total_system["holm_adjusted_p"] == ""
     ratio_rows = [
         row for row in exported if row["analysis_family"] == "paired_ratio_difference"
     ]

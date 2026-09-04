@@ -19,16 +19,38 @@ Engineering smoke campaigns do not require this receipt. A final campaign
 must not contain or use the provisional PC-01 receipt; final readiness follows
 the later validation-only PC-01/PC-02/PC-03 selection and final freeze.
 
-**Current hard blocker:** the tracked page broker is an in-process typed
-engineering fixture. Runtime and sealed-evaluator accessors are importable in
-the same interpreter, so it supplies reviewed-code message-flow evidence only,
-not enforceable isolation. The handoff freezes this truth as
-`BLOCKED_EXTERNAL_PROCESS_ISOLATION_REQUIRED`; the canonical bootstrap stops
-before importing the provider factory. Consequently none of the commands below
-can authorize or start a live campaign in this source version. They document
-the post-isolation sequence for use only after a separately authenticated
-process-isolated broker implementation and receipt are preregistered under a
-new schema. A self-authored Boolean or receipt cannot lift this block.
+**Current hard blocker:** the repository now contains a source-bound AF_UNIX
+process-broker architecture with HMAC-authenticated JSON messages, peer
+PID/UID checks, distinct runtime/control keys, four allowlisted operations,
+exact outer request/result envelopes, recursive registered sensitive-key
+rejection, source- and PID-bound authenticated readiness, and authenticated
+cleanup receipts. Its `action`, `observation`, and `execution` inner values are
+still arbitrary mappings. A neutral key such as `content` can carry data whose
+origin cannot be inferred from the schema, so these checks do not establish
+semantic oracle isolation or value provenance.
+Its local fixture tests are key/envelope architecture evidence only. The active
+WebArena deployment has not supplied an independently authenticated receipt proving
+that these process/source/credential boundaries were used on the campaign
+host. Handoff therefore records
+`BLOCKED_INNER_SCHEMAS_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`; the canonical bootstrap still
+stops before importing the provider factory. The older same-process broker is
+retained for engineering fixtures and is explicitly unpromotable. A
+self-authored Boolean, local test receipt, or copied receipt cannot lift this
+block.
+
+The local broker child currently shares the runtime UID and inherits its launch
+environment. That is address-space separation, not a same-UID hostile-code or
+secret-confidentiality claim. A promotable external deployment receipt must be
+bound to the exact attested source/session and independently prove a separate
+UID or container/process sandbox, a filesystem policy that prevents runtime
+inspection of evaluator memory/state, an allowlisted scrubbed evaluator
+environment with no inherited runtime/provider secrets, authenticated peer
+identity, and cleanup under those same controls. Promotion additionally
+requires exact operation-specific schemas for all three arbitrary inner mapping
+paths and externally reviewable provenance showing where every runtime-visible
+value came from. The registered schema in this source version intentionally has
+neither those inner contracts nor a trust anchor capable of accepting a
+deployment receipt.
 
 ## Freeze prerequisites
 
@@ -39,9 +61,33 @@ environment, prompts, systems, protocol, dependency lock, and read-only P4
 memory must be byte-identical. Schedule and provenance bytes may differ only
 where the distinct campaign identity requires it.
 
+For a split local-browser/DGX-inference deployment, the frozen semantic
+dependency lock must be `table2-semantic-dependency-lock-v2`. Its
+`browser_host` record is derived from the measured local WebArena preflight;
+its `dgx_host` record is derived from the separately pinned, caller-supplied
+`table2-dgx-model-runtime-identity-v2`, which includes explicit
+Python/platform and sorted package measurements as well as model-runtime,
+source-set, and runtime-environment identities. The model/source/environment
+hashes are derived from the nested typed records, and the PC-01 model hashes are
+exactly registered. Missing DGX inventory is a hard stop. The evaluation CLI
+remeasures the browser host during bootstrap and the live capability gate
+repeats its runtime check per block. The comparison CLI can run on the DGX with
+`--remeasure-host-role dgx_host` and
+`--supplied-dgx-runtime-identity <CURRENT_V2_IDENTITY.json>`. It remeasures the
+executing Python/platform/package stack but only compares the supplied
+model/source/environment record; it does not independently generate that
+record. A future startup/model-load/per-block receipt must bind campaign ID,
+block ID, fresh nonce, semantic-lock hash, DGX host/runtime identities, phase,
+and issue time. No receipt schema or external trust anchor exists in this source
+version. Split dispatch therefore fails closed; a browser-side self-claim or
+copied JSON cannot substitute. Single-host v1 locks remain supported.
+
 Both runner attestations and their frozen `runner_source/` trees must include
 the exact current bytes for:
 
+- `src/web_agent/__init__.py`
+- `src/web_agent/eval/__init__.py`
+- `src/web_agent/eval/table2/__init__.py`
 - `src/web_agent/eval/table2/live_compatibility.py`
 - `src/web_agent/eval/table2/campaign.py`
 - `scripts/run_table2_evaluation.py`
@@ -49,6 +95,11 @@ the exact current bytes for:
 - `src/web_agent/eval/table2/common.py`
 - `src/web_agent/eval/table2/schedule.py`
 - `src/web_agent/eval/table2/package_validator.py`
+- `src/web_agent/eval/table2/dependency_lock.py`
+- `src/web_agent/eval/table2/process_broker.py`
+- `src/web_agent/eval/table2/process_broker_protocol.py`
+- `src/web_agent/eval/table2/process_broker_runtime.py`
+- `src/web_agent/eval/table2/process_broker_worker.py`
 
 The gate refuses to authorize the probe if any of these rows is absent, stale,
 symlinked, or different from both the frozen source and current clean source.
@@ -68,10 +119,11 @@ leaf and every parent component are non-symlinks. It must be tree-disjoint in
 both directions from the campaign and source checkout: `/`, either tree, a
 descendant, or an ancestor such as the campaign/source parent is rejected.
 
-After a future registered process-isolation implementation replaces the
-current blocker, generate the probe's provider-boundary receipt with the
-tracked CLI. The command below documents that later deterministic preparation;
-in the current source version it fails closed at the page-broker gate:
+After the deployment owner supplies and preregisters independent process-
+isolation evidence for the actual campaign host, generate the probe's
+provider-boundary receipt with the tracked CLI. The command below documents
+that later deterministic preparation; in the current source version it fails
+closed at the external-deployment-receipt gate:
 
 ```bash
 PYTHONPATH=src python3 scripts/run_table2_evaluation.py \

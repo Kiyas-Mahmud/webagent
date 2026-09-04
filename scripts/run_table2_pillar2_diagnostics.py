@@ -6,6 +6,11 @@ clean checkout before importing any ``web_agent`` or deployment predictor
 source. The predictor factory is a zero-argument ``module:attribute``
 callable; its source and returned predictor identity are rechecked after the
 diagnostic run.
+
+This source version cannot promote companion evidence: an exact PC-01 backend
+from a clean registered commit is emitted only as
+``UNPROMOTABLE_INPUT_PROVENANCE_BLOCKED`` until authoritative input-provenance
+replay exists. Generic predictors remain ``UNPROMOTABLE``.
 """
 
 from __future__ import annotations

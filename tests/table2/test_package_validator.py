@@ -29,6 +29,14 @@ from web_agent.eval.table2.common import (
 )
 from web_agent.eval.table2.package_validator import (
     FINAL_READY_STATUS,
+    MANUAL_AUDIT_AGREEMENT_METHOD,
+    MANUAL_AUDIT_BLINDING_MODE,
+    MANUAL_AUDIT_COMPOSITE_AGREEMENT_METHOD,
+    MANUAL_AUDIT_FINAL_VS_SEALED_METHOD,
+    MANUAL_AUDIT_KAPPA_DEFINED_STATUS,
+    MANUAL_AUDIT_KAPPA_UNDEFINED_REASON,
+    MANUAL_AUDIT_KAPPA_UNDEFINED_STATUS,
+    MANUAL_AUDIT_PER_FIELD_AGREEMENT_METHOD,
     MODEL_EVIDENCE_PRODUCER_SCHEMA_VERSION,
     MODEL_EVIDENCE_ROLES,
     PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD,
@@ -38,6 +46,8 @@ from web_agent.eval.table2.package_validator import (
     _expected_runner_runtime_identity,
     _model_evidence_bundle_value,
     _processor_contract_from_payload,
+    _recompute_manual_audit_agreement,
+    _recompute_manual_audit_final_vs_sealed,
     _pc01_checkpoint_compatibility_binding,
     _pc01_checkpoint_compatibility_source_files,
     _read_canonical_pc01_checkpoint_compatibility_receipt,
@@ -80,8 +90,9 @@ from web_agent.eval.table2.execution_guard import (
     InfrastructureInvalidError,
     PC01_PAGE_BROKER_SECURITY_FIELD,
     RUNNER_ATTESTATION_SCHEMA_VERSION,
-    blocked_pc01_page_broker_security_binding,
+    process_isolated_pc01_page_broker_security_binding,
 )
+from web_agent.eval.table2.dependency_lock import build_semantic_dependency_lock
 from web_agent.eval.table2 import handoff as handoff_preparer
 from web_agent.eval.table2 import package_validator as package_validator_module
 from web_agent.eval.table2 import selection_evidence as selection_evidence_module
@@ -134,6 +145,8 @@ from web_agent.eval.table2.sealed_verifier import (
     verify_sealed_stream,
 )
 from web_agent.eval.table2.summary import (
+    _manual_audit_task_context,
+    _write_manual_audit_reviewer_packet,
     _write_aggregate_hashes,
     _write_campaign_evidence_manifest,
     build_manual_audit_selection,
@@ -808,7 +821,7 @@ def _fixture_page_state_task_export(environment_value: dict[str, Any]) -> dict[s
 def _valid_environment(path: Path) -> Path:
     dependency_lock = path.parent / "dependency.lock"
     dependency_lock.parent.mkdir(parents=True, exist_ok=True)
-    dependency_lock.write_bytes(b"fixture-dependency-lock-v1\n")
+    dependency_lock.write_text("{}\n", encoding="utf-8")
     infrastructure_rules = [
         {
             "operation": operation,
@@ -968,6 +981,14 @@ def _valid_environment(path: Path) -> Path:
         destination_artifact_root=path.parent,
     )
     value[LIVE_DEPLOYMENT_BINDING_FIELD] = live_deployment.binding
+    preflight_evidence = read_json(path.parent / PREFLIGHT_ARTIFACT_RELATIVE_PATH)
+    dependency_value = build_semantic_dependency_lock(
+        environment=value,
+        deployment_preflight=preflight_evidence,
+        deployment_topology=SINGLE_HOST_TOPOLOGY,
+    )
+    _write_json(dependency_lock, dependency_value)
+    value["dependency_lock_sha256"] = sha256_file(dependency_lock)
     return _write_json(path, value)
 
 
@@ -3056,7 +3077,15 @@ def test_evaluation_freeze_requires_environment_model_and_memory_readiness(
         )
     handoff_manifest = handoff_root / "handoff_manifest.json"
     campaign_value = yaml.safe_load(config.read_text(encoding="utf-8"))
+    staged_claim_registry = handoff_root / "paper_claim_registry.json"
+    staged_claim_registry.write_bytes(
+        (
+            REPOSITORY_ROOT
+            / "configs/eval/table2/paper_claim_registry_v1.json"
+        ).read_bytes()
+    )
     campaign_value["handoff_manifest"] = str(handoff_manifest)
+    campaign_value["paper_claim_registry"] = str(staged_claim_registry)
     config.write_text(
         yaml.safe_dump(campaign_value, sort_keys=False), encoding="utf-8"
     )
@@ -3074,6 +3103,8 @@ def test_evaluation_freeze_requires_environment_model_and_memory_readiness(
             "campaign_mode": "evaluation",
             "selection_mode": PC01_PROVISIONAL_SELECTION_MODE,
             "matched_seeds": [42],
+            "paper_claim_registry_id": "table2-research-locked-claims-v1",
+            "paper_claim_registry_sha256": sha256_file(staged_claim_registry),
             "freeze_arguments": {
                 "handoff_manifest": str(handoff_manifest),
                 "campaign_config": str(config),
@@ -3081,6 +3112,7 @@ def test_evaluation_freeze_requires_environment_model_and_memory_readiness(
                 "environment_manifest": str(environment),
                 "runner_attestation": str(runner_attestation),
                 "checkpoint_selection_evidence": str(selection_manifest),
+                "paper_claim_registry": str(staged_claim_registry),
                 "model_manifests": [str(model)],
                 "memory_manifests": [str(memory)],
                 "pc01_checkpoint_compatibility_receipt": str(
@@ -3801,12 +3833,22 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
             *package_validator_module.EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS,
         }
     )
+    handoff_dependency_lock = _write_json(
+        tmp_path / "handoff-dependency.lock",
+        build_semantic_dependency_lock(
+            environment=environment,
+            deployment_preflight=read_json(
+                tmp_path / PREFLIGHT_ARTIFACT_RELATIVE_PATH
+            ),
+            deployment_topology=SINGLE_HOST_TOPOLOGY,
+        ),
+    )
     spec_path = _write_json(
         tmp_path / "handoff-input.json",
         {
             "schema_version": "table2-handoff-input-v1",
             "campaign_config": str(PILOT_CONFIG),
-            "dependency_lock": str(REPOSITORY_ROOT / "pyproject.toml"),
+            "dependency_lock": str(handoff_dependency_lock),
             "environment": environment,
             "evaluator": evaluator,
             "resolved_task_export": str(task_export_path),
@@ -3934,15 +3976,22 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
         for row in resolved_tasks["tasks"]
     )
     assert (handoff_root / "runner_attestation.json").is_file()
-    assert read_json(handoff_root / "runner_attestation.json")[
-        PC01_PAGE_BROKER_SECURITY_FIELD
-    ] == blocked_pc01_page_broker_security_binding()
+    staged_attestation = read_json(handoff_root / "runner_attestation.json")
+    staged_source_hashes = {
+        row["relative_path"]: row["sha256"]
+        for row in staged_attestation["source_files"]
+    }
+    assert staged_attestation[PC01_PAGE_BROKER_SECURITY_FIELD] == (
+        process_isolated_pc01_page_broker_security_binding(
+            source_hashes=staged_source_hashes
+        )
+    )
     assert (handoff_root / "live_deployment/manifest.json").is_file()
     assert handoff["pc01_live_deployment"] == read_json(
         handoff_root / "environment.json"
     )["pc01_live_deployment"]
     assert sha256_file(handoff_root / "dependency.lock") == sha256_file(
-        REPOSITORY_ROOT / "pyproject.toml"
+        handoff_dependency_lock
     )
     assert (handoff_root / "selection_evidence/manifest.json").is_file()
     staged_selection = read_json(
@@ -4034,7 +4083,7 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
         "resolved_config_record_sha256"
     ]
     assert sha256_file(frozen_campaign / "frozen/dependency.lock") == sha256_file(
-        REPOSITORY_ROOT / "pyproject.toml"
+        handoff_dependency_lock
     )
     report = validate_campaign(frozen_campaign, require_complete=False)
     assert report.passed, report.errors
@@ -4933,6 +4982,17 @@ def test_complete_pilot_writes_deterministic_audit_digests_and_exact_result_expo
 
     selection_path = campaign / "manual_audit/selection_manifest.json"
     selection = read_json(selection_path)
+    frozen_audit_definition = read_json(
+        campaign / "frozen/benchmark/audit_manifest.json"
+    )
+    expected_codebook_sha256 = sha256_json(
+        frozen_audit_definition["reviewer_codebook"]
+    )
+    assert selection["reviewer_codebook_id"] == frozen_audit_definition[
+        "reviewer_codebook"
+    ]["codebook_id"]
+    assert selection["reviewer_codebook_sha256"] == expected_codebook_sha256
+    assert selection["blinding_mode"] == MANUAL_AUDIT_BLINDING_MODE
     assert selection["selected_count"] == 18
     assert selection["total_shortfall"] == 2
     strata = {row["name"]: row for row in selection["strata"]}
@@ -4945,10 +5005,43 @@ def test_complete_pilot_writes_deterministic_audit_digests_and_exact_result_expo
     assert strata["e2_e3_disagreement"]["shortfall"] == 2
     assert all(row["substitution_allowed"] is False for row in strata.values())
     assert all("task_success" not in row for row in selection["selected"])
+    assert all("stratum" not in row for row in selection["selected"])
+    assert all(row["task_id"] for row in selection["selected"])
+    assert all(
+        row["artifact_path"].startswith("manual_audit/reviewer_packets/")
+        and "/sealed" not in row["artifact_path"]
+        and row["task_context_path"].startswith(
+            "manual_audit/reviewer_packets/"
+        )
+        for row in selection["selected"]
+    )
     labels_path = campaign / "manual_audit/sealed/selection_labels.json"
     assert labels_path.is_file()
     assert labels_path.stat().st_mode & 0o077 == 0
     assert selection["outcome_labels_sha256"] == sha256_file(labels_path)
+    sealed_selection = read_json(labels_path)
+    assert sealed_selection["reviewer_codebook_sha256"] == expected_codebook_sha256
+    sealed_by_id = {
+        row["audit_id"]: row for row in sealed_selection["labels"]
+    }
+    assert any(
+        row["paired_e2_artifact_path"] is not None
+        and sealed_by_id[row["audit_id"]]["paired_e2_episode_id"] is not None
+        for row in selection["selected"]
+        if row["system_id"] == "E3"
+    )
+    for row in selection["selected"]:
+        packet_root = campaign / Path(row["artifact_path"]).parent
+        packet_manifest = read_json(packet_root / "packet_manifest.json")
+        assert packet_manifest["blinding_mode"] == MANUAL_AUDIT_BLINDING_MODE
+        assert packet_manifest["system_condition_visible"] is True
+        assert packet_manifest["official_outcome_labels_included"] is False
+        assert packet_manifest["sealed_evaluator_files_included"] is False
+        assert (campaign / row["task_context_path"]).is_file()
+        assert not any(
+            "sealed" in path.relative_to(packet_root).parts
+            for path in packet_root.rglob("*")
+        )
     repeated_selection = build_manual_audit_selection(
         campaign, load_selected_analysis_records(campaign)
     )
@@ -5029,13 +5122,40 @@ def test_complete_pilot_writes_deterministic_audit_digests_and_exact_result_expo
     )
 
 
-def test_locked_final_readiness_requires_signed_hash_bound_human_adjudication(
-    tmp_path: Path,
-):
-    root = tmp_path / "locked-final"
+def _manual_audit_label(
+    *, task_outcome: str = "SUCCESS", failure_observed: bool = False
+) -> dict[str, str]:
+    return {
+        "task_outcome": task_outcome,
+        "recovery_outcome": "NO_RECOVERY_ATTEMPT",
+        "memory_effect": "NOT_APPLICABLE",
+        "failure_attribution": (
+            "OTHER_AGENT_FAILURE" if failure_observed else "NO_FAILURE_OBSERVED"
+        ),
+        "intervention_assessment": "NO_INTERVENTION",
+    }
+
+
+def _write_completed_manual_audit(
+    root: Path,
+    *,
+    uniform_reviewer_vectors: bool = False,
+) -> dict[str, Any]:
     audit_root = root / "manual_audit"
     sealed_root = audit_root / "sealed"
     sealed_root.mkdir(parents=True)
+    frozen_benchmark = root / "frozen" / "benchmark"
+    frozen_benchmark.mkdir(parents=True)
+    audit_definition = read_json(
+        REPOSITORY_ROOT / "benchmarks/table2/pilot/audit_manifest.json"
+    )
+    _write_json(frozen_benchmark / "audit_manifest.json", audit_definition)
+    codebook_binding = {
+        "reviewer_codebook_id": audit_definition["reviewer_codebook"]["codebook_id"],
+        "reviewer_codebook_sha256": sha256_json(
+            audit_definition["reviewer_codebook"]
+        ),
+    }
     campaign = {
         "schema_version": SCHEMA_VERSION,
         "campaign_id": "locked-final-1",
@@ -5043,58 +5163,135 @@ def test_locked_final_readiness_requires_signed_hash_bound_human_adjudication(
         "evidence_label": "FINAL_LOCKED",
     }
     _write_json(root / "campaign_manifest.json", campaign)
+    selected_evidence = [
+        {
+            "episode_id": "episode-01",
+            "block_id": "block-01",
+            "task_id": "task-01",
+            "system_id": "E1",
+            "stratum": "ordinary_success",
+            "task_success": True,
+            "loop_detected": False,
+            "environment_failure": False,
+            "has_verified_failure": False,
+            "has_recovery_attempt": False,
+            "has_admitted_memory_intervention": False,
+            "memory_effect_applicable": False,
+            "has_failure_evidence": False,
+            "paired_e2_episode_id": None,
+            "e2_e3_task_outcome_disagreement": False,
+            "case_categories": [],
+            "selection_score": "a" * 64,
+            "audit_id": "audit-01",
+        },
+        {
+            "episode_id": "episode-02",
+            "block_id": "block-02",
+            "task_id": "task-02",
+            "system_id": "E1",
+            "stratum": "terminal_failure",
+            "task_success": bool(uniform_reviewer_vectors),
+            "loop_detected": False,
+            "environment_failure": False,
+            "has_verified_failure": False,
+            "has_recovery_attempt": False,
+            "has_admitted_memory_intervention": False,
+            "memory_effect_applicable": False,
+            "has_failure_evidence": not uniform_reviewer_vectors,
+            "paired_e2_episode_id": None,
+            "e2_e3_task_outcome_disagreement": False,
+            "case_categories": [],
+            "selection_score": "b" * 64,
+            "audit_id": "audit-02",
+        },
+    ]
+    labels = {
+        "schema_version": SCHEMA_VERSION,
+        "manifest_id": audit_definition["manifest_id"],
+        "campaign_id": "locked-final-1",
+        **codebook_binding,
+        "offline_sealed_labels": True,
+        "labels": selected_evidence,
+    }
+    labels_path = _write_json(sealed_root / "selection_labels.json", labels)
+    labels_path.chmod(0o600)
     selection = {
         "schema_version": SCHEMA_VERSION,
+        "manifest_id": audit_definition["manifest_id"],
         "campaign_id": "locked-final-1",
+        **codebook_binding,
+        "selection_algorithm": "sha256-lowest-v1",
+        "selection_seed": audit_definition["selection_seed"],
+        "blinding_mode": MANUAL_AUDIT_BLINDING_MODE,
+        "outcome_labels_location": "sealed/selection_labels.json",
+        "outcome_labels_sha256": sha256_file(labels_path),
+        "total_target": 2,
         "selected_count": 2,
-        "selected": [{"audit_id": "audit-01"}, {"audit_id": "audit-02"}],
+        "total_shortfall": 0,
+        "strata": [],
+        "category_coverage": [],
+        "selected": [
+            {
+                "audit_id": row["audit_id"],
+                "episode_id": row["episode_id"],
+                "block_id": row["block_id"],
+                "task_id": row["task_id"],
+                "system_id": row["system_id"],
+                "task_context_path": f"manual_audit/reviewer_packets/{row['audit_id']}/task_context.json",
+                "artifact_path": f"manual_audit/reviewer_packets/{row['audit_id']}/primary_runtime",
+                "paired_e2_artifact_path": None,
+            }
+            for row in selected_evidence
+        ],
     }
     selection_path = _write_json(audit_root / "selection_manifest.json", selection)
-    report = ValidationReport(campaign_dir=str(root))
-    report.counts["included_blocks"] = 1
-
-    assert _publication_status(root, campaign, report, True) == "N/R"
-    pilot = {
-        **campaign,
-        "campaign_kind": "engineering_pilot",
-        "evidence_label": "PILOT_ONLY",
-    }
-    assert _publication_status(root, pilot, report, True) == "PILOT_ONLY"
-
     selection_hash = sha256_file(selection_path)
     timestamp = "2026-08-31T12:00:00+00:00"
     reviewers = ["reviewer-a", "reviewer-b"]
     signers = [*reviewers, "adjudicator-c"]
+    agreed_label = _manual_audit_label()
+    second_label = (
+        deepcopy(agreed_label)
+        if uniform_reviewer_vectors
+        else _manual_audit_label(task_outcome="FAILURE", failure_observed=True)
+    )
+    first_disagreement_label = (
+        deepcopy(agreed_label)
+        if uniform_reviewer_vectors
+        else _manual_audit_label(task_outcome="SUCCESS", failure_observed=True)
+    )
+    disagreement_count = 0 if uniform_reviewer_vectors else 1
     adjudication = {
         "schema_version": SCHEMA_VERSION,
         "campaign_id": "locked-final-1",
         "selection_manifest_sha256": selection_hash,
+        **codebook_binding,
         "status": "COMPLETE",
         "all_selected_items_reviewed": True,
         "all_disagreements_resolved": True,
         "reviewer_ids": reviewers,
         "adjudicator_id": "adjudicator-c",
-        "signed_by": signers,
-        "signed_at_utc": timestamp,
+        "attested_by": signers,
+        "attested_at_utc": timestamp,
         "records": [
             {
                 "audit_id": "audit-01",
                 "reviewer_labels": {
-                    "reviewer-a": {"success": True},
-                    "reviewer-b": {"success": True},
+                    "reviewer-a": deepcopy(agreed_label),
+                    "reviewer-b": deepcopy(agreed_label),
                 },
-                "final_label": {"success": True},
+                "final_label": deepcopy(agreed_label),
                 "disagreement": False,
                 "resolved": True,
             },
             {
                 "audit_id": "audit-02",
                 "reviewer_labels": {
-                    "reviewer-a": {"success": True},
-                    "reviewer-b": {"success": False},
+                    "reviewer-a": deepcopy(first_disagreement_label),
+                    "reviewer-b": deepcopy(second_label),
                 },
-                "final_label": {"success": False},
-                "disagreement": True,
+                "final_label": deepcopy(second_label),
+                "disagreement": not uniform_reviewer_vectors,
                 "resolved": True,
             },
         ],
@@ -5103,43 +5300,540 @@ def test_locked_final_readiness_requires_signed_hash_bound_human_adjudication(
         sealed_root / "adjudication.json", adjudication
     )
     adjudication_path.chmod(0o600)
+    label_order = audit_definition["reviewer_codebook"]["label_vector_order"]
+    recomputed_agreement = _recompute_manual_audit_agreement(
+        [
+            tuple(agreed_label[field] for field in label_order),
+            tuple(first_disagreement_label[field] for field in label_order),
+        ],
+        [
+            tuple(agreed_label[field] for field in label_order),
+            tuple(second_label[field] for field in label_order),
+        ],
+    )
+    recomputed_final_vs_sealed = _recompute_manual_audit_final_vs_sealed(
+        {
+            "audit-01": adjudication["records"][0]["final_label"],
+            "audit-02": adjudication["records"][1]["final_label"],
+        },
+        {row["audit_id"]: row for row in selected_evidence},
+    )
     agreement = {
         "schema_version": SCHEMA_VERSION,
         "campaign_id": "locked-final-1",
         "selection_manifest_sha256": selection_hash,
+        **codebook_binding,
         "status": "COMPLETE",
         "reviewer_ids": reviewers,
         "sample_size": 2,
-        "disagreement_count": 1,
-        "adjudicated_disagreement_count": 1,
-        "raw_agreement": 0.5,
-        "cohen_kappa": 0.0,
-        "calculation_method": "registered two-reviewer categorical agreement",
-        "signed_by": reviewers,
-        "signed_at_utc": timestamp,
+        "disagreement_count": disagreement_count,
+        "adjudicated_disagreement_count": disagreement_count,
+        **recomputed_agreement,
+        **recomputed_final_vs_sealed,
+        "attested_by": reviewers,
+        "attested_at_utc": timestamp,
     }
     agreement_path = _write_json(audit_root / "agreement.json", agreement)
     completion = {
         "schema_version": SCHEMA_VERSION,
         "campaign_id": "locked-final-1",
         "selection_manifest_sha256": selection_hash,
+        **codebook_binding,
         "completion_status": "HUMAN_ADJUDICATION_COMPLETE",
         "adjudication_relative_path": "sealed/adjudication.json",
         "adjudication_sha256": sha256_file(adjudication_path),
         "agreement_relative_path": "agreement.json",
         "agreement_sha256": sha256_file(agreement_path),
-        "signed_by": signers,
-        "signed_at_utc": timestamp,
+        "attested_by": signers,
+        "attested_at_utc": timestamp,
     }
-    _write_json(audit_root / "completion_manifest.json", completion)
+    completion_path = _write_json(audit_root / "completion_manifest.json", completion)
+    return {
+        "root": root,
+        "campaign": campaign,
+        "audit_definition_path": frozen_benchmark / "audit_manifest.json",
+        "selection": selection,
+        "selection_path": selection_path,
+        "labels": labels,
+        "labels_path": labels_path,
+        "adjudication": adjudication,
+        "adjudication_path": adjudication_path,
+        "agreement": agreement,
+        "agreement_path": agreement_path,
+        "completion": completion,
+        "completion_path": completion_path,
+        "codebook_binding": codebook_binding,
+    }
+
+
+def _refresh_manual_audit_completion_hashes(fixture: dict[str, Any]) -> None:
+    completion = fixture["completion"]
+    completion["adjudication_sha256"] = sha256_file(fixture["adjudication_path"])
+    completion["agreement_sha256"] = sha256_file(fixture["agreement_path"])
+    _write_json(fixture["completion_path"], completion)
+
+
+def test_locked_final_readiness_requires_attested_hash_bound_human_adjudication(
+    tmp_path: Path,
+):
+    fixture = _write_completed_manual_audit(tmp_path / "locked-final")
+    root = fixture["root"]
+    campaign = fixture["campaign"]
+    report = ValidationReport(campaign_dir=str(root))
+    report.counts["included_blocks"] = 1
+
+    pilot = {
+        **campaign,
+        "campaign_kind": "engineering_pilot",
+        "evidence_label": "PILOT_ONLY",
+    }
+    assert _publication_status(root, pilot, report, True) == "PILOT_ONLY"
 
     validated = validate_manual_adjudication_completion(root)
     assert validated["selected_count"] == 2
     assert validated["disagreement_count"] == 1
+    assert validated["raw_agreement"] == 0.5
+    assert validated["cohen_kappa"] == pytest.approx(1.0 / 3.0)
+    assert validated["cohen_kappa_status"] == MANUAL_AUDIT_KAPPA_DEFINED_STATUS
+    assert validated["composite_exact_agreement"] == 0.5
+    assert (
+        validated["final_vs_sealed_comparison_method"]
+        == MANUAL_AUDIT_FINAL_VS_SEALED_METHOD
+    )
+    task_comparison = validated["final_vs_sealed_comparison"][0]
+    assert task_comparison == {
+        "field": "task_outcome",
+        "eligible_count": 2,
+        "uniquely_mappable_count": 2,
+        "comparable_count": 2,
+        "agreement_count": 2,
+        "disagreement_count": 0,
+        "human_undeterminable_count": 0,
+        "not_uniquely_mappable_count": 0,
+    }
+    assert [row["field"] for row in validated["per_field_agreement"]] == [
+        "task_outcome",
+        "recovery_outcome",
+        "memory_effect",
+        "failure_attribution",
+        "intervention_assessment",
+    ]
+    assert validated["reviewer_codebook_sha256"] == fixture["codebook_binding"][
+        "reviewer_codebook_sha256"
+    ]
     assert _publication_status(root, campaign, report, True) == FINAL_READY_STATUS
 
+    agreement = fixture["agreement"]
     agreement["raw_agreement"] = 1.0
-    _write_json(agreement_path, agreement)
-    with pytest.raises(SchemaError):
+    _write_json(fixture["agreement_path"], agreement)
+    _refresh_manual_audit_completion_hashes(fixture)
+    with pytest.raises(SchemaError, match="raw agreement differs"):
         validate_manual_adjudication_completion(root)
     assert _publication_status(root, campaign, report, True) == "N/R"
+
+
+@pytest.mark.parametrize("target", ["reviewer", "final"])
+def test_manual_audit_rejects_arbitrary_reviewer_and_final_label_maps(
+    tmp_path: Path,
+    target: str,
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / target)
+    adjudication = fixture["adjudication"]
+    if target == "reviewer":
+        adjudication["records"][0]["reviewer_labels"]["reviewer-a"] = {
+            "success": True
+        }
+    else:
+        adjudication["records"][0]["final_label"] = {"success": True}
+    _write_json(fixture["adjudication_path"], adjudication)
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="registered reviewer-codebook fields"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_rejects_unregistered_categorical_label(tmp_path: Path) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "unregistered-label")
+    adjudication = fixture["adjudication"]
+    adjudication["records"][0]["reviewer_labels"]["reviewer-a"][
+        "task_outcome"
+    ] = "PROBABLY_SUCCESS"
+    _write_json(fixture["adjudication_path"], adjudication)
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="not a registered categorical label"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_rejects_forged_record_disagreement(tmp_path: Path) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "forged-disagreement")
+    adjudication = fixture["adjudication"]
+    adjudication["records"][1]["disagreement"] = False
+    _write_json(fixture["adjudication_path"], adjudication)
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="disagreement differs from reviewer labels"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+@pytest.mark.parametrize(
+    ("field", "forged_value", "message"),
+    [
+        ("cohen_kappa", 1.0, "kappa differs"),
+        ("calculation_method", "caller-selected-method", "method is not registered"),
+        ("cohen_kappa_status", "UNDEFINED", "status differs"),
+        (
+            "cohen_kappa_undefined_reason",
+            "caller supplied reason",
+            "undefined reason is not the registered result",
+        ),
+    ],
+)
+def test_manual_audit_rejects_forged_agreement_statistics(
+    tmp_path: Path,
+    field: str,
+    forged_value: Any,
+    message: str,
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / field)
+    agreement = fixture["agreement"]
+    agreement[field] = forged_value
+    _write_json(fixture["agreement_path"], agreement)
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match=message):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+@pytest.mark.parametrize("mutation", ["field_order", "category_order"])
+def test_manual_audit_rejects_registered_codebook_order_changes(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / mutation)
+    definition = read_json(fixture["audit_definition_path"])
+    if mutation == "field_order":
+        definition["reviewer_codebook"]["label_vector_order"].reverse()
+    else:
+        definition["reviewer_codebook"]["fields"][0]["allowed_labels"].reverse()
+    _write_json(fixture["audit_definition_path"], definition)
+
+    with pytest.raises(SchemaError, match="codebook differs from registration"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_recomputes_and_requires_registered_undefined_kappa(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_completed_manual_audit(
+        tmp_path / "undefined-kappa", uniform_reviewer_vectors=True
+    )
+    validated = validate_manual_adjudication_completion(fixture["root"])
+    assert validated["raw_agreement"] == 1.0
+    assert validated["cohen_kappa"] is None
+    assert validated["cohen_kappa_status"] == MANUAL_AUDIT_KAPPA_UNDEFINED_STATUS
+    assert (
+        validated["cohen_kappa_undefined_reason"]
+        == MANUAL_AUDIT_KAPPA_UNDEFINED_REASON
+    )
+
+    agreement = fixture["agreement"]
+    agreement["cohen_kappa_undefined_reason"] = "ALL_LABELS_IDENTICAL"
+    _write_json(fixture["agreement_path"], agreement)
+    _refresh_manual_audit_completion_hashes(fixture)
+    with pytest.raises(SchemaError, match="undefined reason is not the registered result"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_rejects_reviewer_order_change(tmp_path: Path) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "reviewer-order")
+    agreement = fixture["agreement"]
+    agreement["reviewer_ids"].reverse()
+    _write_json(fixture["agreement_path"], agreement)
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="reviewer vector/order differs"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+@pytest.mark.parametrize(
+    "artifact_name", ["selection", "adjudication", "agreement", "completion"]
+)
+def test_manual_audit_requires_codebook_binding_on_every_completion_artifact(
+    tmp_path: Path,
+    artifact_name: str,
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / artifact_name)
+    artifact = fixture[artifact_name]
+    artifact["reviewer_codebook_sha256"] = "0" * 64
+    _write_json(fixture[f"{artifact_name}_path"], artifact)
+    if artifact_name in {"adjudication", "agreement"}:
+        _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="codebook|reviewer_codebook_sha256"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_requires_explicit_defined_kappa_reason_field(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "missing-kappa-reason")
+    agreement = fixture["agreement"]
+    del agreement["cohen_kappa_undefined_reason"]
+    _write_json(fixture["agreement_path"], agreement)
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="wrong exact key schema"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+@pytest.mark.parametrize(
+    "artifact_name", ["selection", "labels", "adjudication", "agreement", "completion"]
+)
+def test_manual_audit_artifacts_reject_extra_json_keys(
+    tmp_path: Path, artifact_name: str
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / artifact_name)
+    fixture[artifact_name]["unregistered_extra"] = "forbidden"
+    _write_json(fixture[f"{artifact_name}_path"], fixture[artifact_name])
+    if artifact_name in {"adjudication", "agreement"}:
+        _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="wrong exact key schema"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_rejects_string_boolean_and_legacy_signature_keys(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "exact-types")
+    fixture["adjudication"]["all_selected_items_reviewed"] = "true"
+    _write_json(fixture["adjudication_path"], fixture["adjudication"])
+    _refresh_manual_audit_completion_hashes(fixture)
+    with pytest.raises(SchemaError, match="exact JSON boolean"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+    fixture = _write_completed_manual_audit(tmp_path / "legacy-signature")
+    fixture["completion"]["signed_by"] = fixture["completion"].pop("attested_by")
+    _write_json(fixture["completion_path"], fixture["completion"])
+    with pytest.raises(SchemaError, match="wrong exact key schema"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_completion_rejects_duplicate_json_keys(tmp_path: Path) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "duplicate-core-json")
+    completion_bytes = fixture["completion_path"].read_text(encoding="utf-8")
+    fixture["completion_path"].write_text(
+        completion_bytes[:-2]
+        + ',"completion_status":"FORGED_COMPLETE"}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SchemaError, match="duplicate JSON key"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+@pytest.mark.parametrize(
+    ("artifact_name", "wrong_id"),
+    [
+        ("selection", "other-campaign"),
+        ("labels", "other-campaign"),
+        ("adjudication", "other-campaign"),
+        ("agreement", "other-campaign"),
+        ("completion", "other-campaign"),
+    ],
+)
+def test_manual_audit_requires_exact_campaign_id_on_every_artifact(
+    tmp_path: Path, artifact_name: str, wrong_id: str
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / artifact_name)
+    fixture[artifact_name]["campaign_id"] = wrong_id
+    _write_json(fixture[f"{artifact_name}_path"], fixture[artifact_name])
+    if artifact_name in {"adjudication", "agreement"}:
+        _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="campaign|selection labels"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_label_applicability_is_bound_to_selected_evidence(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "applicability")
+    fixture["adjudication"]["records"][0]["reviewer_labels"]["reviewer-a"][
+        "recovery_outcome"
+    ] = "SUCCESSFUL_RECOVERY"
+    _write_json(fixture["adjudication_path"], fixture["adjudication"])
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="evidence applicability"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_rejects_forged_per_field_agreement(tmp_path: Path) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "per-field")
+    fixture["agreement"]["per_field_agreement"][0]["raw_agreement"] = 1.0
+    _write_json(fixture["agreement_path"], fixture["agreement"])
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="per_field_agreement differs"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_discloses_but_does_not_suppress_human_sealed_disagreement(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "human-sealed-disagreement")
+    adjudication = fixture["adjudication"]
+    # This item already has a genuine inter-reviewer disagreement.  Choosing
+    # reviewer A's observable-evidence judgment must remain admissible even
+    # though the official evaluator recorded failure and no environment fault.
+    adjudication["records"][1]["reviewer_labels"]["reviewer-a"][
+        "failure_attribution"
+    ] = "ENVIRONMENT_OR_INFRASTRUCTURE_FAILURE"
+    adjudication["records"][1]["final_label"] = deepcopy(
+        adjudication["records"][1]["reviewer_labels"]["reviewer-a"]
+    )
+    _write_json(fixture["adjudication_path"], adjudication)
+
+    label_order = read_json(fixture["audit_definition_path"])[
+        "reviewer_codebook"
+    ]["label_vector_order"]
+    fixture["agreement"].update(
+        _recompute_manual_audit_agreement(
+            [
+                tuple(row["reviewer_labels"]["reviewer-a"][field] for field in label_order)
+                for row in adjudication["records"]
+            ],
+            [
+                tuple(row["reviewer_labels"]["reviewer-b"][field] for field in label_order)
+                for row in adjudication["records"]
+            ],
+        )
+    )
+    fixture["agreement"].update(
+        _recompute_manual_audit_final_vs_sealed(
+            {
+                row["audit_id"]: row["final_label"]
+                for row in adjudication["records"]
+            },
+            {
+                row["audit_id"]: row
+                for row in fixture["labels"]["labels"]
+            },
+        )
+    )
+    _write_json(fixture["agreement_path"], fixture["agreement"])
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    validated = validate_manual_adjudication_completion(fixture["root"])
+    task_comparison = validated["final_vs_sealed_comparison"][0]
+    assert task_comparison["agreement_count"] == 1
+    assert task_comparison["disagreement_count"] == 1
+
+
+def test_manual_audit_rejects_forged_final_vs_sealed_comparison(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_completed_manual_audit(tmp_path / "forged-sealed-comparison")
+    fixture["agreement"]["final_vs_sealed_comparison"][0][
+        "disagreement_count"
+    ] = 2
+    _write_json(fixture["agreement_path"], fixture["agreement"])
+    _refresh_manual_audit_completion_hashes(fixture)
+
+    with pytest.raises(SchemaError, match="adjudicated-vs-sealed replay"):
+        validate_manual_adjudication_completion(fixture["root"])
+
+
+def test_manual_audit_task_context_is_frozen_oracle_free_projection(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "task-context"
+    _write_json(
+        root / "campaign_manifest.json",
+        {"campaign_id": "context-campaign", "campaign_mode": "evaluation"},
+    )
+    task = {
+        "task_id": "webarena.7",
+        "instruction": "Open the issue and apply the requested observable change.",
+        "start_state": {
+            "sites": ["gitlab"],
+            "start_url": "https://gitlab.example/issues/7",
+            "require_login": True,
+            "storage_state": {"credential": "must-not-copy"},
+            "geolocation": None,
+            "require_reset": True,
+        },
+        "task_config": {"eval": {"reference_answer": "must-not-copy"}},
+        "evaluator": {"config": {"reference_answer": "must-not-copy"}},
+    }
+    source = _write_json(root / "frozen/task_manifest.json", {"tasks": [task]})
+
+    context = _manual_audit_task_context(root.resolve(), task_id="webarena.7")
+
+    assert context["context_status"] == "AVAILABLE"
+    assert context["task_id"] == "webarena.7"
+    assert context["instruction"] == task["instruction"]
+    assert context["observable_start_context"] == {
+        "sites": ["gitlab"],
+        "start_url": "https://gitlab.example/issues/7",
+        "geolocation": None,
+        "require_login": True,
+        "require_reset": True,
+    }
+    assert context["source_task_snapshot_sha256"] == sha256_file(source)
+    serialized = canonical_json_bytes(context)
+    assert b"must-not-copy" not in serialized
+    assert "storage_state" not in context["observable_start_context"]
+    assert "task_config" not in context
+
+
+def test_manual_audit_reviewer_packet_rejects_duplicate_json_keys(
+    tmp_path: Path,
+) -> None:
+    root = (tmp_path / "duplicate-packet-json").resolve()
+    _write_json(
+        root / "campaign_manifest.json",
+        {"campaign_id": "packet-campaign", "campaign_mode": "evaluation"},
+    )
+    _write_json(
+        root / "frozen/task_manifest.json",
+        {
+            "tasks": [
+                {
+                    "task_id": "webarena.1",
+                    "instruction": "Perform the observable task.",
+                    "start_state": {
+                        "sites": ["site"],
+                        "start_url": "https://site.example/",
+                        "require_login": False,
+                        "storage_state": None,
+                        "geolocation": None,
+                        "require_reset": False,
+                    },
+                }
+            ]
+        },
+    )
+    runtime = root / "paired_blocks/block/rerun_0/E1/runtime"
+    _write_json(runtime / "episode_summary.json", {"episode_id": "episode-1"})
+    (runtime / "duplicate.json").write_text(
+        '{"task_success":false,"task_success":true}\n', encoding="utf-8"
+    )
+    reviewer_root = root / "manual_audit/reviewer_packets"
+    reviewer_root.mkdir(parents=True)
+
+    with pytest.raises(SchemaError, match="duplicate JSON key"):
+        _write_manual_audit_reviewer_packet(
+            root=root,
+            reviewer_packet_root=reviewer_root,
+            campaign_id="packet-campaign",
+            audit_id="audit-01",
+            primary_source=runtime,
+            primary_episode_id="episode-1",
+            primary_system_id="E1",
+            task_id="webarena.1",
+            paired_e2_source=None,
+            paired_e2_episode_id=None,
+        )

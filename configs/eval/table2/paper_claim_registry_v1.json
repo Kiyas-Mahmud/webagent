@@ -1,0 +1,442 @@
+{
+  "schema_version": "table2-paper-claim-registry-v1",
+  "registry_id": "table2-research-locked-claims-v1",
+  "status": "FROZEN_PRE_EVALUATION_TEMPLATE",
+  "paper_table_status": "N/R",
+  "seed_scope": "seed_42_only_task_uncertainty_not_model_seed_uncertainty",
+  "claim_status_values": [
+    "N/R",
+    "SUPPORTED",
+    "NOT_SUPPORTED",
+    "NEGATIVE_OR_NULL"
+  ],
+  "claim_status_semantics": {
+    "N/R": "not evaluated; no evidence or conclusion may be attached",
+    "SUPPORTED": "all registered evidence and conditions are satisfied and the registered analysis supports the stated claim",
+    "NOT_SUPPORTED": "the claim is not scientifically testable because at least one registered identification or provenance condition is unmet",
+    "NEGATIVE_OR_NULL": "all registered evidence and conditions are satisfied, but the registered effect is negative, null, or does not meet the support criterion"
+  },
+  "publication_rules": {
+    "pilot_claim_status": "N/R",
+    "pilot_table_status": "N/R",
+    "final_ready_status": "READY_FOR_TABLE2",
+    "paper_claim_ready_status": "READY_FOR_PAPER_CLAIMS",
+    "ready_for_table2_does_not_imply_claim_readiness": true,
+    "unregistered_decision_rules_block_claim_resolution": true,
+    "final_claims_must_resolve": true,
+    "negative_results_disclosure_required": true,
+    "evidence_paths_must_be_campaign_relative_and_hash_bound": true
+  },
+  "evidence_catalog": [
+    {
+      "kind": "final_package_validation",
+      "relative_path": "paper_claim_evidence/assessments/final_package_validation.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "final_package_validation_v1",
+      "source_relative_paths": ["aggregate/validation_report.json"]
+    },
+    {
+      "kind": "paired_task_effect",
+      "relative_path": "paper_claim_evidence/assessments/paired_task_effect.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "paired_task_effect_v1",
+      "source_relative_paths": ["aggregate/statistics.json"]
+    },
+    {
+      "kind": "task_cluster_confidence_interval",
+      "relative_path": "paper_claim_evidence/assessments/task_cluster_confidence_interval.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "task_cluster_confidence_interval_v1",
+      "source_relative_paths": ["aggregate/statistics.json"]
+    },
+    {
+      "kind": "cost_accounting",
+      "relative_path": "paper_claim_evidence/assessments/cost_accounting.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "cost_accounting_v1",
+      "source_relative_paths": ["aggregate/metrics.json"]
+    },
+    {
+      "kind": "architecture_interface_matched_control",
+      "relative_path": "paper_claim_evidence/assessments/architecture_interface_matched_control.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "architecture_interface_matched_control_v1",
+      "source_relative_paths": ["aggregate/architecture_interface_matched_control.json"]
+    },
+    {
+      "kind": "verified_failure_recovery_evidence",
+      "relative_path": "paper_claim_evidence/assessments/verified_failure_recovery_evidence.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "verified_failure_recovery_evidence_v1",
+      "source_relative_paths": ["aggregate/metrics.json", "aggregate/recovery_diagnostic_metrics.json"]
+    },
+    {
+      "kind": "frozen_train_only_memory_evidence",
+      "relative_path": "paper_claim_evidence/assessments/frozen_train_only_memory_evidence.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "frozen_train_only_memory_evidence_v1",
+      "source_relative_paths": ["memory/seed_42/manifest.json"]
+    },
+    {
+      "kind": "paired_memory_intervention_trace",
+      "relative_path": "paper_claim_evidence/assessments/paired_memory_intervention_trace.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "paired_memory_intervention_trace_v1",
+      "source_relative_paths": ["aggregate/retrieval_diagnostics.json"]
+    },
+    {
+      "kind": "trigger_source_stratified_recovery",
+      "relative_path": "paper_claim_evidence/assessments/trigger_source_stratified_recovery.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "trigger_source_stratified_recovery_v1",
+      "source_relative_paths": ["aggregate/trigger_source_stratified_recovery.json"]
+    },
+    {
+      "kind": "learned_trigger_only_ablation",
+      "relative_path": "paper_claim_evidence/assessments/learned_trigger_only_ablation.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "learned_trigger_only_ablation_v1",
+      "source_relative_paths": ["component_test/pillar1/learned_trigger_only_ablation.json"]
+    },
+    {
+      "kind": "p1_failure_detection_diagnostics",
+      "relative_path": "paper_claim_evidence/assessments/p1_failure_detection_diagnostics.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p1_failure_detection_diagnostics_v1",
+      "source_relative_paths": ["component_test/pillar1/pillar1_diagnostic_report.json"]
+    },
+    {
+      "kind": "p1_failure_diagnosis_diagnostics",
+      "relative_path": "paper_claim_evidence/assessments/p1_failure_diagnosis_diagnostics.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p1_failure_diagnosis_diagnostics_v1",
+      "source_relative_paths": ["component_test/pillar1/pillar1_diagnostic_report.json"]
+    },
+    {
+      "kind": "p1_executed_recovery_assessment_diagnostics",
+      "relative_path": "paper_claim_evidence/assessments/p1_executed_recovery_assessment_diagnostics.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p1_executed_recovery_assessment_diagnostics_v1",
+      "source_relative_paths": ["component_test/pillar1/pillar1_diagnostic_report.json"]
+    },
+    {
+      "kind": "authoritative_companion_input_provenance",
+      "relative_path": "paper_claim_evidence/assessments/authoritative_companion_input_provenance.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "authoritative_companion_input_provenance_v1",
+      "source_relative_paths": ["component_test/companion_input_provenance.json", "component_test/pillar1/package_manifest.json", "component_test/pillar2/package_manifest.json", "component_test/pillar3/package_manifest.json", "component_test/pillar4/package_manifest.json"]
+    },
+    {
+      "kind": "p2_temporal_causal_diagnostics",
+      "relative_path": "paper_claim_evidence/assessments/p2_temporal_causal_diagnostics.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p2_temporal_causal_diagnostics_v1",
+      "source_relative_paths": ["component_test/pillar2/pillar2_diagnostic_report.json"]
+    },
+    {
+      "kind": "p2_modality_occlusion_diagnostics",
+      "relative_path": "paper_claim_evidence/assessments/p2_modality_occlusion_diagnostics.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p2_modality_occlusion_diagnostics_v1",
+      "source_relative_paths": ["component_test/pillar2/pillar2_diagnostic_report.json"]
+    },
+    {
+      "kind": "p3_action_class_diagnostics",
+      "relative_path": "paper_claim_evidence/assessments/p3_action_class_diagnostics.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p3_action_class_diagnostics_v1",
+      "source_relative_paths": ["component_test/pillar3/pillar3_diagnostic_report.json"]
+    },
+    {
+      "kind": "p3_grounding_parameter_diagnostics",
+      "relative_path": "paper_claim_evidence/assessments/p3_grounding_parameter_diagnostics.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p3_grounding_parameter_diagnostics_v1",
+      "source_relative_paths": ["component_test/pillar3/pillar3_diagnostic_report.json"]
+    },
+    {
+      "kind": "p3_invalid_output_accounting",
+      "relative_path": "paper_claim_evidence/assessments/p3_invalid_output_accounting.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p3_invalid_output_accounting_v1",
+      "source_relative_paths": ["component_test/pillar3/pillar3_diagnostic_report.json"]
+    },
+    {
+      "kind": "p4_retrieval_admission_diagnostics",
+      "relative_path": "paper_claim_evidence/assessments/p4_retrieval_admission_diagnostics.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p4_retrieval_admission_diagnostics_v1",
+      "source_relative_paths": ["component_test/pillar4/pillar4_diagnostic_report.json"]
+    },
+    {
+      "kind": "p4_store_provenance_integrity",
+      "relative_path": "paper_claim_evidence/assessments/p4_store_provenance_integrity.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p4_store_provenance_integrity_v1",
+      "source_relative_paths": ["component_test/pillar4/pillar4_diagnostic_report.json"]
+    },
+    {
+      "kind": "p4_no_write_integrity",
+      "relative_path": "paper_claim_evidence/assessments/p4_no_write_integrity.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "p4_no_write_integrity_v1",
+      "source_relative_paths": ["component_test/pillar4/pillar4_diagnostic_report.json"]
+    },
+    {
+      "kind": "checkpoint_backed_embedding_execution_evidence",
+      "relative_path": "paper_claim_evidence/assessments/checkpoint_backed_embedding_execution_evidence.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "checkpoint_backed_embedding_execution_evidence_v1",
+      "source_relative_paths": ["runtime_readiness/pc01_checkpoint_compatibility_receipt.json"]
+    },
+    {
+      "kind": "browser_action_counts",
+      "relative_path": "paper_claim_evidence/assessments/browser_action_counts.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "browser_action_counts_v1",
+      "source_relative_paths": ["aggregate/metrics.json"]
+    },
+    {
+      "kind": "model_call_counts",
+      "relative_path": "paper_claim_evidence/assessments/model_call_counts.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "model_call_counts_v1",
+      "source_relative_paths": ["aggregate/metrics.json"]
+    },
+    {
+      "kind": "wall_clock_latency",
+      "relative_path": "paper_claim_evidence/assessments/wall_clock_latency.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "wall_clock_latency_v1",
+      "source_relative_paths": ["aggregate/metrics.json"]
+    },
+    {
+      "kind": "complete_contrast_disclosure",
+      "relative_path": "paper_claim_evidence/assessments/complete_contrast_disclosure.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "complete_contrast_disclosure_v1",
+      "source_relative_paths": ["paper_claim_evidence/disclosures.json", "aggregate/statistics.json"]
+    },
+    {
+      "kind": "pillar_limitations_disclosure",
+      "relative_path": "paper_claim_evidence/assessments/pillar_limitations_disclosure.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "pillar_limitations_disclosure_v1",
+      "source_relative_paths": ["paper_claim_evidence/disclosures.json"]
+    },
+    {
+      "kind": "model_seed_uncertainty_limitation",
+      "relative_path": "paper_claim_evidence/assessments/model_seed_uncertainty_limitation.json",
+      "schema_version": "table2-paper-claim-evidence-assessment-v1",
+      "producer": "web_agent.eval.table2.paper_claims:evidence-assessment-v1",
+      "validator": "model_seed_uncertainty_limitation_v1",
+      "source_relative_paths": ["paper_claim_evidence/disclosures.json"]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "e0_e1_contextual_policy_difference",
+      "family": "primary_contrast",
+      "contrast": "E0_vs_E1",
+      "interpretation": "trained multimodal policy versus the unadapted common-schema baseline; contextual unless architecture and interface matching are proven",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["final_package_validation", "paired_task_effect", "task_cluster_confidence_interval", "cost_accounting"],
+      "conditions": [],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "e0_e1_pure_training_effect",
+      "family": "conditional_causal_claim",
+      "contrast": "E0_vs_E1",
+      "interpretation": "pure training effect under an architecture/interface-matched control",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NOT_SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["final_package_validation", "paired_task_effect", "task_cluster_confidence_interval", "architecture_interface_matched_control"],
+      "conditions": ["architecture_interface_matched_control"],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "e1_e2_operational_recovery_increment",
+      "family": "primary_contrast",
+      "contrast": "E1_vs_E2",
+      "interpretation": "increment from executed diagnosis and bounded concrete recovery",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["final_package_validation", "paired_task_effect", "task_cluster_confidence_interval", "verified_failure_recovery_evidence", "cost_accounting"],
+      "conditions": [],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "e2_e3_corrective_memory_increment",
+      "family": "primary_contrast",
+      "contrast": "E2_vs_E3",
+      "interpretation": "increment from frozen train-only corrective-memory intervention",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["final_package_validation", "paired_task_effect", "task_cluster_confidence_interval", "frozen_train_only_memory_evidence", "paired_memory_intervention_trace", "cost_accounting"],
+      "conditions": [],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "e0_e3_total_system_difference",
+      "family": "total_system_contrast",
+      "contrast": "E0_vs_E3",
+      "interpretation": "total-system difference only; not a single-pillar attribution",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["final_package_validation", "paired_task_effect", "task_cluster_confidence_interval", "cost_accounting"],
+      "conditions": [],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "p1_learned_trigger_specific_contribution",
+      "family": "conditional_pillar_claim",
+      "contrast": "E1_vs_E2",
+      "interpretation": "learned P1 trigger contribution separated from executor and loop safeguards",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NOT_SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["final_package_validation", "trigger_source_stratified_recovery", "learned_trigger_only_ablation"],
+      "conditions": ["learned_trigger_only_ablation"],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "p1_offline_diagnostic_support",
+      "family": "companion_diagnostic",
+      "contrast": null,
+      "interpretation": "offline failure detection, failure diagnosis, and executed-transition recovery-assessment support; not an operational recovery-effect claim",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NOT_SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["p1_failure_detection_diagnostics", "p1_failure_diagnosis_diagnostics", "p1_executed_recovery_assessment_diagnostics", "authoritative_companion_input_provenance"],
+      "conditions": ["authoritative_companion_input_provenance"],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "p2_temporal_multimodal_diagnostic_support",
+      "family": "companion_diagnostic",
+      "contrast": null,
+      "interpretation": "temporal and modality sensitivity support from registered causal controls",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NOT_SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["p2_temporal_causal_diagnostics", "p2_modality_occlusion_diagnostics", "authoritative_companion_input_provenance"],
+      "conditions": ["authoritative_companion_input_provenance"],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "p3_grounded_action_parameter_diagnostic_support",
+      "family": "companion_diagnostic",
+      "contrast": null,
+      "interpretation": "offline six-class action, grounding, parameter and invalid-output diagnostics; browser execution is not measured",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NOT_SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["p3_action_class_diagnostics", "p3_grounding_parameter_diagnostics", "p3_invalid_output_accounting", "authoritative_companion_input_provenance"],
+      "conditions": ["authoritative_companion_input_provenance"],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "p4_retrieval_admission_diagnostic_support",
+      "family": "companion_diagnostic",
+      "contrast": null,
+      "interpretation": "frozen train-only retrieval, admission, provenance, and no-write mechanism support; not an end-to-end memory-benefit claim",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED", "NOT_SUPPORTED", "NEGATIVE_OR_NULL"],
+      "required_evidence": ["p4_retrieval_admission_diagnostics", "p4_store_provenance_integrity", "p4_no_write_integrity", "authoritative_companion_input_provenance", "checkpoint_backed_embedding_execution_evidence"],
+      "conditions": ["authoritative_companion_input_provenance", "checkpoint_backed_embedding_execution_evidence"],
+      "decision_rule": "UNREGISTERED_BLOCKS_SUPPORTED_OR_NEGATIVE_OR_NULL"
+    },
+    {
+      "claim_id": "cost_and_latency_tradeoff",
+      "family": "required_cost_disclosure",
+      "contrast": "E0_E1_E2_E3",
+      "interpretation": "visible browser-action, model-call and wall-clock costs",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED"],
+      "required_evidence": ["browser_action_counts", "model_call_counts", "wall_clock_latency"],
+      "conditions": [],
+      "decision_rule": "machine_validated_complete_cost_accounting_v1"
+    },
+    {
+      "claim_id": "negative_null_and_unsupported_results_disclosed",
+      "family": "required_complete_disclosure",
+      "contrast": "ALL_REGISTERED_CONTRASTS",
+      "interpretation": "all negative, null and unsupported results and limitations are disclosed",
+      "initial_status": "N/R",
+      "permitted_statuses": ["N/R", "SUPPORTED"],
+      "required_evidence": ["complete_contrast_disclosure", "pillar_limitations_disclosure", "model_seed_uncertainty_limitation"],
+      "conditions": [],
+      "decision_rule": "machine_validated_complete_disclosure_v1"
+    }
+  ],
+  "prohibited_claims": [
+    {
+      "claim_id": "offline_mcc_proves_operational_recovery",
+      "prohibition": "Do not claim operational recovery from offline recovery-outcome MCC alone.",
+      "status": "PROHIBITED",
+      "forbidden_evidence_substitutions": ["offline_recovery_outcome_mcc"]
+    },
+    {
+      "claim_id": "retrieval_metric_alone_proves_memory_benefit",
+      "prohibition": "Do not claim memory benefit from memory-update classification or Recall@K alone.",
+      "status": "PROHIBITED",
+      "forbidden_evidence_substitutions": ["memory_update_classification", "recall_at_k", "mrr"]
+    },
+    {
+      "claim_id": "screenshots_alone_prove_causal_reasoning",
+      "prohibition": "Do not claim causal reasoning from screenshots without registered causal controls.",
+      "status": "PROHIBITED",
+      "forbidden_evidence_substitutions": ["pre_post_screenshot_observation"]
+    },
+    {
+      "claim_id": "cross_benchmark_superiority",
+      "prohibition": "Do not claim superiority to work evaluated on another benchmark.",
+      "status": "PROHIBITED",
+      "forbidden_evidence_substitutions": ["related_paper_score"]
+    },
+    {
+      "claim_id": "all_recovery_strategies_generalize",
+      "prohibition": "Do not claim all six recovery strategies generalize without locked-task support.",
+      "status": "PROHIBITED",
+      "forbidden_evidence_substitutions": ["development_scenario_result"]
+    },
+    {
+      "claim_id": "pilot_result_is_final_table2",
+      "prohibition": "Do not present engineering-pilot values as final Table 2 evidence.",
+      "status": "PROHIBITED",
+      "forbidden_evidence_substitutions": ["pilot_metric", "pilot_confidence_interval"]
+    },
+    {
+      "claim_id": "single_seed_estimates_model_seed_uncertainty",
+      "prohibition": "Do not claim model-seed uncertainty from the registered seed-42-only design.",
+      "status": "PROHIBITED",
+      "forbidden_evidence_substitutions": ["task_cluster_bootstrap"]
+    }
+  ]
+}

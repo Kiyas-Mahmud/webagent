@@ -9,6 +9,16 @@ import sys
 
 from web_agent.eval.table2.common import sha256_json
 from web_agent.eval.table2.split_deployment_preflight import (
+    BRIDGE_REQUEST_SCHEMA,
+    BRIDGE_RESPONSE_SCHEMA,
+    PC01_BACKBONE_ID,
+    PC01_BACKBONE_REVISION,
+    PC01_BASE_SNAPSHOT_SHA256,
+    PC01_CHECKPOINT_SHA256,
+    PC01_PROCESSOR_CONTRACT_SHA256,
+    PC01_RESOLVED_CONFIG_SHA256,
+    SPLIT_BRIDGE_REQUEST_SCHEMA_VERSION,
+    SPLIT_BRIDGE_RESPONSE_SCHEMA_VERSION,
     SPLIT_BRIDGE_IDENTITY_SCHEMA_VERSION,
     SPLIT_BRIDGE_PROTOCOL_ID,
     SPLIT_BRIDGE_PROTOCOL_VERSION,
@@ -71,19 +81,53 @@ def _local_pass() -> dict:
 
 def _inputs(root: Path) -> dict[str, Path]:
     local = _local_pass()
-    dgx = build_dgx_model_runtime_identity(
-        host_identity_sha256="d" * 64,
-        runtime_identity={
-            "checkpoint_sha256": "e" * 64,
-            "processor_contract_sha256": "f" * 64,
+    dependency_identity = {
+        "host": {
+            "system": "Linux",
+            "release": "fixture-dgx-release",
+            "machine": "aarch64",
+            "python_version": "3.12.3",
+            "python_executable_sha256": "d" * 64,
         },
-        runtime_source_set_sha256="1" * 64,
-        runtime_environment_sha256="2" * 64,
+        "packages": [
+            {"distribution": "accelerate", "version": "1.0.0"},
+            {"distribution": "bitsandbytes", "version": "0.49.0"},
+            {"distribution": "peft", "version": "0.18.0"},
+            {"distribution": "torch", "version": "2.13.0"},
+            {"distribution": "transformers", "version": "4.57.6"},
+        ],
+    }
+    dgx = build_dgx_model_runtime_identity(
+        host_identity_sha256=sha256_json(dependency_identity["host"]),
+        dependency_identity=dependency_identity,
+        runtime_identity={
+            "backbone_id": PC01_BACKBONE_ID,
+            "backbone_revision": PC01_BACKBONE_REVISION,
+            "base_snapshot_sha256": PC01_BASE_SNAPSHOT_SHA256,
+            "checkpoint_sha256": PC01_CHECKPOINT_SHA256,
+            "resolved_config_sha256": PC01_RESOLVED_CONFIG_SHA256,
+            "processor_contract_sha256": PC01_PROCESSOR_CONTRACT_SHA256,
+        },
+        runtime_source_files=[
+            {"relative_path": "src/runtime.py", "sha256": "1" * 64}
+        ],
+        runtime_environment={
+            "python_version": "3.12.3",
+            "python_executable_sha256": "d" * 64,
+            "torch_version": "2.13.0",
+            "transformers_version": "4.57.6",
+            "cuda_available": True,
+            "cuda_runtime_version": "13.0",
+            "device_type": "cuda",
+            "device_name": "NVIDIA GB10",
+            "device_count": 1,
+            "container_digest": "sha256:" + "e" * 64,
+        },
     )
     sources = [{"relative_path": "bridge/server.py", "sha256": "3" * 64}]
     bridge = {
         "schema_version": SPLIT_BRIDGE_IDENTITY_SCHEMA_VERSION,
-        "record_type": "OracleBlindInferenceBridgeIdentity",
+        "record_type": "SplitInferenceBridgeCompatibilityIdentity",
         "bridge_id": "fixture-bridge",
         "bridge_version": "v1",
         "protocol_id": SPLIT_BRIDGE_PROTOCOL_ID,
@@ -95,16 +139,28 @@ def _inputs(root: Path) -> dict[str, Path]:
         "dgx_endpoint_identity_sha256": "5" * 64,
         "dgx_model_runtime_identity_sha256": sha256_json(dgx),
         "transport_identity_sha256": "6" * 64,
-        "request_schema_sha256": "7" * 64,
-        "response_schema_sha256": "8" * 64,
-        "reward_fields_permitted": False,
-        "oracle_fields_permitted": False,
-        "evaluator_fields_permitted": False,
+        "request_schema_sha256": sha256_json(BRIDGE_REQUEST_SCHEMA),
+        "response_schema_sha256": sha256_json(BRIDGE_RESPONSE_SCHEMA),
+        "reward_envelope_fields_permitted": False,
+        "oracle_envelope_fields_permitted": False,
+        "evaluator_envelope_fields_permitted": False,
+        "payload_content_attested": False,
+        "endpoint_origin_attested": False,
     }
     exchanges = [
         {
-            "request": {"request_id": "preflight-0", "input_sha256": "9" * 64},
-            "response": {"request_id": "preflight-0", "output_sha256": "a" * 64},
+            "request": {
+                "schema_version": SPLIT_BRIDGE_REQUEST_SCHEMA_VERSION,
+                "request_id": "preflight-0",
+                "operation": "pre_action_prediction",
+                "payload_sha256": "9" * 64,
+            },
+            "response": {
+                "schema_version": SPLIT_BRIDGE_RESPONSE_SCHEMA_VERSION,
+                "request_id": "preflight-0",
+                "operation": "pre_action_prediction",
+                "payload_sha256": "a" * 64,
+            },
         }
     ]
     return {
@@ -198,12 +254,13 @@ def test_cli_builds_redacted_read_only_artifact_then_revalidates_it(
     artifact = json.loads(output.read_text(encoding="utf-8"))
     assert summary["status"] == "PASS"
     assert summary["bridge_exchange_count"] == 1
-    assert summary["forbidden_field_totals"] == {
+    assert summary["forbidden_envelope_field_totals"] == {
         "reward": 0,
         "oracle": 0,
         "evaluator": 0,
     }
-    assert artifact["campaign_eligible"] is True
+    assert artifact["campaign_eligible"] is False
+    assert artifact["dispatch_authorized"] is False
     assert "preflight-0" not in output.read_text(encoding="utf-8")
     assert output.stat().st_mode & stat.S_IWUSR == 0
 
