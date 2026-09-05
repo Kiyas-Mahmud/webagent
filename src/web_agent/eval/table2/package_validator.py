@@ -17,6 +17,7 @@ import platform
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -70,11 +71,16 @@ from web_agent.memory.verification import (
 )
 
 from .common import (
+    CAMPAIGN_PROFILE_FINAL,
+    CAMPAIGN_PROFILE_PILOT,
+    FINAL_EVIDENCE_LABEL,
+    PILOT_EVIDENCE_LABEL,
     SCHEMA_VERSION,
     SchemaError,
     Table2Error,
     atomic_write_json,
     canonical_json_bytes,
+    classify_campaign_profile,
     read_json,
     read_jsonl,
     read_records,
@@ -206,6 +212,16 @@ RUNTIME_FILES = (
 )
 FINAL_READY_STATUS = "READY_FOR_TABLE2"
 DRAFT_PILOT_STATUS = "DRAFT_PILOT_ONLY"
+CAMPAIGN_COMPLETION_KEYS = (
+    "schema_version",
+    "campaign_id",
+    "status",
+    "scheduled_block_count",
+    "processed_block_count",
+    "included_block_count",
+    "infrastructure_excluded_block_count",
+    "publication_status",
+)
 MANUAL_AUDIT_MANIFEST_ID = "table2-outcome-label-hidden-audit-20-v2"
 MANUAL_AUDIT_BLINDING_MODE = "OUTCOME_LABELS_HIDDEN_SYSTEM_CONDITION_VISIBLE"
 MANUAL_AUDIT_CODEBOOK_SCHEMA_VERSION = "table2-manual-audit-reviewer-codebook-v2"
@@ -365,6 +381,7 @@ EVALUATION_CONTROL_SOURCE_RELATIVE_PATHS: tuple[str, ...] = tuple(
             "src/web_agent/eval/table2/process_broker.py",
             "src/web_agent/eval/table2/process_broker_protocol.py",
             "src/web_agent/eval/table2/process_broker_runtime.py",
+            "src/web_agent/eval/table2/process_broker_timeout.py",
             "src/web_agent/eval/table2/process_broker_worker.py",
             "src/web_agent/eval/table2/task_interface_audit.py",
             "src/web_agent/eval/table2/webarena_page_state_evaluator.py",
@@ -1312,10 +1329,14 @@ def freeze_campaign(
     identifier = campaign_id or str(protocol.get("protocol_id", ""))
     if not identifier:
         raise SchemaError("campaign ID or protocol.protocol_id is required")
-    kind = str(campaign_config.get("campaign_kind", "engineering_pilot"))
-    campaign_mode = str(campaign_config.get("campaign_mode", "evaluation"))
-    if campaign_mode not in {"evaluation", "smoke"}:
-        raise SchemaError("campaign_mode must be 'evaluation' or explicit 'smoke'")
+    campaign_mode = campaign_config.get("campaign_mode", "evaluation")
+    campaign_profile = classify_campaign_profile(
+        campaign_config,
+        context="campaign configuration",
+        default_campaign_mode="evaluation",
+    )
+    kind = campaign_config["campaign_kind"]
+    pilot_only = campaign_profile == CAMPAIGN_PROFILE_PILOT
     configured_handoff = handoff_manifest_path or campaign_config.get(
         "handoff_manifest"
     )
@@ -1356,7 +1377,6 @@ def freeze_campaign(
         raise SchemaError(
             "explicit handoff manifest differs from frozen campaign configuration"
         )
-    pilot_only = kind != "locked_final" or str(campaign_config.get("evidence_label")) == "PILOT_ONLY"
     registered_exclusion_path = repo / PILOT_TASK_EXCLUSION_REGISTRY_RELATIVE_PATH
     if registered_exclusion_path.is_symlink() or not registered_exclusion_path.is_file():
         raise SchemaError(
@@ -2773,14 +2793,20 @@ def freeze_campaign(
             "files": hashes,
         },
     )
-    publication_status = "PILOT_ONLY" if pilot_only else "N/R"
+    # The frozen campaign exists before the outcome-label-hidden human audit.
+    # ``evidence_label`` records the registered engineering scope, whereas
+    # ``publication_status`` must remain a draft until the separate,
+    # post-execution adjudication authority validates.
+    publication_status = DRAFT_PILOT_STATUS if pilot_only else "N/R"
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "campaign_id": identifier,
         "campaign_kind": kind,
         "campaign_mode": campaign_mode,
         "protocol_id": protocol.get("protocol_id"),
-        "evidence_label": "PILOT_ONLY" if pilot_only else "FINAL_LOCKED",
+        "evidence_label": (
+            PILOT_EVIDENCE_LABEL if pilot_only else FINAL_EVIDENCE_LABEL
+        ),
         "publication_status": publication_status,
         "paper_table_status": "N/R",
         "paper_claim_registry_id": paper_claim_registry_binding["registry_id"],
@@ -2930,6 +2956,8 @@ def _validate_campaign_core(
                 "schema_version",
                 "campaign_id",
                 "campaign_kind",
+                "campaign_mode",
+                "evidence_label",
                 "publication_status",
                 "paper_claim_registry_id",
                 "paper_claim_registry_sha256",
@@ -2973,6 +3001,20 @@ def _validate_campaign_core(
         )
         if manifest["schema_version"] != SCHEMA_VERSION:
             raise SchemaError("campaign_manifest schema version does not match evaluator")
+        campaign_profile = classify_campaign_profile(
+            manifest,
+            context="campaign_manifest",
+            require_campaign_mode=True,
+        )
+        pilot = campaign_profile == CAMPAIGN_PROFILE_PILOT
+        expected_initial_publication_status = (
+            DRAFT_PILOT_STATUS if pilot else "N/R"
+        )
+        if manifest["publication_status"] != expected_initial_publication_status:
+            raise SchemaError(
+                "campaign_manifest publication_status must remain at its frozen "
+                f"initial value {expected_initial_publication_status!r}"
+            )
         if tuple(manifest["systems"]) != SYSTEM_IDS:
             raise SchemaError("campaign_manifest must register exactly E0--E3")
         for directory in (
@@ -2999,7 +3041,6 @@ def _validate_campaign_core(
         )
         if prefix_tail != manifest["access_ledger_tail"]:
             raise SchemaError("access ledger frozen-prefix tail differs from campaign_manifest")
-        pilot_manifest = str(manifest.get("evidence_label")) == "PILOT_ONLY"
         for record in access_records:
             payload = record.get("payload", {})
             if not isinstance(payload, Mapping):
@@ -3009,7 +3050,7 @@ def _validate_campaign_core(
             locked = strict_bool(
                 payload["locked_test_content"], context="access.locked_test_content"
             )
-            if pilot_manifest and locked:
+            if pilot and locked:
                 raise SchemaError("campaign access ledger contains a locked-test read")
         _validate_frozen_hashes(root, manifest)
         _validate_frozen_handoff_binding(root, manifest)
@@ -3047,7 +3088,6 @@ def _validate_campaign_core(
             campaign_config["paper_claim_registry"]
         ).strip():
             raise SchemaError("frozen campaign lost paper_claim_registry")
-        pilot = str(manifest.get("evidence_label")) == "PILOT_ONLY"
         _validate_protocol_access_boundary(
             protocol,
             campaign_config,
@@ -3127,10 +3167,17 @@ def _validate_campaign_core(
                     "campaign PC-01 live-deployment binding differs from frozen evidence"
                 )
             validate_frozen_dependency_lock(root)
-        if str(campaign_config.get("campaign_kind")) != str(manifest["campaign_kind"]):
-            raise SchemaError("frozen campaign kind differs from campaign_manifest")
-        if str(campaign_config.get("campaign_mode", "evaluation")) != str(
-            manifest.get("campaign_mode")
+        frozen_campaign_profile = classify_campaign_profile(
+            campaign_config,
+            context="frozen campaign configuration",
+            default_campaign_mode="evaluation",
+        )
+        if frozen_campaign_profile != campaign_profile:
+            raise SchemaError(
+                "frozen campaign profile differs from campaign_manifest"
+            )
+        if campaign_config.get("campaign_mode", "evaluation") != manifest.get(
+            "campaign_mode"
         ):
             raise SchemaError("frozen campaign mode differs from campaign_manifest")
         if str(protocol.get("protocol_id")) != str(manifest.get("protocol_id")):
@@ -3256,12 +3303,10 @@ def _validate_campaign_core(
                 "checkpoint compatibility receipt"
             )
         if pilot:
-            if str(campaign_config.get("evidence_label")) != "PILOT_ONLY" or str(
-                protocol.get("evidence_label")
-            ) != "PILOT_ONLY":
+            if protocol.get("evidence_label") != PILOT_EVIDENCE_LABEL:
                 raise SchemaError("pilot evidence labels disagree across frozen artifacts")
         else:
-            if str(manifest.get("campaign_kind")) != "locked_final":
+            if campaign_profile != CAMPAIGN_PROFILE_FINAL:
                 raise SchemaError("non-pilot campaign must be registered locked_final")
         task_candidates = list((root / "frozen").glob("task_manifest.*"))
         if len(task_candidates) != 1:
@@ -3488,6 +3533,15 @@ def _validate_campaign_core(
         )
         if require_complete and included + excluded != len(schedule):
             report.error("not every scheduled block is included or preregistered infrastructure-excluded")
+        processed = len(schedule) - counts["NOT_STARTED"]
+        terminal_completion = _validate_campaign_completion_publication_status(
+            root,
+            manifest,
+            scheduled_block_count=len(schedule),
+            processed_block_count=processed,
+            included_block_count=included,
+            infrastructure_excluded_block_count=excluded,
+        )
         _validate_episode_access_ledger(root, schedule, access_records)
         if enforce_live_readiness:
             _validate_live_readiness_boundary(
@@ -3501,14 +3555,39 @@ def _validate_campaign_core(
         if require_aggregates:
             _validate_aggregate_package(root, report)
         report.publication_status = _publication_status(
-            root, manifest, report, require_complete
+            root,
+            manifest,
+            report,
+            require_complete,
+            campaign_complete=terminal_completion,
         )
     except (FileNotFoundError, OSError, ValueError, KeyError, SchemaError, Table2Error) as exc:
         report.error(str(exc))
         try:
             manifest = read_json(root / "campaign_manifest.json")
+            failed_profile = classify_campaign_profile(
+                manifest,
+                context="campaign_manifest",
+                require_campaign_mode=True,
+            )
+            frozen_campaign = load_yaml(root / "frozen" / "campaign.yaml")
+            frozen_profile = classify_campaign_profile(
+                frozen_campaign,
+                context="frozen campaign configuration",
+                default_campaign_mode="evaluation",
+            )
+            if (
+                frozen_profile != failed_profile
+                or frozen_campaign.get("campaign_mode", "evaluation")
+                != manifest["campaign_mode"]
+            ):
+                raise SchemaError(
+                    "frozen campaign profile differs from campaign_manifest"
+                )
             report.publication_status = (
-                "PILOT_ONLY" if manifest.get("evidence_label") == "PILOT_ONLY" else "N/R"
+                DRAFT_PILOT_STATUS
+                if failed_profile == CAMPAIGN_PROFILE_PILOT
+                else "N/R"
             )
         except Exception:
             report.publication_status = "N/R"
@@ -3526,8 +3605,13 @@ def _validate_live_readiness_boundary(
 
     readiness_root = root / LIVE_COMPATIBILITY_RELATIVE_PATH.parent
     readiness_exists = readiness_root.exists() or readiness_root.is_symlink()
-    mode = str(manifest.get("campaign_mode", "evaluation"))
-    pilot = manifest.get("evidence_label") == "PILOT_ONLY"
+    profile = classify_campaign_profile(
+        manifest,
+        context="live-readiness campaign manifest",
+        require_campaign_mode=True,
+    )
+    mode = manifest["campaign_mode"]
+    pilot = profile == CAMPAIGN_PROFILE_PILOT
     if mode == "smoke" or not pilot:
         if readiness_exists:
             raise SchemaError(
@@ -4232,35 +4316,76 @@ def _validate_infrastructure_invalid_package(
                 "episode_id": episode_id,
                 "task_id": str(schedule_row["task_id"]),
             }
-            for field, expected in expected_classifier.items():
-                if adapter_evidence.get(field) != expected:
-                    raise SchemaError(
-                        f"infrastructure classifier evidence changed {field}"
-                    )
-            exception_type = str(adapter_evidence.get("exception_type") or "")
             failure_class = str(adapter_evidence.get("failure_class") or "")
             rules = classifier.get("rules")
             if not isinstance(rules, list):
                 raise SchemaError("frozen infrastructure classifier rules are malformed")
-            matches = [
-                rule
-                for rule in rules
-                if isinstance(rule, Mapping)
-                and rule.get("operation") == operation
-                and rule.get("exception_type") == exception_type
-            ]
-            if len(matches) != 1:
-                raise SchemaError(
-                    "infrastructure exception/operation is absent from frozen rules"
+            compact_fields = {
+                "adapter_event_id",
+                "failure_class",
+                "diagnostic_sha256",
+                "retryable",
+            }
+            if set(adapter_evidence) == compact_fields:
+                event_prefix = f"{episode_id}:infrastructure:"
+                event_id = adapter_evidence.get("adapter_event_id")
+                event_index = (
+                    event_id[len(event_prefix) :]
+                    if isinstance(event_id, str) and event_id.startswith(event_prefix)
+                    else ""
                 )
-            rule = matches[0]
-            if (
-                rule.get("reason_code") != value.get("reason_code")
-                or rule.get("failure_class") != failure_class
-            ):
-                raise SchemaError(
-                    "infrastructure evidence differs from its frozen exact-match rule"
-                )
+                if (
+                    adapter_evidence.get("retryable") is not True
+                    or not event_index.isdigit()
+                    or int(event_index) <= 0
+                    or str(int(event_index)) != event_index
+                ):
+                    raise SchemaError(
+                        "compact infrastructure evidence is not episode-bound"
+                    )
+                matches = [
+                    rule
+                    for rule in rules
+                    if isinstance(rule, Mapping)
+                    and rule.get("operation") == operation
+                    and rule.get("reason_code") == value.get("reason_code")
+                    and rule.get("failure_class") == failure_class
+                ]
+                if len(matches) != 1:
+                    raise SchemaError(
+                        "compact infrastructure evidence lacks one unique frozen rule"
+                    )
+                exception_type = str(matches[0].get("exception_type") or "")
+                if not exception_type:
+                    raise SchemaError(
+                        "compact infrastructure evidence rule lacks exception type"
+                    )
+            else:
+                for field, expected in expected_classifier.items():
+                    if adapter_evidence.get(field) != expected:
+                        raise SchemaError(
+                            f"infrastructure classifier evidence changed {field}"
+                        )
+                exception_type = str(adapter_evidence.get("exception_type") or "")
+                matches = [
+                    rule
+                    for rule in rules
+                    if isinstance(rule, Mapping)
+                    and rule.get("operation") == operation
+                    and rule.get("exception_type") == exception_type
+                ]
+                if len(matches) != 1:
+                    raise SchemaError(
+                        "infrastructure exception/operation is absent from frozen rules"
+                    )
+                rule = matches[0]
+                if (
+                    rule.get("reason_code") != value.get("reason_code")
+                    or rule.get("failure_class") != failure_class
+                ):
+                    raise SchemaError(
+                        "infrastructure evidence differs from its frozen exact-match rule"
+                    )
             diagnostic = {
                 **expected_classifier,
                 "failure_class": failure_class,
@@ -6918,10 +7043,15 @@ def _validate_frozen_hashes(root: Path, manifest: Mapping[str, Any]) -> None:
 def _validate_frozen_model_and_memory_manifests(
     root: Path, campaign_manifest: Mapping[str, Any]
 ) -> None:
-    final = str(campaign_manifest.get("campaign_kind")) == "locked_final"
+    campaign_profile = classify_campaign_profile(
+        campaign_manifest,
+        context="frozen model/memory campaign manifest",
+        require_campaign_mode=True,
+    )
+    final = campaign_profile == CAMPAIGN_PROFILE_FINAL
     model_paths = sorted((root / "frozen" / "models").glob("seed_*.json"))
     memory_paths = sorted((root / "memory").glob("seed_*/manifest.json"))
-    smoke = str(campaign_manifest.get("campaign_mode")) == "smoke"
+    smoke = campaign_manifest["campaign_mode"] == "smoke"
     expected_seeds = {int(seed) for seed in campaign_manifest.get("matched_seeds", [])}
     if not smoke and len(model_paths) != len(expected_seeds):
         raise SchemaError("evaluation campaign lacks one model manifest per matched seed")
@@ -7298,12 +7428,17 @@ def _validate_aggregate_package(root: Path, report: ValidationReport) -> None:
     if diagnostics.get("task_partition") != "recovery_diagnostic":
         raise SchemaError("recovery diagnostics lost their task-partition label")
     manifest = read_json(root / "campaign_manifest.json")
+    campaign_profile = classify_campaign_profile(
+        manifest,
+        context="aggregate campaign manifest",
+        require_campaign_mode=True,
+    )
     analysis_identity = validate_analysis_source_identity(root)
     if read_json(aggregate / "analysis_source_identity.json") != analysis_identity:
         raise SchemaError(
             "aggregate analysis-source identity differs from exact attestation replay"
         )
-    if manifest.get("evidence_label") == "PILOT_ONLY":
+    if campaign_profile == CAMPAIGN_PROFILE_PILOT:
         expected_status = str(metrics.get("publication_status", ""))
         if expected_status not in {DRAFT_PILOT_STATUS, "PILOT_ONLY"}:
             raise SchemaError(
@@ -7355,6 +7490,12 @@ def _validate_recomputed_aggregate_outputs(
     post-episode sealed verifier evidence.  Recomputing here makes a self-
     consistent but numerically falsified aggregate fail closed.
     """
+
+    campaign_profile = classify_campaign_profile(
+        campaign_manifest,
+        context="aggregate reconstruction campaign manifest",
+        require_campaign_mode=True,
+    )
 
     protocol = load_yaml(root / "frozen" / "protocol.yaml")
     records = _load_selected_analysis_records_unchecked(root)
@@ -7483,7 +7624,7 @@ def _validate_recomputed_aggregate_outputs(
 
     diagnostic_status = (
         publication_status
-        if campaign_manifest.get("evidence_label") == "PILOT_ONLY"
+        if campaign_profile == CAMPAIGN_PROFILE_PILOT
         else "PILOT_ONLY"
     )
     metrics["publication_status"] = publication_status
@@ -8218,6 +8359,11 @@ def _validate_manual_audit_reviewer_packet(
 
 def _validate_manual_audit_package(root: Path) -> None:
     campaign = read_json(root / "campaign_manifest.json")
+    campaign_profile = classify_campaign_profile(
+        campaign,
+        context="manual-audit campaign manifest",
+        require_campaign_mode=True,
+    )
     campaign_id = _audit_nonempty_string(
         campaign.get("campaign_id"), context="campaign_manifest.campaign_id"
     )
@@ -8655,7 +8801,7 @@ def _validate_manual_audit_package(root: Path) -> None:
         MANUAL_AUDIT_CASE_CATEGORIES
     ):
         raise SchemaError("manual audit category coverage has the wrong registered closure")
-    final_campaign = campaign.get("campaign_kind") == "locked_final"
+    final_campaign = campaign_profile == CAMPAIGN_PROFILE_FINAL
     for row in coverage:
         _require_exact_json_object(
             row,
@@ -8708,10 +8854,7 @@ def _validate_manual_audit_package(root: Path) -> None:
             raise SchemaError(
                 f"locked-final manual audit missed an available required case: {category}"
             )
-    if (
-        campaign.get("campaign_kind") == "locked_final"
-        and campaign.get("evidence_label") != "PILOT_ONLY"
-    ):
+    if final_campaign:
         validate_manual_adjudication_completion(root)
 
 
@@ -8722,6 +8865,11 @@ def validate_manual_adjudication_completion(
 
     root = Path(campaign_dir).resolve()
     campaign = read_json(root / "campaign_manifest.json")
+    classify_campaign_profile(
+        campaign,
+        context="manual-adjudication campaign manifest",
+        require_campaign_mode=True,
+    )
     campaign_id = _audit_nonempty_string(
         campaign.get("campaign_id"), context="campaign_manifest.campaign_id"
     )
@@ -9388,6 +9536,102 @@ def validate_manual_adjudication_completion(
     }
 
 
+def adjudication_gated_pilot_publication_status(
+    campaign_dir: str | Path,
+    *,
+    campaign_complete: bool | None = None,
+) -> str:
+    """Return the pilot label only after terminal completion and audit validation.
+
+    The campaign runner supplies its just-recomputed terminal state because its
+    completion artifact does not exist until after this decision.  All other
+    callers must present a self-consistent terminal ``completion.json``.
+    """
+
+    root = Path(campaign_dir).resolve()
+    if campaign_complete is None:
+        campaign_complete = _terminal_campaign_completion_artifact(root)
+    elif type(campaign_complete) is not bool:
+        raise TypeError("campaign_complete must be an exact boolean or None")
+    if not campaign_complete:
+        return DRAFT_PILOT_STATUS
+    try:
+        validate_manual_adjudication_completion(root)
+    except (
+        FileNotFoundError,
+        OSError,
+        TypeError,
+        ValueError,
+        KeyError,
+        SchemaError,
+        Table2Error,
+    ):
+        return DRAFT_PILOT_STATUS
+    return PILOT_EVIDENCE_LABEL
+
+
+def _terminal_campaign_completion_artifact(root: Path) -> bool:
+    """Return whether the on-disk completion claim is internally terminal."""
+
+    path = root / "completion.json"
+    if path.is_symlink() or not path.is_file():
+        return False
+    try:
+        campaign = _read_manual_audit_json(
+            root / "campaign_manifest.json",
+            context="campaign completion manifest",
+        )
+        if (
+            classify_campaign_profile(
+                campaign,
+                context="campaign completion manifest",
+                require_campaign_mode=True,
+            )
+            != CAMPAIGN_PROFILE_PILOT
+        ):
+            return False
+        completion = _read_manual_audit_json(
+            path,
+            context="campaign completion artifact",
+        )
+        _require_exact_json_object(
+            completion,
+            CAMPAIGN_COMPLETION_KEYS,
+            context="campaign completion artifact",
+        )
+        scheduled = _completion_nonnegative_int(
+            completion["scheduled_block_count"], "scheduled_block_count"
+        )
+        processed = _completion_nonnegative_int(
+            completion["processed_block_count"], "processed_block_count"
+        )
+        included = _completion_nonnegative_int(
+            completion["included_block_count"], "included_block_count"
+        )
+        excluded = _completion_nonnegative_int(
+            completion["infrastructure_excluded_block_count"],
+            "infrastructure_excluded_block_count",
+        )
+    except (FileNotFoundError, OSError, TypeError, ValueError, KeyError, SchemaError):
+        return False
+    return (
+        completion["schema_version"] == SCHEMA_VERSION
+        and completion["campaign_id"] == campaign["campaign_id"]
+        and completion["status"] == "COMPLETE"
+        and scheduled > 0
+        and processed == scheduled
+        and included + excluded == scheduled
+    )
+
+
+def _completion_nonnegative_int(value: Any, field: str) -> int:
+    if type(value) is not int or value < 0:
+        raise SchemaError(
+            f"campaign completion artifact {field} must be a nonnegative integer"
+        )
+    return value
+
+
 def _attested_identity_list(value: Any, context: str, *, minimum: int) -> set[str]:
     if not isinstance(value, list) or not all(type(item) is str for item in value):
         raise SchemaError(f"{context} must be an identity list")
@@ -9546,26 +9790,44 @@ def _publication_status(
     manifest: Mapping[str, Any],
     report: ValidationReport,
     require_complete: bool,
+    *,
+    campaign_complete: bool | None = None,
 ) -> str:
-    if str(manifest.get("evidence_label")) == "PILOT_ONLY" or str(manifest.get("campaign_kind")) != "locked_final":
+    campaign_profile = classify_campaign_profile(
+        manifest,
+        context="publication campaign manifest",
+        require_campaign_mode=True,
+    )
+    if campaign_profile == CAMPAIGN_PROFILE_PILOT:
+        if campaign_complete is None:
+            scheduled = report.counts.get("scheduled_blocks")
+            included = report.counts.get("included_blocks")
+            excluded = report.counts.get("infrastructure_excluded_blocks")
+            campaign_complete = (
+                report.passed
+                and type(scheduled) is int
+                and scheduled > 0
+                and type(included) is int
+                and type(excluded) is int
+                and included + excluded == scheduled
+                and _terminal_campaign_completion_artifact(root)
+            )
+        elif type(campaign_complete) is not bool:
+            raise TypeError("campaign_complete must be an exact boolean or None")
+        if not report.passed or not campaign_complete:
+            return DRAFT_PILOT_STATUS
         metrics_path = root / "aggregate" / "metrics.json"
         if metrics_path.is_file():
             status = str(read_json(metrics_path).get("publication_status", ""))
             if status in {DRAFT_PILOT_STATUS, "PILOT_ONLY"}:
-                if status == "PILOT_ONLY":
-                    try:
-                        validate_manual_adjudication_completion(root)
-                    except (
-                        FileNotFoundError,
-                        OSError,
-                        TypeError,
-                        ValueError,
-                        KeyError,
-                        SchemaError,
-                    ):
-                        return DRAFT_PILOT_STATUS
-                return status
-        return "PILOT_ONLY"
+                if status == DRAFT_PILOT_STATUS:
+                    return status
+                return adjudication_gated_pilot_publication_status(
+                    root, campaign_complete=True
+                )
+        return adjudication_gated_pilot_publication_status(
+            root, campaign_complete=True
+        )
     if not require_complete or not report.passed:
         return "N/R"
     if report.counts.get("included_blocks", 0) <= 0:
@@ -9577,15 +9839,102 @@ def _publication_status(
     return FINAL_READY_STATUS
 
 
+def _validate_campaign_completion_publication_status(
+    root: Path,
+    manifest: Mapping[str, Any],
+    *,
+    scheduled_block_count: int,
+    processed_block_count: int,
+    included_block_count: int,
+    infrastructure_excluded_block_count: int,
+) -> bool:
+    """Reject a completion artifact that promotes a pilot without audit authority."""
+
+    path = root / "completion.json"
+    if not path.exists() and not path.is_symlink():
+        return False
+    if path.is_symlink() or not path.is_file():
+        raise SchemaError("campaign completion artifact must be a regular file")
+    completion = _read_manual_audit_json(
+        path,
+        context="campaign completion artifact",
+    )
+    _require_exact_json_object(
+        completion,
+        CAMPAIGN_COMPLETION_KEYS,
+        context="campaign completion artifact",
+    )
+    if completion["schema_version"] != SCHEMA_VERSION:
+        raise SchemaError("campaign completion artifact has the wrong schema version")
+    if completion["campaign_id"] != manifest["campaign_id"]:
+        raise SchemaError("campaign completion artifact has the wrong campaign ID")
+    expected_counts = {
+        "scheduled_block_count": scheduled_block_count,
+        "processed_block_count": processed_block_count,
+        "included_block_count": included_block_count,
+        "infrastructure_excluded_block_count": (
+            infrastructure_excluded_block_count
+        ),
+    }
+    for field, expected in expected_counts.items():
+        actual = _completion_nonnegative_int(completion[field], field)
+        if actual != expected:
+            raise SchemaError(
+                f"campaign completion artifact {field} differs from schedule evidence"
+            )
+    terminal = (
+        scheduled_block_count > 0
+        and included_block_count + infrastructure_excluded_block_count
+        == scheduled_block_count
+    )
+    expected_completion_status = "COMPLETE" if terminal else "INCOMPLETE"
+    if completion["status"] != expected_completion_status:
+        raise SchemaError(
+            "campaign completion artifact status differs from terminal schedule evidence"
+        )
+    profile = classify_campaign_profile(
+        manifest,
+        context="campaign completion publication boundary",
+        require_campaign_mode=True,
+    )
+    status = completion["publication_status"]
+    if profile == CAMPAIGN_PROFILE_PILOT:
+        if status not in {DRAFT_PILOT_STATUS, PILOT_EVIDENCE_LABEL}:
+            raise SchemaError("pilot campaign completion has an unregistered publication status")
+        if (
+            status == PILOT_EVIDENCE_LABEL
+            and (
+                not terminal
+                or adjudication_gated_pilot_publication_status(
+                    root, campaign_complete=terminal
+                )
+                != PILOT_EVIDENCE_LABEL
+            )
+        ):
+            raise SchemaError(
+                "pilot campaign completion cannot claim PILOT_ONLY unless the "
+                "campaign is complete and registered manual adjudication validates"
+            )
+        return terminal
+    if status != "N/R":
+        raise SchemaError("locked-final campaign completion must remain N/R")
+    return terminal
+
+
 def _validate_frozen_handoff_binding(
     root: Path,
     manifest: Mapping[str, Any],
 ) -> None:
     """Require the frozen campaign to retain its authenticated handoff origin."""
 
+    classify_campaign_profile(
+        manifest,
+        context="handoff-bound campaign manifest",
+        require_campaign_mode=True,
+    )
     path = root / "frozen" / "handoff_manifest.json"
     consumption_path = root / FROZEN_HANDOFF_CONSUMPTION_RELATIVE_PATH
-    mode = str(manifest.get("campaign_mode", "evaluation"))
+    mode = manifest["campaign_mode"]
     if mode == "smoke":
         if (
             path.exists()
@@ -10865,7 +11214,12 @@ def _validate_frozen_runner_attestation(
     *,
     protocol: Mapping[str, Any],
 ) -> None:
-    mode = str(campaign_manifest.get("campaign_mode", "evaluation"))
+    classify_campaign_profile(
+        campaign_manifest,
+        context="runner-attested campaign manifest",
+        require_campaign_mode=True,
+    )
+    mode = campaign_manifest["campaign_mode"]
     attestation_path = root / "frozen" / "runner_attestation.json"
     source_root = root / "frozen" / "runner_source"
     if mode == "smoke":
@@ -11046,6 +11400,415 @@ def _payload_size_and_count(path: Path) -> tuple[int, int]:
     if not files:
         raise SchemaError(f"artifact payload directory is empty: {path}")
     return sum(item.stat().st_size for item in files), len(files)
+
+
+def _stable_payload_metadata(metadata: os.stat_result) -> tuple[int, ...]:
+    """Return the fields which bind one opened payload inode and its bytes."""
+
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_uid,
+        metadata.st_gid,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _open_stable_payload_component(
+    parent_descriptor: int,
+    name: str,
+    *,
+    directory: bool,
+    label: str,
+) -> tuple[int, os.stat_result]:
+    """Open one path component without following it and bind its inode."""
+
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    if directory:
+        flags |= getattr(os, "O_DIRECTORY", 0)
+    else:
+        # A concurrent replacement with a FIFO/device must not block validation.
+        flags |= getattr(os, "O_NONBLOCK", 0)
+    try:
+        before = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        if stat.S_ISLNK(before.st_mode):
+            raise SchemaError(f"{label} must not use symlink ancestry")
+        descriptor = os.open(name, flags, dir_fd=parent_descriptor)
+    except SchemaError:
+        raise
+    except OSError as exc:
+        raise SchemaError(f"cannot securely open {label}") from exc
+    try:
+        opened = os.fstat(descriptor)
+        after = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        expected_kind = stat.S_ISDIR if directory else stat.S_ISREG
+        if (
+            not expected_kind(opened.st_mode)
+            or _stable_payload_metadata(before) != _stable_payload_metadata(opened)
+            or _stable_payload_metadata(opened) != _stable_payload_metadata(after)
+        ):
+            raise SchemaError(f"{label} changed during secure open")
+        if not directory and opened.st_nlink != 1:
+            raise SchemaError(f"{label} must not be hard-linked")
+        return descriptor, opened
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _hash_stable_payload_file(
+    parent_descriptor: int,
+    name: str,
+    *,
+    label: str,
+    aggregate: Any | None = None,
+) -> tuple[str | None, int, os.stat_result]:
+    descriptor, before = _open_stable_payload_component(
+        parent_descriptor,
+        name,
+        directory=False,
+        label=label,
+    )
+    try:
+        digest = aggregate if aggregate is not None else hashlib.sha256()
+        total = 0
+        while True:
+            block = os.read(descriptor, 1024 * 1024)
+            if not block:
+                break
+            total += len(block)
+            digest.update(block)
+        opened_after = os.fstat(descriptor)
+        path_after = os.stat(
+            name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            total != before.st_size
+            or opened_after.st_nlink != 1
+            or path_after.st_nlink != 1
+            or _stable_payload_metadata(before)
+            != _stable_payload_metadata(opened_after)
+            or _stable_payload_metadata(opened_after)
+            != _stable_payload_metadata(path_after)
+        ):
+            raise SchemaError(f"{label} changed during authenticated read")
+        return (digest.hexdigest() if aggregate is None else None), total, opened_after
+    except OSError as exc:
+        raise SchemaError(f"cannot securely read {label}") from exc
+    finally:
+        os.close(descriptor)
+
+
+def _scan_stable_payload_directory(
+    descriptor: int,
+    opened_before: os.stat_result,
+    *,
+    relative_prefix: Path,
+    label: str,
+    aggregate: Any,
+) -> tuple[list[tuple[str, int]], os.stat_result]:
+    """Scan a directory through its fd, returning ordered file identities."""
+
+    try:
+        names_before = sorted(os.listdir(descriptor))
+    except OSError as exc:
+        raise SchemaError(f"cannot securely enumerate {label}") from exc
+    files: list[tuple[str, int]] = []
+    for name in names_before:
+        relative = relative_prefix / name
+        try:
+            metadata = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+        except OSError as exc:
+            raise SchemaError(f"{label} changed during enumeration") from exc
+        if stat.S_ISLNK(metadata.st_mode):
+            raise SchemaError(f"{label} contains a symlink: {relative.as_posix()}")
+        if stat.S_ISDIR(metadata.st_mode):
+            child, child_before = _open_stable_payload_component(
+                descriptor,
+                name,
+                directory=True,
+                label=f"{label} directory {relative.as_posix()}",
+            )
+            try:
+                nested, child_after = _scan_stable_payload_directory(
+                    child,
+                    child_before,
+                    relative_prefix=relative,
+                    label=label,
+                    aggregate=aggregate,
+                )
+            finally:
+                os.close(child)
+            rebound = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+            if (
+                _stable_payload_metadata(metadata)
+                != _stable_payload_metadata(child_before)
+                or _stable_payload_metadata(child_before)
+                != _stable_payload_metadata(child_after)
+                or _stable_payload_metadata(child_after)
+                != _stable_payload_metadata(rebound)
+            ):
+                raise SchemaError(f"{label} directory changed during traversal")
+            files.extend(nested)
+        elif stat.S_ISREG(metadata.st_mode):
+            relative_bytes = relative.as_posix().encode("utf-8")
+            aggregate.update(len(relative_bytes).to_bytes(8, "big"))
+            aggregate.update(relative_bytes)
+            _, size, _ = _hash_stable_payload_file(
+                descriptor,
+                name,
+                label=f"{label} file {relative.as_posix()}",
+                aggregate=aggregate,
+            )
+            files.append((relative.as_posix(), size))
+        else:
+            raise SchemaError(
+                f"{label} contains a non-regular entry: {relative.as_posix()}"
+            )
+    try:
+        names_after = sorted(os.listdir(descriptor))
+        opened_after = os.fstat(descriptor)
+    except OSError as exc:
+        raise SchemaError(f"{label} changed during enumeration") from exc
+    if (
+        names_after != names_before
+        or _stable_payload_metadata(opened_before)
+        != _stable_payload_metadata(opened_after)
+    ):
+        raise SchemaError(f"{label} changed during traversal")
+    return files, opened_after
+
+
+def _validated_campaign_relative_model_payload(
+    campaign_root: Path,
+    relative_path: object,
+    *,
+    label: str,
+    stored_path: str | None = None,
+) -> tuple[Path, dict[str, Any]]:
+    """Authenticate one campaign-relative payload without resolving aliases."""
+
+    if (
+        type(relative_path) is not str
+        or not relative_path
+        or relative_path != relative_path.strip()
+        or "\\" in relative_path
+        or "\x00" in relative_path
+    ):
+        raise SchemaError(f"{label} requires a canonical campaign-relative path")
+    lexical = Path(relative_path)
+    if (
+        lexical.is_absolute()
+        or ".." in lexical.parts
+        or "." in lexical.parts
+        or lexical.as_posix() != relative_path
+    ):
+        raise SchemaError(f"{label} requires a canonical campaign-relative path")
+    root = Path(os.path.abspath(os.fspath(campaign_root)))
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        root_descriptor = os.open(root, directory_flags)
+    except OSError as exc:
+        raise SchemaError(f"cannot securely open {label} campaign root") from exc
+    opened_components: list[tuple[int, str, int, os.stat_result]] = []
+    descriptors = [root_descriptor]
+    try:
+        root_before = os.fstat(root_descriptor)
+        parent_descriptor = root_descriptor
+        for component in lexical.parts[:-1]:
+            child, metadata = _open_stable_payload_component(
+                parent_descriptor,
+                component,
+                directory=True,
+                label=f"{label} ancestor",
+            )
+            opened_components.append(
+                (parent_descriptor, component, child, metadata)
+            )
+            descriptors.append(child)
+            parent_descriptor = child
+
+        leaf = lexical.parts[-1]
+        leaf_metadata = os.stat(
+            leaf,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if stat.S_ISLNK(leaf_metadata.st_mode):
+            raise SchemaError(f"{label} must not use symlinks")
+        if stat.S_ISREG(leaf_metadata.st_mode):
+            digest, size_bytes, stable_leaf = _hash_stable_payload_file(
+                parent_descriptor,
+                leaf,
+                label=label,
+            )
+            if _stable_payload_metadata(leaf_metadata) != _stable_payload_metadata(
+                stable_leaf
+            ):
+                raise SchemaError(f"{label} changed before authenticated read")
+            kind = "file"
+            file_count = 1
+        elif stat.S_ISDIR(leaf_metadata.st_mode):
+            leaf_descriptor, opened_leaf = _open_stable_payload_component(
+                parent_descriptor,
+                leaf,
+                directory=True,
+                label=label,
+            )
+            descriptors.append(leaf_descriptor)
+            aggregate = hashlib.sha256()
+            files, leaf_after = _scan_stable_payload_directory(
+                leaf_descriptor,
+                opened_leaf,
+                relative_prefix=Path(),
+                label=label,
+                aggregate=aggregate,
+            )
+            if not files:
+                raise SchemaError(f"{label} directory is empty")
+            rebound_leaf = os.stat(
+                leaf,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            if (
+                _stable_payload_metadata(leaf_metadata)
+                != _stable_payload_metadata(opened_leaf)
+                or _stable_payload_metadata(opened_leaf)
+                != _stable_payload_metadata(leaf_after)
+                or _stable_payload_metadata(leaf_after)
+                != _stable_payload_metadata(rebound_leaf)
+            ):
+                raise SchemaError(f"{label} directory changed during traversal")
+            digest = aggregate.hexdigest()
+            size_bytes = sum(size for _, size in files)
+            file_count = len(files)
+            kind = "directory"
+            stable_leaf = leaf_after
+        else:
+            raise SchemaError(f"{label} must be a regular file or directory")
+
+        # Rebind every open component after all reads, then resolve only after
+        # the no-follow walk has authenticated the complete lexical ancestry.
+        for component_parent, component, child, opened in opened_components:
+            current = os.stat(
+                component,
+                dir_fd=component_parent,
+                follow_symlinks=False,
+            )
+            if (
+                _stable_payload_metadata(opened)
+                != _stable_payload_metadata(os.fstat(child))
+                or _stable_payload_metadata(opened)
+                != _stable_payload_metadata(current)
+            ):
+                raise SchemaError(f"{label} ancestry changed during validation")
+        if _stable_payload_metadata(root_before) != _stable_payload_metadata(
+            os.fstat(root_descriptor)
+        ):
+            raise SchemaError(f"{label} campaign root changed during validation")
+        resolved = (root / lexical).resolve(strict=True)
+        try:
+            resolved.relative_to(root)
+        except ValueError as exc:  # pragma: no cover - no-follow walk is primary
+            raise SchemaError(f"{label} escaped its campaign root") from exc
+        resolved_metadata = resolved.lstat()
+        if (
+            _stable_payload_metadata(stable_leaf)
+            != _stable_payload_metadata(resolved_metadata)
+            or _stable_payload_metadata(root_before)
+            != _stable_payload_metadata(root.lstat())
+        ):
+            raise SchemaError(f"{label} identity changed during resolution")
+        for component_parent, component, child, opened in opened_components:
+            current = os.stat(
+                component,
+                dir_fd=component_parent,
+                follow_symlinks=False,
+            )
+            if (
+                _stable_payload_metadata(opened)
+                != _stable_payload_metadata(os.fstat(child))
+                or _stable_payload_metadata(opened)
+                != _stable_payload_metadata(current)
+            ):
+                raise SchemaError(f"{label} ancestry changed during resolution")
+        return resolved, {
+            "path": stored_path if stored_path is not None else str(resolved),
+            "kind": kind,
+            "sha256": digest,
+            "size_bytes": size_bytes,
+            "file_count": file_count,
+        }
+    except OSError as exc:
+        raise SchemaError(f"{label} changed during validation") from exc
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+_PUBLIC_MODEL_PAYLOAD_DESCRIPTOR_FIELDS = (
+    "path",
+    "kind",
+    "sha256",
+    "size_bytes",
+    "file_count",
+)
+
+
+def _public_model_payload_descriptor(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        field: value.get(field)
+        for field in _PUBLIC_MODEL_PAYLOAD_DESCRIPTOR_FIELDS
+    }
+
+
+def _reauthenticate_campaign_relative_model_payloads(
+    campaign_root: Path,
+    rows: Mapping[str, Any],
+    authenticated: Mapping[str, tuple[Path, Mapping[str, Any]]],
+    *,
+    roles: Sequence[str],
+    label: str,
+) -> None:
+    """Close in-call cross-role drift before returning retained paths.
+
+    Returned paths remain subject to the repository's documented same-UID
+    limitation once these descriptors close; this is not a hostile-code boundary.
+    """
+
+    if set(rows) != set(roles) or set(authenticated) != set(roles):
+        raise SchemaError(f"{label} role coverage changed before return")
+    for role in roles:
+        row = rows.get(role)
+        retained = authenticated.get(role)
+        if not isinstance(row, Mapping) or retained is None:
+            raise SchemaError(f"{label} descriptor changed before return: {role}")
+        retained_path, retained_descriptor = retained
+        rebound_path, rebound_descriptor = _validated_campaign_relative_model_payload(
+            campaign_root,
+            row.get("path"),
+            label=f"{label} {role} return authentication",
+            stored_path=str(row.get("path")),
+        )
+        public = _public_model_payload_descriptor(row)
+        if (
+            rebound_path != retained_path
+            or rebound_descriptor != dict(retained_descriptor)
+            or rebound_descriptor != public
+        ):
+            raise SchemaError(f"{label} changed before return: {role}")
 
 
 def _artifact_payload_descriptor(path: Path, *, stored_path: str | None = None) -> dict[str, Any]:
@@ -11557,6 +12320,7 @@ def _validate_model_evidence_bundle(
     if model.get("model_evidence_bundle_sha256") != bundle["bundle_sha256"]:
         raise SchemaError("model manifest evidence-bundle hash differs from its record")
     resolved: dict[str, tuple[Path, dict[str, Any]]] = {}
+    authenticated: dict[str, tuple[Path, Mapping[str, Any]]] = {}
     for role in MODEL_EVIDENCE_ROLES:
         row = artifacts[role]
         if not isinstance(row, Mapping):
@@ -11570,12 +12334,20 @@ def _validate_model_evidence_bundle(
             else (path_base if path_base is not None else manifest_path.parent)
             / raw_path
         )
-        if candidate.is_symlink():
-            raise SchemaError(f"model evidence {role} must not be a symlink")
-        source = candidate.resolve()
-        descriptor = _artifact_payload_descriptor(
-            source, stored_path=str(row.get("path"))
-        )
+        if path_base is not None:
+            source, descriptor = _validated_campaign_relative_model_payload(
+                path_base,
+                row.get("path"),
+                label=f"model evidence {role}",
+                stored_path=str(row.get("path")),
+            )
+        else:
+            if candidate.is_symlink():
+                raise SchemaError(f"model evidence {role} must not be a symlink")
+            source = candidate.resolve()
+            descriptor = _artifact_payload_descriptor(
+                source, stored_path=str(row.get("path"))
+            )
         if descriptor["kind"] != "file":
             raise SchemaError(f"model evidence {role} must be one file")
         if source.name != MODEL_EVIDENCE_FILENAMES[role]:
@@ -11586,6 +12358,7 @@ def _validate_model_evidence_bundle(
                     f"model evidence {role} {key} differs from payload bytes"
                 )
         resolved[role] = (source, dict(row))
+        authenticated[role] = (source, descriptor)
     producer = _canonical_model_evidence_json(
         resolved["export_manifest"][0], role="export_manifest"
     )
@@ -11596,6 +12369,14 @@ def _validate_model_evidence_bundle(
         evidence=resolved,
         executable=executable_payloads,
     )
+    if path_base is not None:
+        _reauthenticate_campaign_relative_model_payloads(
+            path_base,
+            artifacts,
+            authenticated,
+            roles=MODEL_EVIDENCE_ROLES,
+            label="model evidence",
+        )
     return resolved
 
 
@@ -11612,6 +12393,7 @@ def _validate_model_artifact_payloads(
             + ", ".join(MODEL_PAYLOAD_ROLES)
         )
     resolved: dict[str, tuple[Path, dict[str, Any]]] = {}
+    authenticated: dict[str, tuple[Path, Mapping[str, Any]]] = {}
     for role in MODEL_PAYLOAD_ROLES:
         row = payloads.get(role)
         if not isinstance(row, Mapping):
@@ -11624,10 +12406,20 @@ def _validate_model_artifact_payloads(
             if raw_path.is_absolute()
             else (path_base if path_base is not None else manifest_path.parent) / raw_path
         )
-        if candidate.is_symlink():
-            raise SchemaError(f"model artifact {role} must not be a symlink")
-        source = candidate.resolve()
-        descriptor = _artifact_payload_descriptor(source, stored_path=str(row.get("path")))
+        if path_base is not None:
+            source, descriptor = _validated_campaign_relative_model_payload(
+                path_base,
+                row.get("path"),
+                label=f"model artifact {role}",
+                stored_path=str(row.get("path")),
+            )
+        else:
+            if candidate.is_symlink():
+                raise SchemaError(f"model artifact {role} must not be a symlink")
+            source = candidate.resolve()
+            descriptor = _artifact_payload_descriptor(
+                source, stored_path=str(row.get("path"))
+            )
         for key in ("kind", "sha256", "size_bytes", "file_count"):
             if row.get(key) != descriptor[key]:
                 raise SchemaError(f"model artifact {role} {key} differs from payload bytes")
@@ -11635,6 +12427,7 @@ def _validate_model_artifact_payloads(
         if value.get(hash_field) != descriptor["sha256"]:
             raise SchemaError(f"model manifest {hash_field} differs from {role} payload")
         resolved[role] = (source, dict(row))
+        authenticated[role] = (source, descriptor)
 
     for role in ("processor_contract", "e0_processor_contract"):
         _processor_contract_from_payload(resolved[role][0])
@@ -11663,6 +12456,14 @@ def _validate_model_artifact_payloads(
         "e0_parser_attribute"
     ) != parser_row.get("attribute"):
         raise SchemaError("E0 parser module/attribute differs from its payload descriptor")
+    if path_base is not None:
+        _reauthenticate_campaign_relative_model_payloads(
+            path_base,
+            payloads,
+            authenticated,
+            roles=MODEL_PAYLOAD_ROLES,
+            label="model artifact",
+        )
     return resolved
 
 
@@ -12288,6 +13089,18 @@ def _validate_protocol_access_boundary(
 ) -> None:
     """Keep runtime oracle blindness separate from one final data opening."""
 
+    campaign_profile = classify_campaign_profile(
+        campaign,
+        context="protocol-bound campaign",
+        default_campaign_mode="evaluation",
+    )
+    if type(pilot_only) is not bool or pilot_only is not (
+        campaign_profile == CAMPAIGN_PROFILE_PILOT
+    ):
+        raise SchemaError(
+            "protocol campaign classification differs from the registered profile"
+        )
+
     benchmark = protocol.get("benchmark")
     if not isinstance(benchmark, Mapping):
         raise SchemaError("frozen protocol lacks its benchmark boundary")
@@ -12306,13 +13119,13 @@ def _validate_protocol_access_boundary(
     if pilot_only:
         expected = {
             "protocol_status": "DEVELOPMENT_FROZEN",
-            "evidence_label": "PILOT_ONLY",
+            "evidence_label": PILOT_EVIDENCE_LABEL,
             "paper_table_status": "N/R",
         }
         for key, value in expected.items():
             if protocol.get(key) != value:
                 raise SchemaError(f"pilot protocol requires {key}={value}")
-        if campaign.get("evidence_label") != "PILOT_ONLY":
+        if campaign.get("evidence_label") != PILOT_EVIDENCE_LABEL:
             raise SchemaError("pilot campaign lacks PILOT_ONLY evidence boundary")
         if campaign.get("locked_test_access", "forbidden") != "forbidden":
             raise SchemaError("pilot campaign must remain locked-test blind")

@@ -16,8 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from .common import (
+    CAMPAIGN_PROFILE_FINAL,
+    CAMPAIGN_PROFILE_PILOT,
     SchemaError,
     atomic_write_json,
+    classify_campaign_profile,
     safe_relative_path,
     sha256_file,
 )
@@ -738,6 +741,11 @@ def build_initial_claim_report(
     registry_source = registry_input.resolve()
     campaign_source = campaign_input.resolve()
     campaign = _read_strict_json(campaign_source, context="campaign manifest")
+    classify_campaign_profile(
+        campaign,
+        context="initial paper-claim campaign manifest",
+        require_campaign_mode=True,
+    )
     campaign_id = str(campaign.get("campaign_id", "")).strip()
     if not campaign_id:
         raise SchemaError("campaign manifest lacks campaign_id")
@@ -1582,6 +1590,11 @@ def build_claim_evidence_assessment(
         _campaign_file(root, "campaign_manifest.json", context="campaign manifest"),
         context="campaign manifest",
     )
+    classify_campaign_profile(
+        campaign,
+        context="paper-claim evidence campaign manifest",
+        require_campaign_mode=True,
+    )
     campaign_id = str(campaign.get("campaign_id", "")).strip()
     if not campaign_id:
         raise SchemaError("campaign manifest lacks campaign_id")
@@ -1890,6 +1903,11 @@ def validate_claim_report(
         root, "campaign_manifest.json", context="campaign manifest"
     )
     campaign = _read_strict_json(campaign_source, context="campaign manifest")
+    campaign_profile = classify_campaign_profile(
+        campaign,
+        context="paper-claim campaign manifest",
+        require_campaign_mode=True,
+    )
     report = _read_strict_json(report_source, context="paper claim report")
     _exact_keys(report, REPORT_KEYS, "paper claim report")
     registry_digest = sha256_file(registry_source)
@@ -1954,9 +1972,13 @@ def validate_claim_report(
             raise SchemaError(
                 "saved final-ready authority differs from independently recomputed validation"
             )
-        if str(campaign.get("campaign_kind")) != "locked_final":
+        if campaign_profile != CAMPAIGN_PROFILE_FINAL:
             raise SchemaError("only a locked-final campaign may resolve paper claims")
     else:
+        if campaign_profile != CAMPAIGN_PROFILE_PILOT:
+            raise SchemaError(
+                "only a pilot campaign may use a non-final paper claim report"
+            )
         if authority_relative != Path("campaign_manifest.json"):
             raise SchemaError("non-final claims must use the frozen campaign manifest authority")
         if publication_status not in PILOT_PUBLICATION_STATUSES:

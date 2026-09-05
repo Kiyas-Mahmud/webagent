@@ -392,6 +392,221 @@ def test_production_runner_reopens_frozen_model_evidence(
         runner._verify_model_payloads()
 
 
+@pytest.mark.parametrize("alias_kind", ("symlink-parent", "external-hardlink"))
+def test_campaign_model_payload_rejects_path_and_inode_aliases(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    alias_kind: str,
+) -> None:
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_base_snapshot",
+        lambda path, _backbone: json.loads(path.read_text(encoding="utf-8")),
+    )
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_export_manifest",
+        lambda _path: None,
+    )
+    source = _valid_model_manifest(tmp_path / "source-model.json")
+    campaign = tmp_path / "campaign"
+    frozen_manifest, payloads, evidence = _copy_model_payloads(
+        campaign_root=campaign,
+        seed=42,
+        manifest_path=source,
+        manifest=json.loads(source.read_text(encoding="utf-8")),
+        copied=[],
+    )
+    checkpoint = campaign / payloads["selected_checkpoint"]["path"]
+    if alias_kind == "symlink-parent":
+        relocated = campaign / "relocated-checkpoint-parent"
+        checkpoint.parent.rename(relocated)
+        checkpoint.parent.symlink_to(relocated, target_is_directory=True)
+        expected = "symlink"
+    else:
+        external = tmp_path / "external-checkpoint.bin"
+        external.write_bytes(checkpoint.read_bytes())
+        checkpoint.unlink()
+        checkpoint.hardlink_to(external)
+        expected = "hard-linked"
+
+    frozen_model = json.loads(frozen_manifest.read_text(encoding="utf-8"))
+    with pytest.raises(SchemaError, match=expected):
+        package_validator_module._validate_model_artifact_payloads(
+            frozen_manifest,
+            frozen_model,
+            path_base=campaign,
+        )
+
+    runner = object.__new__(ProductionTable2Runner)
+    runner.root = campaign
+    runner.manifest = {
+        "matched_seeds": [42],
+        "model_payloads_by_seed": {"42": payloads},
+        "model_evidence_by_seed": {"42": evidence},
+    }
+    with pytest.raises(ProductionRunnerError, match="unsafe model payload path"):
+        runner._verify_model_payloads()
+
+
+def test_package_model_payload_second_pass_rejects_cross_role_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_base_snapshot",
+        lambda path, _backbone: json.loads(path.read_text(encoding="utf-8")),
+    )
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_export_manifest",
+        lambda _path: None,
+    )
+    source = _valid_model_manifest(tmp_path / "source-model.json")
+    campaign = tmp_path / "campaign"
+    frozen_manifest, payloads, _ = _copy_model_payloads(
+        campaign_root=campaign,
+        seed=42,
+        manifest_path=source,
+        manifest=json.loads(source.read_text(encoding="utf-8")),
+        copied=[],
+    )
+    checkpoint = campaign / payloads["selected_checkpoint"]["path"]
+    original = package_validator_module._validated_campaign_relative_model_payload
+    calls = 0
+
+    def replace_after_first_role_pass(*args, **kwargs):
+        nonlocal calls
+        result = original(*args, **kwargs)
+        calls += 1
+        if calls == len(package_validator_module.MODEL_PAYLOAD_ROLES):
+            replacement = checkpoint.with_suffix(".replacement")
+            replacement.write_bytes(b"cross-role replacement")
+            replacement.replace(checkpoint)
+        return result
+
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validated_campaign_relative_model_payload",
+        replace_after_first_role_pass,
+    )
+    with pytest.raises(SchemaError, match="return authentication|before return"):
+        package_validator_module._validate_model_artifact_payloads(
+            frozen_manifest,
+            json.loads(frozen_manifest.read_text(encoding="utf-8")),
+            path_base=campaign,
+        )
+    assert calls > len(package_validator_module.MODEL_PAYLOAD_ROLES)
+
+
+def test_package_model_evidence_second_pass_rejects_cross_role_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_base_snapshot",
+        lambda path, _backbone: json.loads(path.read_text(encoding="utf-8")),
+    )
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_export_manifest",
+        lambda _path: None,
+    )
+    source = _valid_model_manifest(tmp_path / "source-model.json")
+    campaign = tmp_path / "campaign"
+    frozen_manifest, _, evidence_bundle = _copy_model_payloads(
+        campaign_root=campaign,
+        seed=42,
+        manifest_path=source,
+        manifest=json.loads(source.read_text(encoding="utf-8")),
+        copied=[],
+    )
+    model = json.loads(frozen_manifest.read_text(encoding="utf-8"))
+    executable = package_validator_module._validate_model_artifact_payloads(
+        frozen_manifest,
+        model,
+        path_base=campaign,
+    )
+    export = campaign / evidence_bundle["artifacts"]["export_manifest"]["path"]
+    original = package_validator_module._validate_pc01_model_evidence_cross_consistency
+
+    def replace_after_semantic_validation(*args, **kwargs):
+        result = original(*args, **kwargs)
+        replacement = export.with_suffix(".replacement")
+        replacement.write_bytes(b"cross-role replacement")
+        replacement.replace(export)
+        return result
+
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_pc01_model_evidence_cross_consistency",
+        replace_after_semantic_validation,
+    )
+    with pytest.raises(SchemaError, match="return authentication|before return"):
+        package_validator_module._validate_model_evidence_bundle(
+            frozen_manifest,
+            model,
+            path_base=campaign,
+            executable_payloads=executable,
+        )
+
+
+def test_production_runner_final_pass_rejects_cross_role_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_base_snapshot",
+        lambda path, _backbone: json.loads(path.read_text(encoding="utf-8")),
+    )
+    monkeypatch.setattr(
+        package_validator_module,
+        "_validate_registered_pc01_export_manifest",
+        lambda _path: None,
+    )
+    source = _valid_model_manifest(tmp_path / "source-model.json")
+    campaign = tmp_path / "campaign"
+    _, payloads, evidence = _copy_model_payloads(
+        campaign_root=campaign,
+        seed=42,
+        manifest_path=source,
+        manifest=json.loads(source.read_text(encoding="utf-8")),
+        copied=[],
+    )
+    checkpoint = campaign / payloads["selected_checkpoint"]["path"]
+    original = production_runner_module._validated_campaign_relative_model_payload
+    calls = 0
+
+    def replace_after_first_role_pass(*args, **kwargs):
+        nonlocal calls
+        result = original(*args, **kwargs)
+        calls += 1
+        if calls == len(package_validator_module.MODEL_PAYLOAD_ROLES):
+            replacement = checkpoint.with_suffix(".replacement")
+            replacement.write_bytes(b"cross-role replacement")
+            replacement.replace(checkpoint)
+        return result
+
+    monkeypatch.setattr(
+        production_runner_module,
+        "_validated_campaign_relative_model_payload",
+        replace_after_first_role_pass,
+    )
+    runner = object.__new__(ProductionTable2Runner)
+    runner.root = campaign
+    runner.manifest = {
+        "matched_seeds": [42],
+        "model_payloads_by_seed": {"42": payloads},
+        "model_evidence_by_seed": {"42": evidence},
+    }
+    with pytest.raises(ProductionRunnerError, match="changed before runtime handoff"):
+        runner._verify_model_payloads()
+    assert calls == len(package_validator_module.MODEL_PAYLOAD_ROLES)
+
+
 def test_runtime_and_evaluator_factories_are_separate_capabilities() -> None:
     names = {field.name for field in fields(EvaluationRuntimeBinding)}
     assert "create_webarena_runtime" in names
@@ -831,7 +1046,9 @@ def test_evaluation_cli_bootstrap_closes_source_and_dependency_bytes(
     (campaign / "campaign_manifest.json").write_text(
         json.dumps(
             {
+                "campaign_kind": "engineering_pilot",
                 "campaign_mode": "evaluation",
+                "evidence_label": "PILOT_ONLY",
                 "runner_identity_scope": evaluation_cli.EVALUATION_RUNNER_SCOPE,
                 "runner_attestation_sha256": sha256_file(attestation_path),
                 "repository_commit": commit,
@@ -860,6 +1077,134 @@ def test_evaluation_cli_bootstrap_closes_source_and_dependency_bytes(
             campaign,
             runner_entrypoint=runner_entrypoint,
         )
+
+
+def test_evaluation_cli_bootstrap_accepts_only_registered_smoke_profile(
+    tmp_path: Path,
+) -> None:
+    campaign = tmp_path / "smoke-campaign"
+    campaign.mkdir()
+    (campaign / "campaign_manifest.json").write_text(
+        json.dumps(
+            {
+                "campaign_kind": "engineering_pilot",
+                "campaign_mode": "smoke",
+                "evidence_label": "PILOT_ONLY",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evaluation_cli._bootstrap_verify_evaluation_source(
+        campaign,
+        runner_entrypoint="fixture.runner:create",
+    )
+
+
+@pytest.mark.parametrize(
+    ("campaign_kind", "evidence_label"),
+    (
+        ("unknown", "PILOT_ONLY"),
+        ("engineering_pilot", "FINAL_LOCKED"),
+        ("locked_final", "PILOT_ONLY"),
+    ),
+)
+def test_evaluation_cli_bootstrap_rejects_unregistered_smoke_before_runner_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    campaign_kind: str,
+    evidence_label: str,
+) -> None:
+    campaign = tmp_path / "bad-smoke-campaign"
+    campaign.mkdir()
+    (campaign / "campaign_manifest.json").write_text(
+        json.dumps(
+            {
+                "campaign_kind": campaign_kind,
+                "campaign_mode": "smoke",
+                "evidence_label": evidence_label,
+            }
+        ),
+        encoding="utf-8",
+    )
+    imported = tmp_path / "runner-imported"
+    (tmp_path / "profile_probe_runner.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(imported)!r}).write_text('imported', encoding='utf-8')\n"
+        "def run(**kwargs):\n"
+        "    return kwargs\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    args = SimpleNamespace(
+        campaign_dir=campaign,
+        runner="profile_probe_runner:run",
+        runner_factory=False,
+        pc01_operations_provider_factory=None,
+        pc01_credential_capability_root=None,
+        pc01_credential_capability_id=None,
+        pc01_credential_capability_version=None,
+        pc01_provider_boundary_receipt=None,
+        prepare_pc01_provider_boundary_receipt=None,
+        block_id=None,
+        maximum_blocks=None,
+        live_readiness_probe_for=None,
+    )
+    monkeypatch.setattr(evaluation_cli, "parse_args", lambda: args)
+
+    with pytest.raises(RuntimeError, match="profile is not registered"):
+        evaluation_cli.main()
+
+    assert not imported.exists()
+    assert "profile_probe_runner" not in sys.modules
+
+
+def test_evaluation_cli_bootstrap_rejects_mixed_smoke_before_provider_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    campaign = tmp_path / "bad-provider-smoke-campaign"
+    campaign.mkdir()
+    (campaign / "campaign_manifest.json").write_text(
+        json.dumps(
+            {
+                "campaign_kind": "engineering_pilot",
+                "campaign_mode": "smoke",
+                "evidence_label": "FINAL_LOCKED",
+            }
+        ),
+        encoding="utf-8",
+    )
+    imported = tmp_path / "provider-imported"
+    (tmp_path / "profile_probe_provider.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(imported)!r}).write_text('imported', encoding='utf-8')\n"
+        "def create(bootstrap_context):\n"
+        "    return bootstrap_context\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    args = SimpleNamespace(
+        campaign_dir=campaign,
+        runner=evaluation_cli.PC01_PRODUCTION_RUNNER_ENTRYPOINT,
+        runner_factory=True,
+        pc01_operations_provider_factory="profile_probe_provider:create",
+        pc01_credential_capability_root=tmp_path / "credentials",
+        pc01_credential_capability_id="fixture-credentials",
+        pc01_credential_capability_version="v1",
+        pc01_provider_boundary_receipt=tmp_path / "boundary.json",
+        prepare_pc01_provider_boundary_receipt=None,
+        block_id=None,
+        maximum_blocks=None,
+        live_readiness_probe_for=None,
+    )
+    monkeypatch.setattr(evaluation_cli, "parse_args", lambda: args)
+
+    with pytest.raises(RuntimeError, match="profile is not registered"):
+        evaluation_cli.main()
+
+    assert not imported.exists()
+    assert "profile_probe_provider" not in sys.modules
 
 
 def test_evaluation_cli_bootstrap_remeasures_split_browser_but_blocks_dispatch(
@@ -1273,6 +1618,12 @@ def test_canonical_bootstrap_records_broker_block_before_package_import() -> Non
     }
     with pytest.raises(RuntimeError, match="blocked before provider import"):
         evaluation_cli._bootstrap_assert_pc01_page_broker_isolation(attestation)
+
+
+def test_evaluation_bootstrap_mirrors_process_broker_promotion_requirements() -> None:
+    assert evaluation_cli.PC01_PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS == list(
+        execution_guard.PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
+    )
 
 
 def test_direct_preflight_cannot_import_or_use_sealed_broker_capability(

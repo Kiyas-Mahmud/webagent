@@ -35,11 +35,16 @@ from typing import (
 from urllib.parse import urlsplit
 
 
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = hashlib.sha256(
+    Path(__file__).resolve().read_bytes()
+).hexdigest()
+
 SCHEMA_VERSION = "table2.runtime.v1"
 EPISODE_FOREIGN_KEY_RECEIPT_VERSION = (
     "table2.episode-foreign-key-validation.v1"
 )
 MEMORY_QUERY_VECTOR_DIMENSION = 768
+MAX_EXECUTION_MESSAGE_CHARS = 4096
 JsonValue = (
     type(None)
     | bool
@@ -1218,6 +1223,10 @@ class ExecutionResult(VersionedRecord):
 
     def __post_init__(self) -> None:
         _require_text("action_id", self.action_id)
+        if type(self.message) is not str or len(self.message) > MAX_EXECUTION_MESSAGE_CHARS:
+            raise ValueError(
+                "execution result message must be text within the registered bound"
+            )
         if self.executor_step <= 0:
             raise ValueError("executor_step is one-based and must be positive")
         if self.internal_retry_count < 0:

@@ -10,23 +10,25 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import fcntl
 import hashlib
 import hmac
 import inspect
+import json
 import os
 from pathlib import Path
 import re
 import secrets
+import stat
 from typing import Any
 
 from .common import (
     SCHEMA_VERSION,
     SchemaError,
-    append_jsonl,
     as_mapping,
     canonical_json_bytes,
-    read_jsonl,
     safe_relative_path,
+    sha256_file,
     sha256_json,
 )
 
@@ -46,6 +48,16 @@ class _FallbackOpaqueTerminalSignal:
 
 
 OpaqueTerminalSignal = _RuntimeSignal or _FallbackOpaqueTerminalSignal
+
+
+# The process-isolated evaluator child owns this sink implementation for the
+# whole episode. Capture the loaded bytes so the broker can prove that its
+# child-owned sealed stream belongs to the authenticated source set.
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
+
+SEALED_VERIFIER_STREAM_TARGET_SCHEMA_VERSION = (
+    "table2-child-owned-sealed-verifier-stream-target-v1"
+)
 
 
 FORBIDDEN_RUNTIME_EVIDENCE_KEYS = frozenset(
@@ -307,6 +319,372 @@ def _runtime_indirect_identifiers(key_token: str, value: Any) -> tuple[str, ...]
     return tuple(collect(value))
 
 
+def _validate_private_regular_file(path: Path, *, context: str) -> os.stat_result:
+    try:
+        metadata = path.lstat()
+    except OSError as exc:
+        raise SchemaError(f"{context} is unavailable") from exc
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or stat.S_ISLNK(metadata.st_mode)
+        or metadata.st_nlink != 1
+        or metadata.st_uid != os.getuid()
+        or metadata.st_mode & 0o077
+    ):
+        raise SchemaError(f"{context} is not a private owner-controlled file")
+    return metadata
+
+
+def _inode_identity(metadata: os.stat_result) -> tuple[int, int]:
+    return (metadata.st_dev, metadata.st_ino)
+
+
+def _directory_open_flags() -> int:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    return flags
+
+
+def _validate_opened_directory(
+    metadata: os.stat_result,
+    *,
+    context: str,
+) -> None:
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != os.getuid()
+        or metadata.st_mode & 0o002
+    ):
+        raise SchemaError(f"{context} is not an owner-controlled directory")
+
+
+def _open_directory_below_exact(
+    anchor: Path,
+    directory: Path,
+    *,
+    create: bool,
+    context: str,
+) -> int:
+    """Open a directory below ``anchor`` without following path components."""
+
+    try:
+        relative = directory.relative_to(anchor)
+    except ValueError as exc:
+        raise SchemaError(f"{context} escaped its trusted directory") from exc
+    if not anchor.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+        raise SchemaError(f"{context} is not a canonical relative directory")
+
+    flags = _directory_open_flags()
+    try:
+        anchor_before = anchor.lstat()
+        current_fd = os.open(anchor, flags)
+    except OSError as exc:
+        raise SchemaError(f"{context} anchor cannot be opened safely") from exc
+    try:
+        anchor_opened = os.fstat(current_fd)
+        anchor_after = anchor.lstat()
+        _validate_opened_directory(anchor_opened, context=f"{context} anchor")
+        if not (
+            _inode_identity(anchor_before)
+            == _inode_identity(anchor_opened)
+            == _inode_identity(anchor_after)
+        ):
+            raise SchemaError(f"{context} anchor identity changed")
+
+        for component in relative.parts:
+            if create:
+                try:
+                    os.mkdir(component, 0o700, dir_fd=current_fd)
+                except FileExistsError:
+                    pass
+                except OSError as exc:
+                    raise SchemaError(
+                        f"{context} component cannot be created safely"
+                    ) from exc
+            try:
+                entry_before = os.stat(
+                    component,
+                    dir_fd=current_fd,
+                    follow_symlinks=False,
+                )
+                next_fd = os.open(component, flags, dir_fd=current_fd)
+            except OSError as exc:
+                raise SchemaError(
+                    f"{context} component cannot be opened safely"
+                ) from exc
+            try:
+                opened = os.fstat(next_fd)
+                entry_after = os.stat(
+                    component,
+                    dir_fd=current_fd,
+                    follow_symlinks=False,
+                )
+                _validate_opened_directory(opened, context=context)
+                if not (
+                    _inode_identity(entry_before)
+                    == _inode_identity(opened)
+                    == _inode_identity(entry_after)
+                ):
+                    raise SchemaError(f"{context} component identity changed")
+            except BaseException:
+                os.close(next_fd)
+                raise
+            os.close(current_fd)
+            current_fd = next_fd
+        return current_fd
+    except BaseException:
+        os.close(current_fd)
+        raise
+
+
+def _open_optional_directory_at_exact(
+    parent_fd: int,
+    name: str,
+    *,
+    context: str,
+) -> int | None:
+    """Open one existing child directory, distinguishing only true absence."""
+
+    flags = _directory_open_flags()
+    try:
+        entry_before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise SchemaError(f"{context} cannot be inspected safely") from exc
+    try:
+        fd = os.open(name, flags, dir_fd=parent_fd)
+    except OSError as exc:
+        raise SchemaError(f"{context} cannot be opened safely") from exc
+    try:
+        opened = os.fstat(fd)
+        entry_after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        _validate_opened_directory(opened, context=context)
+        if not (
+            _inode_identity(entry_before)
+            == _inode_identity(opened)
+            == _inode_identity(entry_after)
+        ):
+            raise SchemaError(f"{context} identity changed")
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _read_private_regular_file_at_exact(
+    parent_fd: int,
+    name: str,
+    *,
+    context: str,
+    maximum_bytes: int = 4096,
+    missing_ok: bool = False,
+) -> bytes | None:
+    """Read one leaf relative to an already authenticated directory inode."""
+
+    try:
+        entry_before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        if missing_ok:
+            return None
+        raise SchemaError(f"{context} is unavailable") from None
+    except OSError as exc:
+        raise SchemaError(f"{context} cannot be inspected safely") from exc
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(name, flags, dir_fd=parent_fd)
+    except OSError as exc:
+        raise SchemaError(f"{context} cannot be opened safely") from exc
+    try:
+        opened_before = os.fstat(fd)
+        if (
+            not stat.S_ISREG(opened_before.st_mode)
+            or opened_before.st_nlink != 1
+            or opened_before.st_uid != os.getuid()
+            or opened_before.st_mode & 0o077
+            or opened_before.st_size <= 0
+            or opened_before.st_size > maximum_bytes
+        ):
+            raise SchemaError(f"{context} is not a bounded private regular file")
+        chunks: list[bytes] = []
+        remaining = maximum_bytes + 1
+        while remaining:
+            chunk = os.read(fd, min(remaining, 4096))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        value = b"".join(chunks)
+        opened_after = os.fstat(fd)
+        entry_after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as exc:
+        raise SchemaError(f"{context} changed while being read") from exc
+    finally:
+        os.close(fd)
+    if not (
+        _inode_identity(entry_before)
+        == _inode_identity(opened_before)
+        == _inode_identity(opened_after)
+        == _inode_identity(entry_after)
+    ) or len(value) != opened_after.st_size:
+        raise SchemaError(f"{context} identity changed while being read")
+    return value
+
+
+def _read_private_regular_file_exact(
+    path: Path,
+    *,
+    context: str,
+    maximum_bytes: int = 4096,
+) -> bytes:
+    """Read one private file without following or retaining a swapped leaf."""
+
+    parent_before = path.parent.lstat()
+    if not stat.S_ISDIR(parent_before.st_mode) or stat.S_ISLNK(
+        parent_before.st_mode
+    ):
+        raise SchemaError(f"{context} parent is not a real directory")
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise SchemaError(f"{context} cannot be opened safely") from exc
+    try:
+        opened_before = os.fstat(fd)
+        if (
+            not stat.S_ISREG(opened_before.st_mode)
+            or opened_before.st_nlink != 1
+            or opened_before.st_uid != os.getuid()
+            or opened_before.st_mode & 0o077
+            or opened_before.st_size <= 0
+            or opened_before.st_size > maximum_bytes
+        ):
+            raise SchemaError(f"{context} is not a bounded private regular file")
+        chunks: list[bytes] = []
+        remaining = maximum_bytes + 1
+        while remaining:
+            chunk = os.read(fd, min(remaining, 4096))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        value = b"".join(chunks)
+        opened_after = os.fstat(fd)
+    finally:
+        os.close(fd)
+    try:
+        path_after = path.lstat()
+        parent_after = path.parent.lstat()
+    except OSError as exc:
+        raise SchemaError(f"{context} changed while being read") from exc
+    if (
+        _inode_identity(parent_before) != _inode_identity(parent_after)
+        or _inode_identity(opened_before) != _inode_identity(opened_after)
+        or _inode_identity(opened_after) != _inode_identity(path_after)
+        or len(value) != opened_after.st_size
+    ):
+        raise SchemaError(f"{context} identity changed while being read")
+    return value
+
+
+def _append_sealed_record_exact(
+    path: Path,
+    record: Mapping[str, Any],
+    *,
+    anchor: Path,
+    expected_event_count: int,
+    seal_key: bytes,
+) -> None:
+    """Durably append one complete record and verify the resulting stream."""
+
+    parent_fd = _open_directory_below_exact(
+        anchor,
+        path.parent,
+        create=True,
+        context="sealed verifier stream directory tree",
+    )
+    flags = os.O_APPEND | os.O_CREAT | os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        entry_before: os.stat_result | None
+        try:
+            entry_before = os.stat(
+                path.name,
+                dir_fd=parent_fd,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            entry_before = None
+        fd = os.open(path.name, flags, 0o600, dir_fd=parent_fd)
+    except OSError as exc:
+        os.close(parent_fd)
+        raise SchemaError("sealed verifier stream cannot be opened safely") from exc
+    try:
+        metadata = os.fstat(fd)
+        entry_opened = os.stat(
+            path.name,
+            dir_fd=parent_fd,
+            follow_symlinks=False,
+        )
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or metadata.st_uid != os.getuid()
+            or metadata.st_mode & 0o077
+            or _inode_identity(metadata) != _inode_identity(entry_opened)
+            or (
+                entry_before is not None
+                and _inode_identity(entry_before) != _inode_identity(metadata)
+            )
+        ):
+            raise SchemaError(
+                "sealed verifier stream is not an owner-controlled regular file"
+            )
+        payload = canonical_json_bytes(record) + b"\n"
+        view = memoryview(payload)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise SchemaError("sealed verifier stream append was incomplete")
+            view = view[written:]
+        os.fchmod(fd, 0o600)
+        os.fsync(fd)
+        metadata_after = os.fstat(fd)
+        entry_after = os.stat(
+            path.name,
+            dir_fd=parent_fd,
+            follow_symlinks=False,
+        )
+        if (
+            metadata_after.st_nlink != 1
+            or _inode_identity(metadata) != _inode_identity(metadata_after)
+            or _inode_identity(metadata_after) != _inode_identity(entry_after)
+        ):
+            raise SchemaError("sealed verifier stream identity changed during append")
+        os.lseek(fd, 0, os.SEEK_SET)
+        chunks: list[bytes] = []
+        remaining = 128 * 1024 * 1024 + 1
+        while remaining:
+            chunk = os.read(fd, min(remaining, 1024 * 1024))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw = b"".join(chunks)
+    finally:
+        os.close(fd)
+        os.close(parent_fd)
+    records = _verify_sealed_stream_bytes(path, raw, seal_key)
+    if len(records) != expected_event_count or records[-1] != dict(record):
+        raise SchemaError("sealed verifier stream append verification failed")
+
+
 class SealedVerifierSink:
     """Append full verifier evidence and return only an opaque terminal signal."""
 
@@ -342,6 +720,7 @@ class SealedVerifierSink:
             raise SchemaError(f"sealed verifier has unknown system ID: {system_id!r}")
         if int(attempt_id) < 0:
             raise SchemaError("sealed verifier attempt ID cannot be negative")
+        self.campaign_dir.mkdir(parents=True, exist_ok=True)
         self.system_root = (
             self.campaign_dir
             / "paired_blocks"
@@ -350,8 +729,8 @@ class SealedVerifierSink:
             / f"repeat_{resolved_repeat}"
             / f"rerun_{int(attempt_id)}"
             / _path_id(system_id)
-        ).resolve()
-        self.sealed_root = (self.system_root / "sealed").resolve()
+        )
+        self.sealed_root = self.system_root / "sealed"
         if self.campaign_dir not in self.sealed_root.parents:
             raise SchemaError("sealed verifier root escaped the campaign directory")
         relative = safe_relative_path(Path(_path_id(episode_id)) / "verifier_events.jsonl")
@@ -363,11 +742,45 @@ class SealedVerifierSink:
         self.matched_seed = resolved_seed
         self.task_id = resolved_task
         self.repeat_id = resolved_repeat
+        sealed_fd = _open_directory_below_exact(
+            self.campaign_dir,
+            self.sealed_root,
+            create=True,
+            context="sealed verifier directory tree",
+        )
+        try:
+            episode_fd = _open_optional_directory_at_exact(
+                sealed_fd,
+                self.path.parent.name,
+                context="sealed verifier episode directory",
+            )
+            if episode_fd is None:
+                initial_stream = None
+            else:
+                try:
+                    initial_stream = _read_private_regular_file_at_exact(
+                        episode_fd,
+                        self.path.name,
+                        context="sealed verifier stream",
+                        maximum_bytes=128 * 1024 * 1024,
+                        missing_ok=True,
+                    )
+                finally:
+                    os.close(episode_fd)
+        finally:
+            os.close(sealed_fd)
         self._key = seal_key or self._load_or_create_key()
         self._previous_hash = "0" * 64
         self._next_index = 0
-        if self.path.exists():
-            existing = verify_sealed_stream(self.path)
+        self._write_disabled = False
+        self._child_ownership_fd: int | None = None
+        self._child_ownership_directory_fd: int | None = None
+        if initial_stream is not None:
+            existing = _verify_sealed_stream_bytes(
+                self.path,
+                initial_stream,
+                self._key,
+            )
             if existing:
                 self._previous_hash = str(existing[-1]["record_hash"])
                 self._next_index = int(existing[-1]["event_index"]) + 1
@@ -381,9 +794,13 @@ class SealedVerifierSink:
     ) -> Any:
         """Seal one verifier result; never return its evidence to the runtime."""
 
+        if self._write_disabled:
+            raise SchemaError(
+                "sealed verifier write ownership was transferred to the child"
+            )
         evidence = as_mapping(verification)
-        if not event_kind:
-            raise SchemaError("sealed verifier event_kind is required")
+        if type(event_kind) is not str or not event_kind.strip():
+            raise SchemaError("sealed verifier event_kind must be nonempty text")
         if type(should_terminate) is not bool:
             raise SchemaError("sealed verifier should_terminate must be an exact boolean")
         event_id = f"{self.episode_id}:verifier:{self._next_index:06d}"
@@ -407,7 +824,13 @@ class SealedVerifierSink:
             hashlib.sha256,
         ).hexdigest()
         record = {**body, "opaque_token_sha256": token, "record_hash": record_hash}
-        append_jsonl(self.path, record, mode=0o600)
+        _append_sealed_record_exact(
+            self.path,
+            record,
+            anchor=self.campaign_dir,
+            expected_event_count=self._next_index + 1,
+            seal_key=self._key,
+        )
         self._previous_hash = record_hash
         self._next_index += 1
         return _make_runtime_signal(
@@ -535,35 +958,439 @@ class SealedVerifierSink:
 
     @property
     def has_episode_final(self) -> bool:
-        if not self.path.exists():
-            return False
         return any(
             record.get("event_kind") == "episode_final"
-            for record in verify_sealed_stream(self.path)
+            for record in self.verified_records()
         )
+
+    def verified_records(self) -> list[dict[str, Any]]:
+        """Read and authenticate this stream through anchored descriptors."""
+
+        raw = self._read_existing_stream_exact()
+        if raw is None:
+            return []
+        return _verify_sealed_stream_bytes(self.path, raw, self._key)
+
+    def _read_existing_stream_exact(self) -> bytes | None:
+        sealed_fd = _open_directory_below_exact(
+            self.campaign_dir,
+            self.sealed_root,
+            create=False,
+            context="sealed verifier directory tree",
+        )
+        try:
+            episode_fd = _open_optional_directory_at_exact(
+                sealed_fd,
+                self.path.parent.name,
+                context="sealed verifier episode directory",
+            )
+            if episode_fd is None:
+                return None
+            try:
+                return _read_private_regular_file_at_exact(
+                    episode_fd,
+                    self.path.name,
+                    context="sealed verifier stream",
+                    maximum_bytes=128 * 1024 * 1024,
+                    missing_ok=True,
+                )
+            finally:
+                os.close(episode_fd)
+        finally:
+            os.close(sealed_fd)
 
     def _load_or_create_key(self) -> bytes:
         key_path = self.sealed_root / ".seal_key"
-        key_path.parent.mkdir(parents=True, exist_ok=True)
-        if key_path.exists():
-            key = key_path.read_bytes()
-            if len(key) < 32:
-                raise SchemaError("existing verifier seal key is too short")
-            return key
-        key = secrets.token_bytes(32)
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-        fd = os.open(key_path, flags, 0o600)
+        sealed_fd = _open_directory_below_exact(
+            self.campaign_dir,
+            self.sealed_root,
+            create=False,
+            context="sealed verifier directory tree",
+        )
         try:
-            os.write(fd, key)
-            os.fsync(fd)
+            existing = _read_private_regular_file_at_exact(
+                sealed_fd,
+                key_path.name,
+                context="sealed verifier key",
+                missing_ok=True,
+            )
+            if existing is not None:
+                if len(existing) < 32:
+                    raise SchemaError("existing verifier seal key is too short")
+                return existing
+            key = secrets.token_bytes(32)
+            flags = (
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_CLOEXEC", 0)
+            )
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            try:
+                fd = os.open(key_path.name, flags, 0o600, dir_fd=sealed_fd)
+            except FileExistsError:
+                raced = _read_private_regular_file_at_exact(
+                    sealed_fd,
+                    key_path.name,
+                    context="sealed verifier key",
+                )
+                if raced is None or len(raced) < 32:
+                    raise SchemaError("existing verifier seal key is too short")
+                return raced
+            except OSError as exc:
+                raise SchemaError("sealed verifier key cannot be created safely") from exc
+            try:
+                opened = os.fstat(fd)
+                entry = os.stat(
+                    key_path.name,
+                    dir_fd=sealed_fd,
+                    follow_symlinks=False,
+                )
+                if (
+                    not stat.S_ISREG(opened.st_mode)
+                    or opened.st_nlink != 1
+                    or opened.st_uid != os.getuid()
+                    or opened.st_mode & 0o077
+                    or _inode_identity(opened) != _inode_identity(entry)
+                ):
+                    raise SchemaError(
+                        "sealed verifier key is not an owner-controlled regular file"
+                    )
+                view = memoryview(key)
+                while view:
+                    written = os.write(fd, view)
+                    if written <= 0:
+                        raise SchemaError("sealed verifier key write was incomplete")
+                    view = view[written:]
+                os.fchmod(fd, 0o600)
+                os.fsync(fd)
+                opened_after = os.fstat(fd)
+                entry_after = os.stat(
+                    key_path.name,
+                    dir_fd=sealed_fd,
+                    follow_symlinks=False,
+                )
+                if not (
+                    _inode_identity(opened)
+                    == _inode_identity(opened_after)
+                    == _inode_identity(entry_after)
+                ) or opened_after.st_nlink != 1:
+                    raise SchemaError("sealed verifier key identity changed during write")
+            finally:
+                os.close(fd)
+            return key
         finally:
+            os.close(sealed_fd)
+
+    def release_child_ownership(self) -> None:
+        """Release an isolated child's exclusive stream claim during cleanup."""
+
+        fd = self._child_ownership_fd
+        self._child_ownership_fd = None
+        if fd is not None:
             os.close(fd)
-        return key
+        directory_fd = self._child_ownership_directory_fd
+        self._child_ownership_directory_fd = None
+        if directory_fd is not None:
+            os.close(directory_fd)
 
 
 # Public architecture name; retain ``SealedVerifierSink`` for compatibility
 # with existing integrations that use the implementation-oriented name.
 SealedVerifier = SealedVerifierSink
+
+
+@dataclass(frozen=True, slots=True)
+class SealedVerifierStreamTarget:
+    """Secret-free locator for a child-owned sealed verifier stream.
+
+    Campaign orchestration constructs this record from its readable sink and
+    passes only the target to the process-isolated episode factory.  It binds
+    the exact output identity and key *digest* but deliberately contains no
+    seal-key bytes and no writer callback.
+    """
+
+    schema_version: str
+    campaign_dir: str
+    block_id: str
+    attempt_id: int
+    system_id: str
+    episode_id: str
+    matched_seed: int
+    task_id: str
+    repeat_id: int
+    seal_key_sha256: str
+    initial_event_count: int = 0
+
+    def __post_init__(self) -> None:
+        if self.schema_version != SEALED_VERIFIER_STREAM_TARGET_SCHEMA_VERSION:
+            raise SchemaError("sealed verifier stream target version differs")
+        campaign = Path(self.campaign_dir)
+        if (
+            not campaign.is_absolute()
+            or not campaign.is_dir()
+            or campaign.is_symlink()
+            or campaign.resolve(strict=True) != campaign
+        ):
+            raise SchemaError(
+                "sealed verifier stream target campaign directory is not canonical"
+            )
+        for name in ("block_id", "system_id", "episode_id", "task_id"):
+            value = getattr(self, name)
+            if type(value) is not str or not value or value != value.strip():
+                raise SchemaError(f"sealed verifier stream target {name} is invalid")
+        if self.system_id not in {"E0", "E1", "E2", "E3"}:
+            raise SchemaError("sealed verifier stream target system is invalid")
+        for name in ("attempt_id", "matched_seed", "repeat_id"):
+            value = getattr(self, name)
+            if type(value) is not int or value < 0:
+                raise SchemaError(
+                    f"sealed verifier stream target {name} is invalid"
+                )
+        _require_sha256(
+            self.seal_key_sha256,
+            context="sealed verifier stream target key",
+        )
+        if self.initial_event_count != 0:
+            raise SchemaError(
+                "child-owned sealed verifier target must begin with an empty stream"
+            )
+
+    @classmethod
+    def from_sink(cls, sink: SealedVerifierSink) -> "SealedVerifierStreamTarget":
+        if type(sink) is not SealedVerifierSink:
+            raise TypeError("sealed verifier stream target requires the exact sink")
+        if sink._write_disabled:  # noqa: SLF001 - exact owner handoff
+            raise SchemaError("sealed verifier stream ownership was already transferred")
+        existing = sink._read_existing_stream_exact()  # noqa: SLF001
+        if existing is not None or sink._next_index != 0:  # noqa: SLF001
+            raise SchemaError(
+                "child-owned sealed verifier target stream is not empty"
+            )
+        key_path = sink.sealed_root / ".seal_key"
+        sealed_fd = _open_directory_below_exact(
+            sink.campaign_dir,
+            sink.sealed_root,
+            create=False,
+            context="sealed verifier stream target directory tree",
+        )
+        try:
+            key = _read_private_regular_file_at_exact(
+                sealed_fd,
+                key_path.name,
+                context="sealed verifier stream target key",
+            )
+        finally:
+            os.close(sealed_fd)
+        if key is None:  # pragma: no cover - missing_ok is deliberately false
+            raise SchemaError("sealed verifier stream target key is unavailable")
+        target = cls(
+            schema_version=SEALED_VERIFIER_STREAM_TARGET_SCHEMA_VERSION,
+            campaign_dir=str(sink.campaign_dir),
+            block_id=sink.block_id,
+            attempt_id=sink.attempt_id,
+            system_id=sink.system_id,
+            episode_id=sink.episode_id,
+            matched_seed=sink.matched_seed,
+            task_id=sink.task_id,
+            repeat_id=sink.repeat_id,
+            seal_key_sha256=hashlib.sha256(key).hexdigest(),
+            initial_event_count=0,
+        )
+        # The parent retains read/verification access but can no longer append
+        # through this stale sink or a writer derived from it.
+        sink._write_disabled = True  # noqa: SLF001 - exact owner handoff
+        return target
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any] | Any) -> "SealedVerifierStreamTarget":
+        raw = as_mapping(value)
+        expected = {
+            "schema_version",
+            "campaign_dir",
+            "block_id",
+            "attempt_id",
+            "system_id",
+            "episode_id",
+            "matched_seed",
+            "task_id",
+            "repeat_id",
+            "seal_key_sha256",
+            "initial_event_count",
+        }
+        if set(raw) != expected:
+            raise SchemaError("sealed verifier stream target fields differ")
+        return cls(**{name: raw[name] for name in expected})
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "campaign_dir": self.campaign_dir,
+            "block_id": self.block_id,
+            "attempt_id": self.attempt_id,
+            "system_id": self.system_id,
+            "episode_id": self.episode_id,
+            "matched_seed": self.matched_seed,
+            "task_id": self.task_id,
+            "repeat_id": self.repeat_id,
+            "seal_key_sha256": self.seal_key_sha256,
+            "initial_event_count": self.initial_event_count,
+        }
+
+    @property
+    def record_sha256(self) -> str:
+        return sha256_json(self.to_dict())
+
+    def open_child_sink(self, *, episode_runtime_dir: str | Path) -> SealedVerifierSink:
+        """Open the exact empty stream from the isolated evaluator process."""
+
+        runtime = Path(episode_runtime_dir)
+        if (
+            not runtime.is_absolute()
+            or not runtime.is_dir()
+            or runtime.is_symlink()
+            or runtime.resolve(strict=True) != runtime
+        ):
+            raise SchemaError(
+                "child-owned sealed verifier runtime directory is not canonical"
+            )
+        system_root = (
+            Path(self.campaign_dir)
+            / "paired_blocks"
+            / f"seed_{self.matched_seed}"
+            / _path_id(self.task_id)
+            / f"repeat_{self.repeat_id}"
+            / f"rerun_{self.attempt_id}"
+            / _path_id(self.system_id)
+        )
+        if runtime != system_root / "runtime":
+            raise SchemaError(
+                "child-owned sealed verifier target differs from runtime directory"
+            )
+        campaign = Path(self.campaign_dir)
+        sealed_root = system_root / "sealed"
+        key_path = sealed_root / ".seal_key"
+        lock_path = sealed_root / ".child_owner.lock"
+        ownership_directory_fd = _open_directory_below_exact(
+            campaign,
+            sealed_root,
+            create=False,
+            context="child-owned sealed verifier directory tree",
+        )
+        ownership_fd = -1
+        try:
+            try:
+                # The directory inode is the durable ownership authority.  A
+                # same-user unlink/recreate of the marker cannot manufacture a
+                # second directory flock while the first child remains alive.
+                fcntl.flock(
+                    ownership_directory_fd,
+                    fcntl.LOCK_EX | fcntl.LOCK_NB,
+                )
+            except OSError as exc:
+                raise SchemaError(
+                    "child-owned sealed verifier stream already has an owner"
+                ) from exc
+
+            lock_flags = (
+                os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
+            )
+            if hasattr(os, "O_NOFOLLOW"):
+                lock_flags |= os.O_NOFOLLOW
+            try:
+                try:
+                    lock_before = os.stat(
+                        lock_path.name,
+                        dir_fd=ownership_directory_fd,
+                        follow_symlinks=False,
+                    )
+                except FileNotFoundError:
+                    lock_before = None
+                ownership_fd = os.open(
+                    lock_path.name,
+                    lock_flags,
+                    0o600,
+                    dir_fd=ownership_directory_fd,
+                )
+            except OSError as exc:
+                raise SchemaError(
+                    "child-owned sealed verifier ownership lock cannot be opened"
+                ) from exc
+            metadata = os.fstat(ownership_fd)
+            lock_opened = os.stat(
+                lock_path.name,
+                dir_fd=ownership_directory_fd,
+                follow_symlinks=False,
+            )
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or metadata.st_uid != os.getuid()
+                or metadata.st_mode & 0o077
+                or _inode_identity(metadata) != _inode_identity(lock_opened)
+                or (
+                    lock_before is not None
+                    and _inode_identity(lock_before) != _inode_identity(metadata)
+                )
+            ):
+                raise SchemaError(
+                    "child-owned sealed verifier ownership lock is unsafe"
+                )
+            fcntl.flock(ownership_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            metadata_after_lock = os.fstat(ownership_fd)
+            lock_after = os.stat(
+                lock_path.name,
+                dir_fd=ownership_directory_fd,
+                follow_symlinks=False,
+            )
+            if not (
+                _inode_identity(metadata)
+                == _inode_identity(metadata_after_lock)
+                == _inode_identity(lock_after)
+            ) or metadata_after_lock.st_nlink != 1:
+                raise SchemaError(
+                    "child-owned sealed verifier ownership lock changed"
+                )
+
+            key = _read_private_regular_file_at_exact(
+                ownership_directory_fd,
+                key_path.name,
+                context="child-owned sealed verifier key",
+            )
+            if key is None:  # pragma: no cover - missing_ok is deliberately false
+                raise SchemaError("child-owned sealed verifier key is unavailable")
+            if hashlib.sha256(key).hexdigest() != self.seal_key_sha256:
+                raise SchemaError("child-owned sealed verifier key digest differs")
+            sink = SealedVerifierSink(
+                self.campaign_dir,
+                block_id=self.block_id,
+                attempt_id=self.attempt_id,
+                system_id=self.system_id,
+                episode_id=self.episode_id,
+                matched_seed=self.matched_seed,
+                task_id=self.task_id,
+                repeat_id=self.repeat_id,
+                seal_key=key,
+            )
+            if sink.system_root != system_root:
+                raise SchemaError("child-owned sealed verifier system root differs")
+            if sink.sealed_root / ".seal_key" != key_path:
+                raise SchemaError("child-owned sealed verifier key path differs")
+            if sink._next_index != self.initial_event_count:  # noqa: SLF001
+                raise SchemaError(
+                    "child-owned sealed verifier stream is not empty"
+                )
+            sink._child_ownership_fd = ownership_fd  # noqa: SLF001
+            sink._child_ownership_directory_fd = ownership_directory_fd  # noqa: SLF001
+            ownership_fd = -1
+            ownership_directory_fd = -1
+            return sink
+        finally:
+            if ownership_fd >= 0:
+                os.close(ownership_fd)
+            if ownership_directory_fd >= 0:
+                os.close(ownership_directory_fd)
 
 
 class SealedVerifierWriter:
@@ -617,17 +1444,45 @@ class SealedVerifierWriter:
         return callback(verification)
 
 
-def verify_sealed_stream(path: str | Path) -> list[dict[str, Any]]:
-    source = Path(path)
-    key_path = source.parent.parent / ".seal_key"
-    if not key_path.is_file():
-        raise SchemaError(f"sealed stream has no HMAC key: {key_path}")
-    key = key_path.read_bytes()
+def _verify_sealed_stream_bytes(
+    source: Path,
+    raw: bytes,
+    key: bytes,
+) -> list[dict[str, Any]]:
+    """Verify authenticated stream bytes without reopening a mutable pathname."""
+
     if len(key) < 32:
-        raise SchemaError(f"sealed stream HMAC key is too short: {key_path}")
-    if key_path.stat().st_mode & 0o077 or source.stat().st_mode & 0o077:
-        raise SchemaError(f"sealed verifier key/evidence permissions are not private: {source}")
-    records = read_jsonl(source)
+        raise SchemaError("sealed stream HMAC key is too short")
+    if not raw.endswith(b"\n"):
+        raise SchemaError(f"sealed stream has an incomplete final record: {source}")
+    records: list[dict[str, Any]] = []
+    for line_number, line in enumerate(raw.splitlines(), start=1):
+        if not line:
+            raise SchemaError(
+                f"sealed stream {source}:{line_number} has an empty record"
+            )
+        try:
+            record = json.loads(
+                line.decode("utf-8"),
+                parse_constant=lambda token: (_ for _ in ()).throw(
+                    ValueError(f"non-standard JSON constant: {token}")
+                ),
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as exc:
+            raise SchemaError(
+                f"sealed stream {source}:{line_number} is not JSON"
+            ) from exc
+        try:
+            canonical = canonical_json_bytes(record)
+        except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
+            raise SchemaError(
+                f"sealed stream {source}:{line_number} is not canonical JSON"
+            ) from exc
+        if not isinstance(record, dict) or canonical != line:
+            raise SchemaError(
+                f"sealed stream {source}:{line_number} is not canonical JSON"
+            )
+        records.append(record)
     previous_hash = "0" * 64
     for index, record in enumerate(records):
         required = {
@@ -645,38 +1500,107 @@ def verify_sealed_stream(path: str | Path) -> list[dict[str, Any]]:
             "opaque_token_sha256",
             "record_hash",
         }
-        missing = sorted(required - set(record))
-        if missing:
-            raise SchemaError(f"sealed stream {path}:{index + 1} missing {missing}")
+        fields = set(record)
+        if fields != required:
+            raise SchemaError(
+                f"sealed stream {source}:{index + 1} fields differ: "
+                f"missing={sorted(required - fields)}, "
+                f"unknown={sorted(fields - required)}"
+            )
+        text_fields = (
+            "schema_version",
+            "event_id",
+            "event_kind",
+            "block_id",
+            "system_id",
+            "episode_id",
+            "previous_record_hash",
+            "opaque_token_sha256",
+            "record_hash",
+        )
+        for field in text_fields:
+            if type(record[field]) is not str or not record[field].strip():
+                raise SchemaError(
+                    f"sealed stream {source}:{index + 1} has invalid {field}"
+                )
         if record["schema_version"] != SCHEMA_VERSION:
-            raise SchemaError(f"sealed stream {path}:{index + 1} has wrong schema")
+            raise SchemaError(f"sealed stream {source}:{index + 1} has wrong schema")
+        if type(record["attempt_id"]) is not int or record["attempt_id"] < 0:
+            raise SchemaError(
+                f"sealed stream {source}:{index + 1} has invalid attempt_id"
+            )
         if type(record["should_terminate"]) is not bool:
             raise SchemaError(
-                f"sealed stream {path}:{index + 1} has non-boolean termination flag"
+                f"sealed stream {source}:{index + 1} has non-boolean termination flag"
             )
-        if int(record["event_index"]) != index:
-            raise SchemaError(f"sealed stream {path} has non-monotonic event index")
+        if type(record["evidence"]) is not dict:
+            raise SchemaError(
+                f"sealed stream {source}:{index + 1} evidence is not an object"
+            )
+        if type(record["event_index"]) is not int or record["event_index"] < 0:
+            raise SchemaError(
+                f"sealed stream {source}:{index + 1} has invalid event index"
+            )
+        if record["event_index"] != index:
+            raise SchemaError(f"sealed stream {source} has non-monotonic event index")
+        for field in (
+            "previous_record_hash",
+            "opaque_token_sha256",
+            "record_hash",
+        ):
+            _require_sha256(
+                record[field],
+                context=f"sealed stream {source}:{index + 1} {field}",
+            )
         if record["previous_record_hash"] != previous_hash:
-            raise SchemaError(f"sealed stream {path} broke its previous-record chain")
+            raise SchemaError(f"sealed stream {source} broke its previous-record chain")
         body = {
             key: value
             for key, value in record.items()
             if key not in {"record_hash", "opaque_token_sha256"}
         }
         expected = sha256_json(body)
-        if not hmac.compare_digest(str(record["record_hash"]), expected):
-            raise SchemaError(f"sealed stream {path}:{index + 1} has a bad record hash")
+        if not hmac.compare_digest(record["record_hash"], expected):
+            raise SchemaError(
+                f"sealed stream {source}:{index + 1} has a bad record hash"
+            )
         expected_token = hmac.new(
             key,
             canonical_json_bytes([record["event_id"], expected]),
             hashlib.sha256,
         ).hexdigest()
         if not hmac.compare_digest(
-            str(record["opaque_token_sha256"]), expected_token
+            record["opaque_token_sha256"], expected_token
         ):
-            raise SchemaError(f"sealed stream {path}:{index + 1} has a bad opaque token")
+            raise SchemaError(
+                f"sealed stream {source}:{index + 1} has a bad opaque token"
+            )
         previous_hash = expected
     return records
+
+
+def _verify_sealed_stream_with_key(
+    source: Path,
+    key: bytes,
+) -> list[dict[str, Any]]:
+    """Verify one safely opened stream against already authenticated key bytes."""
+
+    raw = _read_private_regular_file_exact(
+        source,
+        context="sealed verifier stream",
+        maximum_bytes=128 * 1024 * 1024,
+    )
+    return _verify_sealed_stream_bytes(source, raw, key)
+
+
+def verify_sealed_stream(path: str | Path) -> list[dict[str, Any]]:
+    source = Path(path)
+    key_path = source.parent.parent / ".seal_key"
+    key = _read_private_regular_file_exact(
+        key_path,
+        context="sealed stream HMAC key",
+    )
+    return _verify_sealed_stream_with_key(source, key)
 
 
 def assert_no_verifier_evidence(record: Mapping[str, Any], *, context: str) -> None:

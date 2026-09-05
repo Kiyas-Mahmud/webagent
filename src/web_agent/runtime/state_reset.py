@@ -5,7 +5,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+import hashlib
 import math
+from pathlib import Path
 from time import monotonic
 from typing import Any
 
@@ -16,6 +18,10 @@ from web_agent.runtime.contracts import (
 )
 from web_agent.runtime.deadline import interrupt_after
 
+
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = hashlib.sha256(
+    Path(__file__).resolve().read_bytes()
+).hexdigest()
 
 REGISTERED_STATEFUL_BACKEND_ROLES = (
     "selected_checkpoint_policy",

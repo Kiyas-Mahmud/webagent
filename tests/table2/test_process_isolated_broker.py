@@ -5,11 +5,14 @@ import hashlib
 import importlib.util
 from pathlib import Path
 import json
+import os
 import secrets
 import socket
 import struct
 import subprocess
 import sys
+import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -35,6 +38,8 @@ from web_agent.eval.table2.execution_guard import (
 from web_agent.eval.table2.process_broker import (
     PROCESS_BROKER_SOURCE_PATHS,
     ProcessIsolatedBroker,
+    _PROCESS_BROKER_STDLIB_LAUNCHER,
+    _validated_repository_python_source,
     _verify_parent_imported_sources,
     _validated_readiness_envelope,
     _validate_shutdown_response,
@@ -47,9 +52,11 @@ from web_agent.eval.table2.process_broker_protocol import (
     PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION,
     PROCESS_BROKER_PROTOCOL_VERSION,
     RUNTIME_INNER_SCHEMA_PATHS,
+    ProcessBrokerProtocolError,
     authenticated_envelope,
     expected_verifier_receipt_binding,
     receive_frame,
+    registered_browser_error_observation_url,
     send_frame,
     validate_runtime_request_payload,
     validate_runtime_result,
@@ -72,6 +79,7 @@ from web_agent.runtime.contracts import (
     ActionType,
     ConcreteAction,
     ExecutionEvidence,
+    ExecutionResult,
     ExecutionStatus,
     Observation,
     ObservationStage,
@@ -170,6 +178,7 @@ def _reset(client: ProcessIsolatedRuntimeClient) -> dict:
     observation = client.reset(
         episode_id="episode-1",
         task_id="task-1",
+        task_specification_sha256=SHA,
         benchmark_version="webarena-fixture-v1",
         start_state_id=SHA,
         reset_stage_seed=42,
@@ -249,6 +258,96 @@ def _broker(
     )
 
 
+def test_repository_python_source_rejects_external_hardlink(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    source = repository / "pkg" / "backend.py"
+    source.parent.mkdir(parents=True)
+    external = tmp_path / "external-backend.py"
+    external.write_text("def create_backend(config):\n    return config\n", encoding="utf-8")
+    source.hardlink_to(external)
+
+    with pytest.raises(SchemaError, match="single-link"):
+        _validated_repository_python_source(
+            repository,
+            "pkg/backend.py",
+            label="process-broker backend source",
+        )
+
+
+def test_worker_factory_verification_rejects_external_hardlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from web_agent.eval.table2 import process_broker_worker as worker
+
+    external = tmp_path / "external-backend.py"
+    external.write_text("def create_backend(config):\n    return config\n", encoding="utf-8")
+    source = tmp_path / "backend.py"
+    source.hardlink_to(external)
+    module = SimpleNamespace(__file__=str(source), create_backend=lambda config: config)
+    monkeypatch.setattr(worker.importlib, "import_module", lambda _name: module)
+
+    with pytest.raises(ProcessBrokerProtocolError, match="module identity differs"):
+        worker._load_factory(
+            "fixture_backend:create_backend",
+            source_path=source,
+            source_sha256=sha256_file(source),
+            backend_config={"schema_version": "fixture-v1"},
+            require_sealed_finalization=False,
+        )
+
+
+def test_exact_stdlib_bootstrap_rejects_hardlink_before_package_import(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    source = repository / "src" / "web_agent" / "__init__.py"
+    source.parent.mkdir(parents=True)
+    marker = tmp_path / "package-imported"
+    external = tmp_path / "external-source.py"
+    external.write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('imported', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    source.hardlink_to(external)
+    config = {
+        "repository_root": str(repository),
+        "source_files": [
+            {
+                "relative_path": "src/web_agent/__init__.py",
+                "sha256": sha256_file(source),
+            }
+        ],
+    }
+    payload = json.dumps(config, sort_keys=True).encode("utf-8")
+    parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-I",
+                "-B",
+                "-c",
+                _PROCESS_BROKER_STDLIB_LAUNCHER,
+                str(repository / "src"),
+                str(child.fileno()),
+            ],
+            cwd=repository,
+            pass_fds=(child.fileno(),),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        child.close()
+        parent.sendall(struct.pack("!I", len(payload)) + payload)
+        parent.shutdown(socket.SHUT_WR)
+        assert process.wait(timeout=5.0) != 0
+    finally:
+        parent.close()
+        child.close()
+    assert not marker.exists()
+
+
 def test_process_broker_has_distinct_processes_exact_outer_envelopes_and_cleanup() -> None:
     backend_module = "web_agent.eval.table2.process_broker_fixture_backend"
     evaluator_module = "web_agent.eval.table2.webarena_page_state_evaluator"
@@ -289,6 +388,7 @@ def test_process_broker_has_distinct_processes_exact_outer_envelopes_and_cleanup
             "src/web_agent/eval/__init__.py",
             "src/web_agent/eval/table2/__init__.py",
             "src/web_agent/eval/table2/common.py",
+            "src/web_agent/eval/table2/sealed_verifier.py",
         }.issubset({row["relative_path"] for row in receipt.source_files})
         assert backend_module not in sys.modules
         assert "web_agent.eval.table2.process_broker_worker" not in sys.modules
@@ -380,6 +480,7 @@ def test_process_broker_rejects_screenshot_from_another_registered_root(
             client.reset(
                 episode_id="episode-1",
                 task_id="task-1",
+                task_specification_sha256=SHA,
                 benchmark_version="webarena-fixture-v1",
                 start_state_id=SHA,
                 reset_stage_seed=42,
@@ -676,6 +777,7 @@ def test_runtime_close_rejects_missing_after_reset_terminal_receipt() -> None:
         client.reset(
             episode_id="episode-1",
             task_id="task-1",
+            task_specification_sha256=SHA,
             benchmark_version="webarena-fixture-v1",
             start_state_id=SHA,
             reset_stage_seed=42,
@@ -728,6 +830,7 @@ def test_terminal_receipt_must_match_causal_observation_and_cannot_repeat() -> N
         observation = client.reset(
             episode_id="episode-1",
             task_id="task-1",
+            task_specification_sha256=SHA,
             benchmark_version="webarena-fixture-v1",
             start_state_id=SHA,
             reset_stage_seed=42,
@@ -764,6 +867,7 @@ def test_runtime_client_deep_snapshots_action_and_observation_state() -> None:
         reset_observation = client.reset(
             episode_id="episode-1",
             task_id="task-1",
+            task_specification_sha256=SHA,
             benchmark_version="webarena-fixture-v1",
             start_state_id=SHA,
             reset_stage_seed=42,
@@ -804,6 +908,7 @@ def test_worker_independently_rejects_wrong_terminal_receipt_hash() -> None:
         observation = client.reset(
             episode_id="episode-1",
             task_id="task-1",
+            task_specification_sha256=SHA,
             benchmark_version="webarena-fixture-v1",
             start_state_id=SHA,
             reset_stage_seed=42,
@@ -959,6 +1064,62 @@ def test_action_inner_schema_rejects_destructive_and_bad_recovery_flags() -> Non
                     "action": action,
                 },
             )
+
+
+def test_rejected_action_registration_schema_binds_exact_non_dispatch_result() -> None:
+    action = ConcreteAction(
+        action_id="rejected-action",
+        source_decision_id="decision-1",
+        action_type=ActionType.TYPE,
+        parameters={},
+        bbox=(0.1, 0.1, 0.2, 0.2),
+        destructive=True,
+    )
+    execution = ExecutionResult(
+        action_id=action.action_id,
+        status=ExecutionStatus.REJECTED,
+        executor_step=1,
+        state_changed=False,
+        environment_error=False,
+        error_kind="parameter_resolution_rejected",
+        message="provider did not resolve parameters",
+        evidence=ExecutionEvidence(
+            action_id=action.action_id,
+            started_at_utc=TIMESTAMP,
+            ended_at_utc=TIMESTAMP,
+            status=ExecutionStatus.REJECTED,
+        ),
+    )
+    payload = {
+        "episode_id": "episode-1",
+        "task_id": "task-1",
+        "action": action.to_dict(),
+        "execution": execution.to_dict(),
+    }
+    assert validate_runtime_request_payload(
+        "runtime_register_rejected", payload
+    ) == payload
+
+    for field in ("state_changed", "environment_error"):
+        mutated = copy.deepcopy(payload)
+        mutated["execution"][field] = True
+        with pytest.raises(ProcessBrokerProtocolError):
+            validate_runtime_request_payload(
+                "runtime_register_rejected", mutated
+            )
+    wrong_action = copy.deepcopy(payload)
+    wrong_action["execution"]["action_id"] = "another-action"
+    wrong_action["execution"]["evidence"]["action_id"] = "another-action"
+    with pytest.raises(ProcessBrokerProtocolError):
+        validate_runtime_request_payload(
+            "runtime_register_rejected", wrong_action
+        )
+    oracle_alias = copy.deepcopy(payload)
+    oracle_alias["action"]["parameters"] = {"reward": 1}
+    with pytest.raises(ProcessBrokerProtocolError):
+        validate_runtime_request_payload(
+            "runtime_register_rejected", oracle_alias
+        )
 
 
 def test_observe_request_schema_requires_exact_temporal_binding() -> None:
@@ -1150,6 +1311,43 @@ def test_observation_inner_schema_rejects_arbitrary_and_cross_bound_values() -> 
             "runtime_observe", unsafe_url, request_payload=request
         )
 
+    browser_error = copy.deepcopy(value)
+    browser_error["observation"]["url"] = (
+        registered_browser_error_observation_url("TIMEOUT_ERROR")
+    )
+    browser_error["observation"]["environment_error"] = True
+    browser_error["observation"]["page_state"]["has_browser_error"] = True
+    browser_error["observation"]["page_state"]["browser_error_kind"] = (
+        "TIMEOUT_ERROR"
+    )
+    assert validate_runtime_result(
+        "runtime_observe",
+        browser_error,
+        request_payload=request,
+    ) == browser_error
+
+    mismatched_browser_error = copy.deepcopy(browser_error)
+    mismatched_browser_error["observation"]["page_state"][
+        "browser_error_kind"
+    ] = "NAVIGATION_ERROR"
+    with pytest.raises(Exception, match="contradicts the observed error kind"):
+        validate_runtime_result(
+            "runtime_observe",
+            mismatched_browser_error,
+            request_payload=request,
+        )
+
+    false_error_flag = copy.deepcopy(browser_error)
+    false_error_flag["observation"]["environment_error"] = False
+    false_error_flag["observation"]["page_state"]["has_browser_error"] = False
+    false_error_flag["observation"]["page_state"]["browser_error_kind"] = None
+    with pytest.raises(Exception, match="requires an environment error"):
+        validate_runtime_result(
+            "runtime_observe",
+            false_error_flag,
+            request_payload=request,
+        )
+
     wrong_stage = {
         "observation": _observation(
             stage=ObservationStage.POST_RECOVERY,
@@ -1327,6 +1525,7 @@ def test_runtime_client_poisoned_after_ambiguous_transport_failure(
     kwargs = {
         "episode_id": "episode-1",
         "task_id": "task-1",
+        "task_specification_sha256": SHA,
         "benchmark_version": "webarena-fixture-v1",
         "start_state_id": SHA,
         "reset_stage_seed": 42,
@@ -1340,6 +1539,8 @@ def test_runtime_client_poisoned_after_ambiguous_transport_failure(
 @pytest.mark.parametrize(
     "field, value",
     [
+        ("task_specification_sha256", 7),
+        ("task_specification_sha256", "A" * 64),
         ("benchmark_version", 7),
         ("benchmark_version", " webarena-fixture-v1"),
         ("start_state_id", int("1" * 64)),
@@ -1355,6 +1556,7 @@ def test_reset_request_rejects_type_or_identity_drift_before_backend(
     payload = {
         "episode_id": "episode-1",
         "task_id": "task-1",
+        "task_specification_sha256": SHA,
         "benchmark_version": "webarena-fixture-v1",
         "start_state_id": SHA,
         "reset_stage_seed": 42,
@@ -1387,6 +1589,9 @@ def test_process_broker_static_contract_copies_remain_exactly_aligned() -> None:
         assert module.PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256 == (
             PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256
         )
+        assert tuple(module.PC01_PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS) == (
+            PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
+        )
     finally:
         sys.modules.pop(module_name, None)
 
@@ -1409,6 +1614,105 @@ def test_start_failure_always_cleans_process_socket_and_tempdir() -> None:
     assert not broker._endpoint.exists()
 
 
+def test_socketpair_failure_cleans_tempdir_before_process_launch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    broker = _broker()
+    temp_root = broker._temp_root
+    assert temp_root.is_dir()
+
+    def fail_socketpair(*_args: object, **_kwargs: object) -> tuple[()]:
+        raise OSError("injected socketpair failure")
+
+    monkeypatch.setattr(socket, "socketpair", fail_socketpair)
+    with pytest.raises(OSError, match="injected socketpair failure"):
+        broker.start()
+    assert broker.cleaned
+    assert not temp_root.exists()
+    assert not broker._endpoint.exists()
+
+
+def test_stalled_popen_is_interrupted_by_absolute_startup_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    broker = ProcessIsolatedBroker(
+        repository_root=ROOT,
+        backend_entrypoint=(
+            "web_agent.eval.table2.process_broker_fixture_backend:create_backend"
+        ),
+        backend_source_relative_path=(
+            "src/web_agent/eval/table2/process_broker_fixture_backend.py"
+        ),
+        sealed_backend_config=FIXTURE_BACKEND_CONFIG,
+        startup_timeout_seconds=0.05,
+    )
+    temp_root = broker._temp_root
+    spawned_pids: list[int] = []
+
+    def stalled_execute(process: object, *_args: object, **_kwargs: object) -> None:
+        pid = os.posix_spawn(
+            sys.executable,
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            os.environ,
+        )
+        setattr(process, "pid", pid)
+        setattr(process, "_child_created", True)
+        spawned_pids.append(pid)
+        time.sleep(2.0)
+        raise AssertionError("stalled Popen exec wait was not interrupted")
+
+    monkeypatch.setattr(subprocess.Popen, "_execute_child", stalled_execute)
+    started = time.monotonic()
+    with pytest.raises(
+        TimeoutError, match="absolute startup deadline expired"
+    ):
+        broker.start()
+    assert time.monotonic() - started < 1.0
+    assert broker.cleaned
+    assert not temp_root.exists()
+    assert not broker._endpoint.exists()
+    assert len(spawned_pids) == 1
+    try:
+        waited = os.waitpid(spawned_pids[0], os.WNOHANG)
+    except ChildProcessError:
+        broker_reaped_child = True
+    else:
+        broker_reaped_child = False
+        if waited == (0, 0):
+            os.kill(spawned_pids[0], 9)
+            os.waitpid(spawned_pids[0], 0)
+    assert broker_reaped_child, "startup timeout left an owned child unreaped"
+
+
+def test_absolute_startup_deadline_begins_before_source_verification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    broker = ProcessIsolatedBroker(
+        repository_root=ROOT,
+        backend_entrypoint=(
+            "web_agent.eval.table2.process_broker_fixture_backend:create_backend"
+        ),
+        backend_source_relative_path=(
+            "src/web_agent/eval/table2/process_broker_fixture_backend.py"
+        ),
+        sealed_backend_config=FIXTURE_BACKEND_CONFIG,
+        startup_timeout_seconds=0.05,
+    )
+    temp_root = broker._temp_root
+
+    def stalled_source_verification() -> tuple[dict[str, str], ...]:
+        time.sleep(2.0)
+        raise AssertionError("source verification was outside startup deadline")
+
+    monkeypatch.setattr(broker, "_source_rows", stalled_source_verification)
+    with pytest.raises(
+        TimeoutError, match="absolute startup deadline expired"
+    ):
+        broker.start()
+    assert broker.cleaned
+    assert not temp_root.exists()
+
+
 def test_parent_imported_module_path_must_match_source_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1424,6 +1728,41 @@ def test_parent_imported_module_path_must_match_source_receipt(
     broker.stop(force=True)
 
 
+@pytest.mark.parametrize(
+    ("module_name", "marker"),
+    [
+        ("web_agent.eval.table2.process_broker_runtime", None),
+        ("web_agent.eval.table2.sealed_verifier", None),
+        ("web_agent.runtime.contracts", "0" * 64),
+    ],
+)
+def test_broker_launch_requires_each_parent_module_import_digest(
+    module_name: str,
+    marker: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = sys.modules[module_name]
+    if marker is None:
+        monkeypatch.delattr(
+            module,
+            "PROCESS_BROKER_IMPORT_SOURCE_SHA256",
+            raising=False,
+        )
+    else:
+        monkeypatch.setattr(
+            module,
+            "PROCESS_BROKER_IMPORT_SOURCE_SHA256",
+            marker,
+        )
+    broker = _broker()
+    with pytest.raises(
+        SchemaError,
+        match="imported parent broker module identity differs",
+    ):
+        broker.start()
+    assert broker.cleaned
+
+
 def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
     key = secrets.token_bytes(32)
     body = {
@@ -1436,6 +1775,9 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
         "endpoint_mode": "0o600",
         "sealed_backend_config_sha256": SHA,
         "policy_screenshot_root_identity_sha256": None,
+        "ipc_timeout_binding_sha256": SHA,
+        "sealed_finalization_available": False,
+        "sealed_finalization_required": False,
     }
     envelope = authenticated_envelope(body, authentication_key=key)
     assert (
@@ -1447,8 +1789,10 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
             child_pid=123,
             sealed_backend_config_sha256=SHA,
             policy_screenshot_root_identity_sha256=None,
+            ipc_timeout_binding_sha256=SHA,
+            sealed_finalization_required=False,
         )
-        == 123
+        == (123, False)
     )
     with pytest.raises(Exception, match="authentication failed"):
         _validated_readiness_envelope(
@@ -1459,6 +1803,8 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
             child_pid=123,
             sealed_backend_config_sha256=SHA,
             policy_screenshot_root_identity_sha256=None,
+            ipc_timeout_binding_sha256=SHA,
+            sealed_finalization_required=False,
         )
     with pytest.raises(Exception, match="readiness failed"):
         _validated_readiness_envelope(
@@ -1469,6 +1815,8 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
             child_pid=124,
             sealed_backend_config_sha256=SHA,
             policy_screenshot_root_identity_sha256=None,
+            ipc_timeout_binding_sha256=SHA,
+            sealed_finalization_required=False,
         )
     extra = authenticated_envelope(
         {**body, "extra": True}, authentication_key=key
@@ -1482,7 +1830,54 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
             child_pid=123,
             sealed_backend_config_sha256=SHA,
             policy_screenshot_root_identity_sha256=None,
+            ipc_timeout_binding_sha256=SHA,
+            sealed_finalization_required=False,
         )
+
+
+def test_framed_readiness_partial_header_obeys_absolute_deadline() -> None:
+    parent, peer = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        peer.sendall(b"\x00\x00")
+        started = time.monotonic()
+        with pytest.raises((TimeoutError, OSError, ProcessBrokerProtocolError)):
+            receive_frame(
+                parent,
+                deadline_monotonic=time.monotonic() + 0.05,
+            )
+        assert time.monotonic() - started < 0.5
+    finally:
+        parent.close()
+        peer.close()
+
+
+def test_frame_trickle_cannot_restart_absolute_receive_budget() -> None:
+    parent, peer = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    payload = b'{"value":"trickle"}'
+
+    def trickle() -> None:
+        try:
+            peer.sendall(struct.pack("!I", len(payload)))
+            for byte in payload:
+                peer.send(bytes([byte]))
+                time.sleep(0.02)
+        except OSError:
+            pass
+
+    sender = threading.Thread(target=trickle, daemon=True)
+    sender.start()
+    try:
+        started = time.monotonic()
+        with pytest.raises((TimeoutError, OSError, ProcessBrokerProtocolError)):
+            receive_frame(
+                parent,
+                deadline_monotonic=time.monotonic() + 0.08,
+            )
+        assert time.monotonic() - started < 0.5
+    finally:
+        parent.close()
+        peer.close()
+        sender.join(timeout=0.5)
 
 
 def test_shutdown_response_is_bound_to_role_session_sequence_and_nonce() -> None:
@@ -1567,6 +1962,7 @@ def test_server_rejects_wrong_authentication_and_replayed_message() -> None:
             "payload": {
                 "episode_id": "episode-1",
                 "task_id": "task-1",
+                "task_specification_sha256": SHA,
                 "benchmark_version": "webarena-fixture-v1",
                 "start_state_id": SHA,
                 "reset_stage_seed": 42,

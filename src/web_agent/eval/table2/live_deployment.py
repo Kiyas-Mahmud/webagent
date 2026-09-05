@@ -1075,6 +1075,8 @@ def _evidence_path(evidence_root: Path, value: object, *, field: str) -> Path:
         or not path.is_file()
     ):
         raise SchemaError(f"{field} is unsafe or missing: {relative}")
+    if path.stat().st_nlink != 1:
+        raise SchemaError(f"{field} must not be a hard-linked evidence file")
     return path
 
 
@@ -1096,6 +1098,10 @@ def _evidence_artifact(
         or path.stat().st_size <= 0
     ):
         raise SchemaError(f"{path_field} is unsafe, missing, or empty: {relative}")
+    if path.stat().st_nlink != 1:
+        raise SchemaError(
+            f"{path_field} must not be a hard-linked evidence artifact"
+        )
     expected = _nonzero_sha256(value.get(sha256_field), field=sha256_field)
     if sha256_file(path) != expected:
         raise SchemaError(f"{sha256_field} differs from evidence bytes")
@@ -1899,6 +1905,10 @@ def load_pc01_live_deployment_manifest(
     source = Path(path)
     if source.is_symlink() or not source.is_file():
         raise SchemaError("PC-01 live deployment manifest is unsafe or missing")
+    if source.stat().st_nlink != 1:
+        raise SchemaError(
+            "PC-01 live deployment manifest must not be a hard-linked evidence file"
+        )
     value = read_json(source)
     return validate_pc01_live_deployment_manifest(
         value,

@@ -59,7 +59,7 @@ def _manifest(*, campaign_id: str, schedule_sha256: str) -> dict[str, Any]:
         "campaign_kind": "engineering_pilot",
         "campaign_mode": "evaluation",
         "evidence_label": "PILOT_ONLY",
-        "publication_status": "PILOT_ONLY",
+        "publication_status": "DRAFT_PILOT_ONLY",
         "paper_table_status": "N/R",
         "matched_seeds": [42],
         "normal_block_count": 50,
@@ -678,7 +678,11 @@ def test_real_pilot_requires_receipt_but_engineering_smoke_does_not(
     assert (
         readiness.require_live_compatibility_before_execution(
             root,
-            {"campaign_mode": "smoke", "evidence_label": "PILOT_ONLY"},
+            {
+                "campaign_kind": "engineering_pilot",
+                "campaign_mode": "smoke",
+                "evidence_label": "PILOT_ONLY",
+            },
         )
         is None
     )
@@ -743,7 +747,11 @@ def test_package_boundary_replays_receipt_and_rejects_smoke_or_final_artifacts(
 
     for manifest in (
         {**pilot, "campaign_mode": "smoke"},
-        {**pilot, "evidence_label": "FINAL_LOCKED"},
+        {
+            **pilot,
+            "campaign_kind": "locked_final",
+            "evidence_label": "FINAL_LOCKED",
+        },
     ):
         with pytest.raises(SchemaError, match="cannot contain"):
             package_validator_module._validate_live_readiness_boundary(
@@ -772,7 +780,11 @@ def test_final_campaign_rejects_provisional_pc01_receipt(
     with pytest.raises(Table2Error, match="cannot accept provisional PC-01"):
         readiness.require_live_compatibility_before_execution(
             root,
-            {"campaign_mode": "evaluation", "evidence_label": "FINAL"},
+            {
+                "campaign_kind": "locked_final",
+                "campaign_mode": "evaluation",
+                "evidence_label": "FINAL_LOCKED",
+            },
         )
 
 
@@ -785,7 +797,11 @@ def test_campaign_runner_checks_receipt_adjacent_to_dispatch(
     runner.runner = object()
     runner.runner_entrypoint = "fixture:runner"
     runner.live_readiness_probe_target = None
-    runner.manifest = {"campaign_mode": "evaluation", "evidence_label": "PILOT_ONLY"}
+    runner.manifest = {
+        "campaign_kind": "engineering_pilot",
+        "campaign_mode": "evaluation",
+        "evidence_label": "PILOT_ONLY",
+    }
     row = {
         "block_id": "block-1",
         "task_id": "task-1",
@@ -824,7 +840,11 @@ def test_campaign_runner_engineering_smoke_still_dispatches(
     runner.runner = object()
     runner.runner_entrypoint = "fixture:runner"
     runner.live_readiness_probe_target = None
-    runner.manifest = {"campaign_mode": "smoke", "evidence_label": "PILOT_ONLY"}
+    runner.manifest = {
+        "campaign_kind": "engineering_pilot",
+        "campaign_mode": "smoke",
+        "evidence_label": "PILOT_ONLY",
+    }
     row = {"block_id": "block-1", "task_id": "task-1"}
     runner.schedule = [row]
     runner.tasks = {"task-1": {"task_id": "task-1"}}

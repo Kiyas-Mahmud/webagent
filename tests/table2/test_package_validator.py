@@ -2759,6 +2759,56 @@ def _freeze_smoke(tmp_path: Path, *, name: str = "campaign") -> Path:
     return destination
 
 
+@pytest.mark.parametrize(
+    ("campaign_kind", "evidence_label", "campaign_mode", "expected"),
+    (
+        ("unknown", "PILOT_ONLY", "smoke", "profile is not registered"),
+        (
+            "engineering_pilot",
+            "FINAL_LOCKED",
+            "smoke",
+            "profile is not registered",
+        ),
+        ("locked_final", "PILOT_ONLY", "evaluation", "profile is not registered"),
+        ("locked_final", "FINAL_LOCKED", "smoke", "cannot use smoke"),
+        (None, "PILOT_ONLY", "smoke", "profile is not registered"),
+        (
+            "engineering_pilot",
+            "PILOT_ONLY",
+            "unregistered",
+            "campaign_mode must be",
+        ),
+    ),
+)
+def test_freeze_rejects_unknown_or_inconsistent_campaign_profile_before_writes(
+    tmp_path: Path,
+    campaign_kind: str | None,
+    evidence_label: str,
+    campaign_mode: str,
+    expected: str,
+) -> None:
+    config = _campaign_config(tmp_path / "profile-input", mode="smoke")
+    value = yaml.safe_load(config.read_text(encoding="utf-8"))
+    if campaign_kind is None:
+        value.pop("campaign_kind")
+    else:
+        value["campaign_kind"] = campaign_kind
+    value["evidence_label"] = evidence_label
+    value["campaign_mode"] = campaign_mode
+    config.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+    destination = tmp_path / "campaign"
+
+    with pytest.raises(SchemaError, match=expected):
+        freeze_campaign(
+            repository_root=REPOSITORY_ROOT,
+            campaign_config_path=config,
+            campaign_dir=destination,
+            allow_dirty_pilot=True,
+        )
+
+    assert not destination.exists()
+
+
 @pytest.mark.parametrize("relation", ("equal", "descendant", "ancestor"))
 def test_freeze_rejects_campaign_and_handoff_path_overlap(
     tmp_path: Path,
@@ -2801,7 +2851,7 @@ def test_explicit_smoke_freeze_registers_exact_pilot_and_canonical_layout(tmp_pa
     assert manifest["normal_block_count"] == 50
     assert manifest["recovery_block_count"] == 15
     assert manifest["evidence_label"] == "PILOT_ONLY"
-    assert manifest["publication_status"] == "PILOT_ONLY"
+    assert manifest["publication_status"] == "DRAFT_PILOT_ONLY"
     assert manifest["paper_table_status"] == "N/R"
     exclusion_path = (
         campaign / "frozen/benchmark/pilot_task_exclusion_registry.json"
@@ -2858,9 +2908,199 @@ def test_explicit_smoke_freeze_registers_exact_pilot_and_canonical_layout(tmp_pa
 
     report = validate_campaign(campaign, require_complete=False)
     assert report.passed, report.errors
-    assert report.publication_status == "PILOT_ONLY"
+    assert report.publication_status == "DRAFT_PILOT_ONLY"
     assert report.counts["scheduled_blocks"] == 65
     assert report.counts["block_status_not_started"] == 65
+
+
+def test_validator_rejects_premature_pilot_completion_publication_status(
+    tmp_path: Path,
+) -> None:
+    campaign = _freeze_smoke(tmp_path)
+    manifest = read_json(campaign / "campaign_manifest.json")
+    _write_json(
+        campaign / "completion.json",
+        {
+            "schema_version": SCHEMA_VERSION,
+            "campaign_id": manifest["campaign_id"],
+            "status": "INCOMPLETE",
+            "scheduled_block_count": 65,
+            "processed_block_count": 0,
+            "included_block_count": 0,
+            "infrastructure_excluded_block_count": 0,
+            "publication_status": "PILOT_ONLY",
+        },
+    )
+
+    report = validate_campaign(campaign, require_complete=False)
+
+    assert not report.passed
+    assert any(
+        "cannot claim PILOT_ONLY unless the campaign is complete"
+        in error
+        for error in report.errors
+    )
+    assert report.publication_status == "DRAFT_PILOT_ONLY"
+
+
+def test_validator_accepts_unadjudicated_draft_pilot_completion_status(
+    tmp_path: Path,
+) -> None:
+    campaign = _freeze_smoke(tmp_path)
+    manifest = read_json(campaign / "campaign_manifest.json")
+    _write_json(
+        campaign / "completion.json",
+        {
+            "schema_version": SCHEMA_VERSION,
+            "campaign_id": manifest["campaign_id"],
+            "status": "INCOMPLETE",
+            "scheduled_block_count": 65,
+            "processed_block_count": 0,
+            "included_block_count": 0,
+            "infrastructure_excluded_block_count": 0,
+            "publication_status": "DRAFT_PILOT_ONLY",
+        },
+    )
+
+    report = validate_campaign(campaign, require_complete=False)
+
+    assert report.passed, report.errors
+    assert report.publication_status == "DRAFT_PILOT_ONLY"
+
+
+@pytest.mark.parametrize(
+    "extra_field",
+    ("promotion_status", "ready_for_table2", "paper_table_status"),
+)
+def test_validator_rejects_extra_promotion_fields_in_completion(
+    tmp_path: Path,
+    extra_field: str,
+) -> None:
+    campaign = _freeze_smoke(tmp_path)
+    manifest = read_json(campaign / "campaign_manifest.json")
+    completion = {
+        "schema_version": SCHEMA_VERSION,
+        "campaign_id": manifest["campaign_id"],
+        "status": "INCOMPLETE",
+        "scheduled_block_count": 65,
+        "processed_block_count": 0,
+        "included_block_count": 0,
+        "infrastructure_excluded_block_count": 0,
+        "publication_status": "DRAFT_PILOT_ONLY",
+        extra_field: "READY_FOR_TABLE2",
+    }
+    _write_json(campaign / "completion.json", completion)
+
+    report = validate_campaign(campaign, require_complete=False)
+
+    assert not report.passed
+    assert any(
+        "campaign completion artifact has the wrong exact key schema" in error
+        and extra_field in error
+        for error in report.errors
+    )
+    assert report.publication_status == "DRAFT_PILOT_ONLY"
+
+
+@pytest.mark.parametrize(
+    ("require_complete", "expected_passed"),
+    ((False, True), (True, False)),
+)
+def test_validator_keeps_adjudicated_incomplete_schedule_draft(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    require_complete: bool,
+    expected_passed: bool,
+) -> None:
+    campaign = _freeze_smoke(tmp_path)
+    monkeypatch.setattr(
+        "web_agent.eval.table2.package_validator.validate_manual_adjudication_completion",
+        lambda _root: {"completion_status": "HUMAN_ADJUDICATION_COMPLETE"},
+    )
+
+    report = validate_campaign(campaign, require_complete=require_complete)
+
+    assert report.passed is expected_passed
+    assert report.publication_status == "DRAFT_PILOT_ONLY"
+    if not require_complete:
+        assert report.counts["scheduled_blocks"] == 65
+        assert report.counts["included_blocks"] == 0
+        assert report.counts["infrastructure_excluded_blocks"] == 0
+        assert report.counts["block_status_not_started"] == 65
+
+
+def test_validator_rejects_forged_complete_status_for_incomplete_schedule(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    campaign = _freeze_smoke(tmp_path)
+    manifest = read_json(campaign / "campaign_manifest.json")
+    _write_json(
+        campaign / "completion.json",
+        {
+            "schema_version": SCHEMA_VERSION,
+            "campaign_id": manifest["campaign_id"],
+            "status": "COMPLETE",
+            "scheduled_block_count": 65,
+            "processed_block_count": 65,
+            "included_block_count": 65,
+            "infrastructure_excluded_block_count": 0,
+            "publication_status": "PILOT_ONLY",
+        },
+    )
+    monkeypatch.setattr(
+        "web_agent.eval.table2.package_validator.validate_manual_adjudication_completion",
+        lambda _root: {"completion_status": "HUMAN_ADJUDICATION_COMPLETE"},
+    )
+
+    report = validate_campaign(campaign, require_complete=False)
+
+    assert not report.passed
+    assert any(
+        "differs from schedule evidence" in error for error in report.errors
+    )
+    assert report.publication_status == "DRAFT_PILOT_ONLY"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("campaign_kind", "unknown"),
+        ("evidence_label", "FINAL_LOCKED"),
+    ),
+)
+def test_validation_rejects_tampered_campaign_profile_without_pilot_fallback(
+    tmp_path: Path,
+    field: str,
+    value: str,
+) -> None:
+    campaign = _freeze_smoke(tmp_path)
+    manifest_path = campaign / "campaign_manifest.json"
+    manifest = read_json(manifest_path)
+    manifest[field] = value
+    _write_json(manifest_path, manifest)
+
+    report = validate_campaign(campaign, require_complete=False)
+
+    assert not report.passed
+    assert any("profile is not registered" in error for error in report.errors)
+    assert report.publication_status == "N/R"
+
+
+def test_validation_rejects_frozen_profile_mismatch_without_pilot_fallback(
+    tmp_path: Path,
+) -> None:
+    campaign = _freeze_smoke(tmp_path)
+    config_path = campaign / "frozen" / "campaign.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["campaign_kind"] = "locked_final"
+    config["evidence_label"] = "FINAL_LOCKED"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+
+    report = validate_campaign(campaign, require_complete=False)
+
+    assert not report.passed
+    assert report.publication_status == "N/R"
 
 
 def test_engineering_smoke_cannot_claim_checkpoint_compatibility(
@@ -2906,7 +3146,7 @@ def test_pilot_summary_is_guarded_and_never_promoted_to_paper_table(tmp_path: Pa
     ) as handle:
         rows = list(csv.DictReader(handle))
     assert [row["System"] for row in rows] == list(SYSTEM_IDS)
-    assert all(row["Evidence Status"] == "PILOT_ONLY" for row in rows)
+    assert all(row["Evidence Status"] == "DRAFT_PILOT_ONLY" for row in rows)
     assert all(row["Task Success Rate"] == "N/R" for row in rows)
     assert read_json(campaign / "campaign_manifest.json")["paper_table_status"] == "N/R"
 
@@ -4188,7 +4428,7 @@ def test_access_ledger_locked_read_flag_invalidates_pilot(tmp_path: Path):
     report = validate_campaign(campaign, require_complete=False)
     assert not report.passed
     assert any("locked-test read" in error for error in report.errors)
-    assert report.publication_status == "PILOT_ONLY"
+    assert report.publication_status == "DRAFT_PILOT_ONLY"
 
 
 @pytest.mark.parametrize(
@@ -4284,13 +4524,13 @@ def test_sealed_verifier_returns_only_opaque_signal_and_detects_tampering(tmp_pa
     original = sink.path.read_text(encoding="utf-8")
     record = json.loads(original)
     record["opaque_token_sha256"] = "0" * 64
-    sink.path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    sink.path.write_bytes(canonical_json_bytes(record) + b"\n")
     with pytest.raises(SchemaError, match="bad opaque token"):
         verify_sealed_stream(sink.path)
 
     record = json.loads(original)
     record["evidence"]["task_success"] = False
-    sink.path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    sink.path.write_bytes(canonical_json_bytes(record) + b"\n")
     with pytest.raises(SchemaError, match="bad record hash"):
         verify_sealed_stream(sink.path)
 
@@ -4743,7 +4983,7 @@ def test_campaign_runner_resumes_whole_block_and_validator_parses_nested_evidenc
     assert report.passed, report.errors
     assert report.counts["included_blocks"] == 1
     assert report.counts["block_status_not_started"] == 64
-    assert report.publication_status == "PILOT_ONLY"
+    assert report.publication_status == "DRAFT_PILOT_ONLY"
 
     append_campaign_ledger_event(
         campaign,
@@ -4939,6 +5179,7 @@ def test_complete_pilot_writes_deterministic_audit_digests_and_exact_result_expo
     assert completion["status"] == "COMPLETE"
     assert completion["scheduled_block_count"] == 65
     assert completion["included_block_count"] == 65
+    assert completion["publication_status"] == "DRAFT_PILOT_ONLY"
 
     results_dir = tmp_path / "results/table2/complete-pilot-id"
     with pytest.raises(
@@ -5164,6 +5405,7 @@ def _write_completed_manual_audit(
         "schema_version": SCHEMA_VERSION,
         "campaign_id": "locked-final-1",
         "campaign_kind": "locked_final",
+        "campaign_mode": "evaluation",
         "evidence_label": "FINAL_LOCKED",
     }
     _write_json(root / "campaign_manifest.json", campaign)
@@ -5391,7 +5633,16 @@ def test_locked_final_readiness_requires_attested_hash_bound_human_adjudication(
         "campaign_kind": "engineering_pilot",
         "evidence_label": "PILOT_ONLY",
     }
-    assert _publication_status(root, pilot, report, True) == "PILOT_ONLY"
+    assert (
+        _publication_status(
+            root,
+            pilot,
+            report,
+            True,
+            campaign_complete=True,
+        )
+        == "PILOT_ONLY"
+    )
 
     validated = validate_manual_adjudication_completion(root)
     assert validated["selected_count"] == 2

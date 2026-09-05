@@ -1,39 +1,53 @@
 """Runtime-only client for the process-isolated page/evaluator owner.
 
 This module intentionally imports neither the worker nor an evaluator module.
-Its public API contains only reset, observation, execution, opaque-terminal,
-and session-close operations. The server independently enforces that operation
-allow-list, exact outer envelopes, and all eight registered reset/action/
-observation/execution/verifier request and result schemas. Schema conformance
+Its public API contains only reset, observation, execution, nondispatched
+rejected-action registration, opaque-terminal, and session-close operations.
+The server independently enforces that six-operation allow-list, exact outer
+envelopes, and all twelve registered reset/action/
+observation/execution/verifier/error request and result schemas. Schema conformance
 is additionally bound to one episode/task and a reset/execute/observe/verifier
 causal state. It does not attest where scalar runtime-visible values
 originated; external value-provenance and deployment evidence remain
-mandatory.
+mandatory. Each request uses one absolute monotonic deadline across connect,
+send, and all partial receives; a trickling peer cannot restart the timeout.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import secrets
 import socket
 from pathlib import Path
+from time import monotonic
 from typing import Any, Mapping
 
+from web_agent.benchmarks.base import AdapterExecution
+
 from .process_broker_protocol import (
+    PROCESS_BROKER_INFRASTRUCTURE_INVALID_STATUS,
     PROCESS_BROKER_PROTOCOL_VERSION,
     RUNTIME_BROKER_OPERATIONS,
     ProcessBrokerProtocolError,
     authenticated_envelope,
     expected_verifier_receipt_binding,
     receive_frame,
+    set_socket_timeout_to_deadline,
     send_frame,
+    validate_runtime_infrastructure_invalid,
     validate_runtime_request_payload,
     validate_runtime_result,
     validated_policy_screenshot_root,
     verify_authenticated_envelope,
 )
-from .common import canonical_json_bytes
+from .common import canonical_json_bytes, sha256_file
+from .execution_guard import InfrastructureInvalidError
+from .process_broker_timeout import RUNTIME_TIMEOUT_OPERATIONS
 from web_agent.runtime.contracts import OpaqueTerminalSignal, VerifierReceiptBinding
+
+
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
 
 
 def _detached_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -50,6 +64,7 @@ class ProcessIsolatedRuntimeClient:
 
     __slots__ = (
         "__closed",
+        "__control_cleanup_only",
         "__endpoint",
         "__episode_task",
         "__failed",
@@ -64,7 +79,7 @@ class ProcessIsolatedRuntimeClient:
         "__session_id",
         "__terminal_required",
         "__terminated",
-        "__timeout",
+        "__timeouts",
     )
 
     def __init__(
@@ -75,6 +90,7 @@ class ProcessIsolatedRuntimeClient:
         session_id: str,
         policy_screenshot_root: str | Path | None = None,
         timeout_seconds: float = 10.0,
+        timeout_seconds_by_operation: Mapping[str, float] | None = None,
     ) -> None:
         if not session_id or len(authentication_key) < 32:
             raise ValueError("runtime broker client requires session/key identity")
@@ -82,7 +98,30 @@ class ProcessIsolatedRuntimeClient:
         self.__key = bytes(authentication_key)
         self.__session_id = session_id
         self.__sequence = 0
-        self.__timeout = float(timeout_seconds)
+        if timeout_seconds_by_operation is None:
+            timeout_value = float(timeout_seconds)
+            if not math.isfinite(timeout_value) or timeout_value <= 0.0:
+                raise ValueError("runtime broker timeout must be positive and finite")
+            self.__timeouts = {
+                operation: timeout_value for operation in RUNTIME_TIMEOUT_OPERATIONS
+            }
+        else:
+            if set(timeout_seconds_by_operation) != set(RUNTIME_TIMEOUT_OPERATIONS):
+                raise ValueError("runtime broker timeout operation closure differs")
+            resolved: dict[str, float] = {}
+            for operation in RUNTIME_TIMEOUT_OPERATIONS:
+                raw = timeout_seconds_by_operation[operation]
+                if (
+                    isinstance(raw, bool)
+                    or not isinstance(raw, (int, float))
+                    or not math.isfinite(float(raw))
+                    or float(raw) <= 0.0
+                ):
+                    raise ValueError(
+                        f"runtime broker {operation} timeout must be positive and finite"
+                    )
+                resolved[operation] = float(raw)
+            self.__timeouts = resolved
         self.__episode_task: tuple[str, str] | None = None
         self.__pending_action_id: str | None = None
         self.__pending_is_recovery = False
@@ -95,6 +134,7 @@ class ProcessIsolatedRuntimeClient:
         self.__terminal_required = False
         self.__terminated = False
         self.__closed = False
+        self.__control_cleanup_only = False
         self.__failed = False
 
     def __require_open_identity(
@@ -120,6 +160,15 @@ class ProcessIsolatedRuntimeClient:
         sequence = self.__sequence
         self.__sequence += 1
         try:
+            # Rejected-action registration performs no browser work.  It uses
+            # the already calibrated execute IPC bound instead of inventing an
+            # outcome-dependent timing class after calibration is frozen.
+            timeout_operation = (
+                "runtime_execute"
+                if operation == "runtime_register_rejected"
+                else operation
+            )
+            deadline = monotonic() + self.__timeouts[timeout_operation]
             nonce = secrets.token_hex(32)
             body = {
                 "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
@@ -131,14 +180,16 @@ class ProcessIsolatedRuntimeClient:
                 "payload": validated_payload,
             }
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-                connection.settimeout(self.__timeout)
+                set_socket_timeout_to_deadline(connection, deadline)
                 connection.connect(self.__endpoint)
                 send_frame(
                     connection,
                     authenticated_envelope(body, authentication_key=self.__key),
+                    deadline_monotonic=deadline,
                 )
                 response = verify_authenticated_envelope(
-                    receive_frame(connection), authentication_key=self.__key
+                    receive_frame(connection, deadline_monotonic=deadline),
+                    authentication_key=self.__key,
                 )
             expected = {
                 "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
@@ -159,6 +210,29 @@ class ProcessIsolatedRuntimeClient:
                 raise ProcessBrokerProtocolError(
                     "process-broker response fields differ"
                 )
+            if status == PROCESS_BROKER_INFRASTRUCTURE_INVALID_STATUS:
+                infrastructure = validate_runtime_infrastructure_invalid(
+                    response.get("result"),
+                    request_operation=operation,
+                    episode_id=str(validated_payload["episode_id"]),
+                    request_payload=validated_payload,
+                )
+                self.__control_cleanup_only = True
+                error = InfrastructureInvalidError(
+                    reason_code=infrastructure["reason_code"],
+                    adapter_id=infrastructure["adapter_id"],
+                    adapter_version=infrastructure["adapter_version"],
+                    operation=infrastructure["operation"],
+                    adapter_evidence=infrastructure["adapter_evidence"],
+                )
+                adapter_execution = infrastructure.get("adapter_execution")
+                if isinstance(adapter_execution, Mapping):
+                    setattr(
+                        error,
+                        "adapter_execution",
+                        AdapterExecution.from_dict(adapter_execution),
+                    )
+                raise error
             if status != "PASS":
                 if status != "REJECTED" or response.get("error_code") != (
                     "REGISTERED_REQUEST_REJECTED"
@@ -187,6 +261,7 @@ class ProcessIsolatedRuntimeClient:
         *,
         episode_id: str,
         task_id: str,
+        task_specification_sha256: str,
         benchmark_version: str,
         start_state_id: str,
         reset_stage_seed: int,
@@ -204,6 +279,7 @@ class ProcessIsolatedRuntimeClient:
             {
                 "episode_id": episode_id,
                 "task_id": task_id,
+                "task_specification_sha256": task_specification_sha256,
                 "benchmark_version": benchmark_version,
                 "start_state_id": start_state_id,
                 "reset_stage_seed": reset_stage_seed,
@@ -294,6 +370,58 @@ class ProcessIsolatedRuntimeClient:
         self.__last_action = _detached_mapping(action_snapshot)
         return _detached_mapping(result["execution"])
 
+    def register_rejected_action(
+        self,
+        *,
+        episode_id: str,
+        task_id: str,
+        action: Mapping[str, Any],
+        execution: Mapping[str, Any],
+    ) -> None:
+        """Bind one executor-local rejection without dispatching browser execute."""
+
+        self.__require_open_identity(episode_id, task_id)
+        if self.__terminal_required:
+            raise ProcessBrokerProtocolError(
+                "process-broker rejection registration requires the pending "
+                "terminal receipt"
+            )
+        if self.__terminated:
+            raise ProcessBrokerProtocolError(
+                "process-broker opaque terminal signal already ended the episode"
+            )
+        if self.__pending_action_id is not None:
+            raise ProcessBrokerProtocolError(
+                "process-broker rejection registration awaits post observation"
+            )
+        prepared_payload = validate_runtime_request_payload(
+            "runtime_register_rejected",
+            {
+                "episode_id": episode_id,
+                "task_id": task_id,
+                "action": action,
+                "execution": execution,
+            },
+        )
+        action_snapshot = prepared_payload["action"]
+        result = self.__request(
+            "runtime_register_rejected",
+            prepared_payload,
+        )
+        if result != {"registered": True}:
+            raise ProcessBrokerProtocolError(
+                "process-broker rejected-action registration changed result"
+            )
+        action_id = action_snapshot.get("action_id")
+        if type(action_id) is not str:  # validated above
+            raise ProcessBrokerProtocolError("process-broker action ID is invalid")
+        self.__pending_action_id = action_id
+        self.__pending_is_recovery = (
+            action_snapshot.get("recovery_attempt_id") is not None
+        )
+        self.__last_action = _detached_mapping(action_snapshot)
+        return None
+
     def terminal_signal(
         self,
         *,
@@ -337,6 +465,10 @@ class ProcessIsolatedRuntimeClient:
         return signal
 
     def close(self, *, episode_id: str, task_id: str) -> dict[str, Any]:
+        if self.__control_cleanup_only:
+            raise ProcessBrokerProtocolError(
+                "process-broker infrastructure invalid requires control cleanup"
+            )
         self.__require_open_identity(episode_id, task_id, allow_failed=True)
         if not self.__failed:
             if self.__pending_action_id is not None:

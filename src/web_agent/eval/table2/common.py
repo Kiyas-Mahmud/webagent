@@ -14,7 +14,19 @@ import tempfile
 from typing import Any
 
 
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = hashlib.sha256(
+    Path(__file__).resolve().read_bytes()
+).hexdigest()
+
 SCHEMA_VERSION = "table2.v1"
+
+CAMPAIGN_PROFILE_PILOT = "pilot"
+CAMPAIGN_PROFILE_FINAL = "final"
+PILOT_CAMPAIGN_KIND = "engineering_pilot"
+FINAL_CAMPAIGN_KIND = "locked_final"
+PILOT_EVIDENCE_LABEL = "PILOT_ONLY"
+FINAL_EVIDENCE_LABEL = "FINAL_LOCKED"
+_CAMPAIGN_MODE_MISSING = object()
 
 
 class Table2Error(RuntimeError):
@@ -23,6 +35,56 @@ class Table2Error(RuntimeError):
 
 class SchemaError(Table2Error):
     """Raised when an artifact does not satisfy its registered schema."""
+
+
+def classify_campaign_profile(
+    campaign: Mapping[str, Any],
+    *,
+    context: str = "campaign",
+    require_campaign_mode: bool = False,
+    default_campaign_mode: object = _CAMPAIGN_MODE_MISSING,
+) -> str:
+    """Return the one registered pilot/final class or fail closed.
+
+    Campaign kind and evidence label are a joint authority boundary.  Neither
+    field can independently downgrade an unknown or inconsistent profile to a
+    pilot.  Smoke is a pilot execution mode only; a locked-final profile may
+    run only as an evaluation campaign.
+    """
+
+    if not isinstance(campaign, Mapping):
+        raise SchemaError(f"{context} must be an object")
+    kind = campaign.get("campaign_kind")
+    label = campaign.get("evidence_label")
+    if type(kind) is not str or type(label) is not str:
+        raise SchemaError(
+            f"{context} campaign_kind/evidence_label profile is not registered"
+        )
+    if (kind, label) == (PILOT_CAMPAIGN_KIND, PILOT_EVIDENCE_LABEL):
+        classification = CAMPAIGN_PROFILE_PILOT
+    elif (kind, label) == (FINAL_CAMPAIGN_KIND, FINAL_EVIDENCE_LABEL):
+        classification = CAMPAIGN_PROFILE_FINAL
+    else:
+        raise SchemaError(
+            f"{context} campaign_kind/evidence_label profile is not registered"
+        )
+
+    mode = (
+        campaign["campaign_mode"]
+        if "campaign_mode" in campaign
+        else default_campaign_mode
+    )
+    if mode is _CAMPAIGN_MODE_MISSING:
+        if require_campaign_mode:
+            raise SchemaError(f"{context} is missing campaign_mode")
+        return classification
+    if type(mode) is not str or mode not in {"evaluation", "smoke"}:
+        raise SchemaError(
+            f"{context} campaign_mode must be 'evaluation' or explicit 'smoke'"
+        )
+    if mode == "smoke" and classification != CAMPAIGN_PROFILE_PILOT:
+        raise SchemaError(f"{context} locked-final profile cannot use smoke mode")
+    return classification
 
 
 def as_mapping(value: Any) -> dict[str, Any]:

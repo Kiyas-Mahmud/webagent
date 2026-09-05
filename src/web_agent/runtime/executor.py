@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 from time import monotonic
 from typing import Callable, TypeVar
 
@@ -14,6 +15,7 @@ from web_agent.runtime.contracts import (
     ExecutionEvidence,
     ExecutionResult,
     ExecutionStatus,
+    MAX_EXECUTION_MESSAGE_CHARS,
     Observation,
     ObservationStage,
     OpaqueTerminalSignal,
@@ -45,6 +47,22 @@ class ExecutorInputMutation(RuntimeError):
     """A benchmark callback mutated its detached concrete-action input."""
 
     infrastructure_invalid = True
+
+
+class RejectedActionRegistrationError(RuntimeError):
+    """Causal registration failed after the executor charged a rejection."""
+
+    infrastructure_invalid = True
+
+    def __init__(self, execution_result: ExecutionResult) -> None:
+        if type(execution_result) is not ExecutionResult:
+            raise TypeError(
+                "rejected-action registration error requires an exact execution result"
+            )
+        self.execution_result = execution_result
+        super().__init__(
+            "rejected-action causal registration failed after executor charge"
+        )
 
 
 _T = TypeVar("_T")
@@ -144,7 +162,7 @@ class Executor:
         safety_error = self._safety_error(action)
         if safety_error is not None:
             ended_at_utc = _utc_now()
-            return ExecutionResult(
+            result = ExecutionResult(
                 action_id=action.action_id,
                 status=ExecutionStatus.REJECTED,
                 executor_step=step,
@@ -159,6 +177,8 @@ class Executor:
                     status=ExecutionStatus.REJECTED,
                 ),
             )
+            self._register_rejected_action(action, result)
+            return result
         action_sha256 = action.record_sha256
         callback_action = detached_record_copy(action)
         callback_sha256 = callback_action.record_sha256
@@ -248,29 +268,118 @@ class Executor:
     def reject_unresolved_request(
         self,
         *,
-        action_id: str,
+        action: ConcreteAction,
         reason: str,
-        error_kind: str = "parameter_resolution_rejected",
     ) -> ExecutionResult:
         """Charge one step when the shared provider cannot produce an action."""
+        if type(action) is not ConcreteAction:
+            raise TypeError(
+                "unresolved parameter request requires the exact concrete action"
+            )
+        if type(reason) is not str:
+            raise TypeError("unresolved parameter rejection reason must be text")
+        registered_reason = reason
+        if len(registered_reason) > MAX_EXECUTION_MESSAGE_CHARS:
+            registered_reason = (
+                "parameter-resolution rejection detail omitted; sha256="
+                + hashlib.sha256(reason.encode("utf-8")).hexdigest()
+            )
         started_at_utc = _utc_now()
         step = self._consume_request()
         ended_at_utc = _utc_now()
-        return ExecutionResult(
-            action_id=action_id,
+        result = ExecutionResult(
+            action_id=action.action_id,
             status=ExecutionStatus.REJECTED,
             executor_step=step,
             state_changed=False,
             environment_error=False,
-            error_kind=error_kind,
-            message=reason,
+            error_kind="parameter_resolution_rejected",
+            message=registered_reason,
             evidence=ExecutionEvidence(
-                action_id=action_id,
+                action_id=action.action_id,
                 started_at_utc=started_at_utc,
                 ended_at_utc=ended_at_utc,
                 status=ExecutionStatus.REJECTED,
             ),
         )
+        self._register_rejected_action(action, result)
+        return result
+
+    def _register_rejected_action(
+        self,
+        action: ConcreteAction,
+        execution: ExecutionResult,
+    ) -> None:
+        """Publish one already-charged local rejection without browser dispatch."""
+
+        if (
+            type(action) is not ConcreteAction
+            or type(execution) is not ExecutionResult
+            or execution.action_id != action.action_id
+            or execution.status is not ExecutionStatus.REJECTED
+            or execution.state_changed is not False
+            or execution.environment_error is not False
+            or execution.error_kind
+            not in {"safety_rejection", "parameter_resolution_rejected"}
+        ):
+            raise ValueError("executor-local rejection contract differs")
+        protected = (action, execution)
+        protected_hashes = tuple(item.record_sha256 for item in protected)
+        callback_inputs = tuple(detached_record_copy(item) for item in protected)
+        callback_hashes = tuple(item.record_sha256 for item in callback_inputs)
+
+        def register_isolated() -> None:
+            callback_error: BaseException | None = None
+            callback_result: object | None = None
+            try:
+                callback_result = self.adapter.register_rejected_action(
+                    callback_inputs[0],  # type: ignore[arg-type]
+                    callback_inputs[1],  # type: ignore[arg-type]
+                )
+            except BaseException as exc:
+                callback_error = exc
+            mutated: list[str] = []
+            for label, records, hashes in (
+                ("runtime", protected, protected_hashes),
+                ("callback", callback_inputs, callback_hashes),
+            ):
+                for index, (item, expected) in enumerate(zip(records, hashes)):
+                    try:
+                        actual = item.record_sha256
+                    except Exception:
+                        actual = "<unhashable>"
+                    if actual != expected:
+                        mutated.append(f"{label}[{index}]")
+            if mutated:
+                error = ExecutorInputMutation(
+                    "benchmark adapter mutated protected rejected-action input: "
+                    + ", ".join(mutated)
+                )
+                if callback_error is not None:
+                    raise error from callback_error
+                raise error
+            if callback_error is not None:
+                raise callback_error
+            if callback_result is not None:
+                raise RuntimeError(
+                    "benchmark rejected-action registration returned data"
+                )
+
+        try:
+            self.run_blocking(
+                "rejected-action causal registration",
+                register_isolated,
+            )
+        except BaseException as exc:
+            # The request was already charged before registration.  Preserve
+            # that exact rejection so EpisodeRunner can log the interrupted
+            # causal request before propagating an infrastructure/protocol
+            # failure.  Always translate the callback failure to an ordinary
+            # Exception so even a BaseException raised by arbitrary adapter
+            # code follows the same append-before-propagation path.  In
+            # particular, an EpisodeTimeout here is an infrastructure failure
+            # after the charge, not a scoreable task timeout.
+            raise RejectedActionRegistrationError(execution) from exc
 
     def reject_pre_action_parse_request(
         self,

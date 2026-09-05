@@ -49,8 +49,9 @@ def _campaign(tmp_path: Path, *, ready: bool) -> tuple[Path, dict]:
         "schema_version": "table2.v1",
         "campaign_id": "claim-fixture",
         "campaign_kind": "locked_final" if ready else "engineering_pilot",
+        "campaign_mode": "evaluation",
         "evidence_label": "FINAL_LOCKED" if ready else "PILOT_ONLY",
-        "publication_status": "N/R" if ready else "PILOT_ONLY",
+        "publication_status": "N/R" if ready else "DRAFT_PILOT_ONLY",
         "paper_table_status": "N/R",
         "paper_claim_registry_id": "table2-research-locked-claims-v1",
         "paper_claim_registry_sha256": sha256_file(REGISTRY),
@@ -552,6 +553,52 @@ def test_initial_pilot_report_is_nr_and_hash_bound(tmp_path: Path) -> None:
     assert validate_claim_report(path, registry_path=REGISTRY, campaign_dir=root) == report
     with pytest.raises(SchemaError, match="paper-claim readiness"):
         _validate_claim_readiness(path, root)
+
+
+@pytest.mark.parametrize(
+    "publication_status",
+    ("N/R", "DRAFT_PILOT_ONLY", "PILOT_ONLY"),
+)
+def test_locked_final_report_cannot_use_nonfinal_pilot_claim_path(
+    tmp_path: Path,
+    publication_status: str,
+) -> None:
+    root, campaign = _campaign(tmp_path, ready=True)
+    campaign["publication_status"] = publication_status
+    _write_json(root / "campaign_manifest.json", campaign)
+    report = build_initial_claim_report(
+        registry_path=REGISTRY,
+        campaign_manifest_path=root / "campaign_manifest.json",
+    )
+    path = _write_json(root / "paper_claim_report.json", report)
+
+    with pytest.raises(SchemaError, match="only a pilot campaign may use a non-final"):
+        validate_claim_report(path, registry_path=REGISTRY, campaign_dir=root)
+
+
+@pytest.mark.parametrize(
+    ("campaign_kind", "evidence_label"),
+    (
+        ("unknown", "PILOT_ONLY"),
+        ("engineering_pilot", "FINAL_LOCKED"),
+        ("locked_final", "PILOT_ONLY"),
+    ),
+)
+def test_paper_claim_authority_rejects_unknown_or_mixed_campaign_profile(
+    tmp_path: Path,
+    campaign_kind: str,
+    evidence_label: str,
+) -> None:
+    root, campaign = _campaign(tmp_path, ready=False)
+    campaign["campaign_kind"] = campaign_kind
+    campaign["evidence_label"] = evidence_label
+    _write_json(root / "campaign_manifest.json", campaign)
+
+    with pytest.raises(SchemaError, match="profile is not registered"):
+        build_initial_claim_report(
+            registry_path=REGISTRY,
+            campaign_manifest_path=root / "campaign_manifest.json",
+        )
 
 
 def test_nonfinal_report_cannot_resolve_or_attach_evidence(tmp_path: Path) -> None:

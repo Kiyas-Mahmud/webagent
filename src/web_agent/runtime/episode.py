@@ -57,6 +57,7 @@ from web_agent.runtime.executor import (
     EpisodeTimeout,
     Executor,
     ExecutorBudgetExceeded,
+    RejectedActionRegistrationError,
 )
 from web_agent.runtime.memory_adapter import (
     MemoryAdapter,
@@ -610,25 +611,16 @@ class EpisodeRunner:
                             )
                         else:
                             raise
-                        # The adapter fault occurred after Executor consumed this
-                        # browser request.  Preserve the exact charged request in
-                        # the append-only action stream before the whole-block
-                        # infrastructure invalidation propagates.
-                        counters.normal_actions += 1
-                        self._log(
-                            "actions",
-                            "normal_action",
-                            {
-                                "decision": decision.to_dict(),
-                                "parameters": parameters.to_dict(),
-                                "parameter_error": None,
-                                "parameter_resolution": parameter_resolution,
-                                "resolution_attempts": list(resolution_attempts),
-                                "action": action.to_dict(),
-                                "action_sha256": action.record_sha256,
-                                "execution": execution.to_dict(),
-                                "interrupted": True,
-                            },
+                        self._record_interrupted_normal_action(
+                            decision=decision,
+                            parameters=parameters,
+                            parameter_error=None,
+                            parameter_resolution=parameter_resolution,
+                            resolution_attempts=resolution_attempts,
+                            action=action,
+                            execution=execution,
+                            counters=counters,
+                            contracts=contracts,
                         )
                         raise
                 except HybridParameterResolutionError as exc:
@@ -642,11 +634,25 @@ class EpisodeRunner:
                         parameters={},
                         bbox=decision.bbox,
                     )
-                    execution = self.executor.reject_unresolved_request(
-                        action_id=action_id,
-                        reason=str(exc),
-                    )
                     parameters = None
+                    try:
+                        execution = self.executor.reject_unresolved_request(
+                            action=action,
+                            reason=str(exc),
+                        )
+                    except RejectedActionRegistrationError as registration_error:
+                        self._record_interrupted_normal_action(
+                            decision=decision,
+                            parameters=None,
+                            parameter_error=parameter_error,
+                            parameter_resolution=parameter_resolution,
+                            resolution_attempts=resolution_attempts,
+                            action=action,
+                            execution=registration_error.execution_result,
+                            counters=counters,
+                            contracts=contracts,
+                        )
+                        raise
                 except ParameterResolutionError as exc:
                     parameter_error = exc
                     action = ConcreteAction(
@@ -656,11 +662,25 @@ class EpisodeRunner:
                         parameters={},
                         bbox=decision.bbox,
                     )
-                    execution = self.executor.reject_unresolved_request(
-                        action_id=action_id,
-                        reason=str(exc),
-                    )
                     parameters = None
+                    try:
+                        execution = self.executor.reject_unresolved_request(
+                            action=action,
+                            reason=str(exc),
+                        )
+                    except RejectedActionRegistrationError as registration_error:
+                        self._record_interrupted_normal_action(
+                            decision=decision,
+                            parameters=None,
+                            parameter_error=parameter_error,
+                            parameter_resolution=parameter_resolution,
+                            resolution_attempts=resolution_attempts,
+                            action=action,
+                            execution=registration_error.execution_result,
+                            counters=counters,
+                            contracts=contracts,
+                        )
+                        raise
                 contracts.decisions.append(decision)
                 contracts.actions.append(action)
                 contracts.executions.append(execution)
@@ -1419,6 +1439,43 @@ class EpisodeRunner:
                 "parameter provider changed the selected action type"
             )
         return detached_record_copy(result)
+
+    def _record_interrupted_normal_action(
+        self,
+        *,
+        decision: PreActionDecision,
+        parameters: ActionParameters | None,
+        parameter_error: ParameterResolutionError | None,
+        parameter_resolution: Mapping[str, Any] | None,
+        resolution_attempts: tuple[Mapping[str, Any], ...],
+        action: ConcreteAction,
+        execution: ExecutionResult,
+        counters: _Counters,
+        contracts: _EpisodeContracts,
+    ) -> None:
+        """Commit one charged normal request before its fault propagates."""
+
+        contracts.decisions.append(decision)
+        contracts.actions.append(action)
+        contracts.executions.append(execution)
+        counters.normal_actions += 1
+        self._log(
+            "actions",
+            "normal_action",
+            {
+                "decision": decision.to_dict(),
+                "parameters": parameters.to_dict() if parameters else None,
+                "parameter_error": (
+                    str(parameter_error) if parameter_error else None
+                ),
+                "parameter_resolution": parameter_resolution,
+                "resolution_attempts": list(resolution_attempts),
+                "action": action.to_dict(),
+                "action_sha256": action.record_sha256,
+                "execution": execution.to_dict(),
+                "interrupted": True,
+            },
+        )
 
     def _log(
         self,

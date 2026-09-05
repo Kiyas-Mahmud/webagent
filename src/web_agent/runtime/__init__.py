@@ -8,8 +8,15 @@ the wider runtime graph outside a narrow source-attestation boundary.
 
 from __future__ import annotations
 
+import hashlib
 from importlib import import_module
+from pathlib import Path
 from typing import Any
+
+
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = hashlib.sha256(
+    Path(__file__).resolve().read_bytes()
+).hexdigest()
 
 __all__ = [
     "REGISTERED_BUDGETS",

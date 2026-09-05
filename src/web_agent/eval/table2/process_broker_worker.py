@@ -1,11 +1,14 @@
 """Sealed evaluator/browser-owner worker for authenticated process broker IPC.
 
 Only this process imports the configured backend. The runtime channel exposes
-five exact operation envelopes and rejects registered sensitive key aliases
-recursively. Its eight reset/action/observation/execution/verifier request and
-result paths satisfy registered schemas and one-session causal state. Those
+six exact operation envelopes and rejects registered sensitive key aliases
+recursively. Its registered reset/action/observation/execution/verifier/error request
+and result paths satisfy registered schemas and one-session causal state. Those
 schemas carry no external value-provenance attestation, so this source does not
-claim that neutral-key values are semantically oracle-free.
+claim that neutral-key values are semantically oracle-free.  A separate
+orchestration key exposes one post-decision finalization operation. The child
+owns the append-only sealed stream and only its outer opaque event/token enters
+runtime or orchestration responses.
 """
 
 from __future__ import annotations
@@ -17,23 +20,40 @@ import json
 import os
 from pathlib import Path
 import socket
+import stat
 import struct
 import sys
+from time import monotonic
 from typing import Any, Mapping
 
+from . import sealed_verifier as _sealed_verifier_source  # noqa: F401
 from .common import canonical_json_bytes, sha256_file
 from .process_broker_protocol import (
+    PROCESS_BROKER_INFRASTRUCTURE_INVALID_STATUS,
     PROCESS_BROKER_PROTOCOL_VERSION,
     RUNTIME_BROKER_OPERATIONS,
+    ProcessBrokerInfrastructureInvalidResponse,
     ProcessBrokerProtocolError,
     authenticated_envelope,
     expected_verifier_receipt_binding,
     receive_frame,
     send_frame,
+    validate_runtime_infrastructure_invalid,
     validate_runtime_request_payload,
     validate_runtime_result,
     validated_policy_screenshot_root,
     verify_authenticated_envelope,
+)
+from .process_broker_finalization import (
+    SEALED_FINALIZATION_OPERATION,
+    validate_finalization_request_payload,
+    validate_finalization_result,
+)
+from .process_broker_timeout import (
+    MEASURED_TIMEOUT_MODE,
+    binding_sha256 as timeout_binding_sha256,
+    validate_process_broker_timeout_binding,
+    validate_process_broker_timeout_calibration,
 )
 
 
@@ -46,6 +66,7 @@ def _load_factory(
     source_path: Path,
     source_sha256: str,
     backend_config: Mapping[str, Any],
+    require_sealed_finalization: bool,
 ) -> Any:
     module_name, separator, attribute_name = entrypoint.partition(":")
     if separator != ":" or not module_name or not attribute_name or "." in attribute_name:
@@ -55,6 +76,7 @@ def _load_factory(
     if (
         loaded_source != source_path.resolve()
         or loaded_source.suffix != ".py"
+        or loaded_source.stat().st_nlink != 1
         or sha256_file(loaded_source) != source_sha256
     ):
         raise ProcessBrokerProtocolError(
@@ -69,6 +91,13 @@ def _load_factory(
             raise ProcessBrokerProtocolError(
                 f"sealed backend lacks registered operation {operation}"
             )
+    if require_sealed_finalization and not (
+        callable(getattr(backend, SEALED_FINALIZATION_OPERATION, None))
+        and getattr(backend, "sealed_finalization_available", False) is True
+    ):
+        raise ProcessBrokerProtocolError(
+            "sealed backend lacks required orchestration finalizer"
+        )
     return backend
 
 
@@ -116,6 +145,15 @@ def _verify_imported_broker_sources(config: Mapping[str, Any]) -> None:
         "web_agent.eval.table2.process_broker_protocol": (
             "src/web_agent/eval/table2/process_broker_protocol.py"
         ),
+        "web_agent.eval.table2.process_broker_finalization": (
+            "src/web_agent/eval/table2/process_broker_finalization.py"
+        ),
+        "web_agent.eval.table2.process_broker_timeout": (
+            "src/web_agent/eval/table2/process_broker_timeout.py"
+        ),
+        "web_agent.eval.table2.sealed_verifier": (
+            "src/web_agent/eval/table2/sealed_verifier.py"
+        ),
         "web_agent.eval.table2.process_broker_worker": (
             "src/web_agent/eval/table2/process_broker_worker.py"
         ),
@@ -130,6 +168,7 @@ def _verify_imported_broker_sources(config: Mapping[str, Any]) -> None:
         registered = repository_root / relative
         if (
             loaded != registered
+            or loaded.stat().st_nlink != 1
             or expected.get(relative) != sha256_file(loaded)
             or loaded.suffix != ".py"
         ):
@@ -163,16 +202,46 @@ def _verify_imported_broker_sources(config: Mapping[str, Any]) -> None:
                     f"{module_name}"
                 )
             continue
-        if loaded.suffix != ".py" or expected.get(relative) != sha256_file(loaded):
+        if (
+            loaded.suffix != ".py"
+            or loaded.stat().st_nlink != 1
+            or expected.get(relative) != sha256_file(loaded)
+        ):
             raise ProcessBrokerProtocolError(
                 f"loaded repository module is outside broker source closure: {module_name}"
             )
 
 
-def serve(config: Mapping[str, Any]) -> int:
+def serve(
+    config: Mapping[str, Any],
+    *,
+    readiness_connection: socket.socket,
+) -> int:
+    if not isinstance(readiness_connection, socket.socket):
+        raise ProcessBrokerProtocolError("dedicated readiness channel is absent")
     endpoint = Path(str(config["endpoint"]))
     runtime_key = base64.b64decode(str(config["runtime_key_b64"]), validate=True)
+    orchestration_key = base64.b64decode(
+        str(config["orchestration_key_b64"]), validate=True
+    )
     control_key = base64.b64decode(str(config["control_key_b64"]), validate=True)
+    if (
+        min(
+            len(runtime_key),
+            len(orchestration_key),
+            len(control_key),
+        )
+        < 32
+        or len({runtime_key, orchestration_key, control_key}) != 3
+    ):
+        raise ProcessBrokerProtocolError(
+            "process-broker role capabilities are absent or aliased"
+        )
+    sealed_finalization_required = config.get("sealed_finalization_required")
+    if type(sealed_finalization_required) is not bool:
+        raise ProcessBrokerProtocolError(
+            "process-broker finalization requirement is not boolean"
+        )
     session_id = str(config["session_id"])
     allowed_runtime_pid = int(config["allowed_runtime_pid"])
     allowed_uid = int(config["allowed_uid"])
@@ -187,6 +256,39 @@ def serve(config: Mapping[str, Any]) -> int:
     ).hexdigest()
     if backend_config_sha256 != config.get("sealed_backend_config_sha256"):
         raise ProcessBrokerProtocolError("sealed backend config identity differs")
+    timeout_evidence = config.get("ipc_timeout_calibration_evidence")
+    timeout_binding = validate_process_broker_timeout_binding(
+        config.get("ipc_timeout_binding"),
+        calibration_evidence=timeout_evidence,
+    )
+    if (
+        timeout_binding["mode"] == MEASURED_TIMEOUT_MODE
+        and timeout_evidence is None
+    ):
+        raise ProcessBrokerProtocolError(
+            "measured process-broker timeout evidence is absent"
+        )
+    if timeout_evidence is not None:
+        validate_process_broker_timeout_calibration(timeout_evidence)
+    measured_timeout_binding_sha256 = timeout_binding_sha256(timeout_binding)
+    if measured_timeout_binding_sha256 != config.get("ipc_timeout_binding_sha256"):
+        raise ProcessBrokerProtocolError("process-broker timeout binding differs")
+    execution_scope = config.get("execution_scope")
+    if execution_scope not in {
+        "ENGINEERING_FIXTURE_ONLY",
+        "MEASURED_CALIBRATION_REPLAY_ONLY",
+    }:
+        raise ProcessBrokerProtocolError(
+            "worker execution scope lacks local non-authorizing registration"
+        )
+    if (
+        execution_scope == "ENGINEERING_FIXTURE_ONLY"
+        and timeout_binding["mode"] == MEASURED_TIMEOUT_MODE
+    ) or (
+        execution_scope == "MEASURED_CALIBRATION_REPLAY_ONLY"
+        and timeout_binding["mode"] != MEASURED_TIMEOUT_MODE
+    ):
+        raise ProcessBrokerProtocolError("worker timeout mode differs from scope")
     screenshot_root_identity = (
         hashlib.sha256(str(policy_screenshot_root).encode("utf-8")).hexdigest()
         if policy_screenshot_root is not None
@@ -200,6 +302,7 @@ def serve(config: Mapping[str, Any]) -> int:
     if (
         backend_source.is_symlink()
         or not backend_source.is_file()
+        or backend_source.stat().st_nlink != 1
         or sha256_file(backend_source) != config.get("backend_source_sha256")
     ):
         raise ProcessBrokerProtocolError("sealed backend source identity differs")
@@ -209,9 +312,14 @@ def serve(config: Mapping[str, Any]) -> int:
         source_path=backend_source,
         source_sha256=str(config["backend_source_sha256"]),
         backend_config=backend_config,
+        require_sealed_finalization=sealed_finalization_required,
     )
     _verify_imported_broker_sources(config)
-    sequences = {"runtime": 0, "control": 0}
+    finalization_available = (
+        callable(getattr(backend, SEALED_FINALIZATION_OPERATION, None))
+        and getattr(backend, "sealed_finalization_available", False) is True
+    )
+    sequences = {"runtime": 0, "orchestration": 0, "control": 0}
     seen_nonces: set[str] = set()
     bound_episode_task: tuple[str, str] | None = None
     pending_action: tuple[str, bool] | None = None
@@ -221,6 +329,8 @@ def serve(config: Mapping[str, Any]) -> int:
     episode_terminated = False
     runtime_closed = False
     runtime_failed = False
+    runtime_control_cleanup_only = False
+    finalization_complete = False
     endpoint.parent.mkdir(parents=True, exist_ok=True)
     if endpoint.exists():
         raise ProcessBrokerProtocolError("process-broker endpoint already exists")
@@ -239,28 +349,46 @@ def serve(config: Mapping[str, Any]) -> int:
             "endpoint_mode": oct(endpoint.stat().st_mode & 0o777),
             "sealed_backend_config_sha256": backend_config_sha256,
             "policy_screenshot_root_identity_sha256": screenshot_root_identity,
+            "ipc_timeout_binding_sha256": measured_timeout_binding_sha256,
+            "sealed_finalization_available": finalization_available,
+            "sealed_finalization_required": sealed_finalization_required,
         }
-        print(
-            canonical_json_bytes(
-                authenticated_envelope(readiness, authentication_key=control_key)
-            ).decode("utf-8"),
-            flush=True,
+        startup_deadline = monotonic() + (
+            timeout_binding["timeout_milliseconds"]["broker_startup"] / 1000.0
         )
+        send_frame(
+            readiness_connection,
+            authenticated_envelope(readiness, authentication_key=control_key),
+            deadline_monotonic=startup_deadline,
+        )
+        readiness_connection.close()
         running = True
         while running:
             connection, _ = listener.accept()
             with connection:
+                connection_deadline = monotonic() + (
+                    max(timeout_binding["timeout_milliseconds"].values())
+                    / 1000.0
+                )
                 role: object = None
                 sequence: object = None
                 nonce: object = None
+                runtime_effect_committed = False
                 try:
                     peer = _peer_identity(connection)
-                    envelope = receive_frame(connection)
+                    envelope = receive_frame(
+                        connection,
+                        deadline_monotonic=connection_deadline,
+                    )
                     unsigned = envelope.get("body")
                     role = unsigned.get("role") if isinstance(unsigned, Mapping) else None
-                    if role not in {"runtime", "control"}:
+                    if role not in {"runtime", "orchestration", "control"}:
                         raise ProcessBrokerProtocolError("process-broker role is forbidden")
-                    key = runtime_key if role == "runtime" else control_key
+                    key = {
+                        "runtime": runtime_key,
+                        "orchestration": orchestration_key,
+                        "control": control_key,
+                    }[str(role)]
                     body = verify_authenticated_envelope(
                         envelope, authentication_key=key
                     )
@@ -313,6 +441,11 @@ def serve(config: Mapping[str, Any]) -> int:
                             raise ProcessBrokerProtocolError(
                                 "runtime broker session is closed"
                             )
+                        if runtime_control_cleanup_only:
+                            raise ProcessBrokerProtocolError(
+                                "runtime broker infrastructure invalid requires "
+                                "control cleanup"
+                            )
                         if runtime_failed and operation != "runtime_close":
                             raise ProcessBrokerProtocolError(
                                 "runtime broker session failed closed"
@@ -351,14 +484,17 @@ def serve(config: Mapping[str, Any]) -> int:
                                 raise ProcessBrokerProtocolError(
                                     "runtime observation differs from pending action"
                                 )
-                        elif operation == "runtime_execute":
+                        elif operation in {
+                            "runtime_execute",
+                            "runtime_register_rejected",
+                        }:
                             if pending_action is not None:
                                 raise ProcessBrokerProtocolError(
-                                    "runtime execution awaits its post observation"
+                                    "runtime action request awaits its post observation"
                                 )
                             if terminal_required:
                                 raise ProcessBrokerProtocolError(
-                                    "runtime execution requires pending terminal receipt"
+                                    "runtime action request requires pending terminal receipt"
                                 )
                             if episode_terminated:
                                 raise ProcessBrokerProtocolError(
@@ -414,9 +550,19 @@ def serve(config: Mapping[str, Any]) -> int:
                                 policy_screenshot_root=policy_screenshot_root,
                             )
                             _verify_imported_broker_sources(config)
+                        except ProcessBrokerInfrastructureInvalidResponse:
+                            runtime_failed = True
+                            runtime_control_cleanup_only = True
+                            raise
                         except Exception:
                             runtime_failed = True
                             raise
+                        # From this point a browser/reset/rejection/terminal
+                        # effect may be durable. If the authenticated response
+                        # cannot be delivered, the caller cannot distinguish
+                        # committed from uncommitted state and the episode must
+                        # remain poisoned for finalization.
+                        runtime_effect_committed = True
                         if operation == "runtime_reset":
                             bound_episode_task = requested_identity
                             last_observation = dict(result["observation"])
@@ -426,7 +572,10 @@ def serve(config: Mapping[str, Any]) -> int:
                             pending_action = None
                             last_observation = dict(result["observation"])
                             terminal_required = True
-                        elif operation == "runtime_execute":
+                        elif operation in {
+                            "runtime_execute",
+                            "runtime_register_rejected",
+                        }:
                             action = validated_payload["action"]
                             pending_action = (
                                 str(action["action_id"]),
@@ -445,6 +594,68 @@ def serve(config: Mapping[str, Any]) -> int:
                                 )
                             runtime_closed = True
                         response_role = "sealed_runtime_response"
+                    elif role == "orchestration":
+                        if operation != SEALED_FINALIZATION_OPERATION:
+                            raise ProcessBrokerProtocolError(
+                                "orchestration requested an unregistered operation"
+                            )
+                        validated_payload = validate_finalization_request_payload(
+                            payload
+                        )
+                        requested_identity = (
+                            str(validated_payload["episode_id"]),
+                            str(validated_payload["task_id"]),
+                        )
+                        if bound_episode_task is None:
+                            raise ProcessBrokerProtocolError(
+                                "sealed finalization requires a reset episode"
+                            )
+                        if requested_identity != bound_episode_task:
+                            raise ProcessBrokerProtocolError(
+                                "sealed finalization episode/task identity differs"
+                            )
+                        if finalization_complete:
+                            raise ProcessBrokerProtocolError(
+                                "sealed finalization may execute exactly once"
+                            )
+                        if pending_action is not None:
+                            raise ProcessBrokerProtocolError(
+                                "sealed finalization awaits a post-action observation"
+                            )
+                        if terminal_required:
+                            raise ProcessBrokerProtocolError(
+                                "sealed finalization awaits a causal terminal receipt"
+                            )
+                        if runtime_failed or runtime_control_cleanup_only:
+                            raise ProcessBrokerProtocolError(
+                                "sealed finalization cannot consume a failed runtime"
+                            )
+                        finalizer = getattr(
+                            backend, SEALED_FINALIZATION_OPERATION, None
+                        )
+                        if not callable(finalizer):
+                            raise ProcessBrokerProtocolError(
+                                "sealed backend has no orchestration finalizer"
+                            )
+                        # Possession of the distinct orchestration key is the
+                        # post-decision boundary.  Atomically close the runtime
+                        # role even when an EpisodeTimeout prevented its
+                        # best-effort runtime_close call.
+                        runtime_closed = True
+                        sequences[role] += 1
+                        seen_nonces.add(nonce)
+                        try:
+                            backend_result = _detach_backend_result(
+                                finalizer(validated_payload)
+                            )
+                            _verify_imported_broker_sources(config)
+                            result = validate_finalization_result(backend_result)
+                            _verify_imported_broker_sources(config)
+                        except Exception:
+                            runtime_failed = True
+                            raise
+                        finalization_complete = True
+                        response_role = "sealed_orchestration_response"
                     else:
                         # Control shutdown is lifecycle cleanup only. It is
                         # deliberately available from an incomplete/failed
@@ -476,41 +687,90 @@ def serve(config: Mapping[str, Any]) -> int:
                     send_frame(
                         connection,
                         authenticated_envelope(response, authentication_key=key),
+                        deadline_monotonic=connection_deadline,
                     )
                 except Exception as exc:
+                    if role == "runtime" and runtime_effect_committed:
+                        # A durable sealed append followed by response loss is
+                        # ambiguous to the caller. Never permit finalization or
+                        # another runtime request from that causal prefix.
+                        runtime_failed = True
                     # Do not reflect exception text, backend state, or evaluator
                     # details across the runtime boundary.
                     try:
                         role = (
-                            role if role in {"runtime", "control"} else "runtime"
+                            role
+                            if role in {"runtime", "orchestration", "control"}
+                            else "runtime"
                         )
-                        key = runtime_key if role == "runtime" else control_key
+                        key = {
+                            "runtime": runtime_key,
+                            "orchestration": orchestration_key,
+                            "control": control_key,
+                        }[str(role)]
+                        infrastructure_result: dict[str, Any] | None = None
+                        if role == "runtime" and isinstance(
+                            exc,
+                            ProcessBrokerInfrastructureInvalidResponse,
+                        ):
+                            try:
+                                _verify_imported_broker_sources(config)
+                                infrastructure_result = (
+                                    validate_runtime_infrastructure_invalid(
+                                        exc.result,
+                                        request_operation=str(operation),
+                                        episode_id=str(
+                                            validated_payload["episode_id"]
+                                        ),
+                                        request_payload=validated_payload,
+                                    )
+                                )
+                            except Exception:
+                                infrastructure_result = None
                         response = {
                             "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
                             "role": (
                                 "sealed_runtime_response"
                                 if role == "runtime"
-                                else "sealed_control_response"
+                                else (
+                                    "sealed_orchestration_response"
+                                    if role == "orchestration"
+                                    else "sealed_control_response"
+                                )
                             ),
                             "session_id": session_id,
                             "sequence": (
                                 sequence if type(sequence) is int else -1
                             ),
                             "nonce": nonce if type(nonce) is str else "",
-                            "status": "REJECTED",
-                            # A backend-controlled exception class name would be
-                            # another neutral scalar channel. Keep rejection
-                            # disclosure closed and deterministic.
-                            "error_code": "REGISTERED_REQUEST_REJECTED",
-                            "result": {},
+                            "status": (
+                                PROCESS_BROKER_INFRASTRUCTURE_INVALID_STATUS
+                                if infrastructure_result is not None
+                                else "REJECTED"
+                            ),
+                            "result": (
+                                infrastructure_result
+                                if infrastructure_result is not None
+                                else {}
+                            ),
                         }
+                        if infrastructure_result is None:
+                            # A backend-controlled exception class name would
+                            # be another neutral scalar channel. Keep generic
+                            # rejection disclosure closed and deterministic.
+                            response["error_code"] = "REGISTERED_REQUEST_REJECTED"
                         send_frame(
                             connection,
                             authenticated_envelope(response, authentication_key=key),
+                            deadline_monotonic=connection_deadline,
                         )
                     except Exception:
                         pass
     finally:
+        try:
+            readiness_connection.close()
+        except OSError:
+            pass
         listener.close()
         try:
             endpoint.unlink()
@@ -520,13 +780,9 @@ def serve(config: Mapping[str, Any]) -> int:
 
 
 def main() -> int:
-    line = sys.stdin.readline()
-    if not line:
-        raise ProcessBrokerProtocolError("process-broker worker lacks launch config")
-    value = json.loads(line)
-    if not isinstance(value, Mapping):
-        raise ProcessBrokerProtocolError("process-broker launch config is not an object")
-    return serve(value)
+    raise ProcessBrokerProtocolError(
+        "process-broker worker requires the source-verifying dedicated-FD launcher"
+    )
 
 
 if __name__ == "__main__":

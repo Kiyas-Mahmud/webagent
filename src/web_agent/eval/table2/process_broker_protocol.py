@@ -11,12 +11,16 @@ import re
 import socket
 import stat
 import struct
+from time import monotonic
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 from web_agent.benchmarks.base import AdapterExecution
 from web_agent.runtime.contracts import (
     ConcreteAction,
+    ExecutionResult,
+    ExecutionStatus,
+    MAX_EXECUTION_MESSAGE_CHARS,
     Observation,
     OpaqueTerminalSignal,
     VerifierReceiptBinding,
@@ -29,13 +33,15 @@ from web_agent.runtime.state_reset import (
 from .common import canonical_json_bytes, sha256_file
 
 
-PROCESS_BROKER_PROTOCOL_VERSION = "table2-process-page-broker-ipc-v2"
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
+PROCESS_BROKER_PROTOCOL_VERSION = "table2-process-page-broker-ipc-v3"
 MAX_PROCESS_BROKER_MESSAGE_BYTES = 1_048_576
 RUNTIME_BROKER_OPERATIONS = frozenset(
     {
         "runtime_reset",
         "runtime_observe",
         "runtime_execute",
+        "runtime_register_rejected",
         "runtime_terminal",
         "runtime_close",
     }
@@ -45,20 +51,24 @@ RUNTIME_INNER_SCHEMA_PATHS = (
     "runtime_reset.result.observation",
     "runtime_reset.result.reset_state_receipt",
     "runtime_execute.request.action",
+    "runtime_register_rejected.request.action",
+    "runtime_register_rejected.request.execution",
     "runtime_observe.result.observation",
     "runtime_execute.result.execution",
+    "runtime_register_rejected.result.registered",
+    "runtime_error.result.infrastructure_invalid",
     "runtime_terminal.request.receipt_binding",
     "runtime_terminal.result.opaque_terminal_signal",
 )
 PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION = (
-    "table2-process-broker-inner-schema-registry-v2"
+    "table2-process-broker-inner-schema-registry-v6"
 )
 PROCESS_BROKER_INNER_SCHEMA_REGISTRY = (
     {
         "path": "runtime_reset.request",
         "root_schema_version": "table2.runtime.v1",
         "record_type": "WebArenaResetStateRequest",
-        "validator_id": "webarena-reset-request-fields-v1",
+        "validator_id": "webarena-reset-request-task-specification-bound-v2",
     },
     {
         "path": "runtime_reset.result.observation",
@@ -66,7 +76,7 @@ PROCESS_BROKER_INNER_SCHEMA_REGISTRY = (
         "record_type": "Observation",
         "validator_id": (
             "browsergym-causal-observation-request-bound-"
-            "root-confined-screenshot-v2"
+            "root-confined-screenshot-browser-error-url-v3"
         ),
     },
     {
@@ -82,12 +92,24 @@ PROCESS_BROKER_INNER_SCHEMA_REGISTRY = (
         "validator_id": "six-class-live-browser-action-subset-v1",
     },
     {
+        "path": "runtime_register_rejected.request.action",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "ConcreteAction",
+        "validator_id": "six-class-nondispatched-rejected-action-v1",
+    },
+    {
+        "path": "runtime_register_rejected.request.execution",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "ExecutionResult",
+        "validator_id": "executor-local-rejection-action-step-bound-v1",
+    },
+    {
         "path": "runtime_observe.result.observation",
         "root_schema_version": "table2.runtime.v1",
         "record_type": "Observation",
         "validator_id": (
             "browsergym-causal-observation-request-bound-"
-            "root-confined-screenshot-v2"
+            "root-confined-screenshot-browser-error-url-v3"
         ),
     },
     {
@@ -95,6 +117,21 @@ PROCESS_BROKER_INNER_SCHEMA_REGISTRY = (
         "root_schema_version": "table2.runtime.v1",
         "record_type": "AdapterExecution",
         "validator_id": "adapter-execution-with-action-evidence-v1",
+    },
+    {
+        "path": "runtime_register_rejected.result.registered",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "RejectedActionRegistrationAcknowledgement",
+        "validator_id": "exact-true-no-browser-dispatch-acknowledgement-v1",
+    },
+    {
+        "path": "runtime_error.result.infrastructure_invalid",
+        "root_schema_version": "table2.process-broker.infrastructure-invalid.v1",
+        "record_type": "InfrastructureInvalidError",
+        "validator_id": (
+            "allowlisted-sanitized-request-action-bound-"
+            "infrastructure-invalid-v2"
+        ),
     },
     {
         "path": "runtime_terminal.request.receipt_binding",
@@ -106,7 +143,7 @@ PROCESS_BROKER_INNER_SCHEMA_REGISTRY = (
         "path": "runtime_terminal.result.opaque_terminal_signal",
         "root_schema_version": "table2.runtime.v1",
         "record_type": "OpaqueTerminalSignal",
-        "validator_id": "opaque-terminal-event-token-v1",
+        "validator_id": "child-owned-sealed-stream-outer-event-token-v2",
     },
 )
 PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256 = hashlib.sha256(
@@ -118,7 +155,64 @@ ARBITRARY_RUNTIME_MAPPING_PATHS = RUNTIME_INNER_SCHEMA_PATHS
 PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS = (
     "ATTEST_RUNTIME_VALUE_PROVENANCE",
     "REGISTER_EXTERNAL_DEPLOYMENT_RECEIPT_SCHEMA_AND_TRUST_ANCHOR",
+    "CROSS_BIND_IMMUTABLE_TIMEOUT_CALIBRATION_AUTHORITY_BUNDLE",
+    "CALIBRATE_AND_CROSS_BIND_SEALED_FINALIZATION_TIMEOUT",
 )
+REGISTERED_BROWSER_ERROR_URL_SCHEME = "table2-browser-error"
+REGISTERED_BROWSER_ERROR_URL_HOST = "observable"
+PROCESS_BROKER_INFRASTRUCTURE_INVALID_SCHEMA_VERSION = (
+    "table2.process-broker.infrastructure-invalid.v1"
+)
+PROCESS_BROKER_INFRASTRUCTURE_INVALID_STATUS = "INFRASTRUCTURE_INVALID"
+REGISTERED_PROCESS_BROKER_INFRASTRUCTURE_REASONS = frozenset(
+    {
+        "BENCHMARK_SERVICE_UNAVAILABLE",
+        "BROWSER_CONTROLLER_DISCONNECTED",
+        "ENVIRONMENT_RESET_FAILED",
+        "FROZEN_DEPENDENCY_UNAVAILABLE",
+    }
+)
+REGISTERED_PROCESS_BROKER_INFRASTRUCTURE_OPERATION_REASONS = {
+    "environment_factory": frozenset({"BENCHMARK_SERVICE_UNAVAILABLE"}),
+    "reset": frozenset(
+        {"BENCHMARK_SERVICE_UNAVAILABLE", "ENVIRONMENT_RESET_FAILED"}
+    ),
+    "step": frozenset(
+        {"BENCHMARK_SERVICE_UNAVAILABLE", "BROWSER_CONTROLLER_DISCONNECTED"}
+    ),
+    "screenshot_bytes_reset": frozenset({"BROWSER_CONTROLLER_DISCONNECTED"}),
+    "screenshot_bytes_pre_action": frozenset(
+        {"BROWSER_CONTROLLER_DISCONNECTED"}
+    ),
+    "screenshot_bytes_post_action": frozenset(
+        {"BROWSER_CONTROLLER_DISCONNECTED"}
+    ),
+    "screenshot_bytes_post_recovery": frozenset(
+        {"BROWSER_CONTROLLER_DISCONNECTED"}
+    ),
+}
+REGISTERED_PROCESS_BROKER_RUNTIME_INFRASTRUCTURE_OPERATIONS = {
+    "runtime_reset": frozenset(
+        {"environment_factory", "reset", "screenshot_bytes_reset"}
+    ),
+    "runtime_execute": frozenset(
+        {
+            "step",
+            "screenshot_bytes_post_action",
+            "screenshot_bytes_post_recovery",
+        }
+    ),
+    # Executor-local rejection registration is causal bookkeeping only.  It
+    # cannot claim a browser/controller infrastructure failure because no
+    # native command is dispatched.
+    "runtime_register_rejected": frozenset(),
+    # The strict causal protocol serves post-action observations already
+    # captured by ``runtime_execute``. Neither observation retrieval nor
+    # terminal verification may re-label a step/reset fault as their own.
+    "runtime_observe": frozenset(),
+    "runtime_terminal": frozenset(),
+    "runtime_close": frozenset(),
+}
 _SEALED_FIELD_TOKENS = frozenset(
     {
         "evaluator",
@@ -184,6 +278,10 @@ POLICY_SCREENSHOT_TRANSPORT_CONTRACT = (
 
 class ProcessBrokerProtocolError(RuntimeError):
     """An IPC frame is malformed, unauthenticated, replayed, or oversized."""
+
+
+class ProcessBrokerInfrastructureInvalidMixin:
+    """Marker implemented only by the reviewed campaign rerun exception."""
 
 
 def _normalized_key(value: object) -> str:
@@ -422,6 +520,45 @@ def _absolute_runtime_url(value: object, *, context: str) -> str:
     return value
 
 
+def registered_browser_error_observation_url(error_kind: str) -> str:
+    """Return the sole non-network URL form permitted for an observed browser error."""
+
+    if type(error_kind) is not str or not re.fullmatch(
+        r"[A-Z][A-Z0-9_]{0,95}", error_kind
+    ):
+        raise ProcessBrokerProtocolError(
+            "runtime browser-error URL requires a registered error kind"
+        )
+    return (
+        f"{REGISTERED_BROWSER_ERROR_URL_SCHEME}://"
+        f"{REGISTERED_BROWSER_ERROR_URL_HOST}/{error_kind}"
+    )
+
+
+def _validate_runtime_observation_url(
+    value: object,
+    *,
+    observation: Observation,
+    page_state: Mapping[str, Any],
+) -> str:
+    if type(value) is str and value.startswith(
+        f"{REGISTERED_BROWSER_ERROR_URL_SCHEME}:"
+    ):
+        if observation.environment_error is not True:
+            raise ProcessBrokerProtocolError(
+                "runtime browser-error URL requires an environment error"
+            )
+        expected = registered_browser_error_observation_url(
+            page_state.get("browser_error_kind")
+        )
+        if value != expected:
+            raise ProcessBrokerProtocolError(
+                "runtime browser-error URL contradicts the observed error kind"
+            )
+        return value
+    return _absolute_runtime_url(value, context="runtime observation url")
+
+
 def _validate_action_parameters(action: ConcreteAction) -> None:
     for field, value in (
         ("action_id", action.action_id),
@@ -536,6 +673,99 @@ def _validate_runtime_action(value: object) -> dict[str, Any]:
     return mapping
 
 
+def _validate_rejected_runtime_action(value: object) -> dict[str, Any]:
+    """Validate a concrete request that is intentionally not browser-executable."""
+
+    mapping, action = _strict_record(
+        value,
+        ConcreteAction,
+        context="runtime_register_rejected request action",
+    )
+    for field, field_value in (
+        ("action_id", action.action_id),
+        ("source_decision_id", action.source_decision_id),
+    ):
+        if (
+            type(field_value) is not str
+            or not field_value
+            or field_value != field_value.strip()
+            or len(field_value) > 512
+        ):
+            raise ProcessBrokerProtocolError(
+                f"rejected runtime action {field} is invalid"
+            )
+    if action.action_type.value not in _RUNTIME_ACTION_TYPES:
+        raise ProcessBrokerProtocolError(
+            "rejected runtime action type is not registered"
+        )
+    if type(action.destructive) is not bool:
+        raise ProcessBrokerProtocolError(
+            "rejected runtime action destructive flag is not boolean"
+        )
+    if action.recovery_attempt_id is not None and (
+        type(action.recovery_attempt_id) is not str
+        or not action.recovery_attempt_id
+        or action.recovery_attempt_id != action.recovery_attempt_id.strip()
+        or len(action.recovery_attempt_id) > 512
+    ):
+        raise ProcessBrokerProtocolError(
+            "rejected runtime action recovery attempt is invalid"
+        )
+    if action.bbox is not None:
+        _normalized_bbox(
+            list(action.bbox),
+            context="rejected runtime action bbox",
+        )
+    if not isinstance(action.parameters, Mapping):
+        raise ProcessBrokerProtocolError(
+            "rejected runtime action parameters must be an object"
+        )
+    return mapping
+
+
+def _validate_runtime_rejection(
+    value: object,
+    *,
+    action: Mapping[str, Any],
+) -> dict[str, Any]:
+    mapping, execution = _strict_record(
+        value,
+        ExecutionResult,
+        context="runtime_register_rejected request execution",
+    )
+    if (
+        execution.status is not ExecutionStatus.REJECTED
+        or type(execution.executor_step) is not int
+        or execution.executor_step <= 0
+        or execution.state_changed is not False
+        or execution.environment_error is not False
+        or execution.error_kind
+        not in {"safety_rejection", "parameter_resolution_rejected"}
+        or execution.internal_retry_count != 0
+        or float(execution.latency_ms) != 0.0
+        or type(execution.message) is not str
+        or len(execution.message) > MAX_EXECUTION_MESSAGE_CHARS
+    ):
+        raise ProcessBrokerProtocolError(
+            "executor-local rejection fields differ from schema"
+        )
+    action_id = action.get("action_id")
+    evidence = execution.evidence
+    if (
+        type(action_id) is not str
+        or execution.action_id != action_id
+        or evidence is None
+        or evidence.action_id != action_id
+        or evidence.status is not ExecutionStatus.REJECTED
+        or evidence.controller_command is not None
+        or evidence.safety_receipt is not None
+    ):
+        raise ProcessBrokerProtocolError(
+            "executor-local rejection is not bound to its exact action"
+        )
+    return mapping
+
+
 def _validate_visible_control(value: object, *, index: int) -> dict[str, Any]:
     control = _exact_fields(
         value,
@@ -614,7 +844,7 @@ def _validate_observation_page_state(
     *,
     observation: Observation,
     request_payload: Mapping[str, Any] | None,
-) -> None:
+) -> dict[str, Any]:
     state = _exact_fields(
         value,
         _OBSERVATION_PAGE_STATE_FIELDS,
@@ -757,6 +987,7 @@ def _validate_observation_page_state(
                 "runtime observation compatible action types are invalid"
             )
         previous = fingerprint
+    return state
 
 
 def _validate_runtime_observation(
@@ -779,10 +1010,6 @@ def _validate_runtime_observation(
     _validate_policy_screenshot_path(
         observation=observation,
         policy_screenshot_root=policy_screenshot_root,
-    )
-    _absolute_runtime_url(
-        observation.url,
-        context="runtime observation url",
     )
     if (
         type(observation.observation_id) is not str
@@ -810,10 +1037,15 @@ def _validate_runtime_observation(
         raise ProcessBrokerProtocolError(
             "runtime observation stage/prior action differs from its request"
         )
-    _validate_observation_page_state(
+    page_state = _validate_observation_page_state(
         observation.page_state,
         observation=observation,
         request_payload=request_payload,
+    )
+    _validate_runtime_observation_url(
+        observation.url,
+        observation=observation,
+        page_state=page_state,
     )
     return mapping
 
@@ -833,7 +1065,7 @@ def _validate_runtime_execution(
         or type(execution.environment_error) is not bool
         or type(execution.internal_retry_count) is not int
         or type(execution.message) is not str
-        or len(execution.message) > 4096
+        or len(execution.message) > MAX_EXECUTION_MESSAGE_CHARS
         or (
             execution.error_kind is not None
             and (
@@ -868,6 +1100,7 @@ def _validate_reset_request(value: Mapping[str, Any]) -> dict[str, Any]:
     expected = {
         "episode_id",
         "task_id",
+        "task_specification_sha256",
         "benchmark_version",
         "start_state_id",
         "reset_stage_seed",
@@ -891,6 +1124,10 @@ def _validate_reset_request(value: Mapping[str, Any]) -> dict[str, Any]:
     _lowercase_sha256(
         mapping["start_state_id"], context="runtime_reset request start_state_id"
     )
+    _lowercase_sha256(
+        mapping["task_specification_sha256"],
+        context="runtime_reset request task_specification_sha256",
+    )
     reset_stage_seed = mapping["reset_stage_seed"]
     if (
         type(reset_stage_seed) is not int
@@ -901,7 +1138,18 @@ def _validate_reset_request(value: Mapping[str, Any]) -> dict[str, Any]:
             "runtime_reset request reset_stage_seed is invalid"
         )
     try:
-        request = WebArenaResetStateRequest(**mapping)
+        request = WebArenaResetStateRequest(
+            **{
+                field: mapping[field]
+                for field in (
+                    "episode_id",
+                    "task_id",
+                    "benchmark_version",
+                    "start_state_id",
+                    "reset_stage_seed",
+                )
+            }
+        )
     except (TypeError, ValueError) as exc:
         raise ProcessBrokerProtocolError(
             "runtime_reset request does not satisfy WebArenaResetStateRequest"
@@ -957,6 +1205,222 @@ def _validate_terminal_signal(value: object) -> dict[str, Any]:
     return mapping
 
 
+def _bounded_infrastructure_text(
+    value: object,
+    *,
+    context: str,
+    maximum: int,
+) -> str:
+    if (
+        type(value) is not str
+        or not value
+        or value != value.strip()
+        or len(value) > maximum
+        or any(ord(character) < 0x20 or ord(character) == 0x7F for character in value)
+    ):
+        raise ProcessBrokerProtocolError(f"{context} is invalid")
+    return value
+
+
+def validate_runtime_infrastructure_invalid(
+    value: object,
+    *,
+    request_operation: str | None = None,
+    episode_id: str | None = None,
+    request_payload: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate the only typed backend exception allowed across runtime IPC."""
+
+    base_fields = {
+        "schema_version",
+        "record_type",
+        "reason_code",
+        "adapter_id",
+        "adapter_version",
+        "operation",
+        "adapter_evidence",
+    }
+    has_adapter_execution = (
+        isinstance(value, Mapping) and "adapter_execution" in value
+    )
+    mapping = _exact_fields(
+        value,
+        base_fields | ({"adapter_execution"} if has_adapter_execution else set()),
+        context="runtime infrastructure-invalid result",
+    )
+    if (
+        mapping["schema_version"]
+        != PROCESS_BROKER_INFRASTRUCTURE_INVALID_SCHEMA_VERSION
+        or mapping["record_type"] != "InfrastructureInvalidError"
+    ):
+        raise ProcessBrokerProtocolError(
+            "runtime infrastructure-invalid record identity differs"
+        )
+    reason = _bounded_infrastructure_text(
+        mapping["reason_code"],
+        context="runtime infrastructure-invalid reason",
+        maximum=96,
+    )
+    operation = _bounded_infrastructure_text(
+        mapping["operation"],
+        context="runtime infrastructure-invalid operation",
+        maximum=96,
+    )
+    allowed_reasons = REGISTERED_PROCESS_BROKER_INFRASTRUCTURE_OPERATION_REASONS.get(
+        operation
+    )
+    if (
+        reason not in REGISTERED_PROCESS_BROKER_INFRASTRUCTURE_REASONS
+        or allowed_reasons is None
+        or reason not in allowed_reasons
+    ):
+        raise ProcessBrokerProtocolError(
+            "runtime infrastructure-invalid reason/operation is not registered"
+        )
+    _bounded_infrastructure_text(
+        mapping["adapter_id"],
+        context="runtime infrastructure-invalid adapter_id",
+        maximum=256,
+    )
+    _bounded_infrastructure_text(
+        mapping["adapter_version"],
+        context="runtime infrastructure-invalid adapter_version",
+        maximum=256,
+    )
+    evidence = _exact_fields(
+        mapping["adapter_evidence"],
+        {
+            "adapter_event_id",
+            "failure_class",
+            "diagnostic_sha256",
+            "retryable",
+        },
+        context="runtime infrastructure-invalid adapter_evidence",
+    )
+    _bounded_infrastructure_text(
+        evidence["adapter_event_id"],
+        context="runtime infrastructure-invalid adapter_event_id",
+        maximum=512,
+    )
+    _bounded_infrastructure_text(
+        evidence["failure_class"],
+        context="runtime infrastructure-invalid failure_class",
+        maximum=256,
+    )
+    _lowercase_sha256(
+        evidence["diagnostic_sha256"],
+        context="runtime infrastructure-invalid diagnostic_sha256",
+    )
+    if evidence["retryable"] is not True or type(evidence["retryable"]) is not bool:
+        raise ProcessBrokerProtocolError(
+            "runtime infrastructure-invalid retryable must be exactly true"
+        )
+    context_present = (
+        request_operation is not None
+        or episode_id is not None
+        or request_payload is not None
+    )
+    if context_present and (
+        request_operation is None
+        or episode_id is None
+        or request_payload is None
+    ):
+        raise ProcessBrokerProtocolError(
+            "runtime infrastructure-invalid request binding is incomplete"
+        )
+    if request_operation is not None:
+        assert request_payload is not None
+        _runtime_identity_fields(
+            request_payload,
+            context="runtime infrastructure-invalid request binding",
+        )
+        if request_payload.get("episode_id") != episode_id:
+            raise ProcessBrokerProtocolError(
+                "runtime infrastructure-invalid request episode differs"
+            )
+        causal_operations = (
+            REGISTERED_PROCESS_BROKER_RUNTIME_INFRASTRUCTURE_OPERATIONS.get(
+                request_operation
+            )
+        )
+        if causal_operations is None or operation not in causal_operations:
+            raise ProcessBrokerProtocolError(
+                "runtime infrastructure-invalid operation is not causal"
+            )
+        if type(episode_id) is not str or not episode_id:
+            raise ProcessBrokerProtocolError(
+                "runtime infrastructure-invalid episode binding is invalid"
+            )
+        event_id = evidence["adapter_event_id"]
+        event_prefix = f"{episode_id}:infrastructure:"
+        event_index = (
+            event_id[len(event_prefix) :]
+            if event_id.startswith(event_prefix)
+            else ""
+        )
+        if (
+            not event_index
+            or any(character not in "0123456789" for character in event_index)
+            or event_index != str(int(event_index))
+            or int(event_index) < 1
+        ):
+            raise ProcessBrokerProtocolError(
+                "runtime infrastructure-invalid event is not episode-bound"
+            )
+    if has_adapter_execution:
+        if request_operation != "runtime_execute" or request_payload is None:
+            raise ProcessBrokerProtocolError(
+                "runtime infrastructure-invalid adapter execution is not causal"
+            )
+        mapping["adapter_execution"] = _validate_runtime_execution(
+            mapping["adapter_execution"],
+            request_payload=request_payload,
+        )
+        execution = AdapterExecution.from_dict(mapping["adapter_execution"])
+        command = execution.evidence.controller_command if execution.evidence else None
+        if (
+            operation != "step"
+            or execution.status.value != "error"
+            or execution.state_changed is not False
+            or execution.environment_error is not True
+            or execution.error_kind != "controller_step_interruption"
+            or execution.message != "native controller step did not return"
+            or execution.internal_retry_count != 0
+            or command is None
+            or command.adapter_id != mapping["adapter_id"]
+            or command.adapter_version != mapping["adapter_version"]
+        ):
+            raise ProcessBrokerProtocolError(
+                "runtime infrastructure-invalid adapter execution differs"
+            )
+    forbidden = forbidden_runtime_fields(mapping)
+    if forbidden:
+        raise ProcessBrokerProtocolError(
+            "runtime infrastructure-invalid result contains forbidden named keys"
+        )
+    return mapping
+
+
+class ProcessBrokerInfrastructureInvalidResponse(ProcessBrokerProtocolError):
+    """Child-only carrier for one sanitized registered infrastructure fault."""
+
+    def __init__(
+        self,
+        result: Mapping[str, Any],
+        *,
+        request_operation: str,
+        episode_id: str,
+        request_payload: Mapping[str, Any],
+    ) -> None:
+        self.result = validate_runtime_infrastructure_invalid(
+            result,
+            request_operation=request_operation,
+            episode_id=episode_id,
+            request_payload=request_payload,
+        )
+        super().__init__("registered process-broker infrastructure invalid")
+
+
 def expected_verifier_receipt_binding(
     *, observation: Mapping[str, Any], action: Mapping[str, Any] | None
 ) -> dict[str, Any]:
@@ -1007,10 +1471,17 @@ def validate_runtime_request_payload(
     expected = {"episode_id", "task_id"}
     if operation == "runtime_reset":
         expected.update(
-            {"benchmark_version", "start_state_id", "reset_stage_seed"}
+            {
+                "task_specification_sha256",
+                "benchmark_version",
+                "start_state_id",
+                "reset_stage_seed",
+            }
         )
     elif operation == "runtime_execute":
         expected.add("action")
+    elif operation == "runtime_register_rejected":
+        expected.update({"action", "execution"})
     elif operation == "runtime_observe":
         expected.update({"stage", "prior_action_id"})
     elif operation == "runtime_terminal":
@@ -1039,10 +1510,18 @@ def validate_runtime_request_payload(
             raise ProcessBrokerProtocolError(
                 "runtime post observation requires a bounded prior action ID"
             )
-    if operation == "runtime_execute":
+    if operation in {"runtime_execute", "runtime_register_rejected"}:
         action = normalized.get("action")
         if not isinstance(action, Mapping):
-            raise ProcessBrokerProtocolError("runtime_execute action must be an object")
+            raise ProcessBrokerProtocolError(
+                f"{operation} action must be an object"
+            )
+    if operation == "runtime_register_rejected" and not isinstance(
+        normalized.get("execution"), Mapping
+    ):
+        raise ProcessBrokerProtocolError(
+            "runtime_register_rejected execution must be an object"
+        )
     forbidden = forbidden_runtime_fields(normalized)
     if forbidden:
         raise ProcessBrokerProtocolError(
@@ -1051,6 +1530,14 @@ def validate_runtime_request_payload(
         )
     if operation == "runtime_execute":
         normalized["action"] = _validate_runtime_action(normalized["action"])
+    elif operation == "runtime_register_rejected":
+        normalized["action"] = _validate_rejected_runtime_action(
+            normalized["action"]
+        )
+        normalized["execution"] = _validate_runtime_rejection(
+            normalized["execution"],
+            action=normalized["action"],
+        )
     elif operation == "runtime_terminal":
         normalized["receipt_binding"] = _validate_terminal_binding(
             normalized["receipt_binding"]
@@ -1071,6 +1558,7 @@ def validate_runtime_result(
         "runtime_reset": {"observation", "reset_state_receipt"},
         "runtime_observe": {"observation"},
         "runtime_execute": {"execution"},
+        "runtime_register_rejected": {"registered"},
         "runtime_terminal": {"opaque_terminal_signal"},
         "runtime_close": {"closed"},
     }
@@ -1091,6 +1579,12 @@ def validate_runtime_result(
             raise ProcessBrokerProtocolError(f"{operation} {field} must be an object")
     if operation == "runtime_close" and type(normalized.get("closed")) is not bool:
         raise ProcessBrokerProtocolError("runtime_close closed must be boolean")
+    if operation == "runtime_register_rejected" and normalized.get(
+        "registered"
+    ) is not True:
+        raise ProcessBrokerProtocolError(
+            "runtime rejected-action registration was not acknowledged"
+        )
     forbidden_view: Mapping[str, Any] = normalized
     if operation == "runtime_reset":
         # This one exact field is a registered negative attestation inside a
@@ -1189,17 +1683,63 @@ def verify_authenticated_envelope(
     return body
 
 
-def send_frame(connection: socket.socket, value: Mapping[str, Any]) -> None:
+def remaining_deadline_seconds(deadline_monotonic: float) -> float:
+    """Return the remaining absolute IPC budget or fail closed.
+
+    Socket timeouts normally restart after every successful ``recv``.  The
+    broker instead carries one absolute monotonic deadline across connect,
+    send, and every partial receive so a peer cannot extend the registered
+    budget by trickling bytes.
+    """
+
+    remaining = float(deadline_monotonic) - monotonic()
+    if not math.isfinite(remaining) or remaining <= 0.0:
+        raise ProcessBrokerProtocolError(
+            "process-broker absolute IPC deadline expired"
+        )
+    return remaining
+
+
+def set_socket_timeout_to_deadline(
+    connection: socket.socket, deadline_monotonic: float
+) -> None:
+    connection.settimeout(remaining_deadline_seconds(deadline_monotonic))
+
+
+def send_frame(
+    connection: socket.socket,
+    value: Mapping[str, Any],
+    *,
+    deadline_monotonic: float | None = None,
+) -> None:
     payload = canonical_json_bytes(_json_object(value, context="process-broker frame"))
     if len(payload) > MAX_PROCESS_BROKER_MESSAGE_BYTES:
         raise ProcessBrokerProtocolError("process-broker frame exceeds size limit")
-    connection.sendall(struct.pack("!I", len(payload)) + payload)
+    framed = memoryview(struct.pack("!I", len(payload)) + payload)
+    if deadline_monotonic is None:
+        connection.sendall(framed)
+        return
+    while framed:
+        set_socket_timeout_to_deadline(connection, deadline_monotonic)
+        sent = connection.send(framed)
+        if sent <= 0:
+            raise ProcessBrokerProtocolError(
+                "process-broker connection closed during send"
+            )
+        framed = framed[sent:]
 
 
-def _read_exact(connection: socket.socket, size: int) -> bytes:
+def _read_exact(
+    connection: socket.socket,
+    size: int,
+    *,
+    deadline_monotonic: float | None = None,
+) -> bytes:
     chunks: list[bytes] = []
     remaining = size
     while remaining:
+        if deadline_monotonic is not None:
+            set_socket_timeout_to_deadline(connection, deadline_monotonic)
         chunk = connection.recv(remaining)
         if not chunk:
             raise ProcessBrokerProtocolError("process-broker connection closed early")
@@ -1208,12 +1748,20 @@ def _read_exact(connection: socket.socket, size: int) -> bytes:
     return b"".join(chunks)
 
 
-def receive_frame(connection: socket.socket) -> dict[str, Any]:
-    header = _read_exact(connection, 4)
+def receive_frame(
+    connection: socket.socket,
+    *,
+    deadline_monotonic: float | None = None,
+) -> dict[str, Any]:
+    header = _read_exact(
+        connection, 4, deadline_monotonic=deadline_monotonic
+    )
     size = struct.unpack("!I", header)[0]
     if size <= 0 or size > MAX_PROCESS_BROKER_MESSAGE_BYTES:
         raise ProcessBrokerProtocolError("process-broker frame length is invalid")
-    payload = _read_exact(connection, size)
+    payload = _read_exact(
+        connection, size, deadline_monotonic=deadline_monotonic
+    )
 
     def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}

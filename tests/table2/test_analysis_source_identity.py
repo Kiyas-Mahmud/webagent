@@ -12,6 +12,7 @@ from web_agent.eval.table2.execution_guard import (
     ENGINEERING_SMOKE_SCOPE,
     EVALUATION_RUNNER_SCOPE,
     validate_analysis_source_identity,
+    verify_runner_before_execution,
 )
 
 
@@ -41,6 +42,8 @@ def _evaluation_fixture(tmp_path: Path) -> tuple[Path, Path, str]:
     _write_json(
         campaign / "campaign_manifest.json",
         {
+            "campaign_kind": "engineering_pilot",
+            "evidence_label": "PILOT_ONLY",
             "campaign_mode": "evaluation",
             "runner_identity_scope": EVALUATION_RUNNER_SCOPE,
             "repository_commit": commit,
@@ -54,7 +57,11 @@ def test_smoke_analysis_identity_is_explicitly_non_paper(tmp_path: Path) -> None
     campaign = tmp_path / "smoke"
     _write_json(
         campaign / "campaign_manifest.json",
-        {"campaign_mode": "smoke"},
+        {
+            "campaign_kind": "engineering_pilot",
+            "evidence_label": "PILOT_ONLY",
+            "campaign_mode": "smoke",
+        },
     )
     value = validate_analysis_source_identity(campaign)
     assert value["identity_scope"] == ENGINEERING_SMOKE_SCOPE
@@ -83,6 +90,39 @@ def test_evaluation_analysis_replays_live_and_frozen_sources(
     )
     with pytest.raises(SchemaError, match="not live/frozen attested"):
         validate_analysis_source_identity(campaign, repository_root=repo)
+
+
+@pytest.mark.parametrize(
+    "kind,label",
+    [
+        ("unknown", "PILOT_ONLY"),
+        ("engineering_pilot", "FINAL_LOCKED"),
+        ("locked_final", "PILOT_ONLY"),
+    ],
+)
+def test_smoke_source_and_runner_bypasses_reject_unregistered_profile(
+    tmp_path: Path,
+    kind: str,
+    label: str,
+) -> None:
+    campaign = tmp_path / f"bad-{kind}-{label}"
+    _write_json(
+        campaign / "campaign_manifest.json",
+        {
+            "campaign_kind": kind,
+            "evidence_label": label,
+            "campaign_mode": "smoke",
+            "runner_identity_scope": ENGINEERING_SMOKE_SCOPE,
+        },
+    )
+    with pytest.raises(SchemaError, match="profile is not registered"):
+        validate_analysis_source_identity(campaign)
+    with pytest.raises(SchemaError, match="profile is not registered"):
+        verify_runner_before_execution(
+            campaign,
+            runner=object(),
+            runner_entrypoint=None,
+        )
 
 
 def test_evaluation_analysis_rejects_commit_or_source_omission(

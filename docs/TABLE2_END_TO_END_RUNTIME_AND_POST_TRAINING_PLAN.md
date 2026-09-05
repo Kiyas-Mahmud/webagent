@@ -8,25 +8,26 @@
 
 **Plan status:** Core offline runtime/evidence architecture and the task/source/
 deployment-preflight gates are implemented, including research-locked claim,
-audit, and companion-diagnostic controls. The current integrated Table 2 suite
-passes **1,276/1,276 tests**, including the strict process-broker, handoff,
-Kaggle prepare-only, live-evidence replay, and package-validation paths. The pinned
-WebArena 0--49 source audit currently blocks
-handoff because 47 tasks require an unsupported assistant-answer/STOP
-interface. Strict live-capability, provider-installation, evaluator, memory,
-and artifact-package binding is implemented across handoff, frozen campaign,
-validation, and production launch. Its genuine measured external evidence and
-the other pilot inputs are still unavailable. This document does not claim any
-live browser-evaluation result. A source-bound local process-broker architecture
-and deterministic fixture now place their browser/evaluator owner in a distinct
-OS process and expose only authenticated, operation-whitelisted runtime IPC.
-That architecture is not yet wired to a real WebArena production backend. Its local launch/cleanup
-receipts are explicitly not deployment authority, and the older same-process
-broker remains fixture-only. The frozen runner records
-`BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, so production still fails
-before provider import. No live campaign may run until the actual campaign
-host supplies a separately authenticated receipt under a registered external
-trust anchor.
+audit, companion-diagnostic, strict campaign-profile, generic process-broker,
+and timeout-calibration controls. The exact current verification result is
+recorded in `project_progress.md`. The pinned WebArena 0--49 source audit
+currently blocks handoff because 47 tasks require an unsupported
+assistant-answer/STOP interface. Strict live-capability, provider-installation,
+evaluator, memory, and artifact-package binding is implemented across handoff,
+frozen campaign, validation, and production launch. Its genuine measured
+external evidence and the other pilot inputs are still unavailable. This
+document does not claim any live browser-evaluation result. A source-bound
+local process-broker architecture and deterministic fixture place their
+browser/evaluator owner in a distinct OS process and expose only authenticated,
+operation-whitelisted runtime IPC. A generic source-attested WebArena adapter
+bridge, child-owned sealed stream, orchestration-only finalizer, and mandatory
+production-runner process path are wired. The concrete live BrowserGym plus
+sealed-evaluator factory is not registered. Local launch/cleanup receipts are
+explicitly not deployment authority, and the older same-process broker remains
+fixture-only.
+The frozen runner records
+`BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, so production still
+fails before provider import.
 
 The implemented worker remains a same-UID child and inherits its launch
 environment. Its receipt therefore proves local address-space/message-flow
@@ -35,9 +36,16 @@ Any future externally trusted deployment receipt must bind the exact
 source/session and independently prove a separate UID or container/process
 sandbox, runtime-inaccessible evaluator memory/filesystem state, an allowlisted
 scrubbed evaluator environment with no inherited runtime/provider secrets,
-authenticated peer identity, and cleanup under the same controls. No trust
-anchor for that receipt exists in the current schema.
-Exact operation-specific contracts are now source-registered for all eight
+authenticated peer identity, and cleanup under the same controls. A
+verification-only Ed25519 receipt/challenge schema and local replay ledger now
+exist, but the packaged registry intentionally contains zero authorities, no
+independent public key or global replay anchor is registered, and this verifier
+is not integrated as dispatch authority. It cannot authorize a campaign.
+This independent-authority requirement is conservative implementation
+hardening beyond the plan's explicit hash/isolation language and remains
+`AWAITING_PROJECT_OWNER_RATIFICATION` for the `PILOT_ONLY` campaign; it is not
+silently treated as an approved scientific-design change.
+Exact operation-specific contracts are now source-registered for all twelve
 runtime request/result schema paths. Runtime-visible value provenance remains unregistered:
 schema conformance cannot prove where a permitted scalar value originated.
 
@@ -285,9 +293,10 @@ The future DGX inference service must own separate `dgx_host` remeasurement at
 service startup, before model load, and before every physical block. A
 promotable receipt must bind the campaign ID, physical block ID, fresh challenge
 nonce, semantic-lock hash, DGX host/runtime identities, phase, and issue time.
-The browser process cannot claim that remote check on the DGX's behalf. No
-receipt schema or external trust anchor is registered in this source version,
-so the split lock records
+The browser process cannot claim that remote check on the DGX's behalf. The
+repository can verify four exact Ed25519-signed receipt phases, but its packaged
+authority registry is empty and its local ledger is not a global replay anchor
+or dispatch authority. The split lock therefore records
 `BLOCKED_DGX_REMEASUREMENT_RECEIPT_AND_EXTERNAL_TRUST_ANCHOR_REQUIRED` and both
 the execution guard and standard-library bootstrap reject split dispatch.
 
@@ -364,6 +373,16 @@ task + current pre-action state
 | Post-action | pre-state, executed action type, observed post-state, task/domain; for PC-01, action-value text is omitted to match all 24,107 training rows | outcome, failure type, needs recovery, recovery strategy, memory-update prediction |
 | Recovery | observed post-failure state, P1 diagnosis, concrete recovery, observed post-recovery state | predicted recovery outcome plus sealed progress verification |
 | Memory query | current post-failure representation and permitted task/site metadata | filtered training-recovery neighbours and optional advice |
+
+PC-01 has exactly one learned `recovery_outcome` head. After concrete recovery
+actions have executed and the post-recovery state has been observed, its one
+probability is reused for both predicted failure resolution
+(`predicted_failure_resolved` and `predicted_resolution_probability`) and
+predicted progress (`predicted_progress` and
+`predicted_progress_probability`). These are therefore two recorded views of
+one executed post-recovery assessment, not two independent learned heads or two
+independent model predictions. The sealed evaluator's resolution/progress
+judgments remain separate evaluation truth and cannot enter this assessment.
 
 Hard prohibitions:
 
@@ -652,6 +671,8 @@ src/web_agent/eval/table2/
     retrieval_metrics.py
     statistics.py
     campaign.py
+    deployment_authority.py
+    deployment_authority_registry_v1.json
     outcome_semantics.py
     execution_guard.py
     evidence_validation.py
@@ -675,6 +696,8 @@ src/web_agent/eval/table2/
     process_broker.py
     process_broker_protocol.py
     process_broker_runtime.py
+    process_broker_timeout.py
+    process_broker_webarena_backend.py
     process_broker_worker.py
     public_task_registry.py
     resolved_config.py
@@ -707,6 +730,7 @@ benchmarks/table2/pilot/
     webarena_source_authority.json
 
 scripts/
+    validate_table2_deployment_authority.py
     export_pc01_table2_artifacts.py
     audit_pc01_training_action_values.py
     verify_pc01_processor_parity.py
@@ -1848,6 +1872,17 @@ an explicitly approved sandbox/safety policy.
 
 ## 14. Statistical analysis
 
+This section specifies planned estimators and tests, but the present registry
+deliberately does not supply the decision rule that maps their outputs to paper
+claim statuses. Section 7 of `docs/TABLE2_OPERATOR_INPUTS_REQUIRED.md` is the
+final-only preregistration lock: its hierarchy, direction/alpha, Holm/test and
+bootstrap-interval interpretation, zero-case handling, contrast semantics, and
+P1--P4 diagnostic thresholds must be materialized in a versioned,
+machine-executable registry revision before any final-task outcome is opened.
+PC-01 pilot outcomes may not be used to choose that rule. Until the lock is
+complete, every paper claim and Table 2 cell remains `N/R`; every PC-01 run
+remains `PILOT_ONLY`.
+
 ### 14.1 Paired design
 
 Every system attempts the same task IDs and registered repetitions. Use:
@@ -2248,12 +2283,13 @@ are separate inputs; their five shared origins must agree exactly.
    same-process sealed-page engineering fixture, and cleanup on success,
    evaluator error, and runtime abort. That broker demonstrates reviewed-code
    message flow only; it is not live-campaign authority. A separate AF_UNIX,
-   HMAC-authenticated process architecture now provides five allowlisted
-   runtime operations (`reset`, `observe`, `execute`, `terminal`, and `close`),
+   HMAC-authenticated process architecture now provides six allowlisted
+   runtime operations (`reset`, `observe`, `execute`, nondispatched rejected-
+   action registration, `terminal`, and `close`),
    exact outer request/result envelopes, recursive registered
    sensitive-key rejection, peer-process checks, distinct control credentials,
    authenticated PID/source-bound readiness, and source/session-bound lifecycle
-   receipts. All eight request/result schema paths now require the exact
+   receipts. All twelve request/result schema paths now require the exact
    registered reset request/receipt, `ConcreteAction`, BrowserGym causal
    `Observation`, action-bound `AdapterExecution`, verifier-receipt binding,
    and opaque terminal-signal records, including their closed nested mappings.
@@ -2263,7 +2299,13 @@ are separate inputs; their five shared origins must agree exactly.
    immediately pending action, each reset/post-state must receive its exact
    causal verifier receipt before execution or close can continue, and
    readiness rejects repository-local imports outside the authenticated source
-   closure. A permitted scalar such as visible browser text can still carry
+   closure. A generic child-only, source-attested `EnvironmentAdapter` factory
+   bridge covers those six operations, and the child owns the sealed stream for
+   reset/action/final callbacks. Only an orchestration capability can request
+   finalization. No concrete live BrowserGym plus sealed-evaluator factory or
+   credential/configuration capability is registered;
+   the real-backend transitive-closure item therefore remains pending.
+   A permitted scalar such as visible browser text can still carry
    content of unknown origin, so local schema evidence does not prove runtime
    value provenance or semantic oracle isolation. The
    handoff/runner
@@ -2351,9 +2393,11 @@ out-of-scope top-level keys are rejected before handoff construction.
   and `expected_bridge_identity` authorities, a validated split preflight, and
   a v2 semantic dependency lock containing separate `browser_host` and
   `dgx_host` identities, the per-process remeasurement responsibilities, and
-  the explicit non-authorizing DGX dispatch-receipt requirement. Because this
-  source version has no registered external receipt schema or trust anchor,
-  this split topology can be frozen for compatibility review but cannot launch;
+  the explicit non-authorizing DGX dispatch-receipt requirement. The
+  verification-only Ed25519 schema is present, but no independent authority is
+  registered, the local ledger is not an external/global replay anchor, and the
+  verifier is not integrated into dispatch. This split topology can therefore
+  be frozen for compatibility review but cannot launch;
 - `pc01_live_deployment_manifest` and
   `pc01_live_deployment_evidence_root`, pointing to the independently measured
   seven-capability manifest and the evidence package it references. The source
@@ -2437,7 +2481,7 @@ out-of-scope top-level keys are rejected before handoff construction.
   row Gold train split plus 608-row retry supplement (24,107 rows total). The
   parity receipt must pass the production validator with pre/post/recovery
   tensor streams, all six action classes, exact implementations, the exact
-  live names and source hashes of all nine registered callables, and the five
+  live names and source hashes of all nine model/runtime callables, and the five
   registered training/preprocessing sources,
   including `src/web_agent/data/recovery_transitions.py`. The bundle preserves
   `runtime_ready: false` as an evidence-only statement. Live runtime readiness
@@ -2594,7 +2638,8 @@ live deployment and exact factory identity, then writes the deterministic
 provider-boundary receipt without importing or invoking the factory. A separate
 receipt is required for the probe and target because it binds that campaign's
 immutable state. The receipt's scope is
-`REVIEWED_CODE_ORACLE_FREE_DATAFLOW_ONLY`: it records a same-process factory and
+`REVIEWED_CODE_ORACLE_FREE_DATAFLOW_ONLY`: it records the same-process model-
+operations provider factory and
 `kernel_filesystem_sandbox: false`. It proves which typed data the reviewed
 entrypoint is passed; it is not a sandbox or a hostile-code security claim.
 It also cannot repair the separate page-broker deployment-evidence gap: this
@@ -2633,16 +2678,16 @@ Every callable supplied by the runtime integration or sealed-evaluator
 bindings must resolve to a repository source path whose current SHA-256 occurs
 in the frozen runner attestation. This catches accidental use of an unregistered
 backend, helper, evaluator, or measurement callback. External framework/model
-methods therefore need a thin attested repository
-wrapper instead of being injected directly. In the currently wired production
-factory, the evaluator remains an in-process, source-attested trusted component:
-the callable check and the before/after backend-state digest are scientific
-integrity controls, not an OS sandbox. The separately tested process-broker
-fixture does not change that fact and cannot authorize live dispatch until a
-real WebArena backend is wired and independently attested. Hostile attested
-Python could still inspect globals or arbitrary closure object graphs;
-evaluating adversarial third-party code requires the registered external
-process/container authority described above.
+methods therefore need a thin attested repository wrapper instead of being
+injected directly. Ordinary production execution now requires the
+source-attested process-isolated WebArena path; the older in-process broker and
+recovery fixtures are unreachable legacy engineering paths and cannot
+authorize live dispatch. The generic child bridge is implemented, but the
+concrete live BrowserGym plus sealed-evaluator child factory and its external
+attestation remain absent. Callable/source checks are scientific-integrity
+controls, not a hostile-code sandbox. Evaluating adversarial third-party code
+still requires the registered external process/container authority described
+above.
 
 There is no additional Table 2 model seed: repeat neither the memory build nor
 the browser campaign for seeds 43--44. The only matched model seed is 42.
@@ -3153,11 +3198,13 @@ environment rather than collapsed into one failure bucket.
 - [x] Portable matched E0--E3 live-readiness receipt and dispatch guard
 - [x] Same-process broker retained only as reviewed-code engineering evidence
 - [x] Source-bound authenticated process-broker architecture and local lifecycle/adversarial tests
-- [x] All eight operation-specific request/result schemas, causal reset/action/verifier state, confined screenshot transport, and complete loaded-source closure registered and receipt-bound
+- [x] All twelve operation-specific request/result schemas, including nondispatched rejected-action registration, causal reset/action/verifier state, confined screenshot transport, and complete loaded-source closure registered and receipt-bound
+- [x] Verification-only Ed25519 deployment challenge/receipt schemas, empty packaged authority registry, and adversarial local cryptographic replay tests
 - [x] Semantic dependency-lock generator and fail-closed cross-validation
-- [ ] Real WebArena broker backend's complete transitive source closure registered and hash-bound
-- [ ] Broker IPC timeout frozen against measured live reset/settle behavior
-- [ ] Internal browser-error URL representation and cross-layer broker observation test registered
+- [x] Generic source-attested WebArena broker bridge and its repository source closure registered and hash-bound
+- [ ] Concrete live BrowserGym plus sealed-evaluator factory's complete transitive source closure registered and hash-bound
+- [ ] Broker IPC timeout frozen against measured live reset/settle/normal-and-failed-cleanup behavior (strict outcome-blind calibration v2, typed immutable local authority bundle, deterministic derivation, dedicated framed readiness channel, absolute IPC deadlines, replay-only broker binding, and adversarial tests implemented; live 50-task measurements, typed safe-probe/harness/source/non-persistence receipts, and external authority cross-binding remain absent, so true `EVALUATION` is closed)
+- [x] Internal browser-error URL representation and cross-layer broker observation test registered
 - [ ] Runtime-visible value-provenance authority registered
 - [ ] Independently authenticated campaign-host isolation receipt and trust anchor (plus DGX startup/model-load/per-block receipts for split deployment)
 - [ ] Isolated live first-normal-block readiness probe PASS and target-local receipt frozen

@@ -21,11 +21,12 @@ the later validation-only PC-01/PC-02/PC-03 selection and final freeze.
 
 **Current hard blocker:** the repository now contains a source-bound AF_UNIX
 process-broker architecture with HMAC-authenticated JSON messages, peer
-PID/UID checks, distinct runtime/control keys, five allowlisted runtime
-operations (`reset`, `observe`, `execute`, `terminal`, and `close`),
+PID/UID checks, distinct runtime/control keys, six allowlisted runtime
+operations (`reset`, `observe`, `execute`, nondispatched rejected-action
+registration, `terminal`, and `close`),
 exact outer request/result envelopes, recursive registered sensitive-key
 rejection, source- and PID-bound authenticated readiness, and authenticated
-cleanup receipts. Its eight registered request/result schema paths enforce the
+cleanup receipts. Its twelve registered request/result schema paths enforce the
 exact reset request/receipt, `ConcreteAction`, BrowserGym causal `Observation`,
 action-bound `AdapterExecution`, verifier-receipt binding, and opaque terminal
 signal, including exact nested mappings. Screenshot paths are confined to one
@@ -57,18 +58,72 @@ inspection of evaluator memory/state, an allowlisted scrubbed evaluator
 environment with no inherited runtime/provider secrets, authenticated peer
 identity, and cleanup under those same controls. Promotion additionally
 requires externally reviewable provenance showing where every runtime-visible
-value came from. The registered schema in this source version has the exact
-inner contracts, but intentionally has neither that provenance authority nor a
-trust anchor capable of accepting a deployment receipt.
+value came from. The registered inner contracts do not establish that
+provenance. A separate verification-only Ed25519 receipt/challenge schema now
+exists, but its packaged authority registry is deliberately empty, its local
+ledger is not an external/global replay anchor, and it is not integrated as
+dispatch authority. There is therefore still no registered independent key or
+trust path capable of promoting a live deployment.
+For `PILOT_ONLY`, requiring that independent Ed25519/global-replay authority is
+conservative hardening beyond the supplied plan's explicit hash/isolation
+language and remains `AWAITING_PROJECT_OWNER_RATIFICATION`; see
+`docs/TABLE2_OPERATOR_INPUTS_REQUIRED.md` Section 5. This runbook describes the
+current fail-closed implementation, not a silently approved scientific change.
 
-Before a real WebArena backend can replace the deterministic broker fixture,
-its complete repository-local transitive source set must be enumerated and
-hash-bound (the current worker deliberately rejects any unregistered import),
-the per-request IPC timeout must be frozen against the live reset/settle
-budget, and observable internal browser-error URLs such as a narrowly defined
-`about:blank`/Chromium error state must receive an explicit schema mapping.
-Until those three integration details and their live cross-layer tests exist,
-fail-closed rejection is expected and is not an infrastructure rerun license.
+The generic child-only WebArena adapter bridge, strict dependency-source
+closure mechanism, typed internal browser-error URL mapping, child-owned
+sealed stream, and orchestration-only episode finalizer now exist and are
+required by the production runner. The concrete live BrowserGym plus sealed-
+evaluator factory's complete transitive closure is still absent. The broker
+IPC-timeout calibration contract is also
+implemented but deliberately unfulfilled: production evidence must contain
+one preregistered, outcome-blind monotonic timing block for every task in the
+approved 50-task registry, covering worker startup, reset/reset settlement,
+ordinary and recovery execution/settlement/observation, opaque terminal
+checks, runtime close, normal control shutdown, and control shutdown after a
+registered safe injected runtime failure. The control timeout is derived from
+the maximum of real adapter close, normal shutdown, and failed-runtime
+shutdown. Ordinary probes and recovery probes must each independently cover
+all six action classes, be frozen before measurement, pass typed action-safety
+approvals, and have an independent per-task reset-state non-persistence
+receipt. Every measurement row must be a member of those typed manifests;
+digest-shaped strings alone are insufficient. Rewards, evaluator
+outputs, oracle labels, paper metrics, synthetic pages, and configured timeout
+bounds cannot substitute for a measurement.
+
+The derivation is fixed in source before outcomes: for each broker operation,
+take its maximum registered monotonic duration, apply `2 × maximum + 1000 ms`,
+round upward to 100 ms, respect the already frozen BrowserGym operation floors,
+and reject rather than clip any value exceeding the setup/task budget. The
+calibration artifact is size-bounded, immutable, and non-authorizing and must
+later be cross-bound by the independent deployment receipt. Engineering fixtures retain explicit
+developer timeouts under `ENGINEERING_FIXTURE_ONLY`. Synthetic/raw measured
+evidence can run only under `MEASURED_CALIBRATION_REPLAY_ONLY`, whose receipt
+is explicitly non-authorizing and production-ineligible. `EVALUATION` rejects
+raw in-memory evidence, requires an immutable calibration artifact plus the
+complete typed expected-authority bundle, validates every local relationship,
+and then still fails before worker launch until an external authority
+cross-binds that bundle. Caller-injected timeouts are forbidden in either
+measured scope. Launch configuration and authenticated readiness use a
+dedicated framed socket rather than stdout; stdout/stderr cannot impersonate
+readiness or create pipe backpressure. Connect, send, every partial receive,
+control shutdown, and normal worker wait share absolute monotonic calibrated
+deadlines; forced process reaping uses the separately calibrated startup/setup
+bound rather than an unmeasured constant. No collection CLI exists yet because
+the concrete live BrowserGym plus sealed-evaluator adapter factory,
+calibration collector/harness, and preregistered safe probe-action manifest do
+not exist. That is the current expected stop condition, not an infrastructure
+rerun license.
+
+Campaign-package persistence and deployment-receipt cross-binding for this
+artifact are intentionally still pending. The active task registry has not
+been approved for live execution, no safe calibration-probe manifest exists,
+and no live measurement has been made. Therefore no handoff/campaign field may
+be populated with synthetic evidence, and the unchecked timeout-readiness item
+below must remain open. Once those operator inputs exist, the handoff schema
+must copy the immutable calibration bytes, bind their artifact/content hashes,
+and require the external deployment authority to attest the same binding
+before this prerequisite can be promoted.
 
 ## Freeze prerequisites
 
@@ -121,9 +176,11 @@ executing Python/platform/package stack but only compares the supplied
 model/source/environment record; it does not independently generate that
 record. A future startup/model-load/per-block receipt must bind campaign ID,
 block ID, fresh nonce, semantic-lock hash, DGX host/runtime identities, phase,
-and issue time. No receipt schema or external trust anchor exists in this source
-version. Split dispatch therefore fails closed; a browser-side self-claim or
-copied JSON cannot substitute. Single-host v1 locks remain supported.
+and issue time. The source can verify the four exact signed phases, but the
+packaged registry has no authority, no independent key or global replay anchor
+is registered, and the verifier is not connected to dispatch. Split dispatch
+therefore fails closed; a browser-side self-claim or copied JSON cannot
+substitute. Single-host v1 locks remain supported.
 
 Both runner attestations and their frozen `runner_source/` trees must include
 the exact current bytes for:
@@ -135,15 +192,21 @@ the exact current bytes for:
 - `src/web_agent/eval/table2/__init__.py`
 - `src/web_agent/eval/table2/live_compatibility.py`
 - `src/web_agent/eval/table2/campaign.py`
+- `src/web_agent/eval/table2/production_runner.py`
 - `scripts/run_table2_evaluation.py`
 - `src/web_agent/eval/table2/evidence_validation.py`
 - `src/web_agent/eval/table2/common.py`
 - `src/web_agent/eval/table2/schedule.py`
 - `src/web_agent/eval/table2/package_validator.py`
 - `src/web_agent/eval/table2/dependency_lock.py`
+- `src/web_agent/eval/table2/execution_guard.py`
 - `src/web_agent/eval/table2/process_broker.py`
+- `src/web_agent/eval/table2/process_broker_finalization.py`
 - `src/web_agent/eval/table2/process_broker_protocol.py`
 - `src/web_agent/eval/table2/process_broker_runtime.py`
+- `src/web_agent/eval/table2/sealed_verifier.py`
+- `src/web_agent/eval/table2/process_broker_timeout.py`
+- `src/web_agent/eval/table2/process_broker_webarena_backend.py`
 - `src/web_agent/eval/table2/process_broker_worker.py`
 - `src/web_agent/runtime/__init__.py`
 - `src/web_agent/runtime/contracts.py`

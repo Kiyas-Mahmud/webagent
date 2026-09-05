@@ -13,11 +13,13 @@ import tempfile
 from typing import Any
 
 from .common import (
+    CAMPAIGN_PROFILE_PILOT,
     SCHEMA_VERSION,
     SchemaError,
     Table2Error,
     atomic_write_json,
     canonical_json_bytes,
+    classify_campaign_profile,
     read_json,
     sha256_file,
     sha256_json,
@@ -34,6 +36,7 @@ from .package_validator import (
     _derive_manual_audit_selection_evidence,
     _load_audit_json_without_duplicate_keys,
     _load_selected_analysis_records_unchecked,
+    adjudication_gated_pilot_publication_status,
     load_selected_analysis_records,
     load_yaml,
     validate_manual_audit_reviewer_codebook,
@@ -240,6 +243,11 @@ def summarize_campaign(
     # It is therefore the final permitted write before the publication gate.
     audit_selection = build_manual_audit_selection(root, records)
     campaign_manifest = read_json(root / "campaign_manifest.json")
+    campaign_profile = classify_campaign_profile(
+        campaign_manifest,
+        context="summary campaign manifest",
+        require_campaign_mode=True,
+    )
     publication_status = _summary_publication_status(
         root,
         campaign_manifest,
@@ -248,7 +256,7 @@ def summarize_campaign(
     )
     diagnostic_status = (
         publication_status
-        if campaign_manifest.get("evidence_label") == "PILOT_ONLY"
+        if campaign_profile == CAMPAIGN_PROFILE_PILOT
         else "PILOT_ONLY"
     )
     metrics["publication_status"] = publication_status
@@ -317,20 +325,37 @@ def _summary_publication_status(
 ) -> str:
     """Separate an explicit draft from a human-complete pilot publication."""
 
-    pilot = campaign_manifest.get("evidence_label") == "PILOT_ONLY"
+    pilot = (
+        classify_campaign_profile(
+            campaign_manifest,
+            context="summary publication campaign manifest",
+            require_campaign_mode=True,
+        )
+        == CAMPAIGN_PROFILE_PILOT
+    )
     if draft_pilot:
         if not pilot:
             raise Table2Error("draft_pilot is valid only for a PILOT_ONLY campaign")
         return DRAFT_PILOT_STATUS
+    if pilot:
+        if (
+            adjudication_gated_pilot_publication_status(root)
+            != "PILOT_ONLY"
+        ):
+            raise Table2Error(
+                "final PILOT_ONLY summary/export requires completed terminal "
+                "campaign evidence and human-attested, hash-bound "
+                "outcome-label-hidden adjudication"
+            )
+        return "PILOT_ONLY"
     try:
         validate_manual_adjudication_completion(root)
     except (FileNotFoundError, OSError, TypeError, ValueError, KeyError, SchemaError) as exc:
-        boundary = "final PILOT_ONLY" if pilot else "locked-final"
         raise Table2Error(
-            f"{boundary} summary/export requires completed, human-attested, "
+            "locked-final summary/export requires completed, human-attested, "
             f"hash-bound outcome-label-hidden adjudication: {exc}"
         ) from exc
-    return "PILOT_ONLY" if pilot else validation_status
+    return validation_status
 
 
 def _write_episode_csv(aggregate: Path, episodes: list[dict[str, Any]]) -> None:

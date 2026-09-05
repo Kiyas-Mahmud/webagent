@@ -9,12 +9,18 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+import hashlib
 import math
+from pathlib import Path
 import signal
 from threading import current_thread, main_thread
 from time import monotonic
 from typing import TypeVar
 
+
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = hashlib.sha256(
+    Path(__file__).resolve().read_bytes()
+).hexdigest()
 
 _E = TypeVar("_E", bound=BaseException)
 

@@ -19,6 +19,115 @@ Historical source corpus: Kaggle `thesisdata` →
 steps; train 38,875 / val 16,070 / test 16,020). Current experiment row/split
 authority comes only from each reviewed Gold v2.8 run manifest.
 
+## 2026-09-05 — Table 2 execution-boundary hardening and external-input stop
+
+- Table 2 remains `N/R`. PC-01 epoch 6, seed 42 remains a provisional
+  `PILOT_ONLY` engineering backbone; this work did not retrain PC-01, add model
+  seeds, change checkpoint selection, touch the locked Web-Gold test, or modify
+  the registered four-pillar training design.
+- Revalidated the two public Kaggle source versions without copying the 22 GB
+  image corpus. The authenticated train-only files remain
+  `split_train.json` (23,499 rows; SHA-256
+  `0522807d74256fa303a20d5b8f3bb1653de44aad187660a655580c708c7ae3de`)
+  and `supplement_train.json` (608 rows; SHA-256
+  `67ade5e971e8fa2f58ec8a269b1e476ae8cc2349a89eb3e3e0d5e161c47c1098`).
+  Validation/test reads remain zero. Screening found 6,126 attempted recovery
+  records and 2,065 label-only candidate screens, but none is represented as
+  an eligible P4 memory without independent recovery/final-success provenance,
+  joint duplicate evidence, checkpoint embeddings, and train-only calibration.
+- Verified the isolated local x86 browser environment at BrowserGym/WebArena
+  0.14.3, `libwebarena` 0.0.4, Playwright 1.44.0, and Chromium
+  125.0.6422.26 with a 1280x720 launch. All seven WebArena services, live reset,
+  credential capability, and evaluator parity remain absent; this is a local
+  compatibility result only.
+- Added a generic source-attested child-only WebArena process-broker backend.
+  It accepts only the oracle-blind task projection, exposes reset/observe/
+  execute/rejected-registration/terminal/close through twelve exact schemas,
+  confines screenshot
+  transport, maps a narrow observable internal-browser-error state, preserves
+  action-bound infrastructure-invalid evidence, poisons ambiguous sessions,
+  and rejects unregistered repository imports. Its source is now included in
+  all three synchronized broker architecture closures.
+- The generic bridge is not a complete live production adapter. Ordinary
+  PC-01 production execution now mandates the distinct-process binding and
+  cannot select the retained same-process engineering fixture. The child owns
+  the sealed stream, writes reset/action/final evidence directly, and exposes
+  finalization only through an orchestration capability; the runtime adapter
+  retains no sink, key, target, writer, evidence socket, or sealed path. Live
+  execution still requires a concrete BrowserGym plus sealed-evaluator child
+  factory, scrubbed credential capability, measured timeout authority, and
+  external deployment/value-provenance evidence. None was invented locally.
+- Added timeout-calibration schema v2 and a distinct
+  `MEASURED_CALIBRATION_REPLAY_ONLY` scope. A complete local bundle must bind
+  the ordered 50 tasks, topology, host/config, preflight, dependency/service
+  identities, budgets, safe probes, source closure, measurements, and
+  non-persistence evidence. Ordinary and recovery probes separately cover all
+  six P3 actions; failed-runtime cleanup is measured. Timeouts are rederived as
+  `ceil_100ms(2 * max + 1000ms)` subject to frozen floors/budgets. Broker
+  startup/readiness now uses a dedicated framed socket, and connect/send/
+  partial-receive/shutdown/wait paths use absolute monotonic deadlines.
+  Immutable inputs reject symlinks, hardlinks, writable/raced/ambiguous/
+  non-finite/oversized files. True `EVALUATION` rejects in-memory or locally
+  self-consistent evidence and remains closed until external cross-binding.
+- Added verification-only Ed25519 deployment authority schemas for DGX
+  startup, model-load completion, before-block, and after-block/value-
+  provenance receipts. Challenges are single-use within one locked ledger;
+  issue and consume cryptographically replay every preserved signature under
+  the active registry. The CLI has no signing/key-generation path. The
+  packaged registry intentionally has zero authorities, and the local ledger
+  explicitly is not a global replay anchor or dispatch authority. No campaign
+  authorization is claimed. Requiring that independent authority for the
+  engineering pilot is conservative hardening beyond the supplied plan's
+  explicit hash/isolation language and remains
+  `AWAITING_PROJECT_OWNER_RATIFICATION`; it has not been silently adopted as a
+  new scientific-design requirement.
+- Campaign kind/evidence label is now one strict joint profile across handoff,
+  freeze, validation, execution, summary, and paper-claim paths: only
+  `engineering_pilot` + `PILOT_ONLY` or `locked_final` + `FINAL_LOCKED` is
+  accepted, and locked-final smoke is forbidden. The standard-library
+  bootstrap mirrors these rules without importing project code before source
+  attestation.
+- Live evidence files now reject hardlinks as well as symlinks and mutation.
+  PC-01 checkpoint compatibility input must also remain tree-disjoint from the
+  repository. No fixture, copied ledger, self-authored signature, or shaped
+  hash can promote external evidence. Campaign-relative model/evidence payloads
+  are opened with no-follow descriptor traversal and completely reauthenticated
+  across every role and seed before handoff; the source launcher likewise
+  verifies single-link regular files before importing repository code. These
+  are non-hostile-operator integrity checks, not a same-UID hostile-tamper
+  boundary.
+- Executor-local safety and unresolved-parameter rejections now register one
+  exact causal `ConcreteAction`/`REJECTED` result in the child without browser
+  dispatch, consume exactly one executor step, and are append-logged before a
+  registration fault propagates. Rejection messages have a 4,096-character
+  bound with an exact SHA-256 commitment for omitted oversized details.
+- Child-owned sealed records now have an exact closed schema and strict JSON
+  failure semantics, finalization binds episode/task/system/repeat/model-seed,
+  and descriptor-anchored verification rejects path, inode, hardlink, lock,
+  malformed-JSON, and post-factory lifecycle substitutions. Pilot aggregates
+  remain `DRAFT_PILOT_ONLY` until a complete schedule and valid blinded audit
+  permit `PILOT_ONLY`; locked-final data cannot use that pilot promotion path.
+- The historical WebArena 0--49 registry remains blocked: 47 tasks require the
+  unsupported ANSWER/STOP interface. The non-mutating page-state replacement
+  set in `docs/TABLE2_PILOT_TASK_INTERFACE_DECISION.md` remains
+  `AWAITING_USER_APPROVAL`; no task manifest was silently changed and no model
+  outcome was observed.
+- Final stable verification: 207 focused process/runner/rejection tests passed;
+  the complete Table 2 suite passed **1,509/1,509**; and the repository-wide
+  suite reached **1,630 passed** with the same four known pre-existing failures
+  outside this Table 2 change (historical v2.3/v2.5 notebook stage literals,
+  saved output in the historical v2.7 resume notebook, and a legacy model test
+  that bypasses initialization and lacks the bbox flags). No live matched
+  readiness block, 60 controlled live episodes, 200 ordinary WebArena
+  episodes, blinded audit, or paper Table 2 result has been produced.
+- Remaining external inputs are the explicit task-interface decision, Kaggle
+  authentication/execution and independent P4 provenance, DGX CUDA/model-
+  forward evidence, the seven-service WebArena deployment and exact live child
+  factory contract, the project-owner decision on whether independent lab
+  authority/global replay is mandatory for `PILOT_ONLY` (and, if retained,
+  its public key and signed phase receipts), and the PC-02/PC-03 validation packages.
+  The exact operator checklist is `docs/TABLE2_OPERATOR_INPUTS_REQUIRED.md`.
+
 ## 2026-09-04 — Research-locked Table 2 PC-01 pilot preparation
 
 - The active Table 2 profile is now `table2-pc01-pilot-v1`: PC-01 epoch 6,
@@ -198,7 +307,7 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   monotonic sequence/nonces, peer PID/UID checks, separate control credentials,
   source-bound launch receipts, and authenticated cleanup receipts are covered
   by adversarial local tests. These receipts are explicitly local architecture
-  evidence, not campaign-host authority. All eight registered request/result
+  evidence, not campaign-host authority. All nine registered request/result
   schema paths, sensitive-key rejection, reset request/receipt,
   `ConcreteAction`, BrowserGym causal `Observation`, action-bound
   `AdapterExecution`, verifier-receipt binding, opaque terminal signal, and

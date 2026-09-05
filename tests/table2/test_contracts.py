@@ -10,6 +10,7 @@ from web_agent.runtime.contracts import (
     ExecutionEvidence,
     ExecutionResult,
     ExecutionStatus,
+    MAX_EXECUTION_MESSAGE_CHARS,
     MemoryQuery,
     MemoryQueryResult,
     Observation,
@@ -69,6 +70,14 @@ def test_provider_and_execution_evidence_fail_closed_on_internal_contradictions(
             executor_step=1,
             state_changed=False,
             evidence=evidence,
+        )
+    with pytest.raises(ValueError, match="registered bound"):
+        ExecutionResult(
+            action_id="action-1",
+            status=ExecutionStatus.REJECTED,
+            executor_step=1,
+            state_changed=False,
+            message="x" * (MAX_EXECUTION_MESSAGE_CHARS + 1),
         )
 
 

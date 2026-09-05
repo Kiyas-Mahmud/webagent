@@ -20,11 +20,13 @@ from typing import Any, Mapping
 import yaml
 
 from web_agent.eval.table2.common import (
+    CAMPAIGN_PROFILE_PILOT,
     SCHEMA_VERSION,
     SchemaError,
     Table2Error,
     atomic_write_json,
     canonical_json_bytes,
+    classify_campaign_profile,
     read_json,
     require_keys,
     sha256_file,
@@ -401,16 +403,13 @@ def _require_output_authority_disjoint(
 def _campaign_is_pilot(campaign: Mapping[str, Any]) -> bool:
     """Require one exact campaign-kind/evidence-label profile."""
 
-    profile = (
-        str(campaign.get("campaign_kind") or ""),
-        str(campaign.get("evidence_label") or ""),
-    )
-    if profile == ("engineering_pilot", "PILOT_ONLY"):
-        return True
-    if profile == ("locked_final", "FINAL_LOCKED"):
-        return False
-    raise SchemaError(
-        "handoff campaign_kind/evidence_label profile is not registered"
+    return (
+        classify_campaign_profile(
+            campaign,
+            context="handoff campaign",
+            default_campaign_mode="evaluation",
+        )
+        == CAMPAIGN_PROFILE_PILOT
     )
 
 
@@ -1291,6 +1290,17 @@ def prepare_handoff(
             "handoff campaign profile and protocol selection mode disagree"
         )
     requires_pc01_checkpoint_compatibility = selection_is_pc01
+    checkpoint_compatibility_source: Path | None = None
+    if requires_pc01_checkpoint_compatibility:
+        checkpoint_compatibility_source = _require_external_tree_disjoint(
+            _spec_path(
+                spec_path,
+                spec.get("pc01_checkpoint_compatibility_receipt"),
+                field="pc01_checkpoint_compatibility_receipt",
+            ),
+            repository_root=repo,
+            field="pc01_checkpoint_compatibility_receipt",
+        )
     deployment_topology = str(
         spec.get("webarena_deployment_topology") or ""
     ).strip()
@@ -1553,20 +1563,8 @@ def prepare_handoff(
         "pc01_checkpoint_compatibility_receipt"
     )
     if requires_pc01_checkpoint_compatibility:
-        checkpoint_compatibility_source = _spec_path(
-            spec_path,
-            supplied_checkpoint_compatibility,
-            field="pc01_checkpoint_compatibility_receipt",
-        )
-        resolved_checkpoint_compatibility = checkpoint_compatibility_source.resolve()
-        if (
-            resolved_checkpoint_compatibility == repo
-            or repo in resolved_checkpoint_compatibility.parents
-        ):
-            raise SchemaError(
-                "pc01_checkpoint_compatibility_receipt must be measured outside "
-                "the source checkout"
-            )
+        if checkpoint_compatibility_source is None:  # pragma: no cover - guarded above
+            raise SchemaError("PC-01 checkpoint compatibility source is absent")
         (
             _,
             checkpoint_compatibility_binding,

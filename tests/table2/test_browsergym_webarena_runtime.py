@@ -16,9 +16,14 @@ from web_agent.benchmarks.browsergym_webarena import (
     PinnedBrowserGymAPI,
     _BrowserGymEpisodeCallbacks,
     _action_code,
+    _runtime_visible_page_url,
     callable_source_sha256,
     load_pinned_browsergym_api,
     module_source_sha256,
+)
+from web_agent.eval.table2.process_broker_protocol import (
+    registered_browser_error_observation_url,
+    validate_runtime_result,
 )
 from web_agent.eval.table2.sealed_page_broker import (
     create_one_way_sealed_page_broker,
@@ -212,7 +217,7 @@ def _task() -> TaskSpecification:
     )
 
 
-def _callbacks(tmp_path: Path):
+def _callbacks(tmp_path: Path, *, execute_python_code=_fake_execute):
     auth = tmp_path / ".auth"
     auth.mkdir()
     (auth / "gitlab_state.json").write_text(
@@ -222,7 +227,7 @@ def _callbacks(tmp_path: Path):
     runtime, _ = create_one_way_sealed_page_broker()
     api = PinnedBrowserGymAPI(
         browser_env_class=_FakeBrowserEnv,
-        execute_python_code=_fake_execute,
+        execute_python_code=execute_python_code,
         package_versions=PINNED_WEBARENA_PACKAGES,
         production_loader=False,
     )
@@ -298,6 +303,128 @@ def test_six_actions_compile_without_answer_or_stop_channel() -> None:
         compile(code, f"<{action_type.value}>", "exec")
         assert "send_message_to_user" not in code
         assert "report_infeasible" not in code
+
+
+def test_only_registered_observable_browser_errors_gain_a_runtime_url() -> None:
+    assert (
+        _runtime_visible_page_url(
+            "https://gitlab.test/issues",
+            browser_error_kind=None,
+        )
+        == "https://gitlab.test/issues"
+    )
+    expected = registered_browser_error_observation_url("TIMEOUT_ERROR")
+    assert (
+        _runtime_visible_page_url(
+            "chrome-error://chromewebdata/",
+            browser_error_kind="TIMEOUT_ERROR",
+        )
+        == expected
+    )
+    assert (
+        _runtime_visible_page_url(
+            "about:blank",
+            browser_error_kind="TIMEOUT_ERROR",
+        )
+        == expected
+    )
+    for url, error_kind in (
+        ("chrome-error://chromewebdata/", None),
+        ("chrome-error://chromewebdata:9/", "TIMEOUT_ERROR"),
+        ("CHROME-ERROR://CHROMEWEBDATA/", "TIMEOUT_ERROR"),
+        ("chrome-error://chromewebdata", "TIMEOUT_ERROR"),
+        ("chrome-error://chromewebdata/?detail=x", "TIMEOUT_ERROR"),
+        ("chrome-error://user@chromewebdata/", "TIMEOUT_ERROR"),
+        ("chrome://settings", "TIMEOUT_ERROR"),
+        ("about:blank", None),
+    ):
+        with pytest.raises(BrowserGymWebArenaError, match="registered causal error"):
+            _runtime_visible_page_url(url, browser_error_kind=error_kind)
+    with pytest.raises(BrowserGymWebArenaError, match="safe absolute data"):
+        _runtime_visible_page_url(
+            object(),
+            browser_error_kind="TIMEOUT_ERROR",
+        )
+
+
+def test_browser_error_observation_survives_browsergym_to_process_broker(
+    tmp_path: Path,
+) -> None:
+    callbacks = _callbacks(tmp_path)
+    environment = callbacks.environment_factory(callbacks.task, 42)
+    environment.reset(seed=42)
+    browser = _FakeBrowserEnv.instances[-1]
+    browser.page.url = "chrome-error://chromewebdata/"
+    environment._last_action_error_kind = "TIMEOUT_ERROR"
+    raw = environment._capture(page_settled=True)
+    episode_id = "campaign:E2:webarena.44:repeat-0:seed-42"
+    observation = callbacks.observation_mapper(
+        raw,
+        episode_id,
+        ObservationStage.POST_ACTION,
+        "action-1",
+    )
+    expected_url = registered_browser_error_observation_url("TIMEOUT_ERROR")
+    assert observation.url == expected_url
+    assert observation.environment_error is True
+    assert observation.page_state["browser_error_kind"] == "TIMEOUT_ERROR"
+    value = {"observation": observation.to_dict()}
+    assert validate_runtime_result(
+        "runtime_observe",
+        value,
+        request_payload={
+            "episode_id": episode_id,
+            "task_id": "webarena.44",
+            "stage": "post_action",
+            "prior_action_id": "action-1",
+        },
+    ) == value
+    callbacks.abort_episode(episode_id, "webarena.44")
+
+
+def test_executed_browser_failure_reaches_post_action_observation(
+    tmp_path: Path,
+) -> None:
+    def execute_with_timeout(
+        code,
+        page,
+        *,
+        send_message_to_user,
+        report_infeasible_instructions,
+    ) -> None:
+        del code, send_message_to_user, report_infeasible_instructions
+        page.url = "chrome-error://chromewebdata/"
+        raise TimeoutError("fixture browser timeout")
+
+    callbacks = _callbacks(
+        tmp_path,
+        execute_python_code=execute_with_timeout,
+    )
+    environment = callbacks.environment_factory(callbacks.task, 42)
+    environment.reset(seed=42)
+    raw, _, _, _, _ = environment.step(_action_code(_action(ActionType.CLICK)))
+    assert raw.environment_error is True
+    assert raw.browser_error_kind == "TIMEOUTERROR"
+    settled = callbacks.settle(
+        environment,
+        raw,
+        ObservationStage.POST_ACTION,
+        3.0,
+        True,
+    )
+    episode_id = "campaign:E2:webarena.44:repeat-0:seed-42"
+    observation = callbacks.observation_mapper(
+        settled,
+        episode_id,
+        ObservationStage.POST_ACTION,
+        "action-1",
+    )
+    assert observation.url == registered_browser_error_observation_url(
+        "TIMEOUTERROR"
+    )
+    assert observation.environment_error is True
+    assert observation.page_state["browser_error_kind"] == "TIMEOUTERROR"
+    callbacks.abort_episode(episode_id, "webarena.44")
 
 
 def test_validation_disabled_wrapper_applies_six_fields_and_emits_causal_evidence(

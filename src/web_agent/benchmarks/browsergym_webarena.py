@@ -63,6 +63,10 @@ from web_agent.eval.table2.live_deployment import (
     REGISTERED_BROWSERGYM_VERSION,
     REGISTERED_VALIDATION_DISABLED_EXECUTION_PATH,
 )
+from web_agent.eval.table2.process_broker_protocol import (
+    ProcessBrokerProtocolError,
+    registered_browser_error_observation_url,
+)
 from web_agent.eval.table2.sealed_page_broker import (
     BrowserGymStartStateApplicationReceipt,
     BrowserGymValidationDisabledBoundary,
@@ -488,6 +492,10 @@ class BrowserGymCausalRawObservation:
             or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", self.browser_error_kind)
         ):
             raise ValueError("causal snapshot browser error kind is invalid")
+        if self.environment_error is not (self.browser_error_kind is not None):
+            raise ValueError(
+                "causal snapshot browser error flag and kind must agree"
+            )
         _require_sha256(self.snapshot_sha256, field_name="causal snapshot")
 
 
@@ -603,6 +611,49 @@ def _safe_origin(url: str) -> tuple[str, str, int | None]:
     except ValueError as exc:
         raise BrowserGymWebArenaError("WebArena URL contains an invalid port") from exc
     return parsed.scheme.lower(), parsed.hostname.lower(), port
+
+
+def _runtime_visible_page_url(
+    url: object,
+    *,
+    browser_error_kind: str | None,
+) -> str:
+    """Map only an observed Chromium error document to the typed runtime sentinel."""
+
+    if (
+        type(url) is not str
+        or not url
+        or url != url.strip()
+        or "\\" in url
+        or any(character.isspace() or ord(character) < 32 for character in url)
+    ):
+        raise BrowserGymWebArenaError("BrowserGym page URL is not safe absolute data")
+    if url in {"about:blank", "chrome-error://chromewebdata/"}:
+        if browser_error_kind is None:
+            raise BrowserGymWebArenaError(
+                "BrowserGym internal page URL is not a registered causal error observation"
+            )
+        try:
+            return registered_browser_error_observation_url(browser_error_kind)
+        except ProcessBrokerProtocolError as exc:
+            raise BrowserGymWebArenaError(
+                "BrowserGym browser error kind cannot form a runtime URL"
+            ) from exc
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError as exc:
+        raise BrowserGymWebArenaError("BrowserGym page URL is not parseable") from exc
+    if parsed.scheme.casefold() in {"http", "https"}:
+        _safe_origin(url)
+        if "@" in parsed.netloc or port == 0:
+            raise BrowserGymWebArenaError(
+                "BrowserGym page URL is outside the registered HTTP(S) schema"
+            )
+        return url
+    raise BrowserGymWebArenaError(
+        "BrowserGym internal page URL is not a registered causal error observation"
+    )
 
 
 def _validate_start_state_services(
@@ -1024,11 +1075,15 @@ class ValidationDisabledBrowserGymEnvironment:
         height = viewport.get("height")
         if type(width) is not int or type(height) is not int:
             raise BrowserGymWebArenaError("BrowserGym viewport dimensions changed type")
+        runtime_url = _runtime_visible_page_url(
+            getattr(page, "url", ""),
+            browser_error_kind=self._last_action_error_kind,
+        )
         self._sequence += 1
         state_identity = {
             "task_id": self.task.task_id,
             "sequence": self._sequence,
-            "url": str(getattr(page, "url", "")),
+            "url": runtime_url,
             "title": str(page.title()),
             "width": width,
             "height": height,

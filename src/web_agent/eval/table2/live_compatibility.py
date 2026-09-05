@@ -20,9 +20,11 @@ import stat
 from typing import Any
 
 from .common import (
+    CAMPAIGN_PROFILE_PILOT,
     SchemaError,
     Table2Error,
     atomic_write_json,
+    classify_campaign_profile,
     read_json,
     read_jsonl,
     safe_relative_path,
@@ -80,7 +82,7 @@ _EXPECTED_PILOT = {
     "campaign_kind": "engineering_pilot",
     "campaign_mode": "evaluation",
     "evidence_label": "PILOT_ONLY",
-    "publication_status": "PILOT_ONLY",
+    "publication_status": "DRAFT_PILOT_ONLY",
     "paper_table_status": "N/R",
     "matched_seeds": [42],
     "normal_block_count": 50,
@@ -136,8 +138,13 @@ def campaign_requires_live_compatibility(manifest: Mapping[str, Any]) -> bool:
     """Return whether a campaign is the real provisional 260-episode pilot."""
 
     return (
-        manifest.get("campaign_mode") == "evaluation"
-        and manifest.get("evidence_label") == "PILOT_ONLY"
+        classify_campaign_profile(
+            manifest,
+            context="live-compatibility campaign manifest",
+            require_campaign_mode=True,
+        )
+        == CAMPAIGN_PROFILE_PILOT
+        and manifest["campaign_mode"] == "evaluation"
     )
 
 
@@ -197,6 +204,15 @@ def _require_readiness_directory_closure(target_root: Path) -> Path:
 
 
 def _validate_pilot_manifest(manifest: Mapping[str, Any], *, field: str) -> None:
+    if (
+        classify_campaign_profile(
+            manifest,
+            context=field,
+            require_campaign_mode=True,
+        )
+        != CAMPAIGN_PROFILE_PILOT
+    ):
+        raise SchemaError(f"{field} is not the registered PC-01 pilot")
     mismatches = {
         key: {"expected": expected, "actual": manifest.get(key)}
         for key, expected in _EXPECTED_PILOT.items()
@@ -1373,9 +1389,14 @@ def require_live_compatibility_before_execution(
     """Fail immediately before a provisional pilot episode can reset a browser."""
 
     root = _require_regular_directory(campaign_dir, field="campaign")
+    campaign_profile = classify_campaign_profile(
+        manifest,
+        context="execution target campaign manifest",
+        require_campaign_mode=True,
+    )
     if manifest.get("campaign_mode") == "smoke":
         return None
-    if manifest.get("evidence_label") != "PILOT_ONLY":
+    if campaign_profile != CAMPAIGN_PROFILE_PILOT:
         readiness_root = root / LIVE_COMPATIBILITY_RELATIVE_PATH.parent
         if readiness_root.exists() or readiness_root.is_symlink():
             raise Table2Error(

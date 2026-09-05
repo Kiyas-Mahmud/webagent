@@ -24,6 +24,7 @@ import subprocess
 from time import perf_counter
 from typing import Any
 
+from web_agent.benchmarks.base import EnvironmentAdapter
 from web_agent.benchmarks.recovery_fixture import RecoveryFixtureCampaignRunner
 from web_agent.benchmarks.browsergym_webarena import (
     BrowserGymEpisodeAbortReceipt,
@@ -43,8 +44,10 @@ from web_agent.benchmarks.webarena import (
 )
 from web_agent.eval.table2.campaign import load_entrypoint
 from web_agent.eval.table2.common import (
+    CAMPAIGN_PROFILE_PILOT,
     SchemaError,
     Table2Error,
+    classify_campaign_profile,
     read_json,
     safe_relative_path,
     sha256_file,
@@ -76,6 +79,9 @@ from web_agent.eval.table2.package_validator import (
     MODEL_PAYLOAD_ROLES,
     PC01_CHECKPOINT_COMPATIBILITY_BINDING_FIELD,
     PC01_CHECKPOINT_COMPATIBILITY_RECEIPT_RELATIVE_PATH,
+    _public_model_payload_descriptor,
+    _reauthenticate_campaign_relative_model_payloads,
+    _validated_campaign_relative_model_payload,
     _validate_pc01_checkpoint_compatibility_readiness,
     _validate_model_evidence_bundle,
     require_pc01_provider_installation_ledger,
@@ -86,6 +92,7 @@ from web_agent.eval.table2.resolved_config import (
     load_resolved_config_identity,
 )
 from web_agent.eval.table2.sealed_verifier import (
+    SealedVerifierStreamTarget,
     SealedVerifierWriter,
     assert_no_verifier_evidence,
 )
@@ -620,6 +627,10 @@ FinalEvidenceWriter = Callable[
     [EpisodeSummary, SealedVerifierWriter, Path],
     OpaqueTerminalSignal,
 ]
+ProcessFinalEvidenceWriter = Callable[
+    [EpisodeSummary, Path],
+    OpaqueTerminalSignal,
+]
 AbortBrowserEpisode = Callable[[str, str], BrowserGymEpisodeAbortReceipt]
 
 
@@ -752,6 +763,85 @@ EvaluatorEpisodeFactory = Callable[
 
 
 @dataclass(frozen=True, slots=True)
+class ProcessIsolatedWebArenaEpisodeBinding:
+    """Child-owned browser/finalizer capabilities for one ordinary episode.
+
+    The environment adapter exposes only the runtime decision API.  Final
+    evidence and cleanup stay on distinct orchestration capabilities.  This
+    record deliberately contains no evaluator object or readable evidence
+    sink.
+    """
+
+    benchmark_version: str
+    environment_adapter: EnvironmentAdapter
+    finalize_episode_evidence: ProcessFinalEvidenceWriter
+    abort_episode: AbortBrowserEpisode
+    cleanup_episode: Callable[[], None]
+    broker_receipt: Mapping[str, Any]
+    frozen: bool = True
+    oracle_labels_exposed_to_runtime: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.benchmark_version.strip():
+            raise ValueError("process-isolated WebArena version is required")
+        if not isinstance(self.environment_adapter, EnvironmentAdapter):
+            raise TypeError(
+                "process-isolated WebArena binding requires EnvironmentAdapter"
+            )
+        if (
+            str(getattr(self.environment_adapter, "benchmark_id", "")).casefold()
+            != "webarena"
+            or getattr(self.environment_adapter, "benchmark_version", None)
+            != self.benchmark_version
+        ):
+            raise ValueError(
+                "process-isolated WebArena adapter identity differs"
+            )
+        for name in (
+            "finalize_episode_evidence",
+            "abort_episode",
+            "cleanup_episode",
+        ):
+            if not callable(getattr(self, name)):
+                raise TypeError(
+                    f"process-isolated WebArena binding {name} must be callable"
+                )
+        if not isinstance(self.broker_receipt, Mapping) or not self.broker_receipt:
+            raise ValueError(
+                "process-isolated WebArena binding requires a broker receipt"
+            )
+        required_receipt = {
+            "sealed_finalization_capability_available": True,
+            "sealed_finalization_required": True,
+            "sealed_finalization_operation_in_runtime_allowlist": False,
+            "child_owned_sealed_sink": True,
+            "runtime_adapter_sealed_capability_free": True,
+            "separate_evidence_transport_present": False,
+            "runtime_terminal_returns_outer_sealed_signal": True,
+            "sealed_finalization_returns_outer_sealed_signal": True,
+            "sealed_finalization_timeout_campaign_authority": False,
+            "external_deployment_authority": False,
+        }
+        if any(
+            self.broker_receipt.get(field) is not expected
+            for field, expected in required_receipt.items()
+        ):
+            raise ValueError(
+                "process-isolated WebArena broker receipt lacks finalization isolation"
+            )
+        if self.frozen is not True or self.oracle_labels_exposed_to_runtime is not False:
+            raise ValueError(
+                "process-isolated WebArena binding must be frozen and oracle-blind"
+            )
+
+
+ProcessIsolatedEpisodeFactory = Callable[
+    [TaskSpecification, Path, SealedVerifierStreamTarget],
+    ProcessIsolatedWebArenaEpisodeBinding,
+]
+
+
+@dataclass(frozen=True, slots=True)
 class EvaluationRuntimeBinding:
     """Complete return value required from the source-attested integration."""
 
@@ -760,6 +850,7 @@ class EvaluationRuntimeBinding:
     create_webarena_runtime: RuntimeEpisodeFactory
     frozen: bool = True
     oracle_labels_exposed_to_runtime: bool = False
+    create_process_isolated_webarena: ProcessIsolatedEpisodeFactory | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.runtime_identity, Mapping) or not self.runtime_identity:
@@ -773,6 +864,12 @@ class EvaluationRuntimeBinding:
                 raise ValueError("seed binding key and model_seed differ")
         if not callable(self.create_webarena_runtime):
             raise TypeError("oracle-blind WebArena runtime factory must be callable")
+        if self.create_process_isolated_webarena is not None and not callable(
+            self.create_process_isolated_webarena
+        ):
+            raise TypeError(
+                "process-isolated WebArena factory must be callable when supplied"
+            )
         if not self.frozen or self.oracle_labels_exposed_to_runtime:
             raise ValueError("evaluation integration must be frozen and oracle-blind")
 
@@ -799,6 +896,16 @@ class _ActiveWebArenaSession:
     guard_index: int = 0
 
 
+@dataclass(slots=True)
+class _ActiveProcessWebArenaSession:
+    finalizer: ProcessFinalEvidenceWriter
+    cleanup_episode: Callable[[], None]
+    abort_episode: AbortBrowserEpisode
+    event_logs: EpisodeEventLogs
+    task_id: str
+    cleaned: bool = False
+
+
 class ProductionTable2Runner:
     """Construct and execute the registered systems from frozen inputs only."""
 
@@ -817,11 +924,21 @@ class ProductionTable2Runner:
                 "production campaign preflight failed: " + "; ".join(report.errors)
             )
         self.manifest = read_json(self.root / "campaign_manifest.json")
+        try:
+            campaign_profile = classify_campaign_profile(
+                self.manifest,
+                context="production campaign manifest",
+                require_campaign_mode=True,
+            )
+        except SchemaError as exc:
+            raise ProductionRunnerError(
+                f"production campaign profile is invalid: {exc}"
+            ) from exc
         if self.manifest.get("campaign_mode") != "evaluation":
             raise ProductionRunnerError(
                 "production runner is forbidden for engineering-smoke campaigns"
             )
-        if self.manifest.get("evidence_label") != "PILOT_ONLY":
+        if campaign_profile != CAMPAIGN_PROFILE_PILOT:
             raise ProductionRunnerError(
                 "this registered runner implements the 50+15 development pilot only; "
                 "a later final campaign requires its own preregistered freeze"
@@ -1019,6 +1136,11 @@ class ProductionTable2Runner:
             "runtime_integration.create_webarena_runtime",
             integration.create_webarena_runtime,
         )
+        if integration.create_process_isolated_webarena is not None:
+            self._validate_injected_callable(
+                "runtime_integration.create_process_isolated_webarena",
+                integration.create_process_isolated_webarena,
+            )
         for seed, binding in sorted(integration.seed_bindings.items()):
             self._validate_seed_binding_sources(seed, binding)
         evaluator_identity = self.environment.get("evaluator")
@@ -1056,7 +1178,9 @@ class ProductionTable2Runner:
             )
             for seed in sorted(expected_seeds)
         }
-        self._active_webarena: dict[str, _ActiveWebArenaSession] = {}
+        self._active_webarena: dict[
+            str, _ActiveWebArenaSession | _ActiveProcessWebArenaSession
+        ] = {}
         self._efficiency: dict[str, dict[str, Any]] = {}
         self._contract_validation_receipts: dict[str, Mapping[str, Any]] = {}
         self._recovery_runner = RecoveryFixtureCampaignRunner(
@@ -1252,6 +1376,23 @@ class ProductionTable2Runner:
             expected_relative_path=integration_source_path,
         )
 
+    def _validate_process_episode_binding_sources(
+        self,
+        binding: ProcessIsolatedWebArenaEpisodeBinding,
+    ) -> None:
+        """Bind all parent-visible orchestration callbacks to frozen source."""
+
+        callbacks = (
+            (
+                "process_webarena.finalize_episode_evidence",
+                binding.finalize_episode_evidence,
+            ),
+            ("process_webarena.abort_episode", binding.abort_episode),
+            ("process_webarena.cleanup_episode", binding.cleanup_episode),
+        )
+        for name, callback in callbacks:
+            self._validate_injected_callable(name, callback)
+
     def evaluation_runner_attestation(self) -> Mapping[str, Any]:
         """Return identities verified against actual loaded backend objects."""
 
@@ -1274,6 +1415,7 @@ class ProductionTable2Runner:
         event_logs: Any,
         verifier_writer: SealedVerifierWriter,
         episode_id: str,
+        sealed_stream_target: SealedVerifierStreamTarget | None = None,
         **context: Any,
     ) -> Mapping[str, Any]:
         del context
@@ -1311,6 +1453,10 @@ class ProductionTable2Runner:
             )
 
         if partition == "recovery_diagnostic":
+            if sealed_stream_target is not None:
+                raise ProductionRunnerError(
+                    "recovery diagnostic cannot receive a process sealed-stream target"
+                )
             summary = self._recovery_runner.run(
                 task=dict(task),
                 repeat_id=repeat_id,
@@ -1330,6 +1476,20 @@ class ProductionTable2Runner:
             return {**summary.to_dict(), **efficiency, "completed": True}
         if partition != "normal":
             raise ProductionRunnerError("frozen task has an unregistered partition")
+        if type(sealed_stream_target) is not SealedVerifierStreamTarget:
+            raise ProductionRunnerError(
+                "ordinary process-isolated episode requires the exact sealed-stream target"
+            )
+        if (
+            sealed_stream_target.episode_id != episode_id
+            or sealed_stream_target.task_id != str(task.get("task_id"))
+            or sealed_stream_target.system_id != resolved_system.value
+            or sealed_stream_target.matched_seed != model_seed
+            or sealed_stream_target.repeat_id != repeat_id
+        ):
+            raise ProductionRunnerError(
+                "ordinary process-isolated sealed-stream target identity differs"
+            )
 
         assert setup_deadline is not None
         # Evidence may live on a shared filesystem.  Reopen it immediately
@@ -1344,6 +1504,30 @@ class ProductionTable2Runner:
             raise ProductionRunnerError(
                 "ordinary WebArena episode requires canonical event logs"
             )
+        process_factory = self.integration.create_process_isolated_webarena
+        if process_factory is None:
+            raise ProductionRunnerError(
+                "ordinary evaluation requires the source-attested process-isolated "
+                "WebArena episode factory; the same-process binding is retained only "
+                "as blocked legacy engineering code"
+            )
+        return self._run_process_isolated_webarena(
+            factory=process_factory,
+            task_spec=task_spec,
+            resolved_system=resolved_system,
+            repeat_id=repeat_id,
+            model_seed=model_seed,
+            stage_seeds=stage_seeds,
+            destination=destination,
+            event_logs=event_logs,
+            setup_deadline=setup_deadline,
+            episode_id=episode_id,
+            sealed_stream_target=sealed_stream_target,
+        )
+
+        # Blocked legacy same-process path.  It remains in source solely for
+        # local component tests and cannot be selected by this evaluation
+        # runner without an explicit future protocol revision.
         runtime_binding = setup_deadline.run_blocking(
             "WebArena runtime binding construction",
             lambda: self.integration.create_webarena_runtime(task_spec),
@@ -1483,6 +1667,108 @@ class ProductionTable2Runner:
                 ) from cleanup_error
             raise
 
+    def _run_process_isolated_webarena(
+        self,
+        *,
+        factory: ProcessIsolatedEpisodeFactory,
+        task_spec: TaskSpecification,
+        resolved_system: SystemID,
+        repeat_id: int,
+        model_seed: int,
+        stage_seeds: Mapping[str, int],
+        destination: Path,
+        event_logs: EpisodeEventLogs,
+        setup_deadline: PreBrowserSetupDeadline,
+        episode_id: str,
+        sealed_stream_target: SealedVerifierStreamTarget,
+    ) -> Mapping[str, Any]:
+        """Run one child-owned browser while retaining only orchestration hooks."""
+
+        binding: ProcessIsolatedWebArenaEpisodeBinding | None = None
+        session: _ActiveProcessWebArenaSession | None = None
+        try:
+            binding = setup_deadline.run_blocking(
+                "process-isolated WebArena binding construction",
+                lambda: factory(task_spec, destination, sealed_stream_target),
+            )
+            if type(binding) is not ProcessIsolatedWebArenaEpisodeBinding:
+                raise ProductionRunnerError(
+                    "process-isolated factory returned the wrong binding contract"
+                )
+            if binding.benchmark_version != task_spec.benchmark_version:
+                raise ProductionRunnerError(
+                    "process-isolated WebArena/task versions differ"
+                )
+            self._validate_process_episode_binding_sources(binding)
+            session = _ActiveProcessWebArenaSession(
+                finalizer=binding.finalize_episode_evidence,
+                cleanup_episode=binding.cleanup_episode,
+                abort_episode=binding.abort_episode,
+                event_logs=event_logs,
+                task_id=task_spec.task_id,
+            )
+            self._active_webarena[episode_id] = session
+            summary, efficiency, contract_receipt = self._execute_episode(
+                task=task_spec,
+                adapter=binding.environment_adapter,
+                system_id=resolved_system,
+                repeat_id=repeat_id,
+                model_seed=model_seed,
+                stage_seeds=stage_seeds,
+                event_logs=event_logs,
+                pre_browser_setup_deadline=setup_deadline,
+            )
+            if summary.reset_already_success:
+                raise InfrastructureInvalidError(
+                    reason_code="ENVIRONMENT_RESET_FAILED",
+                    adapter_id=str(self.environment["environment_adapter_id"]),
+                    adapter_version=str(
+                        self.environment["environment_adapter_version"]
+                    ),
+                    operation="post_reset_terminal_check",
+                    adapter_evidence={
+                        "adapter_event_id": (
+                            f"{episode_id}:reset-already-complete"
+                        ),
+                        "failure_class": "TASK_ALREADY_COMPLETE_AFTER_RESET",
+                        "episode_id": episode_id,
+                        "task_id": task_spec.task_id,
+                        "terminal_reason": summary.terminal_reason.value,
+                        "diagnostic_sha256": canonical_sha256(
+                            {
+                                "episode_id": episode_id,
+                                "task_id": task_spec.task_id,
+                                "terminal_reason": summary.terminal_reason.value,
+                            }
+                        ),
+                        "retryable": True,
+                    },
+                )
+            self._append_contract_validation_receipt(event_logs, contract_receipt)
+            return {**summary.to_dict(), **efficiency, "completed": True}
+        except BaseException:
+            self._active_webarena.pop(episode_id, None)
+            if binding is not None:
+                cleanup_error: BaseException | None = None
+                try:
+                    self._abort_browser_episode(
+                        abort_episode=binding.abort_episode,
+                        episode_id=episode_id,
+                        task_id=task_spec.task_id,
+                        event_logs=event_logs,
+                    )
+                except BaseException as exc:
+                    cleanup_error = exc
+                try:
+                    binding.cleanup_episode()
+                except BaseException as exc:
+                    cleanup_error = cleanup_error or exc
+                if cleanup_error is not None:
+                    raise ProductionRunnerError(
+                        "process-isolated WebArena episode failed and cleanup failed"
+                    ) from cleanup_error
+            raise
+
     def finalize_episode(
         self,
         *,
@@ -1500,7 +1786,48 @@ class ProductionTable2Runner:
             raise ProductionRunnerError(
                 "no active WebArena evaluator session exists for finalization"
             ) from exc
+        if type(session) is _ActiveProcessWebArenaSession:
+            callback_error: BaseException | None = None
+            abort_error: BaseException | None = None
+            signal: OpaqueTerminalSignal | None = None
+            try:
+                summary = _summary_from_result(result)
+                signal = session.finalizer(
+                    summary,
+                    Path(runtime_dir).resolve(),
+                )
+                if type(signal) is not OpaqueTerminalSignal:
+                    raise ProductionRunnerError(
+                        "process final evaluator returned a non-opaque result"
+                    )
+            except BaseException as exc:
+                callback_error = exc
+                try:
+                    self._abort_browser_episode(
+                        abort_episode=session.abort_episode,
+                        episode_id=episode_id,
+                        task_id=session.task_id,
+                        event_logs=session.event_logs,
+                    )
+                except BaseException as caught_abort_error:
+                    abort_error = caught_abort_error
+            try:
+                session.cleanup_episode()
+                session.cleaned = True
+            except BaseException as cleanup_error:
+                raise ProductionRunnerError(
+                    "process final evaluation cleanup failed"
+                ) from cleanup_error
+            if abort_error is not None:
+                raise ProductionRunnerError(
+                    "process final evaluation and browser abort both failed"
+                ) from abort_error
+            if callback_error is not None:
+                raise callback_error
+            assert signal is not None
+            return signal
         try:
+            assert type(session) is _ActiveWebArenaSession
             summary = _summary_from_result(result)
             if not isinstance(verifier_writer, SealedVerifierWriter):
                 raise ProductionRunnerError(
@@ -1916,6 +2243,8 @@ class ProductionTable2Runner:
         manifests: dict[int, dict[str, Any]] = {}
         paths: dict[int, dict[str, Path]] = {}
         evidence_paths: dict[int, dict[str, Path]] = {}
+        authenticated_payloads: dict[int, dict[str, dict[str, Any]]] = {}
+        authenticated_evidence: dict[int, dict[str, dict[str, Any]]] = {}
         for seed in sorted(expected):
             path = self.root / "frozen" / "models" / f"seed_{seed}.json"
             value = read_json(path)
@@ -1927,19 +2256,27 @@ class ProductionTable2Runner:
             if descriptors_by_seed.get(str(seed)) != rows:
                 raise ProductionRunnerError("campaign/model payload descriptors differ")
             seed_paths: dict[str, Path] = {}
+            seed_descriptors: dict[str, dict[str, Any]] = {}
             for role in MODEL_PAYLOAD_ROLES:
                 row = rows[role]
                 if not isinstance(row, Mapping):
                     raise ProductionRunnerError(f"malformed model payload: {role}")
-                relative = safe_relative_path(str(row.get("path", "")))
-                payload = (self.root / relative).resolve()
-                if self.root not in payload.parents or payload.is_symlink():
-                    raise ProductionRunnerError(f"unsafe model payload path: {role}")
-                actual_kind = "file" if payload.is_file() else "directory"
-                if actual_kind != row.get("kind"):
+                try:
+                    payload, descriptor = _validated_campaign_relative_model_payload(
+                        self.root,
+                        row.get("path"),
+                        label=f"model payload {role}",
+                        stored_path=str(row.get("path")),
+                    )
+                except SchemaError as exc:
+                    raise ProductionRunnerError(
+                        f"unsafe model payload path: {role}"
+                    ) from exc
+                if descriptor["kind"] != row.get("kind"):
                     raise ProductionRunnerError(f"model payload kind differs: {role}")
-                size, count = _payload_size(payload)
-                digest = _payload_sha256(payload)
+                size = descriptor["size_bytes"]
+                count = descriptor["file_count"]
+                digest = descriptor["sha256"]
                 expected_values = {
                     "size_bytes": size,
                     "file_count": count,
@@ -1955,6 +2292,7 @@ class ProductionTable2Runner:
                         f"model manifest hash differs from {role} bytes"
                     )
                 seed_paths[role] = payload
+                seed_descriptors[role] = dict(descriptor)
             try:
                 executable = {
                     role: (seed_paths[role], dict(rows[role]))
@@ -1984,6 +2322,10 @@ class ProductionTable2Runner:
             evidence_paths[seed] = {
                 role: source for role, (source, _) in evidence.items()
             }
+            authenticated_evidence[seed] = {
+                role: _public_model_payload_descriptor(row)
+                for role, (_, row) in evidence.items()
+            }
             try:
                 resolved_config_identity = load_resolved_config_identity(
                     seed_paths["resolved_config"]
@@ -2000,8 +2342,44 @@ class ProductionTable2Runner:
                 )
             manifests[seed] = value
             paths[seed] = seed_paths
+            authenticated_payloads[seed] = seed_descriptors
         if set(map(int, descriptors_by_seed)) != expected:
             raise ProductionRunnerError("campaign payload seeds differ from schedule")
+        try:
+            for seed in sorted(expected):
+                value = manifests[seed]
+                artifact_rows = value["artifact_payloads"]
+                evidence_rows = value["model_evidence_bundle"]["artifacts"]
+                _reauthenticate_campaign_relative_model_payloads(
+                    self.root,
+                    artifact_rows,
+                    {
+                        role: (
+                            paths[seed][role],
+                            authenticated_payloads[seed][role],
+                        )
+                        for role in MODEL_PAYLOAD_ROLES
+                    },
+                    roles=MODEL_PAYLOAD_ROLES,
+                    label=f"model payload seed {seed}",
+                )
+                _reauthenticate_campaign_relative_model_payloads(
+                    self.root,
+                    evidence_rows,
+                    {
+                        role: (
+                            evidence_paths[seed][role],
+                            authenticated_evidence[seed][role],
+                        )
+                        for role in MODEL_EVIDENCE_ROLES
+                    },
+                    roles=MODEL_EVIDENCE_ROLES,
+                    label=f"model evidence seed {seed}",
+                )
+        except SchemaError as exc:
+            raise ProductionRunnerError(
+                "frozen model payloads changed before runtime handoff"
+            ) from exc
         return manifests, paths, evidence_paths
 
     def _build_seed_state(

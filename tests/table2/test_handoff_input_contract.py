@@ -193,7 +193,12 @@ def test_checked_final_template_cannot_authorize_handoff() -> None:
         "benchmark": {"allow_locked_reads": False},
         "manual_rescue": {"policy": "forbidden"},
     }
-    campaign = {"manual_rescue": "forbidden"}
+    campaign = {
+        "campaign_kind": "locked_final",
+        "campaign_mode": "evaluation",
+        "evidence_label": "FINAL_LOCKED",
+        "manual_rescue": "forbidden",
+    }
 
     with pytest.raises(SchemaError, match="cannot authorize a campaign"):
         _validate_protocol_access_boundary(

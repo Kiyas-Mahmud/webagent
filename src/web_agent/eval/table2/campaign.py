@@ -14,16 +14,20 @@ from time import perf_counter
 from typing import Any
 
 from .package_validator import (
+    DRAFT_PILOT_STATUS,
+    adjudication_gated_pilot_publication_status,
     append_campaign_ledger_event,
     load_yaml,
     validate_campaign,
 )
 from .common import (
+    CAMPAIGN_PROFILE_PILOT,
     SCHEMA_VERSION,
     SchemaError,
     Table2Error,
     as_mapping,
     atomic_write_json,
+    classify_campaign_profile,
     read_json,
     read_jsonl,
     sha256_file,
@@ -51,6 +55,7 @@ from .schedule import (
 )
 from .sealed_verifier import (
     SealedVerifierSink,
+    SealedVerifierStreamTarget,
     SealedVerifierWriter,
     assert_no_verifier_evidence,
 )
@@ -114,6 +119,11 @@ class CampaignRunner:
                 "campaign preflight validation failed: " + "; ".join(preflight.errors)
             )
         self.manifest = read_json(self.root / "campaign_manifest.json")
+        classify_campaign_profile(
+            self.manifest,
+            context="campaign runner manifest",
+            require_campaign_mode=True,
+        )
         verify_runner_before_execution(
             self.root,
             runner=self.runner,
@@ -222,8 +232,19 @@ class CampaignRunner:
                 row["status"] == "EXCLUDED_INFRASTRUCTURE" for row in resolutions
             ),
             "publication_status": (
-                "PILOT_ONLY"
-                if self.manifest.get("evidence_label") == "PILOT_ONLY"
+                (
+                    adjudication_gated_pilot_publication_status(
+                        self.root, campaign_complete=all_terminal
+                    )
+                    if all_terminal
+                    else DRAFT_PILOT_STATUS
+                )
+                if classify_campaign_profile(
+                    self.manifest,
+                    context="campaign completion manifest",
+                    require_campaign_mode=True,
+                )
+                == CAMPAIGN_PROFILE_PILOT
                 else "N/R"
             ),
         }
@@ -242,8 +263,13 @@ def _run_block(
 ) -> dict[str, Any]:
     base = _block_base(root, schedule_row)
     campaign_manifest = read_json(root / "campaign_manifest.json")
+    campaign_profile = classify_campaign_profile(
+        campaign_manifest,
+        context="campaign block manifest",
+        require_campaign_mode=True,
+    )
     campaign_id = str(campaign_manifest["campaign_id"])
-    campaign_mode = str(campaign_manifest.get("campaign_mode", "evaluation"))
+    campaign_mode = campaign_manifest["campaign_mode"]
     base.mkdir(parents=True, exist_ok=True)
     existing = _read_existing_attempts(base, int(schedule_row["max_block_attempts"]))
     resolution = resolve_block_attempts(schedule_row, existing)
@@ -317,6 +343,17 @@ def _run_block(
                 task_id=str(schedule_row["task_id"]),
                 repeat_id=int(schedule_row["repeat_id"]),
             )
+            sealed_stream_target = (
+                SealedVerifierStreamTarget.from_sink(sink)
+                if (
+                    str(schedule_row["task_partition"]) == "normal"
+                    and _runner_declares_parameter(
+                        runner,
+                        "sealed_stream_target",
+                    )
+                )
+                else None
+            )
             status_rows[system_id]["launched"] = True
             status_rows[system_id]["episode_id"] = episode_id
             append_campaign_ledger_event(
@@ -330,10 +367,7 @@ def _run_block(
                     "system_id": system_id,
                     "attempt_id": attempt_id,
                     "episode_id": episode_id,
-                    "locked_test_content": (
-                        read_json(root / "campaign_manifest.json").get("evidence_label")
-                        != "PILOT_ONLY"
-                    ),
+                    "locked_test_content": campaign_profile != CAMPAIGN_PROFILE_PILOT,
                 },
             )
             atomic_write_json(rerun / "block_manifest.json", block_manifest)
@@ -351,6 +385,7 @@ def _run_block(
                     runtime_dir=runtime_dir,
                     event_logs=event_logs,
                     verifier_writer=SealedVerifierWriter(sink),
+                    sealed_stream_target=sealed_stream_target,
                     episode_id=episode_id,
                     block_id=str(schedule_row["block_id"]),
                     rerun_id=attempt_id,
@@ -481,6 +516,15 @@ def _invoke_runner(runner: Any, **context: Any) -> Any:
     if missing:
         raise TypeError(f"runner requires unsupported parameters: {missing}")
     return target(**kwargs)
+
+
+def _runner_declares_parameter(runner: Any, name: str) -> bool:
+    """Require an explicit process handoff parameter before transferring writes."""
+
+    target = runner.run if hasattr(runner, "run") and callable(runner.run) else runner
+    if not callable(target):
+        return False
+    return name in inspect.signature(target).parameters
 
 
 def _ensure_final_verifier_receipt(

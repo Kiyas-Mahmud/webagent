@@ -24,6 +24,7 @@ from web_agent.runtime.action_parameters import (
 from web_agent.runtime.contracts import (
     ActionParameters,
     ActionType,
+    ConcreteAction,
     PolicyObservation,
     PreActionDecision,
     TaskSpecification,
@@ -249,8 +250,15 @@ def test_double_provider_rejection_consumes_exactly_one_executor_step():
 
     executor = Executor(DeterministicFixtureAdapter(), budgets=REGISTERED_BUDGETS)
     executor.reset(_task(), episode_id="episode-provider-reject", seed=42)
-    result = executor.reject_unresolved_request(
+    action = ConcreteAction(
         action_id="rejected-provider-request",
+        source_decision_id="rejected-provider-decision",
+        action_type=ActionType.TYPE,
+        parameters={},
+        bbox=(0.1, 0.1, 0.2, 0.1),
+    )
+    result = executor.reject_unresolved_request(
+        action=action,
         reason=str(caught.value),
     )
     assert result.executor_step == 1

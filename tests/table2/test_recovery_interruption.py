@@ -23,7 +23,13 @@ from web_agent.runtime.contracts import (
 )
 from web_agent.runtime.episode import EpisodeRunner
 from web_agent.runtime.event_log import EpisodeEventLogs
-from web_agent.runtime.executor import EpisodeTimeout, Executor, ExecutorBudgetExceeded
+from web_agent.runtime.executor import (
+    EpisodeTimeout,
+    Executor,
+    ExecutorBudgetExceeded,
+    ExecutorInputMutation,
+    RejectedActionRegistrationError,
+)
 from web_agent.runtime.policy import (
     CallablePolicyAdapter,
     PolicyError,
@@ -47,6 +53,57 @@ class _RecoveryExecuteInterrupt(Executor):
         if action.recovery_attempt_id is not None:
             raise self._interruption("injected after begin_attempt")
         return super().execute(action)
+
+
+class _RecoveryRegistrationBaseFailure(BaseException):
+    pass
+
+
+class _RecoveryRegistrationClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class _RecoveryRegistrationFaultAdapter(RecoveryDiagnosticAdapter):
+    def __init__(self, scenario, *, mode: str, clock: _RecoveryRegistrationClock):
+        super().__init__(scenario)
+        self._registration_fault_mode = mode
+        self._registration_clock = clock
+
+    def register_rejected_action(self, action, execution) -> None:
+        if self._registration_fault_mode == "failure":
+            raise RuntimeError("injected recovery registration failure")
+        if self._registration_fault_mode == "mutation":
+            action.parameters["mutated"] = True
+            return None
+        if self._registration_fault_mode == "timeout":
+            self._registration_clock.now += 600.0
+            return None
+        if self._registration_fault_mode == "base_exception":
+            raise _RecoveryRegistrationBaseFailure(
+                "injected recovery registration BaseException"
+            )
+        raise AssertionError(
+            f"unknown recovery registration fault: {self._registration_fault_mode}"
+        )
+
+
+class _RecoveryLocalSafetyRejectExecutor(Executor):
+    def _safety_error(self, action):
+        if action.recovery_attempt_id is not None:
+            return "injected recovery safety rejection"
+        return super()._safety_error(action)
+
+
+_RECOVERY_REGISTRATION_CAUSE = {
+    "failure": RuntimeError,
+    "mutation": ExecutorInputMutation,
+    "timeout": EpisodeTimeout,
+    "base_exception": _RecoveryRegistrationBaseFailure,
+}
 
 
 def _retry_scenario():
@@ -242,3 +299,104 @@ def test_begun_recovery_is_logged_when_post_execution_assessment_fails(
     assert attempts[0]["payload"]["interruption_kind"] == "PolicyError"
     assert attempts[0]["payload"]["attempt"]["completed"] is False
     assert len(attempts[0]["payload"]["attempt"]["action_ids"]) == 1
+
+
+@pytest.mark.parametrize("mode", tuple(_RECOVERY_REGISTRATION_CAUSE))
+def test_recovery_local_rejection_registration_fault_commits_before_propagation(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    scenario = _retry_scenario()
+    task = _task(scenario)
+    protocol = RuntimeProtocol(
+        protocol_id="recovery-registration-protocol",
+        campaign_id="recovery-registration-campaign",
+        provider_id="deterministic-parameter-provider",
+        provider_version="v1",
+    )
+    episode_id = (
+        f"{protocol.campaign_id}:E2:{task.task_id}:repeat-0:seed-42"
+    )
+    logs = EpisodeEventLogs(
+        tmp_path,
+        episode_id=episode_id,
+        include_memory=False,
+        system_id="E2",
+        task_id=task.task_id,
+        repeat_id=0,
+        matched_seed=42,
+        timestamp_factory=lambda: "2000-01-01T00:00:00+00:00",
+    )
+    clock = _RecoveryRegistrationClock()
+    adapter = _RecoveryRegistrationFaultAdapter(
+        scenario,
+        mode=mode,
+        clock=clock,
+    )
+    runner = EpisodeRunner(
+        protocol=protocol,
+        system_policy=_policy(),
+        provider=DeterministicParameterProvider(),
+        executor=_RecoveryLocalSafetyRejectExecutor(
+            adapter,
+            budgets=protocol.budgets,
+            clock=clock,
+        ),
+        recovery_controller=RecoveryController(protocol.budgets),
+        event_logs=logs,
+    )
+
+    with pytest.raises(RejectedActionRegistrationError) as caught:
+        runner.run(task, repeat_id=0, model_seed=42)
+
+    assert type(caught.value.__cause__) is _RECOVERY_REGISTRATION_CAUSE[mode]
+    partial = caught.value.partial_episode_summary
+    assert partial["executor_steps"] == 2
+    assert partial["normal_actions"] == 1
+    assert partial["recovery_actions"] == 1
+    assert partial["recovery_attempts"] == 1
+    action_rows = [
+        json.loads(line)
+        for line in (tmp_path / "actions.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(action_rows) == 2
+    recovery_row = action_rows[-1]
+    assert recovery_row["event_type"] == "recovery_action"
+    assert recovery_row["payload"]["interrupted"] is True
+    assert recovery_row["payload"]["execution"]["executor_step"] == 2
+    assert recovery_row["payload"]["execution"]["status"] == "rejected"
+    assert (
+        recovery_row["payload"]["execution"]["error_kind"]
+        == "safety_rejection"
+    )
+    attempts = _attempt_rows(tmp_path)
+    assert len(attempts) == 1
+    assert attempts[0]["payload"]["interrupted"] is True
+    assert attempts[0]["payload"]["interruption_kind"] == (
+        "RejectedActionRegistrationError"
+    )
+    assert attempts[0]["payload"]["attempt"]["action_ids"] == [
+        recovery_row["payload"]["action"]["action_id"]
+    ]
+    environment_rows = [
+        json.loads(line)
+        for line in (tmp_path / "environment_events.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert all(
+        row["event_type"] != "post_recovery_observation"
+        for row in environment_rows
+    )
+    terminal_rows = [
+        json.loads(line)
+        for line in (tmp_path / "terminal_signals.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    # Reset and the failed normal action were sealed before recovery. The
+    # rejected recovery registration cannot invent a third receipt.
+    assert len(terminal_rows) == 2
+    assert runner.contract_validation_receipt is None

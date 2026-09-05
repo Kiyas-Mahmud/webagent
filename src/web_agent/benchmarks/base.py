@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import hashlib
 import math
+from pathlib import Path
 
 from web_agent.runtime.contracts import (
     ConcreteAction,
     ExecutionEvidence,
+    ExecutionResult,
     ExecutionStatus,
     Observation,
     ObservationStage,
@@ -17,6 +20,11 @@ from web_agent.runtime.contracts import (
     VerifierReceiptBinding,
     VersionedRecord,
 )
+
+
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = hashlib.sha256(
+    Path(__file__).resolve().read_bytes()
+).hexdigest()
 
 
 class BenchmarkUnavailableError(RuntimeError):
@@ -85,6 +93,24 @@ class BenchmarkAdapter(ABC):
     @abstractmethod
     def execute(self, action: ConcreteAction) -> AdapterExecution:
         raise NotImplementedError
+
+    def register_rejected_action(
+        self,
+        action: ConcreteAction,
+        execution: ExecutionResult,
+    ) -> None:
+        """Register an executor-local rejection for causal observation only.
+
+        The shared executor calls this hook after charging a concrete request
+        that cannot be sent to the browser (for example, a safety or parameter
+        resolution rejection).  The default adapter needs no extra state.  A
+        process-backed adapter uses the hook to bind the unchanged next
+        observation to the exact action and rejection without invoking
+        :meth:`execute` or consuming another executor/browser step.
+        """
+
+        del action, execution
+        return None
 
     @abstractmethod
     def terminal_signal(

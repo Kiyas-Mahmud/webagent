@@ -31,6 +31,7 @@ from web_agent.runtime.contracts import (
     ConcreteAction,
     ControllerCommandCommitment,
     ExecutionEvidence,
+    ExecutionResult,
     ExecutionSafetyReceipt,
     ExecutionStatus,
     Observation,
@@ -1489,6 +1490,50 @@ class WebArenaAdapter(BenchmarkAdapter):
                 safety_receipt=safety_receipt,
             ),
         )
+
+    def register_rejected_action(
+        self,
+        action: ConcreteAction,
+        execution: ExecutionResult,
+    ) -> None:
+        """Publish an unchanged causal snapshot for a non-dispatched request."""
+
+        if self._environment is None or self._raw_observation is None:
+            raise BenchmarkStateError("WebArena task has not been reset")
+        if self._pending_observation is not None:
+            raise BenchmarkStateError(
+                "WebArena pending post-action observation must be consumed first"
+            )
+        if (
+            type(action) is not ConcreteAction
+            or type(execution) is not ExecutionResult
+            or execution.action_id != action.action_id
+            or execution.status is not ExecutionStatus.REJECTED
+            or execution.state_changed is not False
+            or execution.environment_error is not False
+        ):
+            raise BenchmarkStateError(
+                "WebArena rejected-action registration contract differs"
+            )
+        stage = (
+            ObservationStage.POST_RECOVERY
+            if action.recovery_attempt_id is not None
+            else ObservationStage.POST_ACTION
+        )
+        # Page settlement may capture a fresh immutable snapshot, but no action
+        # mapper, native command, environment.step, or browser-step counter is
+        # touched by this path.
+        self._raw_observation = self._settle_observation(
+            self._raw_observation,
+            stage,
+        )
+        self._last_observation = None
+        self._pending_observation = self._map_observation(
+            stage,
+            action.action_id,
+            register=False,
+        )
+        return None
 
     def _settle_observation(
         self,

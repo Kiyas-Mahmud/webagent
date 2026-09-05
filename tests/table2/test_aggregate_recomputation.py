@@ -165,7 +165,11 @@ def test_recomputation_rejects_every_tampered_numeric_aggregate(
     protocol_path.write_text(yaml.safe_dump(protocol), encoding="utf-8")
     _install_deterministic_recomputation_stubs(monkeypatch)
     expected = _write_expected_aggregates(tmp_path)
-    campaign_manifest = {"evidence_label": "PILOT_ONLY"}
+    campaign_manifest = {
+        "campaign_kind": "engineering_pilot",
+        "campaign_mode": "evaluation",
+        "evidence_label": "PILOT_ONLY",
+    }
 
     # The untouched aggregate is accepted, proving the five independent
     # reconstruction branches agree on their registered source evidence.

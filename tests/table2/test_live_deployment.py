@@ -101,6 +101,55 @@ def test_live_evidence_path_rejects_nested_symlink_ancestry(tmp_path: Path) -> N
         )
 
 
+def test_live_evidence_path_rejects_hard_linked_measured_file(tmp_path: Path) -> None:
+    evidence_root = tmp_path / "evidence"
+    evidence_root.mkdir()
+    external = tmp_path / "external-record.json"
+    external.write_text("{}\n", encoding="utf-8")
+    (evidence_root / "record.json").hardlink_to(external)
+
+    with pytest.raises(SchemaError, match="hard-linked evidence file"):
+        live_deployment._evidence_path(
+            evidence_root,
+            "record.json",
+            field="capability.evidence",
+        )
+
+
+def test_live_manifest_rejects_hard_linked_measured_file(tmp_path: Path) -> None:
+    original = tmp_path / "original-manifest.json"
+    original.write_text("{}\n", encoding="utf-8")
+    linked = tmp_path / "linked-manifest.json"
+    linked.hardlink_to(original)
+
+    with pytest.raises(SchemaError, match="hard-linked evidence file"):
+        live_deployment.load_pc01_live_deployment_manifest(
+            linked,
+            repository_root=ROOT,
+            evidence_root=tmp_path,
+        )
+
+
+def test_live_evidence_artifact_rejects_hard_linked_file(tmp_path: Path) -> None:
+    evidence_root = tmp_path / "evidence"
+    evidence_root.mkdir()
+    external = tmp_path / "external-artifact.json"
+    external.write_text("{}\n", encoding="utf-8")
+    linked = evidence_root / "artifact.json"
+    linked.hardlink_to(external)
+
+    with pytest.raises(SchemaError, match="hard-linked evidence artifact"):
+        live_deployment._evidence_artifact(
+            evidence_root,
+            {
+                "artifact_path": "artifact.json",
+                "artifact_sha256": sha256_file(linked),
+            },
+            path_field="artifact_path",
+            sha256_field="artifact_sha256",
+        )
+
+
 def _task_export_and_audit(*, page_state_only: bool) -> tuple[dict, dict]:
     tasks = []
     for index in range(50):

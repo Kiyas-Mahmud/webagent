@@ -19,6 +19,7 @@ from .common import (
     SchemaError,
     Table2Error,
     canonical_json_bytes,
+    classify_campaign_profile,
     read_json,
     safe_relative_path,
     sha256_file,
@@ -29,8 +30,16 @@ from .process_broker_protocol import (
     PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256,
     PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION,
     PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS,
+    ProcessBrokerInfrastructureInvalidMixin,
     RUNTIME_INNER_SCHEMA_PATHS,
 )
+
+
+# Parent-side reconstruction of the exact campaign rerun exception is part of
+# the broker's authority-bearing path. The broker compares this import-time
+# digest with its launch source receipt, so stale imported code cannot be paired
+# with replacement bytes that were hashed later.
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
 
 
 RUNNER_ATTESTATION_SCHEMA_VERSION = "table2-evaluation-runner-attestation-v2"
@@ -50,7 +59,7 @@ PC01_PAGE_BROKER_SECURITY_SCHEMA_VERSION = (
     "table2-pc01-page-broker-security-v1"
 )
 PC01_PROCESS_BROKER_SECURITY_SCHEMA_VERSION = (
-    "table2-pc01-page-broker-security-v5"
+    "table2-pc01-page-broker-security-v9"
 )
 PC01_PAGE_BROKER_SECURITY_CLAIM_SCOPE = (
     "REVIEWED_CODE_DATAFLOW_ONLY_NOT_PROCESS_ISOLATION"
@@ -72,9 +81,14 @@ PC01_PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/eval/__init__.py",
     "src/web_agent/eval/table2/__init__.py",
     "src/web_agent/eval/table2/common.py",
+    "src/web_agent/eval/table2/execution_guard.py",
     "src/web_agent/eval/table2/process_broker.py",
+    "src/web_agent/eval/table2/process_broker_finalization.py",
     "src/web_agent/eval/table2/process_broker_protocol.py",
     "src/web_agent/eval/table2/process_broker_runtime.py",
+    "src/web_agent/eval/table2/sealed_verifier.py",
+    "src/web_agent/eval/table2/process_broker_timeout.py",
+    "src/web_agent/eval/table2/process_broker_webarena_backend.py",
     "src/web_agent/eval/table2/process_broker_worker.py",
     "src/web_agent/runtime/__init__.py",
     "src/web_agent/runtime/contracts.py",
@@ -155,10 +169,13 @@ def process_isolated_pc01_page_broker_security_binding(
 
     These rows attest distinct local processes, exact outer envelopes,
     recursive named-key rejection, a complete loaded-source closure, and
-    all eight source-bound operation-specific reset/action/observation/
-    execution/verifier schemas, causal session/action binding, canonical wire
-    JSON, and a root-confined content-addressed screenshot transport. They do
-    not attest the origin of scalar values within those schemas. A real
+    all twelve source-bound operation-specific reset/action/observation/
+    execution/verifier/error schemas, causal session/action binding, canonical wire
+    JSON, and a root-confined content-addressed screenshot transport. They also
+    register measured, outcome-blind IPC timeout calibration as a mandatory
+    but currently absent evaluation input; developer-selected fixture
+    timeouts cannot satisfy it. They do not attest the origin of scalar values
+    within those schemas. A real
     deployment therefore still requires external runtime-value provenance and
     a separately authenticated receipt proving that its processes used the
     reviewed bytes and boundaries. This repository has no registered trust
@@ -178,8 +195,16 @@ def process_isolated_pc01_page_broker_security_binding(
         "schema_version": PC01_PROCESS_BROKER_SECURITY_SCHEMA_VERSION,
         "status": PC01_PROCESS_BROKER_SECURITY_BLOCKED_STATUS,
         "claim_scope": PC01_PROCESS_BROKER_SECURITY_CLAIM_SCOPE,
-        "architecture": "separate_process_af_unix_json_hmac_sha256_peercred_v1",
+        "architecture": (
+            "separate_process_child_owned_sealed_sink_"
+            "af_unix_json_hmac_sha256_peercred_v2"
+        ),
         "runtime_and_evaluator_process_roles_separate": True,
+        "child_owned_sealed_sink": True,
+        "runtime_adapter_sealed_capability_free": True,
+        "separate_evidence_transport_present": False,
+        "runtime_terminal_returns_outer_sealed_signal": True,
+        "sealed_finalization_returns_outer_sealed_signal": True,
         "outer_envelope_fields_exact": True,
         "forbidden_named_keys_rejected_recursively": True,
         "operation_specific_inner_schema_paths": list(RUNTIME_INNER_SCHEMA_PATHS),
@@ -195,6 +220,7 @@ def process_isolated_pc01_page_broker_security_binding(
         "observation_stage_prior_action_bound": True,
         "verifier_receipt_causal_binding_enforced": True,
         "reset_operation_registered": True,
+        "executor_local_rejection_registration_enforced": True,
         "policy_screenshot_transport_contract": (
             POLICY_SCREENSHOT_TRANSPORT_CONTRACT
         ),
@@ -202,6 +228,19 @@ def process_isolated_pc01_page_broker_security_binding(
         "canonical_wire_json_enforced": True,
         "runtime_client_ambiguous_failure_poisoned": True,
         "sealed_backend_config_hash_bound": True,
+        "measured_ipc_timeout_calibration_required": True,
+        "measured_ipc_timeout_calibration_present": False,
+        "caller_injected_evaluation_timeout_forbidden": True,
+        "ipc_timeout_calibration_schema_version": (
+            "table2-process-broker-ipc-timeout-calibration-v2"
+        ),
+        "immutable_timeout_authority_bundle_present": False,
+        "external_timeout_authority_cross_binding_present": False,
+        "measured_replay_scope_production_eligible": False,
+        "failed_runtime_cleanup_calibration_required": True,
+        "failed_runtime_cleanup_calibration_present": False,
+        "absolute_ipc_deadline_enforced": True,
+        "dedicated_framed_readiness_channel": True,
         "runtime_value_provenance_attested": False,
         "evaluator_operation_in_runtime_allowlist": False,
         "authenticated_outer_envelopes": True,
@@ -210,7 +249,7 @@ def process_isolated_pc01_page_broker_security_binding(
             PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
         ),
         "same_process_fixture_production_eligible": False,
-        "local_receipt_schema_version": "table2-process-page-broker-receipt-v4",
+        "local_receipt_schema_version": "table2-process-page-broker-receipt-v9",
         "local_cleanup_receipt_schema_version": (
             "table2-process-page-broker-cleanup-receipt-v1"
         ),
@@ -285,7 +324,8 @@ def assert_pc01_page_broker_production_authorized(value: object) -> None:
         raise SchemaError(
             "PC-01 live campaign is blocked: local broker architecture/source "
             "evidence includes registered operation-specific inner schemas but "
-            "does not attest runtime-value provenance and is not external "
+            "still requires frozen measured IPC-timeout calibration, does not "
+            "attest runtime-value provenance, and is not external "
             "deployment authority; a registered, independently authenticated "
             "value-provenance/deployment receipt is required "
             "before any provider or browser runtime loads"
@@ -425,7 +465,10 @@ def is_sha256(value: object) -> bool:
     return True
 
 
-class InfrastructureInvalidError(Table2Error):
+class InfrastructureInvalidError(
+    Table2Error,
+    ProcessBrokerInfrastructureInvalidMixin,
+):
     """Typed authorization request for one preregistered whole-block rerun.
 
     Generic connection/time-out exceptions are intentionally unrelated to
@@ -950,6 +993,7 @@ def validate_analysis_source_identity(
 
     campaign_path = Path(campaign_root).resolve()
     campaign = read_json(campaign_path / "campaign_manifest.json")
+    classify_campaign_profile(campaign, require_campaign_mode=True)
     if campaign.get("campaign_mode") == "smoke":
         return {
             "schema_version": ANALYSIS_SOURCE_IDENTITY_SCHEMA_VERSION,
@@ -1029,7 +1073,8 @@ def verify_runner_before_execution(
     """Verify live runner, loaded identities, source bytes, and checkout commit."""
 
     campaign = read_json(campaign_root / "campaign_manifest.json")
-    mode = str(campaign.get("campaign_mode", "evaluation"))
+    classify_campaign_profile(campaign, require_campaign_mode=True)
+    mode = str(campaign["campaign_mode"])
     if mode == "smoke":
         if campaign.get("runner_identity_scope") != ENGINEERING_SMOKE_SCOPE:
             raise SchemaError("smoke runner bypass lacks ENGINEERING_SMOKE_ONLY scope")

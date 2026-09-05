@@ -42,9 +42,14 @@ PC01_PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/eval/__init__.py",
     "src/web_agent/eval/table2/__init__.py",
     "src/web_agent/eval/table2/common.py",
+    "src/web_agent/eval/table2/execution_guard.py",
     "src/web_agent/eval/table2/process_broker.py",
+    "src/web_agent/eval/table2/process_broker_finalization.py",
     "src/web_agent/eval/table2/process_broker_protocol.py",
     "src/web_agent/eval/table2/process_broker_runtime.py",
+    "src/web_agent/eval/table2/sealed_verifier.py",
+    "src/web_agent/eval/table2/process_broker_timeout.py",
+    "src/web_agent/eval/table2/process_broker_webarena_backend.py",
     "src/web_agent/eval/table2/process_broker_worker.py",
     "src/web_agent/runtime/__init__.py",
     "src/web_agent/runtime/contracts.py",
@@ -56,20 +61,24 @@ PC01_PROCESS_BROKER_INNER_SCHEMA_PATHS = [
     "runtime_reset.result.observation",
     "runtime_reset.result.reset_state_receipt",
     "runtime_execute.request.action",
+    "runtime_register_rejected.request.action",
+    "runtime_register_rejected.request.execution",
     "runtime_observe.result.observation",
     "runtime_execute.result.execution",
+    "runtime_register_rejected.result.registered",
+    "runtime_error.result.infrastructure_invalid",
     "runtime_terminal.request.receipt_binding",
     "runtime_terminal.result.opaque_terminal_signal",
 ]
 PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION = (
-    "table2-process-broker-inner-schema-registry-v2"
+    "table2-process-broker-inner-schema-registry-v6"
 )
 PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY = [
     {
         "path": "runtime_reset.request",
         "root_schema_version": "table2.runtime.v1",
         "record_type": "WebArenaResetStateRequest",
-        "validator_id": "webarena-reset-request-fields-v1",
+        "validator_id": "webarena-reset-request-task-specification-bound-v2",
     },
     {
         "path": "runtime_reset.result.observation",
@@ -77,7 +86,7 @@ PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY = [
         "record_type": "Observation",
         "validator_id": (
             "browsergym-causal-observation-request-bound-"
-            "root-confined-screenshot-v2"
+            "root-confined-screenshot-browser-error-url-v3"
         ),
     },
     {
@@ -93,12 +102,24 @@ PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY = [
         "validator_id": "six-class-live-browser-action-subset-v1",
     },
     {
+        "path": "runtime_register_rejected.request.action",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "ConcreteAction",
+        "validator_id": "six-class-nondispatched-rejected-action-v1",
+    },
+    {
+        "path": "runtime_register_rejected.request.execution",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "ExecutionResult",
+        "validator_id": "executor-local-rejection-action-step-bound-v1",
+    },
+    {
         "path": "runtime_observe.result.observation",
         "root_schema_version": "table2.runtime.v1",
         "record_type": "Observation",
         "validator_id": (
             "browsergym-causal-observation-request-bound-"
-            "root-confined-screenshot-v2"
+            "root-confined-screenshot-browser-error-url-v3"
         ),
     },
     {
@@ -106,6 +127,21 @@ PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY = [
         "root_schema_version": "table2.runtime.v1",
         "record_type": "AdapterExecution",
         "validator_id": "adapter-execution-with-action-evidence-v1",
+    },
+    {
+        "path": "runtime_register_rejected.result.registered",
+        "root_schema_version": "table2.runtime.v1",
+        "record_type": "RejectedActionRegistrationAcknowledgement",
+        "validator_id": "exact-true-no-browser-dispatch-acknowledgement-v1",
+    },
+    {
+        "path": "runtime_error.result.infrastructure_invalid",
+        "root_schema_version": "table2.process-broker.infrastructure-invalid.v1",
+        "record_type": "InfrastructureInvalidError",
+        "validator_id": (
+            "allowlisted-sanitized-request-action-bound-"
+            "infrastructure-invalid-v2"
+        ),
     },
     {
         "path": "runtime_terminal.request.receipt_binding",
@@ -117,7 +153,7 @@ PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY = [
         "path": "runtime_terminal.result.opaque_terminal_signal",
         "root_schema_version": "table2.runtime.v1",
         "record_type": "OpaqueTerminalSignal",
-        "validator_id": "opaque-terminal-event-token-v1",
+        "validator_id": "child-owned-sealed-stream-outer-event-token-v2",
     },
 ]
 PC01_PROCESS_BROKER_SCREENSHOT_TRANSPORT_CONTRACT = (
@@ -135,6 +171,8 @@ PC01_PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256 = hashlib.sha256(
 PC01_PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS = [
     "ATTEST_RUNTIME_VALUE_PROVENANCE",
     "REGISTER_EXTERNAL_DEPLOYMENT_RECEIPT_SCHEMA_AND_TRUST_ANCHOR",
+    "CROSS_BIND_IMMUTABLE_TIMEOUT_CALIBRATION_AUTHORITY_BUNDLE",
+    "CALIBRATE_AND_CROSS_BIND_SEALED_FINALIZATION_TIMEOUT",
 ]
 PINNED_SEMANTIC_DEPENDENCIES = {
     "browsergym-core": "0.14.3",
@@ -902,7 +940,7 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         if isinstance(row, dict)
     }
     process_blocked = (
-        binding.get("schema_version") == "table2-pc01-page-broker-security-v5"
+        binding.get("schema_version") == "table2-pc01-page-broker-security-v9"
         and binding.get("status")
         == "BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED"
         and binding.get("claim_scope")
@@ -911,8 +949,16 @@ def _bootstrap_assert_pc01_page_broker_isolation(
             "NOT_VALUE_PROVENANCE_OR_DEPLOYMENT_AUTHORITY"
         )
         and binding.get("architecture")
-        == "separate_process_af_unix_json_hmac_sha256_peercred_v1"
+        == (
+            "separate_process_child_owned_sealed_sink_"
+            "af_unix_json_hmac_sha256_peercred_v2"
+        )
         and binding.get("runtime_and_evaluator_process_roles_separate") is True
+        and binding.get("child_owned_sealed_sink") is True
+        and binding.get("runtime_adapter_sealed_capability_free") is True
+        and binding.get("separate_evidence_transport_present") is False
+        and binding.get("runtime_terminal_returns_outer_sealed_signal") is True
+        and binding.get("sealed_finalization_returns_outer_sealed_signal") is True
         and binding.get("outer_envelope_fields_exact") is True
         and binding.get("forbidden_named_keys_rejected_recursively") is True
         and binding.get("operation_specific_inner_schema_paths")
@@ -927,12 +973,25 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         and binding.get("observation_stage_prior_action_bound") is True
         and binding.get("verifier_receipt_causal_binding_enforced") is True
         and binding.get("reset_operation_registered") is True
+        and binding.get("executor_local_rejection_registration_enforced") is True
         and binding.get("policy_screenshot_transport_contract")
         == PC01_PROCESS_BROKER_SCREENSHOT_TRANSPORT_CONTRACT
         and binding.get("policy_screenshot_root_bound_per_session") is True
         and binding.get("canonical_wire_json_enforced") is True
         and binding.get("runtime_client_ambiguous_failure_poisoned") is True
         and binding.get("sealed_backend_config_hash_bound") is True
+        and binding.get("measured_ipc_timeout_calibration_required") is True
+        and binding.get("measured_ipc_timeout_calibration_present") is False
+        and binding.get("caller_injected_evaluation_timeout_forbidden") is True
+        and binding.get("ipc_timeout_calibration_schema_version")
+        == "table2-process-broker-ipc-timeout-calibration-v2"
+        and binding.get("immutable_timeout_authority_bundle_present") is False
+        and binding.get("external_timeout_authority_cross_binding_present") is False
+        and binding.get("measured_replay_scope_production_eligible") is False
+        and binding.get("failed_runtime_cleanup_calibration_required") is True
+        and binding.get("failed_runtime_cleanup_calibration_present") is False
+        and binding.get("absolute_ipc_deadline_enforced") is True
+        and binding.get("dedicated_framed_readiness_channel") is True
         and binding.get("runtime_value_provenance_attested") is False
         and binding.get("evaluator_operation_in_runtime_allowlist") is False
         and binding.get("authenticated_outer_envelopes") is True
@@ -941,7 +1000,7 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         == PC01_PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
         and binding.get("same_process_fixture_production_eligible") is False
         and binding.get("local_receipt_schema_version")
-        == "table2-process-page-broker-receipt-v4"
+        == "table2-process-page-broker-receipt-v9"
         and binding.get("local_cleanup_receipt_schema_version")
         == "table2-process-page-broker-cleanup-receipt-v1"
         and binding.get("external_deployment_receipt_schema_version") is None
@@ -974,6 +1033,11 @@ def _bootstrap_assert_pc01_page_broker_isolation(
             "claim_scope",
             "architecture",
             "runtime_and_evaluator_process_roles_separate",
+            "child_owned_sealed_sink",
+            "runtime_adapter_sealed_capability_free",
+            "separate_evidence_transport_present",
+            "runtime_terminal_returns_outer_sealed_signal",
+            "sealed_finalization_returns_outer_sealed_signal",
             "outer_envelope_fields_exact",
             "forbidden_named_keys_rejected_recursively",
             "operation_specific_inner_schema_paths",
@@ -985,11 +1049,23 @@ def _bootstrap_assert_pc01_page_broker_isolation(
             "observation_stage_prior_action_bound",
             "verifier_receipt_causal_binding_enforced",
             "reset_operation_registered",
+            "executor_local_rejection_registration_enforced",
             "policy_screenshot_transport_contract",
             "policy_screenshot_root_bound_per_session",
             "canonical_wire_json_enforced",
             "runtime_client_ambiguous_failure_poisoned",
             "sealed_backend_config_hash_bound",
+            "measured_ipc_timeout_calibration_required",
+            "measured_ipc_timeout_calibration_present",
+            "caller_injected_evaluation_timeout_forbidden",
+            "ipc_timeout_calibration_schema_version",
+            "immutable_timeout_authority_bundle_present",
+            "external_timeout_authority_cross_binding_present",
+            "measured_replay_scope_production_eligible",
+            "failed_runtime_cleanup_calibration_required",
+            "failed_runtime_cleanup_calibration_present",
+            "absolute_ipc_deadline_enforced",
+            "dedicated_framed_readiness_channel",
             "runtime_value_provenance_attested",
             "evaluator_operation_in_runtime_allowlist",
             "authenticated_outer_envelopes",
@@ -1013,8 +1089,9 @@ def _bootstrap_assert_pc01_page_broker_isolation(
     raise RuntimeError(
         "PC-01 live campaign is blocked before provider import: local broker "
         "evidence covers distinct processes, exact outer/inner schemas, and named-key "
-        "rejection; external runtime-value provenance and a separately authenticated "
-        "deployment receipt are still required"
+        "rejection; frozen measured IPC-timeout calibration, external runtime-value "
+        "provenance, and a separately authenticated deployment receipt are still "
+        "required"
     )
 
 
@@ -1024,11 +1101,36 @@ def _bootstrap_verify_evaluation_source(
     runner_entrypoint: str,
     provider_factory_entrypoint: str | None = None,
 ) -> None:
-    """Use only the standard library before importing the evaluation package."""
+    """Use only standard-library guards before importing project modules."""
 
     campaign_root = campaign_dir.resolve()
     manifest = _read_mapping(campaign_root / "campaign_manifest.json")
-    if manifest.get("campaign_mode") == "smoke":
+    # This check deliberately mirrors ``common.classify_campaign_profile``
+    # instead of importing it: source identity is established only below.
+    profile = (manifest.get("campaign_kind"), manifest.get("evidence_label"))
+    if profile not in {
+        ("engineering_pilot", "PILOT_ONLY"),
+        ("locked_final", "FINAL_LOCKED"),
+    }:
+        raise RuntimeError(
+            "evaluation bootstrap campaign_kind/evidence_label profile is not registered"
+        )
+    campaign_mode = manifest.get("campaign_mode")
+    if type(campaign_mode) is not str or campaign_mode not in {
+        "evaluation",
+        "smoke",
+    }:
+        raise RuntimeError(
+            "evaluation bootstrap campaign_mode must be 'evaluation' or explicit 'smoke'"
+        )
+    if campaign_mode == "smoke" and profile != (
+        "engineering_pilot",
+        "PILOT_ONLY",
+    ):
+        raise RuntimeError(
+            "evaluation bootstrap locked-final profile cannot use smoke mode"
+        )
+    if campaign_mode == "smoke":
         return
     if manifest.get("runner_identity_scope") != EVALUATION_RUNNER_SCOPE:
         raise RuntimeError("evaluation bootstrap lacks a frozen runner identity")
@@ -1287,6 +1389,10 @@ def _preflight_pc01_provider_install(
         _read_mapping(campaign_root / "frozen" / "runner_attestation.json")
     )
 
+    from web_agent.eval.table2.common import (
+        CAMPAIGN_PROFILE_PILOT,
+        classify_campaign_profile,
+    )
     from web_agent.eval.table2.execution_guard import (
         PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD,
         assert_clean_git_checkout,
@@ -1331,9 +1437,14 @@ def _preflight_pc01_provider_install(
     attestation = _read_mapping(campaign_root / "frozen/runner_attestation.json")
     environment = _read_mapping(campaign_root / "frozen/environment.json")
     protocol = _read_json_or_yaml_mapping(campaign_root / "frozen/protocol.yaml")
+    campaign_profile = classify_campaign_profile(
+        manifest,
+        context="PC-01 provider preflight campaign manifest",
+        require_campaign_mode=True,
+    )
     if (
-        manifest.get("campaign_mode") != "evaluation"
-        or manifest.get("evidence_label") != "PILOT_ONLY"
+        campaign_profile != CAMPAIGN_PROFILE_PILOT
+        or manifest.get("campaign_mode") != "evaluation"
         or protocol.get("protocol_id") != "table2-pc01-pilot-v1"
         or protocol.get("evidence_label") != "PILOT_ONLY"
         or protocol.get("paper_table_status") != "N/R"
