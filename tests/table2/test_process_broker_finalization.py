@@ -20,7 +20,9 @@ from web_agent.eval.table2.common import (
 )
 from web_agent.eval.table2.process_broker import ProcessIsolatedBroker
 from web_agent.eval.table2.process_broker_finalization import (
+    PROCESS_BROKER_FINALIZATION_RECEIPT_SCHEMA_VERSION,
     ProcessIsolatedEpisodeFinalizationBinding,
+    SEALED_CALLBACK_GUARD_RELATIVE_PATH,
     SEALED_FINALIZATION_OPERATION,
 )
 from web_agent.eval.table2.process_broker_protocol import (
@@ -598,6 +600,21 @@ def test_finalization_is_separate_single_use_capability_and_browser_survives_clo
             ),
         )
         assert signal.terminate is True
+        finalization_receipt = finalizer.finalization_receipt
+        assert finalization_receipt.schema_version == (
+            PROCESS_BROKER_FINALIZATION_RECEIPT_SCHEMA_VERSION
+        )
+        assert finalization_receipt.transcript_entry_count == 14
+        assert finalization_receipt.sealed_callback_guard_identity[
+            "relative_path"
+        ] == SEALED_CALLBACK_GUARD_RELATIVE_PATH
+        assert finalization_receipt.sealed_callback_guard_identity[
+            "record_count"
+        ] >= 1
+        with pytest.raises(TypeError):
+            finalization_receipt.sealed_callback_guard_identity[
+                "record_count"
+            ] = 0
         sealed = verify_sealed_stream(sink.path)
         assert [row["event_kind"] for row in sealed] == [
             "after_reset",
@@ -623,6 +640,23 @@ def test_finalization_is_separate_single_use_capability_and_browser_survives_clo
     finally:
         broker.stop()
     assert broker.cleaned
+    cleanup = broker.cleanup_receipt
+    assert cleanup.transcript_entry_count == 16
+    assert cleanup.shutdown_request_previous_transcript_entry_count == (
+        finalization_receipt.transcript_entry_count
+    )
+    assert cleanup.shutdown_request_previous_transcript_root_sha256 == (
+        finalization_receipt.transcript_root_sha256
+    )
+    assert cleanup.transcript_entry_count == (
+        cleanup.shutdown_request_previous_transcript_entry_count + 2
+    )
+    assert cleanup.child_cleanup_result["cleanup_disposition"] == (
+        "RUNTIME_CLOSE_ACKNOWLEDGED"
+    )
+    assert cleanup.child_cleanup_result["browser_close_completed"] is True
+    assert cleanup.child_cleanup_result["manual_rescue_check_count"] == 0
+    assert cleanup.child_cleanup_result["manual_rescue_tail_sha256"] is None
 
 
 @pytest.mark.parametrize("reason", [TerminalReason.TIMEOUT, TerminalReason.ABORT])
@@ -928,24 +962,39 @@ def test_production_runner_finalizes_then_cleans_process_binding(
         episode_runtime_dir=runtime_dir,
     )
 
+    def cleanup_episode() -> dict[str, Any]:
+        receipt = broker.stop()
+        if receipt is None:
+            raise RuntimeError("authenticated fixture cleanup receipt is absent")
+        return receipt.to_dict()
+
     def abort_episode(episode_id: str, task_id: str) -> BrowserGymEpisodeAbortReceipt:
-        broker.stop(force=True)
+        cleanup = cleanup_episode()
         return BrowserGymEpisodeAbortReceipt(
             episode_id=episode_id,
             task_id=task_id,
             outcome="BROKER_ABORTED",
             underlying_browser_created=True,
             underlying_browser_close_called=True,
-            broker_abort_receipt_sha256="a" * 64,
+            broker_abort_receipt_sha256=sha256_json(cleanup),
         )
 
+    factory_identity = {"schema_version": "fixture-process-episode-factory-v1"}
     process_binding = ProcessIsolatedWebArenaEpisodeBinding(
         benchmark_version=task.benchmark_version,
         environment_adapter=adapter,
         finalize_episode_evidence=finalization.finalize_episode_evidence,
+        finalization_receipt=lambda: finalization.finalization_receipt.to_dict(),
         abort_episode=abort_episode,
-        cleanup_episode=broker.stop,
+        cleanup_episode=cleanup_episode,
         broker_receipt=broker.receipt.to_dict(),
+        live_deployment_binding_sha256="a" * 64,
+        live_deployment_manifest_sha256="b" * 64,
+        measured_timeout_binding_sha256=(
+            broker.receipt.ipc_timeout_binding_sha256
+        ),
+        episode_factory_public_identity=factory_identity,
+        episode_factory_descriptor_sha256=sha256_json(factory_identity),
     )
     logs = EpisodeEventLogs(
         tmp_path / "events",
@@ -960,10 +1009,14 @@ def test_production_runner_finalizes_then_cleans_process_binding(
     runner._active_webarena = {
         "episode-1": _ActiveProcessWebArenaSession(
             finalizer=process_binding.finalize_episode_evidence,
+            finalization_receipt=process_binding.finalization_receipt,
             cleanup_episode=process_binding.cleanup_episode,
             abort_episode=process_binding.abort_episode,
             event_logs=logs,
             task_id="task-1",
+            launch_receipt_sha256=sha256_json(broker.receipt.to_dict()),
+            launch_source_set_sha256=broker.receipt.source_set_sha256,
+            sealed_child_pid=broker.receipt.sealed_evaluator_pid,
         )
     }
     summary = _summary(
@@ -1003,16 +1056,22 @@ def test_production_runner_finalizer_error_aborts_and_reaps_process(
     )
     aborts: list[str] = []
 
+    def cleanup_episode() -> dict[str, Any]:
+        receipt = broker.stop()
+        if receipt is None:
+            raise RuntimeError("authenticated fixture cleanup receipt is absent")
+        return receipt.to_dict()
+
     def abort_episode(episode_id: str, task_id: str) -> BrowserGymEpisodeAbortReceipt:
         aborts.append(episode_id)
-        broker.stop(force=True)
+        cleanup = cleanup_episode()
         return BrowserGymEpisodeAbortReceipt(
             episode_id=episode_id,
             task_id=task_id,
             outcome="BROKER_ABORTED",
             underlying_browser_created=True,
             underlying_browser_close_called=True,
-            broker_abort_receipt_sha256="a" * 64,
+            broker_abort_receipt_sha256=sha256_json(cleanup),
         )
 
     logs = EpisodeEventLogs(
@@ -1028,10 +1087,16 @@ def test_production_runner_finalizer_error_aborts_and_reaps_process(
     runner._active_webarena = {
         "episode-1": _ActiveProcessWebArenaSession(
             finalizer=finalization.finalize_episode_evidence,
-            cleanup_episode=broker.stop,
+            finalization_receipt=lambda: (
+                finalization.finalization_receipt.to_dict()
+            ),
+            cleanup_episode=cleanup_episode,
             abort_episode=abort_episode,
             event_logs=logs,
             task_id="task-1",
+            launch_receipt_sha256=sha256_json(broker.receipt.to_dict()),
+            launch_source_set_sha256=broker.receipt.source_set_sha256,
+            sealed_child_pid=broker.receipt.sealed_evaluator_pid,
         )
     }
     with pytest.raises(ProcessBrokerProtocolError):

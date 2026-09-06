@@ -13,7 +13,13 @@ from web_agent.eval.table2 import package_validator as package_validator_module
 from web_agent.eval.table2 import production_runner as production_runner_module
 
 from web_agent.eval.table2 import execution_guard
-from web_agent.eval.table2.common import SchemaError, sha256_file, sha256_json
+from web_agent.eval.table2.common import (
+    CAMPAIGN_PROFILE_FINAL,
+    CAMPAIGN_PROFILE_PILOT,
+    SchemaError,
+    sha256_file,
+    sha256_json,
+)
 from web_agent.eval.table2.dependency_lock import build_semantic_dependency_lock
 from web_agent.eval.table2.execution_guard import (
     EVALUATION_RUNNER_SCOPE,
@@ -1207,7 +1213,7 @@ def test_evaluation_cli_bootstrap_rejects_mixed_smoke_before_provider_import(
     assert "profile_probe_provider" not in sys.modules
 
 
-def test_evaluation_cli_bootstrap_remeasures_split_browser_but_blocks_dispatch(
+def test_evaluation_cli_split_bootstrap_stays_closed_without_live_dgx_receipts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1311,11 +1317,22 @@ def test_evaluation_cli_bootstrap_remeasures_split_browser_but_blocks_dispatch(
         "version",
         lambda name: PINNED_WEBARENA_PACKAGES[name],
     )
-    with pytest.raises(RuntimeError, match="split deployment dispatch is blocked"):
+    with pytest.raises(
+        RuntimeError,
+        match="split pilot dispatch is blocked until a typed DGX startup",
+    ):
         evaluation_cli._bootstrap_validate_semantic_dependency_lock(
             campaign_root=campaign,
             environment=environment,
             dependency_lock=lock_path,
+            campaign_profile=evaluation_cli.PC01_PILOT_PROFILE,
+        )
+    with pytest.raises(RuntimeError, match="locked-final split deployment"):
+        evaluation_cli._bootstrap_validate_semantic_dependency_lock(
+            campaign_root=campaign,
+            environment=environment,
+            dependency_lock=lock_path,
+            campaign_profile=evaluation_cli.PC01_FINAL_PROFILE,
         )
 
     missing = json.loads(json.dumps(preflight))
@@ -1328,6 +1345,7 @@ def test_evaluation_cli_bootstrap_remeasures_split_browser_but_blocks_dispatch(
             campaign_root=campaign,
             environment=environment,
             dependency_lock=lock_path,
+            campaign_profile=evaluation_cli.PC01_PILOT_PROFILE,
         )
 
 
@@ -1560,8 +1578,11 @@ def test_same_process_page_broker_binding_is_truthful_and_unpromotable() -> None
         "production_dispatch_authorized": False,
     }
     assert validate_pc01_page_broker_security_binding(binding) == binding
-    with pytest.raises(SchemaError, match="externally evidenced process isolation"):
-        assert_pc01_page_broker_production_authorized(binding)
+    with pytest.raises(SchemaError, match="same-process broker"):
+        assert_pc01_page_broker_production_authorized(
+            binding,
+            campaign_profile=CAMPAIGN_PROFILE_PILOT,
+        )
 
     forged = dict(binding)
     forged["production_dispatch_authorized"] = True
@@ -1580,7 +1601,8 @@ def test_process_isolation_block_prevents_adversarial_provider_import(
         # module side effect. The production gate must fire before its module is
         # resolved or executed at all.
         assert_pc01_page_broker_production_authorized(
-            blocked_pc01_page_broker_security_binding()
+            blocked_pc01_page_broker_security_binding(),
+            campaign_profile=CAMPAIGN_PROFILE_PILOT,
         )
 
     def adversarial_factory_load(*_args, **_kwargs):
@@ -1598,7 +1620,7 @@ def test_process_isolation_block_prevents_adversarial_provider_import(
     monkeypatch.setattr(
         evaluation_cli, "_load_exact_provider_factory", adversarial_factory_load
     )
-    with pytest.raises(SchemaError, match="externally evidenced process isolation"):
+    with pytest.raises(SchemaError, match="same-process broker"):
         evaluation_cli._install_pc01_operations_provider(
             tmp_path / "campaign",
             provider_factory_entrypoint=(
@@ -1617,7 +1639,10 @@ def test_canonical_bootstrap_records_broker_block_before_package_import() -> Non
         PC01_PAGE_BROKER_SECURITY_FIELD: blocked_pc01_page_broker_security_binding()
     }
     with pytest.raises(RuntimeError, match="blocked before provider import"):
-        evaluation_cli._bootstrap_assert_pc01_page_broker_isolation(attestation)
+        evaluation_cli._bootstrap_assert_pc01_page_broker_isolation(
+            attestation,
+            campaign_profile=evaluation_cli.PC01_PILOT_PROFILE,
+        )
 
 
 def test_evaluation_bootstrap_mirrors_process_broker_promotion_requirements() -> None:

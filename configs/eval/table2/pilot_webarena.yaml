@@ -3,10 +3,10 @@ campaign_kind: engineering_pilot
 evidence_label: PILOT_ONLY
 paper_table_status: N/R
 protocol: configs/eval/table2/protocol.yaml
-task_manifest: benchmarks/table2/pilot/task_manifest.json
-recovery_scenarios: benchmarks/table2/pilot/recovery_scenarios.json
+task_manifest: benchmarks/table2/pilot/task_manifest_page_state_v2.json
+recovery_scenarios: benchmarks/table2/pilot/recovery_scenarios_page_state_v2.json
 recovery_oracle_rules: benchmarks/table2/pilot/recovery_oracle_rules.json
-duplicate_audit_manifest: benchmarks/table2/pilot/duplicate_audit_manifest.json
+duplicate_audit_manifest: benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json
 audit_manifest: benchmarks/table2/pilot/audit_manifest.json
 paper_claim_registry: configs/eval/table2/paper_claim_registry_v1.json
 systems: [E0, E1, E2, E3]

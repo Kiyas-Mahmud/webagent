@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
+import hashlib
 import json
 import math
 import os
@@ -34,7 +35,7 @@ from .common import SchemaError, canonical_json_bytes, sha256_file, sha256_json
 PROCESS_BROKER_IMPORT_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
 
 TIMEOUT_CALIBRATION_SCHEMA_VERSION = (
-    "table2-process-broker-ipc-timeout-calibration-v2"
+    "table2-process-broker-ipc-timeout-calibration-v3"
 )
 TIMEOUT_CALIBRATION_RECORD_TYPE = "ProcessBrokerIPCTimeoutCalibration"
 TIMEOUT_CALIBRATION_STATUS = "MEASURED_COMPLETE_NON_AUTHORIZING"
@@ -42,10 +43,10 @@ TIMEOUT_CALIBRATION_CLAIM_SCOPE = (
     "PRE_CAMPAIGN_OUTCOME_BLIND_INFRASTRUCTURE_CALIBRATION_"
     "NOT_DEPLOYMENT_AUTHORITY"
 )
-TIMEOUT_BINDING_SCHEMA_VERSION = "table2-process-broker-ipc-timeout-binding-v2"
+TIMEOUT_BINDING_SCHEMA_VERSION = "table2-process-broker-ipc-timeout-binding-v3"
 MEASURED_TIMEOUT_MODE = "MEASURED_PRE_CAMPAIGN_CALIBRATION"
 ENGINEERING_TIMEOUT_MODE = "ENGINEERING_FIXTURE_EXPLICIT_NOT_EVALUATION"
-TIMEOUT_DERIVATION_ID = "max_observed_x2_plus_1000ms_ceil_100ms_v1"
+TIMEOUT_DERIVATION_ID = "max_observed_x2_plus_1000ms_ceil_100ms_v2"
 MONOTONIC_CLOCK_ID = "time.monotonic_ns"
 MAX_TIMEOUT_AUTHORITY_ARTIFACT_BYTES = 8 * 1024 * 1024
 # Leaves 640 KiB of the registered 1 MiB IPC frame for source rows, sealed
@@ -59,9 +60,11 @@ RUNTIME_TIMEOUT_OPERATIONS = (
     "runtime_terminal",
     "runtime_close",
 )
+SEALED_FINALIZATION_TIMEOUT_OPERATION = "sealed_finalize_episode"
 BROKER_TIMEOUT_KEYS = (
     "broker_startup",
     *RUNTIME_TIMEOUT_OPERATIONS,
+    SEALED_FINALIZATION_TIMEOUT_OPERATION,
     "control_shutdown",
 )
 CALIBRATION_OPERATION_CLASSES = (
@@ -78,6 +81,7 @@ CALIBRATION_OPERATION_CLASSES = (
     "runtime_observe_recovery",
     "runtime_terminal_post_recovery",
     "runtime_close",
+    "sealed_finalize_episode",
     "control_shutdown_normal",
     "control_shutdown_after_failed_runtime",
 )
@@ -120,6 +124,7 @@ DERIVATION_SOURCE_CLASSES = {
         "runtime_terminal_post_recovery",
     ),
     "runtime_close": ("runtime_close",),
+    "sealed_finalize_episode": ("sealed_finalize_episode",),
     "control_shutdown": (
         "runtime_close",
         "control_shutdown_normal",
@@ -128,16 +133,37 @@ DERIVATION_SOURCE_CLASSES = {
 }
 
 SAFE_PROBE_MANIFEST_SCHEMA_VERSION = (
-    "table2-process-broker-timeout-safe-probe-manifest-v1"
+    "table2-process-broker-timeout-safe-probe-manifest-v2"
 )
 HARNESS_SOURCE_RECEIPT_SCHEMA_VERSION = (
     "table2-process-broker-timeout-harness-source-receipt-v1"
 )
 MEASUREMENT_SOURCE_RECEIPT_SCHEMA_VERSION = (
-    "table2-process-broker-timeout-measurement-source-receipt-v1"
+    "table2-process-broker-timeout-measurement-source-receipt-v2"
 )
 NON_PERSISTENCE_RECEIPT_SCHEMA_VERSION = (
     "table2-process-broker-timeout-non-persistence-receipt-v1"
+)
+TIMEOUT_COLLECTION_MANIFEST_SCHEMA_VERSION = (
+    "table2-process-broker-timeout-collection-manifest-v1"
+)
+
+TIMEOUT_CALIBRATION_FILENAME = "process_broker_timeout_calibration.json"
+TIMEOUT_SAFE_PROBE_FILENAME = "safe_probe_manifest.json"
+TIMEOUT_HARNESS_SOURCE_RECEIPT_FILENAME = (
+    "measurement_harness_source_receipt.json"
+)
+TIMEOUT_MEASUREMENT_SOURCE_RECEIPT_FILENAME = "measurement_source_receipt.json"
+TIMEOUT_NON_PERSISTENCE_RECEIPT_FILENAME = "non_persistence_audit_receipt.json"
+TIMEOUT_COLLECTION_MANIFEST_FILENAME = "collection_manifest.json"
+TIMEOUT_COLLECTION_FAILURE_FILENAME = "COLLECTION_FAILED.json"
+
+_TIMEOUT_CORE_ARTIFACT_FILENAMES = (
+    TIMEOUT_CALIBRATION_FILENAME,
+    TIMEOUT_HARNESS_SOURCE_RECEIPT_FILENAME,
+    TIMEOUT_MEASUREMENT_SOURCE_RECEIPT_FILENAME,
+    TIMEOUT_NON_PERSISTENCE_RECEIPT_FILENAME,
+    TIMEOUT_SAFE_PROBE_FILENAME,
 )
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -248,6 +274,31 @@ _BINDING_FIELDS = {
     "caller_selected_timeout",
     "live_campaign_authority",
 }
+_COLLECTION_MANIFEST_FIELDS = {
+    "schema_version",
+    "record_type",
+    "status",
+    "claim_scope",
+    "evidence_label",
+    "paper_table_status",
+    "production_dispatch_authorized",
+    "live_campaign_authority",
+    "external_cross_binding_present",
+    "caller_selected_timeout",
+    "measurement_clock",
+    "measurement_count",
+    "task_count",
+    "operation_classes",
+    "safe_probe_manifest_sha256",
+    "measurement_harness_source_receipt_sha256",
+    "measurement_harness_source_set_sha256",
+    "harness_factory_entrypoint",
+    "harness_factory_entrypoint_sha256",
+    "calibration_content_sha256",
+    "artifact_files",
+    "rerun_at_same_output_path_permitted",
+}
+_COLLECTION_MANIFEST_ARTIFACT_FIELDS = {"relative_path", "sha256"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,6 +319,8 @@ class ProcessBrokerTimeoutExpectedAuthority:
     production_dispatch_authorized: bool
     calibration_artifact_path: str | Path
     calibration_content_sha256: str
+    collection_manifest_path: str | Path
+    collection_manifest_content_sha256: str
     task_manifest_sha256: str
     ordered_task_ids: tuple[str, ...]
     ordered_upstream_indices: tuple[int, ...]
@@ -299,6 +352,10 @@ class ProcessBrokerTimeoutExpectedAuthority:
             "production_dispatch_authorized": self.production_dispatch_authorized,
             "calibration_artifact_path": os.fspath(self.calibration_artifact_path),
             "calibration_content_sha256": self.calibration_content_sha256,
+            "collection_manifest_path": os.fspath(self.collection_manifest_path),
+            "collection_manifest_content_sha256": (
+                self.collection_manifest_content_sha256
+            ),
             "task_manifest_sha256": self.task_manifest_sha256,
             "ordered_task_ids": list(self.ordered_task_ids),
             "ordered_upstream_indices": list(self.ordered_upstream_indices),
@@ -533,6 +590,7 @@ def _expected_derivation_contract() -> dict[str, Any]:
                 "pre_observation_delay_ms+1000ms"
             ),
             "terminal_close_control": "playwright_timeout_ms+1000ms",
+            "sealed_finalization": "playwright_timeout_ms+1000ms",
             "startup_observe": "1000ms",
         },
         "timeout_source_classes": {
@@ -681,6 +739,7 @@ def _measurement_rows(
             rows["runtime_observe_recovery"],
             rows["runtime_terminal_post_recovery"],
             rows["runtime_close"],
+            rows["sealed_finalize_episode"],
             rows["control_shutdown_normal"],
             rows["control_shutdown_after_failed_runtime"],
         ]
@@ -722,6 +781,7 @@ def _derive_timeout_milliseconds(
         "runtime_observe": 1000,
         "runtime_terminal": playwright_ms + 1000,
         "runtime_close": playwright_ms + 1000,
+        "sealed_finalize_episode": playwright_ms + 1000,
         "control_shutdown": playwright_ms + 1000,
     }
     derived: dict[str, int] = {}
@@ -739,7 +799,10 @@ def _derive_timeout_milliseconds(
             raise SchemaError(
                 f"measured {timeout_key} timeout exceeds frozen setup budget"
             )
-    for timeout_key in RUNTIME_TIMEOUT_OPERATIONS:
+    for timeout_key in (
+        *RUNTIME_TIMEOUT_OPERATIONS,
+        SEALED_FINALIZATION_TIMEOUT_OPERATION,
+    ):
         if derived[timeout_key] > runtime_ceiling:
             raise SchemaError(
                 f"measured {timeout_key} timeout exceeds frozen task budget"
@@ -1442,6 +1505,182 @@ def load_process_broker_timeout_calibration(
     return validate_process_broker_timeout_calibration(value, **expected)
 
 
+def _timeout_authority_bundle_directory(
+    authority: ProcessBrokerTimeoutExpectedAuthority,
+) -> tuple[Path, tuple[int, int, int]]:
+    """Resolve the one sealed directory allowed to contain an authority bundle."""
+
+    expected_names = {
+        "calibration_artifact_path": TIMEOUT_CALIBRATION_FILENAME,
+        "collection_manifest_path": TIMEOUT_COLLECTION_MANIFEST_FILENAME,
+        "safe_probe_manifest_path": TIMEOUT_SAFE_PROBE_FILENAME,
+        "measurement_harness_source_receipt_path": (
+            TIMEOUT_HARNESS_SOURCE_RECEIPT_FILENAME
+        ),
+        "measurement_source_receipt_path": (
+            TIMEOUT_MEASUREMENT_SOURCE_RECEIPT_FILENAME
+        ),
+        "non_persistence_audit_receipt_path": (
+            TIMEOUT_NON_PERSISTENCE_RECEIPT_FILENAME
+        ),
+    }
+    canonical_directory: Path | None = None
+    for field, expected_name in expected_names.items():
+        raw_path = Path(os.fspath(getattr(authority, field)))
+        if not raw_path.is_absolute():
+            raise SchemaError(f"timeout expected-authority {field} must be absolute")
+        path = Path(os.path.abspath(raw_path))
+        if path.name != expected_name:
+            raise SchemaError(
+                f"timeout expected-authority {field} must use the registered filename"
+            )
+        current = Path(path.anchor)
+        try:
+            for component in path.parent.parts[1:]:
+                current = current / component
+                metadata = current.lstat()
+                if stat.S_ISLNK(metadata.st_mode):
+                    raise SchemaError(
+                        "timeout authority bundle must not use symlink ancestry"
+                    )
+        except OSError as exc:
+            raise SchemaError("timeout authority bundle directory is absent") from exc
+        resolved_parent = path.parent.resolve(strict=True)
+        if canonical_directory is None:
+            canonical_directory = resolved_parent
+        elif resolved_parent != canonical_directory:
+            raise SchemaError(
+                "timeout authority artifacts must share one canonical directory"
+            )
+
+    assert canonical_directory is not None  # all expected paths are mandatory
+    try:
+        directory_metadata = canonical_directory.lstat()
+    except OSError as exc:  # pragma: no cover - resolved directory already existed
+        raise SchemaError("timeout authority bundle directory is absent") from exc
+    if (
+        not stat.S_ISDIR(directory_metadata.st_mode)
+        or stat.S_ISLNK(directory_metadata.st_mode)
+        or directory_metadata.st_mode & 0o222
+    ):
+        raise SchemaError("timeout authority bundle directory must be read-only")
+    if os.path.lexists(canonical_directory / TIMEOUT_COLLECTION_FAILURE_FILENAME):
+        raise SchemaError("failed timeout collection cannot provide calibration authority")
+    return canonical_directory, (
+        directory_metadata.st_dev,
+        directory_metadata.st_ino,
+        directory_metadata.st_mode,
+    )
+
+
+def _validate_timeout_collection_manifest(
+    value: object,
+    *,
+    authority: ProcessBrokerTimeoutExpectedAuthority,
+) -> dict[str, Any]:
+    """Validate the success marker and its exact five-artifact closure."""
+
+    manifest = _detached_mapping(value, "timeout collection manifest")
+    _require_exact_fields(
+        manifest, _COLLECTION_MANIFEST_FIELDS, "timeout collection manifest"
+    )
+    fixed = {
+        "schema_version": TIMEOUT_COLLECTION_MANIFEST_SCHEMA_VERSION,
+        "record_type": "ProcessBrokerTimeoutCollectionManifest",
+        "status": TIMEOUT_CALIBRATION_STATUS,
+        "claim_scope": TIMEOUT_CALIBRATION_CLAIM_SCOPE,
+        "evidence_label": "PRE_CAMPAIGN_INFRASTRUCTURE_ONLY",
+        "paper_table_status": "N/R",
+        "production_dispatch_authorized": False,
+        "live_campaign_authority": False,
+        "external_cross_binding_present": False,
+        "caller_selected_timeout": False,
+        "measurement_clock": MONOTONIC_CLOCK_ID,
+        "rerun_at_same_output_path_permitted": False,
+    }
+    if any(manifest.get(field) != expected for field, expected in fixed.items()):
+        raise SchemaError("timeout collection manifest authority boundary differs")
+    for field in ("measurement_count", "task_count"):
+        if type(manifest.get(field)) is not int or manifest[field] <= 0:
+            raise SchemaError(f"timeout collection manifest {field} is invalid")
+    if manifest.get("operation_classes") != list(CALIBRATION_OPERATION_CLASSES):
+        raise SchemaError("timeout collection manifest operation classes differ")
+    expected_identities = {
+        "safe_probe_manifest_sha256": (
+            authority.safe_probe_manifest_content_sha256
+        ),
+        "measurement_harness_source_receipt_sha256": (
+            authority.measurement_harness_source_receipt_content_sha256
+        ),
+        "measurement_harness_source_set_sha256": (
+            authority.measurement_harness_source_set_sha256
+        ),
+        "calibration_content_sha256": authority.calibration_content_sha256,
+    }
+    for field, expected in expected_identities.items():
+        if manifest.get(field) != expected:
+            raise SchemaError(
+                f"timeout collection manifest {field} differs from authority"
+            )
+    entrypoint = manifest.get("harness_factory_entrypoint")
+    if type(entrypoint) is not str or ":" not in entrypoint or not entrypoint.strip():
+        raise SchemaError("timeout collection manifest harness entrypoint is invalid")
+    if manifest.get("harness_factory_entrypoint_sha256") != hashlib.sha256(
+        entrypoint.encode("utf-8")
+    ).hexdigest():
+        raise SchemaError("timeout collection manifest harness entrypoint hash differs")
+
+    expected_artifacts = {
+        TIMEOUT_CALIBRATION_FILENAME: authority.calibration_content_sha256,
+        TIMEOUT_SAFE_PROBE_FILENAME: (
+            authority.safe_probe_manifest_content_sha256
+        ),
+        TIMEOUT_HARNESS_SOURCE_RECEIPT_FILENAME: (
+            authority.measurement_harness_source_receipt_content_sha256
+        ),
+        TIMEOUT_MEASUREMENT_SOURCE_RECEIPT_FILENAME: (
+            authority.measurement_source_receipt_content_sha256
+        ),
+        TIMEOUT_NON_PERSISTENCE_RECEIPT_FILENAME: (
+            authority.non_persistence_audit_receipt_content_sha256
+        ),
+    }
+    rows = manifest.get("artifact_files")
+    if not isinstance(rows, list) or len(rows) != len(expected_artifacts):
+        raise SchemaError(
+            "timeout collection manifest lacks the exact core artifact set"
+        )
+    observed: dict[str, str] = {}
+    ordered_paths: list[str] = []
+    for row_value in rows:
+        row = _detached_mapping(row_value, "timeout collection artifact row")
+        _require_exact_fields(
+            row,
+            _COLLECTION_MANIFEST_ARTIFACT_FIELDS,
+            "timeout collection artifact row",
+        )
+        relative = row.get("relative_path")
+        digest = _require_sha256(
+            row.get("sha256"), "timeout collection artifact"
+        )
+        if (
+            type(relative) is not str
+            or relative not in expected_artifacts
+            or relative in observed
+            or Path(relative).name != relative
+        ):
+            raise SchemaError(
+                "timeout collection manifest core artifact paths differ"
+            )
+        observed[relative] = digest
+        ordered_paths.append(relative)
+    if observed != expected_artifacts or ordered_paths != sorted(expected_artifacts):
+        raise SchemaError(
+            "timeout collection manifest lacks the exact core artifact set"
+        )
+    return manifest
+
+
 def load_authority_bound_timeout_calibration(
     authority: ProcessBrokerTimeoutExpectedAuthority,
 ) -> dict[str, Any]:
@@ -1466,19 +1705,12 @@ def load_authority_bound_timeout_calibration(
         raise SchemaError(
             "local timeout expected-authority binding cannot claim external authority"
         )
-    path_fields = (
-        "calibration_artifact_path",
-        "safe_probe_manifest_path",
-        "measurement_harness_source_receipt_path",
-        "measurement_source_receipt_path",
-        "non_persistence_audit_receipt_path",
+    bundle_directory, bundle_directory_identity = (
+        _timeout_authority_bundle_directory(authority)
     )
-    for field in path_fields:
-        path = Path(os.fspath(getattr(authority, field)))
-        if not path.is_absolute():
-            raise SchemaError(f"timeout expected-authority {field} must be absolute")
     digest_fields = (
         "calibration_content_sha256",
+        "collection_manifest_content_sha256",
         "task_manifest_sha256",
         "deployment_preflight_content_sha256",
         "semantic_dependency_lock_sha256",
@@ -1497,6 +1729,19 @@ def load_authority_bound_timeout_calibration(
         authority.ordered_upstream_indices
     ) != 50:
         raise SchemaError("timeout authority requires the exact 50-task registry")
+
+    collection_manifest = _load_immutable_strict_json(
+        authority.collection_manifest_path,
+        label="timeout collection manifest",
+    )
+    if (
+        sha256_json(collection_manifest)
+        != authority.collection_manifest_content_sha256
+    ):
+        raise SchemaError("timeout collection manifest content differs from authority")
+    collection_manifest = _validate_timeout_collection_manifest(
+        collection_manifest, authority=authority
+    )
 
     evidence = load_process_broker_timeout_calibration(
         authority.calibration_artifact_path,
@@ -1595,6 +1840,27 @@ def load_authority_bound_timeout_calibration(
             authority.non_persistence_audit_receipt_content_sha256
         ),
     )
+    if collection_manifest["measurement_count"] != len(evidence["measurements"]):
+        raise SchemaError("timeout collection manifest measurement count differs")
+    if collection_manifest["task_count"] != len(task_ids):
+        raise SchemaError("timeout collection manifest task count differs")
+    try:
+        final_directory_metadata = bundle_directory.lstat()
+    except OSError as exc:
+        raise SchemaError("timeout authority bundle directory disappeared") from exc
+    if (
+        (
+            final_directory_metadata.st_dev,
+            final_directory_metadata.st_ino,
+            final_directory_metadata.st_mode,
+        )
+        != bundle_directory_identity
+        or final_directory_metadata.st_mode & 0o222
+        or os.path.lexists(
+            bundle_directory / TIMEOUT_COLLECTION_FAILURE_FILENAME
+        )
+    ):
+        raise SchemaError("timeout authority bundle changed during validation")
     return evidence
 
 
@@ -1681,6 +1947,7 @@ def engineering_timeout_binding(
     seconds = {
         "broker_startup": startup_timeout_seconds,
         **{operation: runtime_timeout_seconds for operation in RUNTIME_TIMEOUT_OPERATIONS},
+        SEALED_FINALIZATION_TIMEOUT_OPERATION: runtime_timeout_seconds,
         "control_shutdown": control_shutdown_timeout_seconds,
     }
     milliseconds: dict[str, int] = {}
@@ -1837,6 +2104,7 @@ __all__ = [
     "PROCESS_BROKER_IMPORT_SOURCE_SHA256",
     "ProcessBrokerTimeoutExpectedAuthority",
     "RUNTIME_TIMEOUT_OPERATIONS",
+    "SEALED_FINALIZATION_TIMEOUT_OPERATION",
     "SAFE_PROBE_MANIFEST_SCHEMA_VERSION",
     "TIMEOUT_BINDING_SCHEMA_VERSION",
     "TIMEOUT_CALIBRATION_SCHEMA_VERSION",

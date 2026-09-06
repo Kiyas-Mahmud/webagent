@@ -29,6 +29,7 @@ from .process_broker_protocol import (
     PROCESS_BROKER_INFRASTRUCTURE_INVALID_STATUS,
     PROCESS_BROKER_PROTOCOL_VERSION,
     RUNTIME_BROKER_OPERATIONS,
+    ProcessBrokerTranscript,
     ProcessBrokerProtocolError,
     authenticated_envelope,
     expected_verifier_receipt_binding,
@@ -80,6 +81,7 @@ class ProcessIsolatedRuntimeClient:
         "__terminal_required",
         "__terminated",
         "__timeouts",
+        "__transcript",
     )
 
     def __init__(
@@ -91,12 +93,18 @@ class ProcessIsolatedRuntimeClient:
         policy_screenshot_root: str | Path | None = None,
         timeout_seconds: float = 10.0,
         timeout_seconds_by_operation: Mapping[str, float] | None = None,
+        transcript: ProcessBrokerTranscript | None = None,
     ) -> None:
         if not session_id or len(authentication_key) < 32:
             raise ValueError("runtime broker client requires session/key identity")
         self.__endpoint = str(endpoint)
         self.__key = bytes(authentication_key)
         self.__session_id = session_id
+        if transcript is not None and type(transcript) is not ProcessBrokerTranscript:
+            raise TypeError("runtime broker transcript capability has wrong type")
+        self.__transcript = transcript or ProcessBrokerTranscript(
+            session_id=session_id
+        )
         self.__sequence = 0
         if timeout_seconds_by_operation is None:
             timeout_value = float(timeout_seconds)
@@ -179,18 +187,45 @@ class ProcessIsolatedRuntimeClient:
                 "operation": operation,
                 "payload": validated_payload,
             }
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-                set_socket_timeout_to_deadline(connection, deadline)
-                connection.connect(self.__endpoint)
-                send_frame(
-                    connection,
-                    authenticated_envelope(body, authentication_key=self.__key),
-                    deadline_monotonic=deadline,
-                )
-                response = verify_authenticated_envelope(
-                    receive_frame(connection, deadline_monotonic=deadline),
-                    authentication_key=self.__key,
-                )
+            request_frame = authenticated_envelope(
+                body, authentication_key=self.__key
+            )
+            with self.__transcript.exchange():
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                    set_socket_timeout_to_deadline(connection, deadline)
+                    connection.connect(self.__endpoint)
+                    send_frame(
+                        connection,
+                        request_frame,
+                        deadline_monotonic=deadline,
+                    )
+                    self.__transcript.commit_authenticated_frame(
+                        direction="request",
+                        role="runtime",
+                        sequence=sequence,
+                        operation=operation,
+                        frame=request_frame,
+                        payload=validated_payload,
+                    )
+                    response_frame = receive_frame(
+                        connection, deadline_monotonic=deadline
+                    )
+                    response = verify_authenticated_envelope(
+                        response_frame,
+                        authentication_key=self.__key,
+                    )
+                    # Authentication is the commitment boundary. Even a
+                    # subsequently rejected response shape is retained so an
+                    # ambiguous or adversarial exchange cannot disappear from
+                    # the final cleanup transcript.
+                    self.__transcript.commit_authenticated_frame(
+                        direction="response",
+                        role="runtime",
+                        sequence=sequence,
+                        operation=operation,
+                        frame=response_frame,
+                        payload=response.get("result"),
+                    )
             expected = {
                 "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
                 "role": "sealed_runtime_response",

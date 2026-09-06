@@ -41,7 +41,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--registry",
         type=Path,
-        default=REPOSITORY_ROOT / "benchmarks/table2/pilot/task_manifest.json",
+        default=(
+            REPOSITORY_ROOT
+            / "benchmarks/table2/pilot/task_manifest_page_state_v2.json"
+        ),
     )
     parser.add_argument(
         "--url-map",

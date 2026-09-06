@@ -51,7 +51,10 @@ def _comparison_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--task-registry",
         type=Path,
-        default=REPOSITORY_ROOT / "benchmarks/table2/pilot/task_manifest.json",
+        default=(
+            REPOSITORY_ROOT
+            / "benchmarks/table2/pilot/task_manifest_page_state_v2.json"
+        ),
         help="tracked ordered 50-task public-development registry",
     )
     parser.add_argument(

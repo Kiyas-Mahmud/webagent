@@ -4,7 +4,12 @@ from copy import deepcopy
 
 import pytest
 
-from web_agent.eval.table2.common import SchemaError, sha256_json
+from web_agent.eval.table2.common import (
+    CAMPAIGN_PROFILE_FINAL,
+    CAMPAIGN_PROFILE_PILOT,
+    SchemaError,
+    sha256_json,
+)
 from web_agent.eval.table2.dependency_lock import (
     BROWSER_HOST_ROLE,
     DGX_HOST_ROLE,
@@ -236,8 +241,19 @@ def test_split_lock_binds_two_host_inventories_and_responsibilities() -> None:
     assert lock["dgx_dispatch_receipt_requirement"][
         "production_dispatch_authorized"
     ] is False
-    with pytest.raises(SchemaError, match="split dispatch is blocked"):
-        assert_split_dispatch_authority_registered(lock)
+    with pytest.raises(
+        SchemaError,
+        match="typed DGX startup/per-block remeasurement receipt",
+    ):
+        assert_split_dispatch_authority_registered(
+            lock,
+            campaign_profile=CAMPAIGN_PROFILE_PILOT,
+        )
+    with pytest.raises(SchemaError, match="locked-final split dispatch"):
+        assert_split_dispatch_authority_registered(
+            lock,
+            campaign_profile=CAMPAIGN_PROFILE_FINAL,
+        )
 
     missing = deepcopy(preflight)
     del missing["dgx_model_runtime_identity"]["dependency_identity"]

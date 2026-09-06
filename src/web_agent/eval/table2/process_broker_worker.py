@@ -7,8 +7,9 @@ and result paths satisfy registered schemas and one-session causal state. Those
 schemas carry no external value-provenance attestation, so this source does not
 claim that neutral-key values are semantically oracle-free.  A separate
 orchestration key exposes one post-decision finalization operation. The child
-owns the append-only sealed stream and only its outer opaque event/token enters
-runtime or orchestration responses.
+owns the append-only sealed stream. Runtime receives only outer opaque signals;
+orchestration additionally receives a content-addressed identity for the
+completed child-owned sealed-callback state guard.
 """
 
 from __future__ import annotations
@@ -30,10 +31,14 @@ from . import sealed_verifier as _sealed_verifier_source  # noqa: F401
 from .common import canonical_json_bytes, sha256_file
 from .process_broker_protocol import (
     PROCESS_BROKER_INFRASTRUCTURE_INVALID_STATUS,
+    PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION,
+    PROCESS_BROKER_CHILD_ENVIRONMENT_FIXED_NAMES,
+    PROCESS_BROKER_CHILD_ENVIRONMENT_INHERITED_ALLOWLIST,
     PROCESS_BROKER_PROTOCOL_VERSION,
     RUNTIME_BROKER_OPERATIONS,
     ProcessBrokerInfrastructureInvalidResponse,
     ProcessBrokerProtocolError,
+    ProcessBrokerTranscript,
     authenticated_envelope,
     expected_verifier_receipt_binding,
     receive_frame,
@@ -41,6 +46,7 @@ from .process_broker_protocol import (
     validate_runtime_infrastructure_invalid,
     validate_runtime_request_payload,
     validate_runtime_result,
+    validate_child_cleanup_result,
     validated_policy_screenshot_root,
     verify_authenticated_envelope,
 )
@@ -58,6 +64,75 @@ from .process_broker_timeout import (
 
 
 CONTROL_OPERATION = "sealed_control_shutdown"
+
+
+def _verify_child_environment(
+    config: Mapping[str, Any], *, endpoint: Path
+) -> tuple[str, ...]:
+    """Require the exec environment to equal the registered non-secret closure."""
+
+    if config.get("child_environment_allowlist_version") != (
+        PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION
+    ):
+        raise ProcessBrokerProtocolError(
+            "process-broker child environment allowlist version differs"
+        )
+    configured = config.get("child_environment_variable_names")
+    if (
+        type(configured) is not list
+        or any(type(name) is not str for name in configured)
+        or configured != sorted(set(configured))
+    ):
+        raise ProcessBrokerProtocolError(
+            "process-broker child environment name closure is invalid"
+        )
+    registered = set(PROCESS_BROKER_CHILD_ENVIRONMENT_INHERITED_ALLOWLIST) | set(
+        PROCESS_BROKER_CHILD_ENVIRONMENT_FIXED_NAMES
+    )
+    actual = tuple(sorted(os.environ))
+    if set(configured) != set(actual) or not set(actual).issubset(registered):
+        raise ProcessBrokerProtocolError(
+            "process-broker child environment escaped its exact allowlist"
+        )
+    forbidden_tokens = (
+        "API_KEY",
+        "AUTH",
+        "COOKIE",
+        "CREDENTIAL",
+        "PASSWORD",
+        "SECRET",
+        "TOKEN",
+    )
+    if any(
+        token in name.upper() for name in actual for token in forbidden_tokens
+    ):
+        raise ProcessBrokerProtocolError(
+            "process-broker child environment contains a credential alias"
+        )
+    root = endpoint.parent.resolve(strict=True)
+    fixed_paths = {
+        "HOME": root / "home",
+        "TMPDIR": root,
+        "XDG_CACHE_HOME": root / "cache",
+    }
+    if os.environ.get("PYTHONNOUSERSITE") != "1":
+        raise ProcessBrokerProtocolError(
+            "process-broker child user-site isolation differs"
+        )
+    for name, expected in fixed_paths.items():
+        supplied = os.environ.get(name)
+        path = Path(supplied) if type(supplied) is str else None
+        if (
+            path is None
+            or not path.is_absolute()
+            or path.is_symlink()
+            or not path.is_dir()
+            or path.resolve(strict=True) != expected.resolve(strict=True)
+        ):
+            raise ProcessBrokerProtocolError(
+                f"process-broker child fixed environment path differs: {name}"
+            )
+    return actual
 
 
 def _load_factory(
@@ -91,6 +166,10 @@ def _load_factory(
             raise ProcessBrokerProtocolError(
                 f"sealed backend lacks registered operation {operation}"
             )
+    if not callable(getattr(backend, "shutdown", None)):
+        raise ProcessBrokerProtocolError(
+            "sealed backend lacks registered child cleanup operation"
+        )
     if require_sealed_finalization and not (
         callable(getattr(backend, SEALED_FINALIZATION_OPERATION, None))
         and getattr(backend, "sealed_finalization_available", False) is True
@@ -220,6 +299,9 @@ def serve(
     if not isinstance(readiness_connection, socket.socket):
         raise ProcessBrokerProtocolError("dedicated readiness channel is absent")
     endpoint = Path(str(config["endpoint"]))
+    child_environment_variable_names = _verify_child_environment(
+        config, endpoint=endpoint
+    )
     runtime_key = base64.b64decode(str(config["runtime_key_b64"]), validate=True)
     orchestration_key = base64.b64decode(
         str(config["orchestration_key_b64"]), validate=True
@@ -277,6 +359,7 @@ def serve(
     if execution_scope not in {
         "ENGINEERING_FIXTURE_ONLY",
         "MEASURED_CALIBRATION_REPLAY_ONLY",
+        "PILOT_EVALUATION",
     }:
         raise ProcessBrokerProtocolError(
             "worker execution scope lacks local non-authorizing registration"
@@ -286,6 +369,9 @@ def serve(
         and timeout_binding["mode"] == MEASURED_TIMEOUT_MODE
     ) or (
         execution_scope == "MEASURED_CALIBRATION_REPLAY_ONLY"
+        and timeout_binding["mode"] != MEASURED_TIMEOUT_MODE
+    ) or (
+        execution_scope == "PILOT_EVALUATION"
         and timeout_binding["mode"] != MEASURED_TIMEOUT_MODE
     ):
         raise ProcessBrokerProtocolError("worker timeout mode differs from scope")
@@ -320,6 +406,7 @@ def serve(
         and getattr(backend, "sealed_finalization_available", False) is True
     )
     sequences = {"runtime": 0, "orchestration": 0, "control": 0}
+    transcript = ProcessBrokerTranscript(session_id=session_id)
     seen_nonces: set[str] = set()
     bound_episode_task: tuple[str, str] | None = None
     pending_action: tuple[str, bool] | None = None
@@ -352,6 +439,12 @@ def serve(
             "ipc_timeout_binding_sha256": measured_timeout_binding_sha256,
             "sealed_finalization_available": finalization_available,
             "sealed_finalization_required": sealed_finalization_required,
+            "child_environment_allowlist_version": (
+                PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION
+            ),
+            "child_environment_variable_names": list(
+                child_environment_variable_names
+            ),
         }
         startup_deadline = monotonic() + (
             timeout_binding["timeout_milliseconds"]["broker_startup"] / 1000.0
@@ -373,7 +466,10 @@ def serve(
                 role: object = None
                 sequence: object = None
                 nonce: object = None
+                operation: object = None
+                payload: object = None
                 runtime_effect_committed = False
+                request_transcript_committed = False
                 try:
                     peer = _peer_identity(connection)
                     envelope = receive_frame(
@@ -392,6 +488,28 @@ def serve(
                     body = verify_authenticated_envelope(
                         envelope, authentication_key=key
                     )
+                    sequence = body.get("sequence")
+                    nonce = body.get("nonce")
+                    operation = body.get("operation")
+                    payload = body.get("payload")
+                    if (
+                        type(sequence) is not int
+                        or sequence < 0
+                        or type(operation) is not str
+                        or not operation
+                    ):
+                        raise ProcessBrokerProtocolError(
+                            "process-broker authenticated transcript metadata is invalid"
+                        )
+                    transcript.commit_authenticated_frame(
+                        direction="request",
+                        role=str(role),
+                        sequence=sequence,
+                        operation=operation,
+                        frame=envelope,
+                        payload=payload,
+                    )
+                    request_transcript_committed = True
                     if set(body) != {
                         "protocol_version",
                         "role",
@@ -415,11 +533,8 @@ def serve(
                             raise ProcessBrokerProtocolError(
                                 "process-broker peer process identity differs"
                             )
-                    sequence = body.get("sequence")
-                    nonce = body.get("nonce")
                     if (
-                        type(sequence) is not int
-                        or sequence != sequences[role]
+                        sequence != sequences[role]
                         or type(nonce) is not str
                         or len(nonce) != 64
                         or nonce in seen_nonces
@@ -427,8 +542,6 @@ def serve(
                         raise ProcessBrokerProtocolError(
                             "process-broker sequence/nonce is replayed or invalid"
                         )
-                    operation = body.get("operation")
-                    payload = body.get("payload")
                     if role == "runtime":
                         validated_payload = validate_runtime_request_payload(
                             operation, payload
@@ -669,10 +782,47 @@ def serve(
                         sequences[role] += 1
                         seen_nonces.add(nonce)
                         shutdown = getattr(backend, "shutdown", None)
-                        if callable(shutdown):
+                        if not callable(shutdown):  # checked during factory load
+                            raise ProcessBrokerProtocolError(
+                                "sealed backend child cleanup operation disappeared"
+                            )
+                        child_cleanup_result = validate_child_cleanup_result(
                             shutdown()
+                        )
+                        disposition = child_cleanup_result[
+                            "cleanup_disposition"
+                        ]
+                        if runtime_closed and disposition != (
+                            "RUNTIME_CLOSE_ACKNOWLEDGED"
+                        ):
+                            raise ProcessBrokerProtocolError(
+                                "child cleanup disposition differs from closed runtime"
+                            )
+                        if not runtime_closed and disposition == (
+                            "RUNTIME_CLOSE_ACKNOWLEDGED"
+                        ):
+                            raise ProcessBrokerProtocolError(
+                                "child cleanup disposition invents runtime close"
+                            )
+                        if (
+                            bound_episode_task is not None
+                            and disposition == "NO_BROWSER_CREATED"
+                        ):
+                            raise ProcessBrokerProtocolError(
+                                "child cleanup denies a reset browser session"
+                            )
                         _verify_imported_broker_sources(config)
-                        result = {"shutdown": True}
+                        transcript_before_response = transcript.snapshot()
+                        result = {
+                            "shutdown": True,
+                            "child_cleanup_result": child_cleanup_result,
+                            "transcript_root_before_response_sha256": (
+                                transcript_before_response["root_sha256"]
+                            ),
+                            "transcript_entry_count_before_response": (
+                                transcript_before_response["entry_count"]
+                            ),
+                        }
                         response_role = "sealed_control_response"
                         running = False
                     response = {
@@ -684,9 +834,20 @@ def serve(
                         "status": "PASS",
                         "result": dict(result),
                     }
+                    response_frame = authenticated_envelope(
+                        response, authentication_key=key
+                    )
+                    transcript.commit_authenticated_frame(
+                        direction="response",
+                        role=str(role),
+                        sequence=int(sequence),
+                        operation=str(operation),
+                        frame=response_frame,
+                        payload=response["result"],
+                    )
                     send_frame(
                         connection,
-                        authenticated_envelope(response, authentication_key=key),
+                        response_frame,
                         deadline_monotonic=connection_deadline,
                     )
                 except Exception as exc:
@@ -759,9 +920,21 @@ def serve(
                             # be another neutral scalar channel. Keep generic
                             # rejection disclosure closed and deterministic.
                             response["error_code"] = "REGISTERED_REQUEST_REJECTED"
+                        response_frame = authenticated_envelope(
+                            response, authentication_key=key
+                        )
+                        if request_transcript_committed:
+                            transcript.commit_authenticated_frame(
+                                direction="response",
+                                role=str(role),
+                                sequence=int(sequence),
+                                operation=str(operation),
+                                frame=response_frame,
+                                payload=response["result"],
+                            )
                         send_frame(
                             connection,
-                            authenticated_envelope(response, authentication_key=key),
+                            response_frame,
                             deadline_monotonic=connection_deadline,
                         )
                     except Exception:

@@ -57,6 +57,9 @@ from web_agent.eval.table2.pc01_artifacts import (
     PC01_EXPECTED_CONFIG_SHA256,
     PC01_MODEL_REVISION,
 )
+from web_agent.eval.table2.process_broker_episode_factory import (
+    CredentialFreeProcessIsolatedWebArenaEpisodeFactory,
+)
 from web_agent.eval.table2.execution_guard import (
     PC01_PROVIDER_BOOTSTRAP_SCHEMA_VERSION,
     PC01ProviderInstallationReceipt,
@@ -704,6 +707,9 @@ class PC01LiveOperationsProvider:
     finish_measurement: Callable[..., Mapping[str, Any]]
     parameter_fallback_contract: str
     parameter_fallback_source_sha256: str
+    create_process_isolated_webarena: (
+        CredentialFreeProcessIsolatedWebArenaEpisodeFactory | None
+    ) = None
     model_seed: int = PC01_LIVE_MODEL_SEED
     frozen: bool = True
     oracle_labels_exposed_to_runtime: bool = False
@@ -862,6 +868,13 @@ class PC01LiveOperationsProvider:
         if self.parameter_fallback_source_sha256 != actual_qwen_sha256:
             raise PC01LiveIntegrationError(
                 "parameter fallback source differs from the PC-01 model bridge"
+            )
+        if self.create_process_isolated_webarena is not None and type(
+            self.create_process_isolated_webarena
+        ) is not CredentialFreeProcessIsolatedWebArenaEpisodeFactory:
+            raise PC01LiveIntegrationError(
+                "process-isolated episode factory must use the exact "
+                "credential-free source-attested implementation"
             )
         # Resolve every external executable now.  This catches lambda/code
         # injection outside the attested repository without invoking it.
@@ -1542,6 +1555,13 @@ def _validate_runtime_binding(
         raise PC01LiveIntegrationError(
             "PC-01 evaluation binding is mutable, oracle-bearing, or seed-mismatched"
         )
+    if (
+        result.create_process_isolated_webarena
+        is not provider.create_process_isolated_webarena
+    ):
+        raise PC01LiveIntegrationError(
+            "PC-01 evaluation binding replaced the process-isolated episode factory"
+        )
     binding = result.seed_bindings[PC01_LIVE_MODEL_SEED]
     if type(binding) is not SeedRuntimeBinding:
         raise PC01LiveIntegrationError("PC-01 seed binding has the wrong type")
@@ -1645,6 +1665,9 @@ def create_pc01_live_runtime(context: FrozenRuntimeContext) -> EvaluationRuntime
     factory = PC01EvaluationRuntimeFactory(
         create_webarena_runtime=browser_factory,
         seed_services={PC01_LIVE_MODEL_SEED: services},
+        create_process_isolated_webarena=(
+            provider.create_process_isolated_webarena
+        ),
     )
     result = factory(context)
     _validate_runtime_binding(result, context, provider)

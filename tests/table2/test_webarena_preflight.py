@@ -11,6 +11,7 @@ from web_agent.eval.table2.split_deployment_preflight import SINGLE_HOST_TOPOLOG
 from web_agent.eval.table2.webarena_preflight import (
     PINNED_WEBARENA_PACKAGES,
     PINNED_WEBARENA_SERVICE_URL_KEYS,
+    load_service_url_map,
     run_webarena_host_preflight,
     validate_webarena_host_preflight,
 )
@@ -32,6 +33,16 @@ URL_MAP = {
     "WA_WIKIPEDIA": "http://wikipedia.private.example",
     "WA_HOMEPAGE": "http://homepage.private.example",
 }
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_tracked_service_url_map_example_matches_live_preflight_schema() -> None:
+    loaded = load_service_url_map(
+        REPOSITORY_ROOT / "configs/eval/table2/webarena_url_map.example.json"
+    )
+
+    assert set(loaded) == set(PINNED_WEBARENA_SERVICE_URL_KEYS)
 
 
 def _version(distribution: str) -> str:

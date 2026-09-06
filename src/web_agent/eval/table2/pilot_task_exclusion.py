@@ -11,13 +11,13 @@ from .common import SchemaError, read_json, sha256_file
 
 
 PILOT_TASK_EXCLUSION_REGISTRY_RELATIVE_PATH = Path(
-    "benchmarks/table2/pilot/task_manifest.json"
+    "benchmarks/table2/pilot/final_exclusion_registry_v2.json"
 )
 FROZEN_PILOT_TASK_EXCLUSION_RELATIVE_PATH = Path(
     "frozen/benchmark/pilot_task_exclusion_registry.json"
 )
 PILOT_TASK_EXCLUSION_IDENTITY_VERSION = (
-    "benchmark_name_plus_upstream_index_and_benchmark_task_id_v1"
+    "benchmark_name_plus_upstream_index_and_benchmark_task_id_v2"
 )
 
 
@@ -49,12 +49,12 @@ def pilot_task_exclusion_provenance(
 def load_pilot_task_exclusion_authority(
     path: str | Path,
 ) -> PilotTaskExclusionAuthority:
-    """Load the tracked 50-task registry without opening any final task content."""
+    """Load the tracked 100-task authority without opening final-task content."""
 
     source = Path(path)
     value = read_json(source)
     exact_metadata = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "partition": "development",
         "registration_status": "FROZEN_DEVELOPMENT_EXCLUSION",
         "final_paper_evaluation_eligible": False,
@@ -71,43 +71,54 @@ def load_pilot_task_exclusion_authority(
         raise SchemaError("pilot exclusion registry lacks a manifest identity")
     if not isinstance(benchmark, str) or not benchmark.strip():
         raise SchemaError("pilot exclusion registry lacks a benchmark identity")
-    rows = value.get("tasks")
+    if value.get("schema_version") != "2.0":
+        raise SchemaError("pilot exclusion registry must use aggregate schema 2.0")
+    if value.get("identity_version") != PILOT_TASK_EXCLUSION_IDENTITY_VERSION:
+        raise SchemaError("pilot exclusion registry changed stable identity semantics")
+    rows = value.get("excluded_upstream_indices")
+    benchmark_ids = value.get("excluded_benchmark_task_ids")
     required_count = value.get("required_task_count")
     if (
         type(required_count) is not int
-        or required_count != 50
+        or required_count != 100
         or not isinstance(rows, list)
         or len(rows) != required_count
+        or not isinstance(benchmark_ids, list)
+        or len(benchmark_ids) != required_count
     ):
-        raise SchemaError("pilot exclusion registry must contain exactly 50 tasks")
+        raise SchemaError("pilot exclusion registry must contain exactly 100 tasks")
 
     indices: set[int] = set()
     benchmark_task_ids: set[str] = set()
-    local_ids: set[str] = set()
-    for position, row in enumerate(rows):
-        if not isinstance(row, Mapping):
-            raise SchemaError(f"pilot exclusion task {position} must be an object")
-        index = row.get("upstream_index")
-        task_id = row.get("task_id")
+    for position, (index, benchmark_task_id) in enumerate(zip(rows, benchmark_ids)):
         if type(index) is not int or index < 0:
             raise SchemaError(
                 f"pilot exclusion task {position} has an invalid upstream index"
             )
-        if not isinstance(task_id, str) or not task_id.strip():
-            raise SchemaError(f"pilot exclusion task {position} lacks a task ID")
-        benchmark_task_id = str(row.get("benchmark_task_id", index)).strip()
-        if not benchmark_task_id:
+        if not isinstance(benchmark_task_id, str) or not benchmark_task_id.strip():
             raise SchemaError(
                 f"pilot exclusion task {position} lacks a benchmark task identity"
             )
-        if index in indices or task_id in local_ids or benchmark_task_id in benchmark_task_ids:
+        stable_id = benchmark_task_id.strip()
+        if index in indices or stable_id in benchmark_task_ids:
             raise SchemaError("pilot exclusion registry contains duplicate stable identity")
         indices.add(index)
-        local_ids.add(task_id)
-        benchmark_task_ids.add(benchmark_task_id)
-    if indices != set(range(50)):
+        benchmark_task_ids.add(stable_id)
+    historical = set(range(50))
+    active = {
+        102, 156, 157, 158, 159, 238, 258, 260, 269, 274,
+        283, 284, 298, 324, 356, 369, 370, 371, 372, 373,
+        374, 375, 377, 378, 379, 380, 381, 676, 677, 678,
+        679, 680, 704, 705, 706, 707, 708, 709, 710, 711,
+        712, 757, 758, 761, 762, 763, 764, 765, 766, 767,
+    }
+    if indices != historical | active:
         raise SchemaError(
-            "pilot exclusion registry must preserve upstream WebArena indices 0--49"
+            "pilot exclusion registry must preserve both registered 50-task sets"
+        )
+    if benchmark_task_ids != {str(index) for index in indices}:
+        raise SchemaError(
+            "pilot exclusion benchmark task identities differ from upstream identities"
         )
     return PilotTaskExclusionAuthority(
         manifest_id=manifest_id,

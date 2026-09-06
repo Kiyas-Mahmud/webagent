@@ -36,7 +36,7 @@ SPLIT_TRANSCRIPT_CLAIM_SCOPE = (
     "REDACTED_EXACT_ENVELOPE_METADATA_NOT_PAYLOAD_CONTENT_OR_ORIGIN_PROOF"
 )
 SPLIT_DISPATCH_BLOCKER = (
-    "BLOCKED_DGX_REMEASUREMENT_RECEIPT_AND_EXTERNAL_TRUST_ANCHOR_REQUIRED"
+    "PILOT_DGX_REMEASUREMENT_AND_LIVE_TRANSCRIPT_REQUIRED"
 )
 
 PC01_BACKBONE_ID = "Qwen/Qwen2-VL-2B-Instruct"
@@ -286,10 +286,10 @@ def _validate_runtime_environment(
 
 
 def _split_dispatch_requirement() -> dict[str, Any]:
-    """Describe the deliberately unavailable external split-dispatch authority."""
+    """Register the still-unimplemented live split-host evidence gate."""
 
     return {
-        "schema_version": "table2-split-dgx-remeasurement-requirement-v1",
+        "schema_version": "table2-split-dgx-remeasurement-requirement-v2",
         "status": SPLIT_DISPATCH_BLOCKER,
         "required_phases": [
             "DGX_INFERENCE_SERVICE_STARTUP",
@@ -306,8 +306,19 @@ def _split_dispatch_requirement() -> dict[str, Any]:
             "phase",
             "issued_at_utc",
         ],
-        "registered_receipt_schema_version": None,
-        "registered_external_trust_anchor": None,
+        "pilot_assurance_scope": "source_attested_engineering_pilot",
+        "pilot_runtime_remeasurement_required": True,
+        "pilot_request_response_hash_chain_required": True,
+        "pilot_independent_ed25519_required": False,
+        "pilot_global_replay_anchor_required": False,
+        "registered_pilot_runtime_receipt_schema_version": None,
+        "registered_pilot_live_transcript_schema_version": None,
+        "pilot_dispatch_authorized": False,
+        "locked_final_independent_ed25519_required": True,
+        "locked_final_global_replay_anchor_required": True,
+        "registered_locked_final_receipt_schema_version": None,
+        "registered_locked_final_external_trust_anchor": None,
+        "locked_final_dispatch_authorized": False,
         "production_dispatch_authorized": False,
     }
 

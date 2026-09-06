@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 import hashlib
 import json
 import os
@@ -19,7 +20,13 @@ from web_agent.eval.table2.common import (
 from web_agent.eval.table2.process_broker import (
     PROCESS_BROKER_EVALUATION_SCOPE,
     PROCESS_BROKER_MEASURED_REPLAY_SCOPE,
+    PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
     ProcessIsolatedBroker,
+)
+from web_agent.eval.table2.process_broker_webarena_backend import (
+    PROCESS_BROKER_WEBARENA_BACKEND_ENTRYPOINT,
+    PROCESS_BROKER_WEBARENA_BACKEND_SOURCE,
+    PROCESS_BROKER_WEBARENA_FINALIZING_BACKEND_SCHEMA_VERSION,
 )
 from web_agent.eval.table2.process_broker_timeout import (
     CALIBRATION_OPERATION_CLASSES,
@@ -31,6 +38,16 @@ from web_agent.eval.table2.process_broker_timeout import (
     MEASUREMENT_SOURCE_RECEIPT_SCHEMA_VERSION,
     NON_PERSISTENCE_RECEIPT_SCHEMA_VERSION,
     SAFE_PROBE_MANIFEST_SCHEMA_VERSION,
+    TIMEOUT_CALIBRATION_CLAIM_SCOPE,
+    TIMEOUT_CALIBRATION_FILENAME,
+    TIMEOUT_CALIBRATION_STATUS,
+    TIMEOUT_COLLECTION_FAILURE_FILENAME,
+    TIMEOUT_COLLECTION_MANIFEST_FILENAME,
+    TIMEOUT_COLLECTION_MANIFEST_SCHEMA_VERSION,
+    TIMEOUT_HARNESS_SOURCE_RECEIPT_FILENAME,
+    TIMEOUT_MEASUREMENT_SOURCE_RECEIPT_FILENAME,
+    TIMEOUT_NON_PERSISTENCE_RECEIPT_FILENAME,
+    TIMEOUT_SAFE_PROBE_FILENAME,
     ProcessBrokerTimeoutExpectedAuthority,
     build_process_broker_timeout_calibration,
     engineering_timeout_binding,
@@ -41,6 +58,11 @@ from web_agent.eval.table2.process_broker_timeout import (
     validate_process_broker_timeout_calibration,
     validate_process_broker_timeout_binding,
 )
+from web_agent.eval.table2.sealed_verifier import (
+    SealedVerifierSink,
+    SealedVerifierStreamTarget,
+)
+from web_agent.runtime.contracts import RuntimeStartState, TaskSpecification
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -52,6 +74,77 @@ FIXTURE_BACKEND_SOURCE = (
 FIXTURE_BACKEND_ENTRYPOINT = (
     "web_agent.eval.table2.process_broker_fixture_backend:create_backend"
 )
+FIXTURE_ADAPTER_ENTRYPOINT = (
+    "web_agent.eval.table2.process_broker_fixture_backend:"
+    "create_environment_adapter"
+)
+FIXTURE_FINALIZER_ENTRYPOINT = (
+    "web_agent.eval.table2.process_broker_fixture_backend:"
+    "finalize_environment_episode"
+)
+FIXTURE_TRANSITION_ENTRYPOINT = (
+    "web_agent.eval.table2.process_broker_fixture_backend:"
+    "evaluate_environment_transition"
+)
+
+
+def _pilot_finalizing_backend_config(tmp_path: Path) -> dict:
+    start = RuntimeStartState(
+        sites=("shopping",),
+        start_url="https://fixture.invalid/start",
+        require_login=False,
+        storage_state=None,
+        geolocation=None,
+        require_reset=True,
+    )
+    task = TaskSpecification(
+        task_id="task-1",
+        goal="complete the visible fixture task",
+        benchmark_id="webarena",
+        benchmark_version="webarena-fixture-v1",
+        start_state_id=start.start_state_sha256,
+        site="shopping",
+        start_url=start.start_url,
+        development_partition=True,
+        destructive_actions_allowed=False,
+        metadata={
+            "task_partition": "normal",
+            "upstream_index": 1,
+            "benchmark_task_id": "webarena.1",
+            "source_content_sha256": "b" * 64,
+        },
+        runtime_start_state=start,
+    )
+    sink = SealedVerifierSink(
+        tmp_path / "pilot-campaign",
+        block_id="task_task-1__seed_42__repeat_000",
+        attempt_id=0,
+        system_id="E0",
+        episode_id="episode-1",
+        matched_seed=42,
+        task_id=task.task_id,
+        repeat_id=0,
+    )
+    runtime_dir = sink.system_root / "runtime"
+    runtime_dir.mkdir(parents=True)
+    source_sha256 = sha256_file(ROOT / FIXTURE_BACKEND_SOURCE)
+    return {
+        "schema_version": (
+            PROCESS_BROKER_WEBARENA_FINALIZING_BACKEND_SCHEMA_VERSION
+        ),
+        "adapter_factory_entrypoint": FIXTURE_ADAPTER_ENTRYPOINT,
+        "adapter_factory_source_relative_path": FIXTURE_BACKEND_SOURCE,
+        "adapter_factory_source_sha256": source_sha256,
+        "sealed_finalizer_entrypoint": FIXTURE_FINALIZER_ENTRYPOINT,
+        "sealed_finalizer_source_relative_path": FIXTURE_BACKEND_SOURCE,
+        "sealed_finalizer_source_sha256": source_sha256,
+        "sealed_transition_callback_entrypoint": FIXTURE_TRANSITION_ENTRYPOINT,
+        "sealed_transition_callback_source_relative_path": FIXTURE_BACKEND_SOURCE,
+        "sealed_transition_callback_source_sha256": source_sha256,
+        "task_specification": task.to_dict(),
+        "episode_runtime_dir": str(runtime_dir),
+        "sealed_stream_target": SealedVerifierStreamTarget.from_sink(sink).to_dict(),
+    }
 
 
 def _sha(label: str) -> str:
@@ -122,10 +215,11 @@ def _intervals(base: int, scale: int) -> dict[str, tuple[int, int]]:
         "runtime_observe_recovery": (base + 410 * unit, base + 420 * unit),
         "runtime_terminal_post_recovery": (base + 430 * unit, base + 440 * unit),
         "runtime_close": (base + 450 * unit, base + 460 * unit),
-        "control_shutdown_normal": (base + 470 * unit, base + 480 * unit),
+        "sealed_finalize_episode": (base + 470 * unit, base + 480 * unit),
+        "control_shutdown_normal": (base + 490 * unit, base + 500 * unit),
         "control_shutdown_after_failed_runtime": (
-            base + 490 * unit,
-            base + 530 * unit,
+            base + 510 * unit,
+            base + 550 * unit,
         ),
     }
 
@@ -431,7 +525,7 @@ def test_local_measured_replay_forbids_injected_timeout_and_binds_calibration() 
         assert receipt.timeout_calibration_replay_only is True
         assert receipt.immutable_timeout_authority_bundle_validated is False
         assert receipt.external_timeout_authority_cross_binding_present is False
-        assert receipt.ipc_timeout_calibration_live_campaign_authority is False
+        assert receipt.ipc_timeout_calibration_pilot_eligible is False
         assert receipt.ipc_timeout_binding["timeout_milliseconds"] == evidence[
             "derived_timeout_milliseconds"
         ]
@@ -695,16 +789,64 @@ def _authority_artifacts(
         **build_kwargs,
     )
     paths = {
-        "calibration": _write_calibration(root / "calibration.json", evidence),
-        "safe": _write_calibration(root / "safe-probes.json", safe_manifest),
-        "harness": _write_calibration(root / "harness.json", harness),
+        "calibration": _write_calibration(
+            root / TIMEOUT_CALIBRATION_FILENAME, evidence
+        ),
+        "safe": _write_calibration(
+            root / TIMEOUT_SAFE_PROBE_FILENAME, safe_manifest
+        ),
+        "harness": _write_calibration(
+            root / TIMEOUT_HARNESS_SOURCE_RECEIPT_FILENAME, harness
+        ),
         "measurement": _write_calibration(
-            root / "measurement.json", measurement_receipt
+            root / TIMEOUT_MEASUREMENT_SOURCE_RECEIPT_FILENAME,
+            measurement_receipt,
         ),
         "non_persistence": _write_calibration(
-            root / "non-persistence.json", non_persistence
+            root / TIMEOUT_NON_PERSISTENCE_RECEIPT_FILENAME,
+            non_persistence,
         ),
     }
+    core_hashes = {
+        TIMEOUT_CALIBRATION_FILENAME: sha256_json(evidence),
+        TIMEOUT_SAFE_PROBE_FILENAME: safe_sha,
+        TIMEOUT_HARNESS_SOURCE_RECEIPT_FILENAME: sha256_json(harness),
+        TIMEOUT_MEASUREMENT_SOURCE_RECEIPT_FILENAME: measurement_sha,
+        TIMEOUT_NON_PERSISTENCE_RECEIPT_FILENAME: non_persistence_sha,
+    }
+    harness_factory_entrypoint = harness["collector_entrypoint"]
+    collection_manifest = {
+        "schema_version": TIMEOUT_COLLECTION_MANIFEST_SCHEMA_VERSION,
+        "record_type": "ProcessBrokerTimeoutCollectionManifest",
+        "status": TIMEOUT_CALIBRATION_STATUS,
+        "claim_scope": TIMEOUT_CALIBRATION_CLAIM_SCOPE,
+        "evidence_label": "PRE_CAMPAIGN_INFRASTRUCTURE_ONLY",
+        "paper_table_status": "N/R",
+        "production_dispatch_authorized": False,
+        "live_campaign_authority": False,
+        "external_cross_binding_present": False,
+        "caller_selected_timeout": False,
+        "measurement_clock": "time.monotonic_ns",
+        "measurement_count": len(measurements),
+        "task_count": len(_registry()["ordered_task_ids"]),
+        "operation_classes": list(CALIBRATION_OPERATION_CLASSES),
+        "safe_probe_manifest_sha256": safe_sha,
+        "measurement_harness_source_receipt_sha256": sha256_json(harness),
+        "measurement_harness_source_set_sha256": harness["source_set_sha256"],
+        "harness_factory_entrypoint": harness_factory_entrypoint,
+        "harness_factory_entrypoint_sha256": hashlib.sha256(
+            harness_factory_entrypoint.encode("utf-8")
+        ).hexdigest(),
+        "calibration_content_sha256": sha256_json(evidence),
+        "artifact_files": [
+            {"relative_path": name, "sha256": core_hashes[name]}
+            for name in sorted(core_hashes)
+        ],
+        "rerun_at_same_output_path_permitted": False,
+    }
+    paths["collection_manifest"] = _write_calibration(
+        root / TIMEOUT_COLLECTION_MANIFEST_FILENAME, collection_manifest
+    )
     authority = ProcessBrokerTimeoutExpectedAuthority(
         schema_version="table2-process-broker-timeout-expected-authority-v1",
         record_type="ProcessBrokerTimeoutExpectedAuthority",
@@ -713,6 +855,8 @@ def _authority_artifacts(
         production_dispatch_authorized=False,
         calibration_artifact_path=paths["calibration"],
         calibration_content_sha256=sha256_json(evidence),
+        collection_manifest_path=paths["collection_manifest"],
+        collection_manifest_content_sha256=sha256_json(collection_manifest),
         task_manifest_sha256=_registry()["manifest_sha256"],
         ordered_task_ids=tuple(_registry()["ordered_task_ids"]),
         ordered_upstream_indices=tuple(_registry()["ordered_upstream_indices"]),
@@ -735,6 +879,7 @@ def _authority_artifacts(
         external_cross_binding_present=False,
         live_campaign_authority=False,
     )
+    root.chmod(0o555)
     return authority, evidence
 
 
@@ -906,19 +1051,93 @@ def test_immutable_expected_authority_bundle_cross_checks_typed_receipts(
         load_authority_bound_timeout_calibration(mismatched)
 
 
-def test_true_evaluation_validates_bundle_but_stays_closed_without_external_authority(
+def test_authority_loader_requires_exact_success_manifest_core_set(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "manifest-core"
+    authority, _ = _authority_artifacts(root)
+    manifest_path = Path(authority.collection_manifest_path)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["artifact_files"].pop()
+    root.chmod(0o755)
+    manifest_path.chmod(0o644)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    manifest_path.chmod(0o444)
+    root.chmod(0o555)
+    incomplete = replace(
+        authority,
+        collection_manifest_content_sha256=sha256_json(manifest),
+    )
+    with pytest.raises(SchemaError, match="exact core artifact set"):
+        load_authority_bound_timeout_calibration(incomplete)
+
+
+def test_authority_loader_requires_one_sealed_directory_without_failure_marker(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "sealed"
+    authority, _ = _authority_artifacts(root)
+    root.chmod(0o755)
+    with pytest.raises(SchemaError, match="directory must be read-only"):
+        load_authority_bound_timeout_calibration(authority)
+
+    other = tmp_path / "other"
+    other_manifest = _write_calibration(
+        other / TIMEOUT_COLLECTION_MANIFEST_FILENAME,
+        json.loads(Path(authority.collection_manifest_path).read_text()),
+    )
+    root.chmod(0o555)
+    other.chmod(0o555)
+    split = replace(authority, collection_manifest_path=other_manifest)
+    with pytest.raises(SchemaError, match="share one canonical directory"):
+        load_authority_bound_timeout_calibration(split)
+
+    root.chmod(0o755)
+    _write_calibration(
+        root / TIMEOUT_COLLECTION_FAILURE_FILENAME,
+        {"status": "COLLECTION_FAILED_NO_CALIBRATION_AUTHORITY"},
+    )
+    root.chmod(0o555)
+    with pytest.raises(SchemaError, match="failed timeout collection"):
+        load_authority_bound_timeout_calibration(authority)
+
+
+def test_pilot_evaluation_accepts_exact_bundle_while_final_stays_closed(
     tmp_path: Path,
 ) -> None:
     authority, _ = _authority_artifacts(tmp_path / "authority")
-    with pytest.raises(SchemaError, match="external authority cross-binds"):
+    finalizing_config = _pilot_finalizing_backend_config(tmp_path)
+    pilot = ProcessIsolatedBroker(
+        repository_root=ROOT,
+        backend_entrypoint=PROCESS_BROKER_WEBARENA_BACKEND_ENTRYPOINT,
+        backend_source_relative_path=PROCESS_BROKER_WEBARENA_BACKEND_SOURCE,
+        backend_dependency_source_relative_paths=(FIXTURE_BACKEND_SOURCE,),
+        sealed_backend_config=finalizing_config,
+        execution_scope=PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
+        timeout_calibration_artifact_path=authority.calibration_artifact_path,
+        timeout_calibration_expected_authority=authority,
+        require_sealed_finalization=True,
+    )
+    with pilot:
+        receipt = pilot.receipt
+        assert receipt.execution_scope == PROCESS_BROKER_PILOT_EVALUATION_SCOPE
+        assert receipt.measured_ipc_timeout_calibration_complete is True
+        assert receipt.timeout_calibration_replay_only is False
+        assert receipt.immutable_timeout_authority_bundle_validated is True
+        assert receipt.ipc_timeout_calibration_pilot_eligible is True
+        assert receipt.sealed_finalization_timeout_measured is True
+        assert receipt.external_timeout_authority_cross_binding_present is False
+        assert receipt.external_deployment_authority is False
+
+    with pytest.raises(SchemaError, match="independent authority cross-binds"):
         ProcessIsolatedBroker(
             repository_root=ROOT,
-            backend_entrypoint=FIXTURE_BACKEND_ENTRYPOINT,
-            backend_source_relative_path=FIXTURE_BACKEND_SOURCE,
-            sealed_backend_config={
-                "schema_version": "table2-process-broker-fixture-backend-v1"
-            },
+            backend_entrypoint=PROCESS_BROKER_WEBARENA_BACKEND_ENTRYPOINT,
+            backend_source_relative_path=PROCESS_BROKER_WEBARENA_BACKEND_SOURCE,
+            backend_dependency_source_relative_paths=(FIXTURE_BACKEND_SOURCE,),
+            sealed_backend_config=finalizing_config,
             execution_scope=PROCESS_BROKER_EVALUATION_SCOPE,
             timeout_calibration_artifact_path=authority.calibration_artifact_path,
             timeout_calibration_expected_authority=authority,
+            require_sealed_finalization=True,
         )

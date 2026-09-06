@@ -1,10 +1,11 @@
 """Lifecycle owner for a source-bound, process-isolated Table 2 broker.
 
-The receipt produced here is local architecture evidence only. The worker is a
-same-UID child and that fact is not a hostile-code or secret boundary. It cannot
-authorize a live campaign: deployment must separately prove process, source,
-peer-credential, secret-scrubbing and filesystem boundaries under an external
-trust anchor registered by the execution guard.
+The receipt remains a component record, never blanket campaign authority.  A
+PC-01 engineering pilot may use it only with the complete immutable measured
+timeout bundle and the other frozen live-deployment guards.  The worker is a
+same-UID child and is not a hostile-code or secret-confidentiality boundary.
+Independent Ed25519/global-replay authority remains mandatory for the later
+locked-final campaign, not for ``PILOT_ONLY``.
 """
 
 from __future__ import annotations
@@ -30,16 +31,25 @@ from .common import canonical_json_bytes, SchemaError, sha256_file, sha256_json
 from .process_broker_protocol import (
     MAX_PROCESS_BROKER_MESSAGE_BYTES,
     POLICY_SCREENSHOT_TRANSPORT_CONTRACT,
+    PROCESS_BROKER_CHILD_CLEANUP_DISPOSITIONS,
+    PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE,
+    PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION,
+    PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION,
+    PROCESS_BROKER_CHILD_ENVIRONMENT_FIXED_NAMES,
+    PROCESS_BROKER_CHILD_ENVIRONMENT_INHERITED_ALLOWLIST,
     PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256,
     PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION,
     PROCESS_BROKER_PROTOCOL_VERSION,
+    PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM,
     PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS,
     RUNTIME_INNER_SCHEMA_PATHS,
+    ProcessBrokerTranscript,
     authenticated_envelope,
     receive_frame,
     remaining_deadline_seconds,
     set_socket_timeout_to_deadline,
     send_frame,
+    validate_child_cleanup_result,
     validated_policy_screenshot_root,
     verify_authenticated_envelope,
 )
@@ -53,6 +63,7 @@ from .process_broker_finalization import (
 from .process_broker_timeout import (
     MAX_TIMEOUT_CALIBRATION_PAYLOAD_BYTES,
     MEASURED_TIMEOUT_MODE,
+    SEALED_FINALIZATION_TIMEOUT_OPERATION,
     ProcessBrokerTimeoutExpectedAuthority,
     binding_sha256 as timeout_binding_sha256,
     engineering_timeout_binding,
@@ -171,12 +182,16 @@ raise SystemExit(serve(config, readiness_connection=channel))
 """
 
 
-PROCESS_BROKER_RECEIPT_SCHEMA_VERSION = "table2-process-page-broker-receipt-v9"
+PROCESS_BROKER_RECEIPT_SCHEMA_VERSION = "table2-process-page-broker-receipt-v11"
 PROCESS_BROKER_CLEANUP_RECEIPT_SCHEMA_VERSION = (
-    "table2-process-page-broker-cleanup-receipt-v1"
+    "table2-process-page-broker-cleanup-receipt-v2"
 )
 PROCESS_BROKER_ENGINEERING_SCOPE = "ENGINEERING_FIXTURE_ONLY"
 PROCESS_BROKER_MEASURED_REPLAY_SCOPE = "MEASURED_CALIBRATION_REPLAY_ONLY"
+# The only live scope implemented by the current PC-01 runner.  Keeping this
+# distinct from EVALUATION prevents an engineering pilot from weakening the
+# future locked-final authority gate.
+PROCESS_BROKER_PILOT_EVALUATION_SCOPE = "PILOT_EVALUATION"
 PROCESS_BROKER_EVALUATION_SCOPE = "EVALUATION"
 PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/__init__.py",
@@ -187,6 +202,7 @@ PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/eval/table2/common.py",
     "src/web_agent/eval/table2/execution_guard.py",
     "src/web_agent/eval/table2/process_broker.py",
+    "src/web_agent/eval/table2/process_broker_episode_factory.py",
     "src/web_agent/eval/table2/process_broker_finalization.py",
     "src/web_agent/eval/table2/process_broker_protocol.py",
     "src/web_agent/eval/table2/process_broker_runtime.py",
@@ -284,6 +300,54 @@ def _validated_repository_python_source(
     return resolved, lexical.as_posix()
 
 
+def _scrubbed_child_environment(
+    source: Mapping[str, str], *, temporary_root: Path
+) -> dict[str, str]:
+    """Build the complete registered child environment without secret aliases.
+
+    Only interpreter, locale, certificate, and Playwright-path necessities are
+    inherited. Service logins, tokens, cookies, proxy credentials, cloud
+    credentials, and generic application settings never cross via environ.
+    """
+
+    environment: dict[str, str] = {}
+    for name in PROCESS_BROKER_CHILD_ENVIRONMENT_INHERITED_ALLOWLIST:
+        value = source.get(name)
+        if type(value) is str and value and "\x00" not in value:
+            environment[name] = value
+    environment.setdefault("LANG", "C.UTF-8")
+    environment.setdefault("PATH", os.defpath)
+    child_home = temporary_root / "home"
+    child_cache = temporary_root / "cache"
+    child_home.mkdir(mode=0o700)
+    child_cache.mkdir(mode=0o700)
+    environment["HOME"] = str(child_home)
+    environment["XDG_CACHE_HOME"] = str(child_cache)
+    environment["PYTHONNOUSERSITE"] = "1"
+    environment["TMPDIR"] = str(temporary_root)
+    registered = set(PROCESS_BROKER_CHILD_ENVIRONMENT_INHERITED_ALLOWLIST) | set(
+        PROCESS_BROKER_CHILD_ENVIRONMENT_FIXED_NAMES
+    )
+    if not set(environment).issubset(registered):  # pragma: no cover - local build
+        raise RuntimeError("process-broker child environment escaped its allowlist")
+    forbidden_tokens = (
+        "API_KEY",
+        "AUTH",
+        "COOKIE",
+        "CREDENTIAL",
+        "PASSWORD",
+        "SECRET",
+        "TOKEN",
+    )
+    if any(
+        token in name.upper()
+        for name in environment
+        for token in forbidden_tokens
+    ):  # pragma: no cover - registered constant audit
+        raise RuntimeError("process-broker child environment allowlists a credential")
+    return environment
+
+
 def _validated_readiness_envelope(
     value: object,
     *,
@@ -295,6 +359,7 @@ def _validated_readiness_envelope(
     policy_screenshot_root_identity_sha256: str | None,
     ipc_timeout_binding_sha256: str,
     sealed_finalization_required: bool,
+    child_environment_variable_names: tuple[str, ...],
 ) -> tuple[int, bool]:
     ready = verify_authenticated_envelope(value, authentication_key=control_key)
     if set(ready) != {
@@ -310,6 +375,8 @@ def _validated_readiness_envelope(
         "ipc_timeout_binding_sha256",
         "sealed_finalization_available",
         "sealed_finalization_required",
+        "child_environment_allowlist_version",
+        "child_environment_variable_names",
     }:
         raise RuntimeError("process-broker worker readiness fields differ")
     evaluator_pid = ready.get("evaluator_pid")
@@ -329,6 +396,10 @@ def _validated_readiness_envelope(
         or type(ready.get("sealed_finalization_available")) is not bool
         or ready.get("sealed_finalization_required")
         is not sealed_finalization_required
+        or ready.get("child_environment_allowlist_version")
+        != PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION
+        or ready.get("child_environment_variable_names")
+        != list(child_environment_variable_names)
         or (
             sealed_finalization_required
             and ready.get("sealed_finalization_available") is not True
@@ -347,19 +418,59 @@ def _validate_shutdown_response(
     session_id: str,
     sequence: int,
     nonce: str,
-) -> None:
+    transcript: ProcessBrokerTranscript,
+) -> dict[str, Any]:
+    if type(transcript) is not ProcessBrokerTranscript:
+        raise TypeError("process-broker shutdown requires the shared transcript")
+    before_response = transcript.snapshot()
     response = verify_authenticated_envelope(value, authentication_key=control_key)
-    expected = {
+    transcript.commit_authenticated_frame(
+        direction="response",
+        role="control",
+        sequence=sequence,
+        operation=CONTROL_OPERATION,
+        frame=value,
+        payload=response.get("result"),
+    )
+    expected_binding = {
         "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
         "role": "sealed_control_response",
         "session_id": session_id,
         "sequence": sequence,
         "nonce": nonce,
-        "status": "PASS",
-        "result": {"shutdown": True},
     }
-    if response != expected:
+    if any(
+        response.get(field) != expected
+        for field, expected in expected_binding.items()
+    ) or set(response) != set(expected_binding) | {"status", "result"}:
         raise RuntimeError("process-broker shutdown was rejected")
+    result = response.get("result")
+    if response.get("status") != "PASS" or not isinstance(result, Mapping):
+        raise RuntimeError("process-broker shutdown was rejected")
+    detached_result = json.loads(canonical_json_bytes(result))
+    if set(detached_result) != {
+        "shutdown",
+        "child_cleanup_result",
+        "transcript_root_before_response_sha256",
+        "transcript_entry_count_before_response",
+    } or detached_result.get("shutdown") is not True:
+        raise RuntimeError("process-broker shutdown result fields differ")
+    child_cleanup_result = validate_child_cleanup_result(
+        detached_result.get("child_cleanup_result")
+    )
+    if (
+        detached_result.get("transcript_root_before_response_sha256")
+        != before_response["root_sha256"]
+        or detached_result.get("transcript_entry_count_before_response")
+        != before_response["entry_count"]
+    ):
+        raise RuntimeError("process-broker shutdown transcript root/count differs")
+    final_transcript = transcript.snapshot()
+    return {
+        "child_cleanup_result": child_cleanup_result,
+        "transcript_root_sha256": final_transcript["root_sha256"],
+        "transcript_entry_count": final_transcript["entry_count"],
+    }
 
 
 def _verify_parent_imported_sources(
@@ -486,14 +597,21 @@ class ProcessBrokerReceipt:
     policy_screenshot_root_bound_per_session: bool
     canonical_wire_json_enforced: bool
     runtime_client_ambiguous_failure_poisoned: bool
+    transcript_chain_algorithm: str
+    authenticated_request_response_transcript_chaining: bool
+    parent_child_transcript_convergence_required: bool
     sealed_backend_config_hash_bound: bool
+    child_environment_allowlist_version: str
+    child_environment_variable_names: tuple[str, ...]
+    child_environment_exact_allowlist_enforced: bool
+    child_environment_credentials_scrubbed: bool
     ipc_timeout_binding: Mapping[str, Any]
     ipc_timeout_binding_sha256: str
     measured_ipc_timeout_calibration_complete: bool
     timeout_calibration_replay_only: bool
     immutable_timeout_authority_bundle_validated: bool
     external_timeout_authority_cross_binding_present: bool
-    ipc_timeout_calibration_live_campaign_authority: bool
+    ipc_timeout_calibration_pilot_eligible: bool
     runtime_value_provenance_attested: bool
     evaluator_operation_in_runtime_allowlist: bool
     sealed_finalization_capability_available: bool
@@ -504,7 +622,7 @@ class ProcessBrokerReceipt:
     separate_evidence_transport_present: bool
     runtime_terminal_returns_outer_sealed_signal: bool
     sealed_finalization_returns_outer_sealed_signal: bool
-    sealed_finalization_timeout_campaign_authority: bool
+    sealed_finalization_timeout_measured: bool
     future_promotion_requirements: tuple[str, ...]
     backend_entrypoint: str
     backend_entrypoint_sha256: str
@@ -557,15 +675,23 @@ class ProcessBrokerReceipt:
             "policy_screenshot_root_bound_per_session": True,
             "canonical_wire_json_enforced": True,
             "runtime_client_ambiguous_failure_poisoned": True,
+            "transcript_chain_algorithm": (
+                PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM
+            ),
+            "authenticated_request_response_transcript_chaining": True,
+            "parent_child_transcript_convergence_required": True,
             "sealed_backend_config_hash_bound": True,
-            "ipc_timeout_calibration_live_campaign_authority": False,
+            "child_environment_allowlist_version": (
+                PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION
+            ),
+            "child_environment_exact_allowlist_enforced": True,
+            "child_environment_credentials_scrubbed": True,
             "external_timeout_authority_cross_binding_present": False,
             "runtime_value_provenance_attested": False,
             "evaluator_operation_in_runtime_allowlist": False,
             "sealed_finalization_operation_in_runtime_allowlist": False,
             "runtime_adapter_sealed_capability_free": True,
             "separate_evidence_transport_present": False,
-            "sealed_finalization_timeout_campaign_authority": False,
             "external_deployment_authority": False,
         }
         for name, expected in fixed.items():
@@ -574,6 +700,7 @@ class ProcessBrokerReceipt:
         if self.execution_scope not in {
             PROCESS_BROKER_ENGINEERING_SCOPE,
             PROCESS_BROKER_MEASURED_REPLAY_SCOPE,
+            PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
             PROCESS_BROKER_EVALUATION_SCOPE,
         }:
             raise SchemaError("process-broker receipt execution scope is unregistered")
@@ -586,6 +713,27 @@ class ProcessBrokerReceipt:
         ):
             raise SchemaError(
                 "process-broker receipt future promotion requirements differ"
+            )
+        registered_environment_names = set(
+            PROCESS_BROKER_CHILD_ENVIRONMENT_INHERITED_ALLOWLIST
+        ) | set(PROCESS_BROKER_CHILD_ENVIRONMENT_FIXED_NAMES)
+        if (
+            tuple(sorted(self.child_environment_variable_names))
+            != self.child_environment_variable_names
+            or not set(self.child_environment_variable_names).issubset(
+                registered_environment_names
+            )
+            or not {
+                "HOME",
+                "LANG",
+                "PATH",
+                "PYTHONNOUSERSITE",
+                "TMPDIR",
+                "XDG_CACHE_HOME",
+            }.issubset(self.child_environment_variable_names)
+        ):
+            raise SchemaError(
+                "process-broker receipt child environment names differ"
             )
         timeout_binding = validate_process_broker_timeout_binding(
             self.ipc_timeout_binding,
@@ -600,11 +748,36 @@ class ProcessBrokerReceipt:
             self.execution_scope == PROCESS_BROKER_MEASURED_REPLAY_SCOPE
         ):
             raise SchemaError("process-broker receipt replay-only status differs")
+        bundle_scope = self.execution_scope in {
+            PROCESS_BROKER_MEASURED_REPLAY_SCOPE,
+            PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
+        }
         if self.immutable_timeout_authority_bundle_validated and not (
-            self.timeout_calibration_replay_only and expected_complete
+            bundle_scope and expected_complete
         ):
             raise SchemaError(
                 "process-broker immutable timeout bundle status differs"
+            )
+        if self.execution_scope == PROCESS_BROKER_PILOT_EVALUATION_SCOPE:
+            if not (
+                expected_complete
+                and self.immutable_timeout_authority_bundle_validated
+                and self.ipc_timeout_calibration_pilot_eligible
+                and self.sealed_finalization_timeout_measured
+                and self.sealed_finalization_capability_available
+                and self.sealed_finalization_required
+            ):
+                raise SchemaError(
+                    "pilot evaluation broker requires the immutable measured "
+                    "runtime timeout bundle and sealed finalization capability"
+                )
+        elif self.ipc_timeout_calibration_pilot_eligible:
+            raise SchemaError(
+                "non-pilot broker cannot claim pilot timeout eligibility"
+            )
+        if self.sealed_finalization_timeout_measured is not expected_complete:
+            raise SchemaError(
+                "process-broker sealed-finalization timeout coverage differs"
             )
         if self.execution_scope == PROCESS_BROKER_EVALUATION_SCOPE:
             raise SchemaError(
@@ -641,6 +814,9 @@ class ProcessBrokerReceipt:
             and expected_complete
         ) or (
             self.execution_scope == PROCESS_BROKER_MEASURED_REPLAY_SCOPE
+            and not expected_complete
+        ) or (
+            self.execution_scope == PROCESS_BROKER_PILOT_EVALUATION_SCOPE
             and not expected_complete
         ):
             raise SchemaError("process-broker receipt timeout mode differs from scope")
@@ -691,6 +867,9 @@ class ProcessBrokerReceipt:
         value["future_promotion_requirements"] = list(
             self.future_promotion_requirements
         )
+        value["child_environment_variable_names"] = list(
+            self.child_environment_variable_names
+        )
         value["ipc_timeout_binding"] = dict(self.ipc_timeout_binding)
         value["ipc_timeout_binding"]["timeout_milliseconds"] = dict(
             self.ipc_timeout_binding["timeout_milliseconds"]
@@ -700,7 +879,7 @@ class ProcessBrokerReceipt:
 
 @dataclass(frozen=True, slots=True)
 class ProcessBrokerCleanupReceipt:
-    """Source/session-bound proof that the evaluator process and socket ended."""
+    """Source/session-bound process cleanup plus child-owned browser evidence."""
 
     schema_version: str
     record_type: str
@@ -714,6 +893,12 @@ class ProcessBrokerCleanupReceipt:
     endpoint_removed: bool
     temporary_directory_removed: bool
     source_set_sha256: str
+    transcript_chain_algorithm: str
+    shutdown_request_previous_transcript_root_sha256: str
+    shutdown_request_previous_transcript_entry_count: int
+    transcript_root_sha256: str
+    transcript_entry_count: int
+    child_cleanup_result: Mapping[str, Any]
     external_deployment_authority: bool
 
     def __post_init__(self) -> None:
@@ -726,6 +911,9 @@ class ProcessBrokerCleanupReceipt:
             "graceful_authenticated_shutdown": True,
             "endpoint_removed": True,
             "temporary_directory_removed": True,
+            "transcript_chain_algorithm": (
+                PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM
+            ),
             "external_deployment_authority": False,
         }
         for name, expected in fixed.items():
@@ -735,15 +923,47 @@ class ProcessBrokerCleanupReceipt:
             "launch_receipt_sha256",
             "session_identity_sha256",
             "source_set_sha256",
+            "shutdown_request_previous_transcript_root_sha256",
+            "transcript_root_sha256",
         ):
             value = getattr(self, name)
             if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
                 raise SchemaError(f"process-broker cleanup {name} is not SHA-256")
         if self.sealed_evaluator_pid <= 0:
             raise SchemaError("process-broker cleanup evaluator PID is invalid")
+        if type(self.transcript_entry_count) is not int or (
+            self.transcript_entry_count < 2
+            or self.transcript_entry_count % 2 != 0
+        ):
+            raise SchemaError(
+                "process-broker cleanup transcript count is invalid"
+            )
+        if (
+            type(self.shutdown_request_previous_transcript_entry_count) is not int
+            or self.shutdown_request_previous_transcript_entry_count < 0
+            or self.transcript_entry_count
+            != self.shutdown_request_previous_transcript_entry_count + 2
+        ):
+            raise SchemaError(
+                "process-broker cleanup shutdown transcript prefix differs"
+            )
+        validated_cleanup = validate_child_cleanup_result(
+            self.child_cleanup_result
+        )
+        if canonical_json_bytes(validated_cleanup) != canonical_json_bytes(
+            self.child_cleanup_result
+        ):
+            raise SchemaError("process-broker child cleanup result is not canonical")
+        object.__setattr__(
+            self,
+            "child_cleanup_result",
+            MappingProxyType(dict(validated_cleanup)),
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        return {item.name: getattr(self, item.name) for item in fields(self)}
+        value = {item.name: getattr(self, item.name) for item in fields(self)}
+        value["child_cleanup_result"] = dict(self.child_cleanup_result)
+        return value
 
 
 class ProcessIsolatedBroker:
@@ -851,6 +1071,7 @@ class ProcessIsolatedBroker:
         if execution_scope not in {
             PROCESS_BROKER_ENGINEERING_SCOPE,
             PROCESS_BROKER_MEASURED_REPLAY_SCOPE,
+            PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
             PROCESS_BROKER_EVALUATION_SCOPE,
         }:
             raise SchemaError("process-broker execution scope is unregistered")
@@ -858,7 +1079,10 @@ class ProcessIsolatedBroker:
             timeout_calibration_artifact_path is not None
             or timeout_calibration_expected_authority is not None
         )
-        if execution_scope == PROCESS_BROKER_EVALUATION_SCOPE:
+        if execution_scope in {
+            PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
+            PROCESS_BROKER_EVALUATION_SCOPE,
+        }:
             if timeout_calibration_evidence is not None:
                 raise SchemaError(
                     "evaluation broker forbids self-declared in-memory timeout calibration"
@@ -885,15 +1109,18 @@ class ProcessIsolatedBroker:
                 raise SchemaError(
                     "evaluation timeout artifact path differs from expected authority"
                 )
-            # Validate every local relationship before reporting the residual
-            # external gate. This bundle remains explicitly non-authorizing.
-            load_authority_bound_timeout_calibration(
+            # Validate every local relationship before profile-specific use.
+            # The bundle is sufficient for PILOT_EVALUATION only; it does not
+            # become independent authority for a locked-final campaign.
+            validated_evidence = load_authority_bound_timeout_calibration(
                 timeout_calibration_expected_authority
             )
-            raise SchemaError(
-                "evaluation broker remains blocked until an external authority "
-                "cross-binds the complete timeout calibration bundle"
-            )
+            if execution_scope == PROCESS_BROKER_EVALUATION_SCOPE:
+                raise SchemaError(
+                    "locked-final evaluation broker remains blocked until an "
+                    "independent authority cross-binds the complete timeout "
+                    "calibration bundle"
+                )
         self._execution_scope = execution_scope
         if execution_scope == PROCESS_BROKER_ENGINEERING_SCOPE:
             if timeout_calibration_evidence is not None or supplied_bundle:
@@ -920,7 +1147,10 @@ class ProcessIsolatedBroker:
                 ),
             )
         else:
-            if execution_scope != PROCESS_BROKER_MEASURED_REPLAY_SCOPE:
+            if execution_scope not in {
+                PROCESS_BROKER_MEASURED_REPLAY_SCOPE,
+                PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
+            }:
                 raise SchemaError("process-broker measured timeout scope differs")
             if any(
                 value is not None
@@ -937,6 +1167,13 @@ class ProcessIsolatedBroker:
                 raise SchemaError(
                     "measured replay must use either raw test evidence or one "
                     "immutable authority bundle"
+                )
+            if (
+                execution_scope == PROCESS_BROKER_PILOT_EVALUATION_SCOPE
+                and timeout_calibration_evidence is not None
+            ):
+                raise SchemaError(
+                    "pilot evaluation forbids in-memory timeout calibration"
                 )
             if timeout_calibration_evidence is not None:
                 self._timeout_authority_bundle_validated = False
@@ -968,7 +1205,9 @@ class ProcessIsolatedBroker:
                         "replay timeout artifact path differs from expected authority"
                     )
                 self._timeout_calibration_evidence = (
-                    load_authority_bound_timeout_calibration(
+                    validated_evidence
+                    if execution_scope == PROCESS_BROKER_PILOT_EVALUATION_SCOPE
+                    else load_authority_bound_timeout_calibration(
                         timeout_calibration_expected_authority
                     )
                 )
@@ -988,6 +1227,9 @@ class ProcessIsolatedBroker:
                 "runtime_close",
             )
         }
+        self._sealed_finalization_timeout = (
+            timeout_ms[SEALED_FINALIZATION_TIMEOUT_OPERATION] / 1000.0
+        )
         self._control_shutdown_timeout = (
             timeout_ms["control_shutdown"] / 1000.0
         )
@@ -995,8 +1237,12 @@ class ProcessIsolatedBroker:
         self._orchestration_key = secrets.token_bytes(32)
         self._control_key = secrets.token_bytes(32)
         self._session_id = secrets.token_hex(32)
+        self._transcript = ProcessBrokerTranscript(session_id=self._session_id)
         self._control_sequence = 0
         self._temp_root = Path(tempfile.mkdtemp(prefix="t2pb-", dir="/tmp"))
+        self._child_environment = _scrubbed_child_environment(
+            os.environ, temporary_root=self._temp_root
+        )
         self._endpoint = self._temp_root / "broker.sock"
         self._process: subprocess.Popen[str] | None = None
         self._receipt: ProcessBrokerReceipt | None = None
@@ -1038,6 +1284,7 @@ class ProcessIsolatedBroker:
             session_id=self._session_id,
             policy_screenshot_root=self._policy_screenshot_root,
             timeout_seconds_by_operation=self._runtime_timeouts,
+            transcript=self._transcript,
         )
 
     def finalization_client(self) -> ProcessIsolatedFinalizationClient:
@@ -1054,19 +1301,12 @@ class ProcessIsolatedBroker:
                 "process broker finalization capability may be issued once"
             )
         self._finalization_client_issued = True
-        # Final episode verification has not yet received its own independently
-        # measured operation class.  Local engineering/replay evidence reuses
-        # the larger of terminal/close bounds and the receipt explicitly marks
-        # this as non-authorizing for a campaign.
-        timeout_seconds = max(
-            self._runtime_timeouts["runtime_terminal"],
-            self._runtime_timeouts["runtime_close"],
-        )
         return ProcessIsolatedFinalizationClient(
             endpoint=self._endpoint,
             authentication_key=self._orchestration_key,
             session_id=self._session_id,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=self._sealed_finalization_timeout,
+            transcript=self._transcript,
         )
 
     def _source_rows(self) -> tuple[dict[str, str], ...]:
@@ -1173,6 +1413,12 @@ class ProcessIsolatedBroker:
             ),
             "execution_scope": self._execution_scope,
             "sealed_finalization_required": self._sealed_finalization_required,
+            "child_environment_allowlist_version": (
+                PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION
+            ),
+            "child_environment_variable_names": sorted(
+                self._child_environment
+            ),
         }
         if len(canonical_json_bytes(config)) > MAX_PROCESS_BROKER_MESSAGE_BYTES:
             self.stop(force=True)
@@ -1217,6 +1463,7 @@ class ProcessIsolatedBroker:
                     text=True,
                     cwd=self._repo,
                     pass_fds=(launch_child.fileno(),),
+                    env=self._child_environment,
                 )
             finally:
                 launched_pid = getattr(process, "pid", None)
@@ -1254,6 +1501,9 @@ class ProcessIsolatedBroker:
                 ),
                 sealed_finalization_required=(
                     self._sealed_finalization_required
+                ),
+                child_environment_variable_names=tuple(
+                    sorted(self._child_environment)
                 ),
             )
         except BaseException:
@@ -1320,7 +1570,20 @@ class ProcessIsolatedBroker:
                 policy_screenshot_root_bound_per_session=True,
                 canonical_wire_json_enforced=True,
                 runtime_client_ambiguous_failure_poisoned=True,
+                transcript_chain_algorithm=(
+                    PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM
+                ),
+                authenticated_request_response_transcript_chaining=True,
+                parent_child_transcript_convergence_required=True,
                 sealed_backend_config_hash_bound=True,
+                child_environment_allowlist_version=(
+                    PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION
+                ),
+                child_environment_variable_names=tuple(
+                    sorted(self._child_environment)
+                ),
+                child_environment_exact_allowlist_enforced=True,
+                child_environment_credentials_scrubbed=True,
                 ipc_timeout_binding=MappingProxyType(
                     {
                         **self._timeout_binding,
@@ -1347,7 +1610,10 @@ class ProcessIsolatedBroker:
                     self._timeout_authority_bundle_validated
                 ),
                 external_timeout_authority_cross_binding_present=False,
-                ipc_timeout_calibration_live_campaign_authority=False,
+                ipc_timeout_calibration_pilot_eligible=(
+                    self._execution_scope
+                    == PROCESS_BROKER_PILOT_EVALUATION_SCOPE
+                ),
                 runtime_value_provenance_attested=False,
                 evaluator_operation_in_runtime_allowlist=False,
                 sealed_finalization_capability_available=(
@@ -1366,7 +1632,9 @@ class ProcessIsolatedBroker:
                 sealed_finalization_returns_outer_sealed_signal=(
                     self._sealed_finalization_available
                 ),
-                sealed_finalization_timeout_campaign_authority=False,
+                sealed_finalization_timeout_measured=(
+                    self._timeout_binding["mode"] == MEASURED_TIMEOUT_MODE
+                ),
                 future_promotion_requirements=(
                     PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
                 ),
@@ -1401,12 +1669,14 @@ class ProcessIsolatedBroker:
         self._launch_receipt_sha256 = sha256_json(self._receipt.to_dict())
         return self._receipt
 
-    def stop(self, *, force: bool = False) -> None:
+    def stop(self, *, force: bool = False) -> ProcessBrokerCleanupReceipt | None:
         process = self._process
         if process is None:
             shutil.rmtree(self._temp_root, ignore_errors=True)
-            return
+            return self._cleanup_receipt
         graceful = process.poll() is None and not force
+        shutdown_evidence: dict[str, Any] | None = None
+        shutdown_request_previous_transcript: dict[str, Any] | None = None
         shutdown_deadline = monotonic() + self._control_shutdown_timeout
         if graceful:
             sequence = self._control_sequence
@@ -1422,26 +1692,44 @@ class ProcessIsolatedBroker:
                 "payload": {},
             }
             try:
-                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-                    set_socket_timeout_to_deadline(connection, shutdown_deadline)
-                    connection.connect(str(self._endpoint))
-                    send_frame(
-                        connection,
-                        authenticated_envelope(
-                            body, authentication_key=self._control_key
-                        ),
-                        deadline_monotonic=shutdown_deadline,
-                    )
-                    _validate_shutdown_response(
-                        receive_frame(
+                request_frame = authenticated_envelope(
+                    body, authentication_key=self._control_key
+                )
+                with self._transcript.exchange():
+                    with socket.socket(
+                        socket.AF_UNIX, socket.SOCK_STREAM
+                    ) as connection:
+                        set_socket_timeout_to_deadline(
+                            connection, shutdown_deadline
+                        )
+                        connection.connect(str(self._endpoint))
+                        shutdown_request_previous_transcript = (
+                            self._transcript.snapshot()
+                        )
+                        send_frame(
                             connection,
+                            request_frame,
                             deadline_monotonic=shutdown_deadline,
-                        ),
-                        control_key=self._control_key,
-                        session_id=self._session_id,
-                        sequence=sequence,
-                        nonce=nonce,
-                    )
+                        )
+                        self._transcript.commit_authenticated_frame(
+                            direction="request",
+                            role="control",
+                            sequence=sequence,
+                            operation=CONTROL_OPERATION,
+                            frame=request_frame,
+                            payload={},
+                        )
+                        shutdown_evidence = _validate_shutdown_response(
+                            receive_frame(
+                                connection,
+                                deadline_monotonic=shutdown_deadline,
+                            ),
+                            control_key=self._control_key,
+                            session_id=self._session_id,
+                            sequence=sequence,
+                            nonce=nonce,
+                            transcript=self._transcript,
+                        )
             except Exception:
                 graceful = False
                 if process.poll() is None:
@@ -1475,6 +1763,8 @@ class ProcessIsolatedBroker:
             and self._launch_receipt_sha256 is not None
             and graceful
             and exit_code == 0
+            and shutdown_evidence is not None
+            and shutdown_request_previous_transcript is not None
         ):
             self._cleanup_receipt = ProcessBrokerCleanupReceipt(
                 schema_version=PROCESS_BROKER_CLEANUP_RECEIPT_SCHEMA_VERSION,
@@ -1491,8 +1781,27 @@ class ProcessIsolatedBroker:
                 endpoint_removed=not self._endpoint.exists(),
                 temporary_directory_removed=not self._temp_root.exists(),
                 source_set_sha256=self._receipt.source_set_sha256,
+                transcript_chain_algorithm=(
+                    PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM
+                ),
+                shutdown_request_previous_transcript_root_sha256=str(
+                    shutdown_request_previous_transcript["root_sha256"]
+                ),
+                shutdown_request_previous_transcript_entry_count=int(
+                    shutdown_request_previous_transcript["entry_count"]
+                ),
+                transcript_root_sha256=str(
+                    shutdown_evidence["transcript_root_sha256"]
+                ),
+                transcript_entry_count=int(
+                    shutdown_evidence["transcript_entry_count"]
+                ),
+                child_cleanup_result=MappingProxyType(
+                    dict(shutdown_evidence["child_cleanup_result"])
+                ),
                 external_deployment_authority=False,
             )
+        return self._cleanup_receipt
 
     @property
     def cleaned(self) -> bool:

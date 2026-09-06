@@ -19,7 +19,15 @@ from pathlib import Path
 import sys
 from typing import Any
 
-from .common import SchemaError, atomic_write_json, read_json, sha256_file, sha256_json
+from .common import (
+    CAMPAIGN_PROFILE_FINAL,
+    CAMPAIGN_PROFILE_PILOT,
+    SchemaError,
+    atomic_write_json,
+    read_json,
+    sha256_file,
+    sha256_json,
+)
 from .split_deployment_preflight import SINGLE_HOST_TOPOLOGY, SPLIT_HOST_TOPOLOGY
 from .split_deployment_preflight import (
     SPLIT_DISPATCH_BLOCKER,
@@ -425,8 +433,10 @@ def validate_current_host_against_semantic_dependency_lock(
     return deepcopy(current)
 
 
-def assert_split_dispatch_authority_registered(value: Mapping[str, Any]) -> None:
-    """Fail closed until an externally trusted, per-block DGX receipt exists."""
+def assert_split_dispatch_authority_registered(
+    value: Mapping[str, Any], *, campaign_profile: str
+) -> None:
+    """Apply the split-host assurance gate for the classified campaign profile."""
 
     if value.get("deployment_topology") != SPLIT_HOST_TOPOLOGY:
         return
@@ -434,19 +444,20 @@ def assert_split_dispatch_authority_registered(value: Mapping[str, Any]) -> None
     expected = _split_dispatch_requirement()
     if requirement != expected:
         raise SchemaError("split DGX dispatch-receipt requirement differs")
-    if (
-        requirement.get("status") == SPLIT_DISPATCH_BLOCKER
-        and requirement.get("registered_receipt_schema_version") is None
-        and requirement.get("registered_external_trust_anchor") is None
-        and requirement.get("production_dispatch_authorized") is False
-    ):
+    if requirement.get("status") != SPLIT_DISPATCH_BLOCKER:
+        raise SchemaError("split DGX dispatch assurance status differs")
+    if campaign_profile == CAMPAIGN_PROFILE_PILOT:
         raise SchemaError(
-            "split dispatch is blocked: no externally trusted DGX startup/per-block "
-            "remeasurement receipt is registered; the future receipt must bind "
-            "campaign_id, block_id, challenge_nonce, the semantic lock, DGX host, "
-            "runtime identity, phase, and issue time"
+            "split pilot dispatch is blocked until a typed DGX startup/per-block "
+            "remeasurement receipt and live request/response transcript chain are "
+            "implemented and registered"
         )
-    raise SchemaError("split DGX dispatch authority is not a registered exact contract")
+    if campaign_profile == CAMPAIGN_PROFILE_FINAL:
+        raise SchemaError(
+            "locked-final split dispatch is blocked: no independently signed DGX "
+            "startup/per-block receipt or global replay anchor is registered"
+        )
+    raise SchemaError("split DGX campaign profile is not registered")
 
 
 def build_semantic_dependency_lock(

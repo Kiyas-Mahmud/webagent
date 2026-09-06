@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
+import stat
 from typing import Any, Mapping
 
 from web_agent.benchmarks.base import AdapterExecution, EnvironmentAdapter
@@ -28,12 +30,19 @@ from web_agent.runtime.state_reset import (
     WebArenaResetStateReceipt,
     webarena_reset_state_digest,
 )
-from web_agent.eval.table2.common import canonical_json_bytes, sha256_json
+from web_agent.eval.table2.common import canonical_json_bytes, sha256_file, sha256_json
 from web_agent.eval.table2.process_broker_protocol import (
+    PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE,
+    PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION,
     ProcessBrokerInfrastructureInvalidMixin,
     registered_browser_error_observation_url,
 )
 from web_agent.eval.table2.sealed_verifier import SealedVerifierWriter
+
+
+# Capture the exact bytes that were imported so a parent process cannot claim
+# that a subsequently modified backend is the source it reviewed/launched.
+PROCESS_BROKER_IMPORT_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
 
 
 _FIXTURE_SHA256 = "a" * 64
@@ -121,6 +130,7 @@ class FixtureSealedBackend:
         ):
             raise ValueError("fixture backend config version differs")
         self._raw_page = _RawFixturePage()
+        self._runtime_closed = False
         self._terminal_events = 0
         screenshot_root = config.get("screenshot_root")
         self._screenshot_root = (
@@ -305,10 +315,24 @@ class FixtureSealedBackend:
     def runtime_close(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         del payload
         self._raw_page.closed = True
+        self._runtime_closed = True
         return {"closed": True}
 
-    def shutdown(self) -> None:
+    def shutdown(self) -> dict[str, Any]:
         self._raw_page.closed = True
+        return {
+            "schema_version": PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION,
+            "record_type": PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE,
+            "cleanup_disposition": (
+                "RUNTIME_CLOSE_ACKNOWLEDGED"
+                if self._runtime_closed
+                else "CONTROL_ABORT_COMPLETED"
+            ),
+            "browser_close_attempted": True,
+            "browser_close_completed": self._raw_page.closed is True,
+            "manual_rescue_check_count": 0,
+            "manual_rescue_tail_sha256": None,
+        }
 
 
 class FixtureWebArenaEnvironmentAdapter(EnvironmentAdapter):
@@ -316,7 +340,7 @@ class FixtureWebArenaEnvironmentAdapter(EnvironmentAdapter):
 
     benchmark_id = "webarena"
 
-    def __init__(self, task: TaskSpecification) -> None:
+    def __init__(self, task: TaskSpecification, episode_runtime_dir: Path) -> None:
         self.benchmark_version = str(task.benchmark_version)
         self._adapter_id = "fixture-process-webarena"
         self._adapter_version = "v1"
@@ -327,6 +351,12 @@ class FixtureWebArenaEnvironmentAdapter(EnvironmentAdapter):
         self._episode_id: str | None = None
         self._receipt: WebArenaResetStateReceipt | None = None
         self._closed = False
+        sidecar = episode_runtime_dir / "manual_rescue_guard.child.jsonl"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(sidecar, flags, 0o600)
+        os.close(descriptor)
+        self._manual_sidecar_path = sidecar
 
     def reset(
         self,
@@ -422,6 +452,40 @@ class FixtureWebArenaEnvironmentAdapter(EnvironmentAdapter):
             )["opaque_terminal_signal"]
         )
 
+    def process_broker_environment_state_sha256(self) -> str:
+        """Deterministic state commitment for sealed-callback mutation tests."""
+
+        page = self._backend._raw_page
+        return sha256_json(
+            {
+                "url": page.url,
+                "actions": page.actions,
+                "browser_error_kind": page.browser_error_kind,
+                "closed": page.closed,
+            }
+        )
+
+    def process_broker_manual_rescue_sidecar_identity(self) -> dict[str, Any]:
+        """The fixture has no live exclusive-input source and fabricates no receipt."""
+
+        metadata = self._manual_sidecar_path.lstat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or self._manual_sidecar_path.read_bytes() != b""
+        ):
+            raise ValueError("fixture manual-rescue sidecar identity changed")
+        return {
+            "schema_version": (
+                "table2-process-broker-manual-rescue-sidecar-identity-v1"
+            ),
+            "record_type": "ProcessBrokerManualRescueSidecarIdentity",
+            "relative_path": "manual_rescue_guard.child.jsonl",
+            "record_count": 0,
+            "tail_sha256": None,
+            "content_sha256": hashlib.sha256(b"").hexdigest(),
+        }
+
     def close(self) -> None:
         if self._closed:
             return None
@@ -441,7 +505,7 @@ def create_environment_adapter(
 ) -> FixtureWebArenaEnvironmentAdapter:
     if not episode_runtime_dir.is_dir():
         raise ValueError("fixture adapter runtime directory is unavailable")
-    return FixtureWebArenaEnvironmentAdapter(task)
+    return FixtureWebArenaEnvironmentAdapter(task, episode_runtime_dir)
 
 
 def finalize_environment_episode(

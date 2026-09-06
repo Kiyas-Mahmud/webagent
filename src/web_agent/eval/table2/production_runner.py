@@ -15,8 +15,9 @@ remain owned by this repository.
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields as dataclass_fields
 import json
 import math
 from pathlib import Path
@@ -86,6 +87,19 @@ from web_agent.eval.table2.package_validator import (
     _validate_model_evidence_bundle,
     require_pc01_provider_installation_ledger,
     validate_campaign,
+)
+from web_agent.eval.table2.process_broker import (
+    PROCESS_BROKER_CLEANUP_RECEIPT_SCHEMA_VERSION,
+    PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
+    PROCESS_BROKER_RECEIPT_SCHEMA_VERSION,
+    ProcessBrokerCleanupReceipt,
+    ProcessBrokerReceipt,
+)
+from web_agent.eval.table2.process_broker_finalization import (
+    ProcessIsolatedFinalizationReceipt,
+)
+from web_agent.eval.table2.process_broker_protocol import (
+    ProcessBrokerProtocolError,
 )
 from web_agent.eval.table2.resolved_config import (
     ResolvedConfigIdentityError,
@@ -173,6 +187,16 @@ _OPTIONAL_EFFICIENCY_FIELDS = frozenset(
     }
 )
 
+PROCESS_BROKER_STARTUP_ASSURANCE_SCHEMA_VERSION = (
+    "table2-process-broker-startup-assurance-v1"
+)
+PROCESS_BROKER_CLEANUP_ASSURANCE_SCHEMA_VERSION = (
+    "table2-process-broker-cleanup-assurance-v1"
+)
+PROCESS_BROKER_PILOT_ASSURANCE_CLAIM_SCOPE = (
+    "SOURCE_ATTESTED_PROCESS_ISOLATION_PILOT_EVIDENCE_NOT_FINAL_AUTHORITY"
+)
+
 RUNTIME_CAPABILITY_AUTHORITY_SCHEMA_VERSION = (
     "table2-pc01-runtime-capability-authority-v1"
 )
@@ -237,12 +261,158 @@ class ProductionRunnerError(Table2Error):
     """A frozen production binding is absent, inconsistent, or unsafe."""
 
 
+def _validated_process_broker_launch_receipt(
+    value: Mapping[str, Any],
+) -> ProcessBrokerReceipt:
+    """Reconstruct the exact typed broker receipt from detached JSON."""
+
+    if not isinstance(value, Mapping):
+        raise ProductionRunnerError("process-broker launch receipt is malformed")
+    expected = {item.name for item in dataclass_fields(ProcessBrokerReceipt)}
+    if set(value) != expected:
+        raise ProductionRunnerError(
+            "process-broker launch receipt fields differ from the registered schema"
+        )
+    try:
+        detached = json.loads(json.dumps(dict(value), sort_keys=True))
+        for field_name in (
+            "operation_specific_inner_schema_paths",
+            "future_promotion_requirements",
+            "child_environment_variable_names",
+        ):
+            if not isinstance(detached[field_name], list):
+                raise TypeError(field_name)
+            detached[field_name] = tuple(detached[field_name])
+        if not isinstance(detached["source_files"], list):
+            raise TypeError("source_files")
+        detached["source_files"] = tuple(
+            dict(row) if isinstance(row, Mapping) else row
+            for row in detached["source_files"]
+        )
+        receipt = ProcessBrokerReceipt(**detached)
+    except (SchemaError, TypeError, ValueError) as exc:
+        raise ProductionRunnerError(
+            f"process-broker launch receipt is invalid: {exc}"
+        ) from exc
+    if receipt.to_dict() != dict(value):
+        raise ProductionRunnerError(
+            "process-broker launch receipt is not the canonical detached record"
+        )
+    return receipt
+
+
+def _validated_process_broker_cleanup_receipt(
+    value: Mapping[str, Any],
+) -> ProcessBrokerCleanupReceipt:
+    """Reconstruct the authenticated cleanup receipt before publication."""
+
+    if not isinstance(value, Mapping):
+        raise ProductionRunnerError("process-broker cleanup receipt is malformed")
+    expected = {item.name for item in dataclass_fields(ProcessBrokerCleanupReceipt)}
+    if set(value) != expected:
+        raise ProductionRunnerError(
+            "process-broker cleanup receipt fields differ from the registered schema"
+        )
+    try:
+        detached = json.loads(json.dumps(dict(value), sort_keys=True))
+        receipt = ProcessBrokerCleanupReceipt(**detached)
+    except (SchemaError, TypeError, ValueError) as exc:
+        raise ProductionRunnerError(
+            f"process-broker cleanup receipt is invalid: {exc}"
+        ) from exc
+    if receipt.to_dict() != dict(value):
+        raise ProductionRunnerError(
+            "process-broker cleanup receipt is not the canonical detached record"
+        )
+    return receipt
+
+
+def _validated_process_finalization_receipt(
+    value: Mapping[str, Any],
+) -> ProcessIsolatedFinalizationReceipt:
+    """Reconstruct the final authenticated-response commitment exactly."""
+
+    if not isinstance(value, Mapping):
+        raise ProductionRunnerError("process finalization receipt is malformed")
+    expected = {
+        item.name for item in dataclass_fields(ProcessIsolatedFinalizationReceipt)
+    }
+    if set(value) != expected:
+        raise ProductionRunnerError(
+            "process finalization receipt fields differ from the registered schema"
+        )
+    try:
+        detached = json.loads(json.dumps(dict(value), sort_keys=True))
+        receipt = ProcessIsolatedFinalizationReceipt(**detached)
+    except (ProcessBrokerProtocolError, TypeError, ValueError) as exc:
+        raise ProductionRunnerError(
+            f"process finalization receipt is invalid: {exc}"
+        ) from exc
+    if receipt.to_dict() != dict(value):
+        raise ProductionRunnerError(
+            "process finalization receipt is not the canonical detached record"
+        )
+    return receipt
+
+
 def _require_runtime_sha256(value: object, *, field: str) -> str:
     if type(value) is not str or len(value) != 64 or any(
         character not in "0123456789abcdef" for character in value
     ):
         raise ProductionRunnerError(f"{field} must be a lowercase SHA-256")
     return value
+
+
+def _validate_attested_entrypoint_without_import(
+    *,
+    entrypoint: str,
+    source_relative_path: str,
+    source_sha256: str,
+    repository_root: Path,
+    attested_source_hashes_by_path: Mapping[str, str],
+    field: str,
+) -> None:
+    """Authenticate a child-only top-level function without importing it."""
+
+    module_name, separator, attribute_name = entrypoint.partition(":")
+    if (
+        separator != ":"
+        or not module_name
+        or any(not part.isidentifier() for part in module_name.split("."))
+        or not attribute_name.isidentifier()
+    ):
+        raise ProductionRunnerError(f"{field} entrypoint is malformed")
+    try:
+        relative = safe_relative_path(source_relative_path)
+    except (SchemaError, TypeError, ValueError) as exc:
+        raise ProductionRunnerError(f"{field} source path is malformed") from exc
+    expected_module_path = Path(*module_name.split(".")).with_suffix(".py")
+    if relative not in {expected_module_path, Path("src") / expected_module_path}:
+        raise ProductionRunnerError(f"{field} source differs from entrypoint")
+    source = (repository_root / relative).resolve()
+    if (
+        repository_root not in source.parents
+        or source.is_symlink()
+        or not source.is_file()
+        or source.stat().st_nlink != 1
+        or sha256_file(source) != source_sha256
+        or attested_source_hashes_by_path.get(relative.as_posix()) != source_sha256
+    ):
+        raise ProductionRunnerError(f"{field} source is not frozen and attested")
+    try:
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+    except (OSError, SyntaxError, UnicodeError) as exc:
+        raise ProductionRunnerError(f"{field} source cannot be parsed") from exc
+    declarations = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == attribute_name
+    ]
+    if len(declarations) != 1 or not isinstance(declarations[0], ast.FunctionDef):
+        raise ProductionRunnerError(
+            f"{field} must be one top-level synchronous function"
+        )
 
 
 def runtime_context_identity(
@@ -775,9 +945,15 @@ class ProcessIsolatedWebArenaEpisodeBinding:
     benchmark_version: str
     environment_adapter: EnvironmentAdapter
     finalize_episode_evidence: ProcessFinalEvidenceWriter
+    finalization_receipt: Callable[[], Mapping[str, Any]]
     abort_episode: AbortBrowserEpisode
-    cleanup_episode: Callable[[], None]
+    cleanup_episode: Callable[[], Mapping[str, Any]]
     broker_receipt: Mapping[str, Any]
+    live_deployment_binding_sha256: str
+    live_deployment_manifest_sha256: str
+    measured_timeout_binding_sha256: str
+    episode_factory_public_identity: Mapping[str, Any]
+    episode_factory_descriptor_sha256: str
     frozen: bool = True
     oracle_labels_exposed_to_runtime: bool = False
 
@@ -799,6 +975,7 @@ class ProcessIsolatedWebArenaEpisodeBinding:
             )
         for name in (
             "finalize_episode_evidence",
+            "finalization_receipt",
             "abort_episode",
             "cleanup_episode",
         ):
@@ -810,6 +987,22 @@ class ProcessIsolatedWebArenaEpisodeBinding:
             raise ValueError(
                 "process-isolated WebArena binding requires a broker receipt"
             )
+        for name in (
+            "live_deployment_binding_sha256",
+            "live_deployment_manifest_sha256",
+            "measured_timeout_binding_sha256",
+            "episode_factory_descriptor_sha256",
+        ):
+            _require_runtime_sha256(getattr(self, name), field=name)
+        if (
+            not isinstance(self.episode_factory_public_identity, Mapping)
+            or not self.episode_factory_public_identity
+            or sha256_json(self.episode_factory_public_identity)
+            != self.episode_factory_descriptor_sha256
+        ):
+            raise ValueError(
+                "process-isolated episode factory public identity is malformed"
+            )
         required_receipt = {
             "sealed_finalization_capability_available": True,
             "sealed_finalization_required": True,
@@ -819,7 +1012,7 @@ class ProcessIsolatedWebArenaEpisodeBinding:
             "separate_evidence_transport_present": False,
             "runtime_terminal_returns_outer_sealed_signal": True,
             "sealed_finalization_returns_outer_sealed_signal": True,
-            "sealed_finalization_timeout_campaign_authority": False,
+            "runtime_value_provenance_attested": False,
             "external_deployment_authority": False,
         }
         if any(
@@ -832,6 +1025,36 @@ class ProcessIsolatedWebArenaEpisodeBinding:
         if self.frozen is not True or self.oracle_labels_exposed_to_runtime is not False:
             raise ValueError(
                 "process-isolated WebArena binding must be frozen and oracle-blind"
+            )
+
+    def assert_pilot_evaluation_receipt(self) -> None:
+        """Require the complete measured pilot receipt before live execution."""
+
+        receipt = _validated_process_broker_launch_receipt(self.broker_receipt)
+        required = {
+            "schema_version": PROCESS_BROKER_RECEIPT_SCHEMA_VERSION,
+            "execution_scope": PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
+            "process_ids_distinct": True,
+            "loaded_source_closure_enforced": True,
+            "operation_specific_inner_schemas_registered": True,
+            "single_episode_task_session_enforced": True,
+            "verifier_receipt_causal_binding_enforced": True,
+            "measured_ipc_timeout_calibration_complete": True,
+            "timeout_calibration_replay_only": False,
+            "immutable_timeout_authority_bundle_validated": True,
+            "external_timeout_authority_cross_binding_present": False,
+            "ipc_timeout_calibration_pilot_eligible": True,
+            "sealed_finalization_timeout_measured": True,
+            "external_deployment_authority": False,
+        }
+        if any(
+            type(getattr(receipt, field)) is not type(expected)
+            or getattr(receipt, field) != expected
+            for field, expected in required.items()
+        ):
+            raise ValueError(
+                "process-isolated WebArena binding lacks the exact measured "
+                "PILOT_EVALUATION receipt"
             )
 
 
@@ -899,10 +1122,14 @@ class _ActiveWebArenaSession:
 @dataclass(slots=True)
 class _ActiveProcessWebArenaSession:
     finalizer: ProcessFinalEvidenceWriter
-    cleanup_episode: Callable[[], None]
+    finalization_receipt: Callable[[], Mapping[str, Any]]
+    cleanup_episode: Callable[[], Mapping[str, Any]]
     abort_episode: AbortBrowserEpisode
     event_logs: EpisodeEventLogs
     task_id: str
+    launch_receipt_sha256: str
+    launch_source_set_sha256: str
+    sealed_child_pid: int
     cleaned: bool = False
 
 
@@ -946,7 +1173,8 @@ class ProductionTable2Runner:
         self.attestation = read_json(self.root / "frozen" / "runner_attestation.json")
         try:
             assert_pc01_page_broker_production_authorized(
-                self.attestation.get(PC01_PAGE_BROKER_SECURITY_FIELD)
+                self.attestation.get(PC01_PAGE_BROKER_SECURITY_FIELD),
+                campaign_profile=campaign_profile,
             )
         except SchemaError as exc:
             raise ProductionRunnerError(
@@ -1157,17 +1385,36 @@ class ProductionTable2Runner:
             )
         self._assert_locked_mount_absent()
         self._assert_clean_source_checkout()
-        evaluator_factory = load_entrypoint(evaluator_entrypoint)
-        if not callable(evaluator_factory):
-            raise ProductionRunnerError("sealed evaluator entrypoint is not callable")
-        self._validate_injected_callable(
-            "sealed_evaluator_factory",
-            evaluator_factory,
-            expected_relative_path=str(
+        _validate_attested_entrypoint_without_import(
+            entrypoint=evaluator_entrypoint,
+            source_relative_path=str(
                 evaluator_identity.get("source_relative_path", "")
             ),
+            source_sha256=_require_runtime_sha256(
+                evaluator_identity.get("source_sha256"),
+                field="sealed evaluator source",
+            ),
+            repository_root=self.repository_root,
+            attested_source_hashes_by_path=self._attested_source_hashes,
+            field="child-only sealed evaluator factory",
         )
-        self.evaluator_factory: EvaluatorEpisodeFactory = evaluator_factory
+        sealed_capability = self.live_deployment.manifest.get(
+            "capabilities", {}
+        ).get("sealed_webarena_evaluator")
+        if not isinstance(sealed_capability, Mapping) or any(
+            sealed_capability.get(name) != evaluator_identity.get(name)
+            for name in (
+                "source_relative_path",
+                "source_sha256",
+            )
+        ):
+            raise ProductionRunnerError(
+                "child-only evaluator source differs from live deployment authority"
+            )
+        # A process-isolated pilot must not import evaluator code into the
+        # policy/model parent. The child factory revalidates and imports it
+        # only after its exact source closure and role capabilities are bound.
+        self.evaluator_factory: EvaluatorEpisodeFactory | None = None
         self.integration = integration
         self.seed_states = {
             seed: self._build_seed_state(
@@ -1387,11 +1634,333 @@ class ProductionTable2Runner:
                 "process_webarena.finalize_episode_evidence",
                 binding.finalize_episode_evidence,
             ),
+            (
+                "process_webarena.finalization_receipt",
+                binding.finalization_receipt,
+            ),
             ("process_webarena.abort_episode", binding.abort_episode),
             ("process_webarena.cleanup_episode", binding.cleanup_episode),
         )
         for name, callback in callbacks:
             self._validate_injected_callable(name, callback)
+
+    def _process_broker_startup_assurance(
+        self,
+        binding: ProcessIsolatedWebArenaEpisodeBinding,
+    ) -> dict[str, Any]:
+        """Create the oracle-free composite pilot launch commitment."""
+
+        receipt = _validated_process_broker_launch_receipt(binding.broker_receipt)
+        live_binding_sha256 = sha256_json(self.live_deployment.binding)
+        live_manifest_sha256 = sha256_json(self.live_deployment.manifest)
+        if (
+            binding.live_deployment_binding_sha256 != live_binding_sha256
+            or binding.live_deployment_manifest_sha256 != live_manifest_sha256
+            or binding.measured_timeout_binding_sha256
+            != receipt.ipc_timeout_binding_sha256
+        ):
+            raise ProductionRunnerError(
+                "process episode descriptor differs from the revalidated live "
+                "deployment or measured timeout authority"
+            )
+        public_identity = dict(binding.episode_factory_public_identity)
+        public_identity_keys = {
+            "schema_version",
+            "record_type",
+            "claim_scope",
+            "live_deployment_binding_sha256",
+            "live_deployment_manifest_sha256",
+            "measured_timeout_binding_sha256",
+            "adapter_factory",
+            "sealed_transition_callback",
+            "sealed_finalizer",
+            "backend_dependency_sources",
+            "broker_backend_entrypoint",
+            "broker_backend_source_relative_path",
+            "broker_backend_source_sha256",
+            "credential_material_embedded",
+            "frozen",
+        }
+        if set(public_identity) != public_identity_keys or (
+            public_identity.get("schema_version")
+            != "table2-process-broker-episode-factory-descriptor-public-identity-v1"
+            or public_identity.get("record_type")
+            != "ProcessBrokerEpisodeFactoryDescriptorPublicIdentity"
+            or public_identity.get("claim_scope")
+            != "PILOT_ONLY_CREDENTIAL_FREE_ORCHESTRATION_NOT_FINAL_DEPLOYMENT_AUTHORITY"
+        ):
+            raise ProductionRunnerError(
+                "process episode factory public identity schema differs"
+            )
+        public_expected = {
+            "live_deployment_binding_sha256": live_binding_sha256,
+            "live_deployment_manifest_sha256": live_manifest_sha256,
+            "measured_timeout_binding_sha256": receipt.ipc_timeout_binding_sha256,
+            "credential_material_embedded": False,
+            "frozen": True,
+        }
+        if any(public_identity.get(name) != expected for name, expected in public_expected.items()):
+            raise ProductionRunnerError(
+                "process episode factory public identity differs from its bound inputs"
+            )
+        if sha256_json(public_identity) != binding.episode_factory_descriptor_sha256:
+            raise ProductionRunnerError(
+                "process episode factory descriptor commitment differs"
+            )
+
+        capabilities = self.live_deployment.manifest.get("capabilities")
+        runtime_capability = (
+            capabilities.get("oracle_blind_browser_mapping")
+            if isinstance(capabilities, Mapping)
+            else None
+        )
+        sealed_capability = (
+            capabilities.get("sealed_webarena_evaluator")
+            if isinstance(capabilities, Mapping)
+            else None
+        )
+        if not isinstance(runtime_capability, Mapping) or not isinstance(
+            sealed_capability, Mapping
+        ):
+            raise ProductionRunnerError(
+                "live deployment lacks distinct runtime/sealed source authorities"
+            )
+        runtime_source = {
+            "source_relative_path": runtime_capability.get("source_relative_path"),
+            "source_sha256": runtime_capability.get("source_sha256"),
+        }
+        sealed_source = {
+            "source_relative_path": sealed_capability.get("source_relative_path"),
+            "source_sha256": sealed_capability.get("source_sha256"),
+        }
+        def public_source(role: str) -> dict[str, Any] | None:
+            value = public_identity.get(role)
+            if not isinstance(value, Mapping):
+                return None
+            return {
+                "source_relative_path": value.get("source_relative_path"),
+                "source_sha256": value.get("source_sha256"),
+            }
+
+        if (
+            runtime_source == sealed_source
+            or public_source("adapter_factory") != runtime_source
+            or public_source("sealed_transition_callback") != sealed_source
+            or public_source("sealed_finalizer") != sealed_source
+        ):
+            raise ProductionRunnerError(
+                "process episode factory does not preserve the runtime/sealed "
+                "source-plane boundary"
+            )
+
+        source_rows = [dict(row) for row in receipt.source_files]
+        source_map = {
+            str(row.get("relative_path") or ""): str(row.get("sha256") or "")
+            for row in source_rows
+        }
+        for role, source in (
+            ("runtime", runtime_source),
+            ("sealed", sealed_source),
+        ):
+            if source_map.get(str(source["source_relative_path"])) != source[
+                "source_sha256"
+            ]:
+                raise ProductionRunnerError(
+                    f"process broker source closure omits the {role} capability source"
+                )
+        for row in source_rows:
+            relative = str(row.get("relative_path") or "")
+            digest = str(row.get("sha256") or "")
+            if self._attested_source_hashes.get(relative) != digest:
+                raise ProductionRunnerError(
+                    "process broker loaded source is absent from the frozen runner "
+                    f"attestation: {relative}"
+                )
+        dependency_rows = public_identity.get("backend_dependency_sources")
+        if not isinstance(dependency_rows, list) or dependency_rows != sorted(
+            dependency_rows,
+            key=lambda row: str(row.get("source_relative_path", ""))
+            if isinstance(row, Mapping)
+            else "",
+        ):
+            raise ProductionRunnerError(
+                "process episode factory dependency identity is not canonical"
+            )
+        declared_rows = [
+            public_identity.get("adapter_factory"),
+            public_identity.get("sealed_transition_callback"),
+            public_identity.get("sealed_finalizer"),
+            *dependency_rows,
+        ]
+        for row in declared_rows:
+            if not isinstance(row, Mapping) or set(row) not in (
+                {"source_relative_path", "source_sha256"},
+                {"entrypoint", "source_relative_path", "source_sha256"},
+            ):
+                raise ProductionRunnerError(
+                    "process episode factory source identity is malformed"
+                )
+            if source_map.get(str(row["source_relative_path"])) != row["source_sha256"]:
+                raise ProductionRunnerError(
+                    "process episode factory source is absent from broker closure"
+                )
+        if (
+            public_identity.get("broker_backend_entrypoint")
+            != receipt.backend_entrypoint
+            or public_identity.get("broker_backend_source_relative_path")
+            != receipt.backend_source_relative_path
+            or public_identity.get("broker_backend_source_sha256")
+            != receipt.backend_source_sha256
+        ):
+            raise ProductionRunnerError(
+                "process episode factory broker backend identity differs"
+            )
+        launch_sha256 = sha256_json(receipt.to_dict())
+        return {
+            "schema_version": PROCESS_BROKER_STARTUP_ASSURANCE_SCHEMA_VERSION,
+            "record_type": "ProcessBrokerStartupAssurance",
+            "claim_scope": PROCESS_BROKER_PILOT_ASSURANCE_CLAIM_SCOPE,
+            "evidence_label": "PILOT_ONLY",
+            "paper_table_status": "N/R",
+            "launch_receipt_sha256": launch_sha256,
+            "execution_scope": receipt.execution_scope,
+            "runtime_pid": receipt.runtime_pid,
+            "sealed_child_pid": receipt.sealed_evaluator_pid,
+            "process_ids_distinct": receipt.process_ids_distinct,
+            "transport": receipt.transport,
+            "protocol_version": receipt.protocol_version,
+            "peer_credentials_enforced": receipt.peer_credentials_enforced,
+            "role_separated_authentication": receipt.role_separated_authentication,
+            "loaded_source_closure_enforced": receipt.loaded_source_closure_enforced,
+            "child_environment_allowlist_version": (
+                receipt.child_environment_allowlist_version
+            ),
+            "child_environment_variable_names": list(
+                receipt.child_environment_variable_names
+            ),
+            "child_environment_exact_allowlist_enforced": (
+                receipt.child_environment_exact_allowlist_enforced
+            ),
+            "child_environment_credentials_scrubbed": (
+                receipt.child_environment_credentials_scrubbed
+            ),
+            "authenticated_transcript_chaining": (
+                receipt.authenticated_request_response_transcript_chaining
+            ),
+            "parent_child_transcript_convergence_required": (
+                receipt.parent_child_transcript_convergence_required
+            ),
+            "transcript_chain_algorithm": receipt.transcript_chain_algorithm,
+            "ipc_timeout_binding_sha256": receipt.ipc_timeout_binding_sha256,
+            "immutable_timeout_authority_bundle_validated": (
+                receipt.immutable_timeout_authority_bundle_validated
+            ),
+            "source_files": source_rows,
+            "source_set_sha256": receipt.source_set_sha256,
+            "live_deployment_binding_sha256": live_binding_sha256,
+            "live_deployment_manifest_sha256": live_manifest_sha256,
+            "episode_factory_descriptor_sha256": (
+                binding.episode_factory_descriptor_sha256
+            ),
+            "provider_installation_receipt_sha256": (
+                self.provider_installation_receipt.receipt_sha256
+            ),
+            "runner_attestation_sha256": sha256_file(
+                self.root / "frozen" / "runner_attestation.json"
+            ),
+            "runtime_value_provenance_attested": (
+                receipt.runtime_value_provenance_attested
+            ),
+            "source_attested_oracle_free_value_origin_evidence": True,
+            "independent_runtime_value_provenance_attested": False,
+            "external_deployment_authority": receipt.external_deployment_authority,
+        }
+
+    @staticmethod
+    def _append_process_broker_cleanup_assurance(
+        session: _ActiveProcessWebArenaSession,
+        *,
+        cleanup_value: Mapping[str, Any],
+        finalization_value: Mapping[str, Any] | None,
+    ) -> None:
+        """Persist authenticated child cleanup without publishing sealed truth."""
+
+        cleanup = _validated_process_broker_cleanup_receipt(cleanup_value)
+        if (
+            cleanup.launch_receipt_sha256 != session.launch_receipt_sha256
+            or cleanup.source_set_sha256 != session.launch_source_set_sha256
+            or cleanup.sealed_evaluator_pid != session.sealed_child_pid
+            or cleanup.external_deployment_authority is not False
+        ):
+            raise ProductionRunnerError(
+                "process-broker cleanup receipt differs from the launched child"
+            )
+        finalization: ProcessIsolatedFinalizationReceipt | None = None
+        if finalization_value is not None:
+            finalization = _validated_process_finalization_receipt(
+                finalization_value
+            )
+            if (
+                finalization.transcript_entry_count
+                != cleanup.shutdown_request_previous_transcript_entry_count
+                or finalization.transcript_root_sha256
+                != cleanup.shutdown_request_previous_transcript_root_sha256
+                or cleanup.transcript_entry_count
+                != cleanup.shutdown_request_previous_transcript_entry_count + 2
+            ):
+                raise ProductionRunnerError(
+                    "process finalization transcript differs from the authenticated "
+                    "pre-shutdown snapshot"
+                )
+            child_cleanup = cleanup.child_cleanup_result
+            if (
+                child_cleanup.get("cleanup_disposition")
+                != "RUNTIME_CLOSE_ACKNOWLEDGED"
+                or child_cleanup.get("browser_close_attempted") is not True
+                or child_cleanup.get("browser_close_completed") is not True
+            ):
+                raise ProductionRunnerError(
+                    "completed process episode lacks child-owned browser close evidence"
+                )
+
+        session.event_logs.append(
+            "environment_events",
+            "process_broker_cleanup_assurance",
+            {
+                "schema_version": PROCESS_BROKER_CLEANUP_ASSURANCE_SCHEMA_VERSION,
+                "record_type": "ProcessBrokerCleanupAssurance",
+                "claim_scope": PROCESS_BROKER_PILOT_ASSURANCE_CLAIM_SCOPE,
+                "evidence_label": "PILOT_ONLY",
+                "paper_table_status": "N/R",
+                "launch_receipt_sha256": cleanup.launch_receipt_sha256,
+                "cleanup_receipt_sha256": sha256_json(cleanup.to_dict()),
+                "session_identity_sha256": cleanup.session_identity_sha256,
+                "sealed_child_pid": cleanup.sealed_evaluator_pid,
+                "worker_exit_code": cleanup.worker_exit_code,
+                "graceful_authenticated_shutdown": (
+                    cleanup.graceful_authenticated_shutdown
+                ),
+                "endpoint_removed": cleanup.endpoint_removed,
+                "temporary_directory_removed": cleanup.temporary_directory_removed,
+                "source_set_sha256": cleanup.source_set_sha256,
+                "transcript_chain_algorithm": cleanup.transcript_chain_algorithm,
+                "shutdown_request_previous_transcript_root_sha256": (
+                    cleanup.shutdown_request_previous_transcript_root_sha256
+                ),
+                "shutdown_request_previous_transcript_entry_count": (
+                    cleanup.shutdown_request_previous_transcript_entry_count
+                ),
+                "transcript_root_sha256": cleanup.transcript_root_sha256,
+                "transcript_entry_count": cleanup.transcript_entry_count,
+                "child_cleanup_result": dict(cleanup.child_cleanup_result),
+                "finalization_receipt": (
+                    finalization.to_dict() if finalization is not None else None
+                ),
+                "external_deployment_authority": (
+                    cleanup.external_deployment_authority
+                ),
+            },
+        )
 
     def evaluation_runner_attestation(self) -> Mapping[str, Any]:
         """Return identities verified against actual loaded backend objects."""
@@ -1538,6 +2107,10 @@ class ProductionTable2Runner:
             )
         session: _ActiveWebArenaSession | None = None
         try:
+            if self.evaluator_factory is None:
+                raise ProductionRunnerError(
+                    "same-process evaluator import is blocked for the pilot"
+                )
             evaluator_binding = setup_deadline.run_blocking(
                 "sealed evaluator binding construction",
                 lambda: self.evaluator_factory(dict(task), verifier_writer),
@@ -1699,13 +2272,22 @@ class ProductionTable2Runner:
                 raise ProductionRunnerError(
                     "process-isolated WebArena/task versions differ"
                 )
+            binding.assert_pilot_evaluation_receipt()
             self._validate_process_episode_binding_sources(binding)
+            startup_assurance = self._process_broker_startup_assurance(binding)
+            launch_receipt = _validated_process_broker_launch_receipt(
+                binding.broker_receipt
+            )
             session = _ActiveProcessWebArenaSession(
                 finalizer=binding.finalize_episode_evidence,
+                finalization_receipt=binding.finalization_receipt,
                 cleanup_episode=binding.cleanup_episode,
                 abort_episode=binding.abort_episode,
                 event_logs=event_logs,
                 task_id=task_spec.task_id,
+                launch_receipt_sha256=sha256_json(launch_receipt.to_dict()),
+                launch_source_set_sha256=launch_receipt.source_set_sha256,
+                sealed_child_pid=launch_receipt.sealed_evaluator_pid,
             )
             self._active_webarena[episode_id] = session
             summary, efficiency, contract_receipt = self._execute_episode(
@@ -1717,6 +2299,7 @@ class ProductionTable2Runner:
                 stage_seeds=stage_seeds,
                 event_logs=event_logs,
                 pre_browser_setup_deadline=setup_deadline,
+                process_startup_assurance=startup_assurance,
             )
             if summary.reset_already_success:
                 raise InfrastructureInvalidError(
@@ -1760,7 +2343,17 @@ class ProductionTable2Runner:
                 except BaseException as exc:
                     cleanup_error = exc
                 try:
-                    binding.cleanup_episode()
+                    cleanup_value = binding.cleanup_episode()
+                    if session is None:
+                        raise ProductionRunnerError(
+                            "process cleanup completed without an active evidence session"
+                        )
+                    self._append_process_broker_cleanup_assurance(
+                        session,
+                        cleanup_value=cleanup_value,
+                        finalization_value=None,
+                    )
+                    session.cleaned = True
                 except BaseException as exc:
                     cleanup_error = cleanup_error or exc
                 if cleanup_error is not None:
@@ -1790,6 +2383,7 @@ class ProductionTable2Runner:
             callback_error: BaseException | None = None
             abort_error: BaseException | None = None
             signal: OpaqueTerminalSignal | None = None
+            finalization_value: Mapping[str, Any] | None = None
             try:
                 summary = _summary_from_result(result)
                 signal = session.finalizer(
@@ -1800,6 +2394,8 @@ class ProductionTable2Runner:
                     raise ProductionRunnerError(
                         "process final evaluator returned a non-opaque result"
                     )
+                finalization_value = session.finalization_receipt()
+                _validated_process_finalization_receipt(finalization_value)
             except BaseException as exc:
                 callback_error = exc
                 try:
@@ -1812,7 +2408,12 @@ class ProductionTable2Runner:
                 except BaseException as caught_abort_error:
                     abort_error = caught_abort_error
             try:
-                session.cleanup_episode()
+                cleanup_value = session.cleanup_episode()
+                self._append_process_broker_cleanup_assurance(
+                    session,
+                    cleanup_value=cleanup_value,
+                    finalization_value=finalization_value,
+                )
                 session.cleaned = True
             except BaseException as cleanup_error:
                 raise ProductionRunnerError(
@@ -2036,6 +2637,7 @@ class ProductionTable2Runner:
         stage_seeds: Mapping[str, int],
         event_logs: Any,
         pre_browser_setup_deadline: PreBrowserSetupDeadline | None = None,
+        process_startup_assurance: Mapping[str, Any] | None = None,
     ) -> tuple[EpisodeSummary, dict[str, Any], Mapping[str, Any]]:
         state = self.seed_states[model_seed]
         if pre_browser_setup_deadline is None:
@@ -2060,6 +2662,16 @@ class ProductionTable2Runner:
             pre_browser_setup_deadline.run_blocking(
                 "shared model-backend reset",
                 lambda: self._reset_episode_backends(**reset_kwargs),
+            )
+        if process_startup_assurance is not None:
+            if not isinstance(event_logs, EpisodeEventLogs):
+                raise ProductionRunnerError(
+                    "process startup assurance requires canonical episode event logs"
+                )
+            event_logs.append(
+                "environment_events",
+                "process_broker_startup_assurance",
+                dict(process_startup_assurance),
             )
         switches = self.bundle.system(system_id).switches
         policy = state.base_policy if system_id is SystemID.E0 else state.trained_policy

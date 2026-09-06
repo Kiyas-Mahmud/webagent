@@ -1,9 +1,10 @@
 """Orchestration-only finalization for the process-isolated page broker.
 
 The sealed evaluator/browser child owns the append-only verifier sink for the
-whole episode. Runtime terminal calls and post-decision finalization therefore
-return the *outer* sealed event/token directly. No raw-evidence socket, seal
-key, sink, or verifier writer is retained by either client in this module.
+whole episode. Runtime terminal calls return the *outer* sealed event/token;
+post-decision finalization additionally returns only a content-addressed
+identity for the completed child-owned callback-state guard. No raw-evidence
+socket, seal key, sink, or verifier writer is retained by either client here.
 
 This remains local architecture evidence. Finalization does not yet have an
 independently measured and externally cross-bound timeout class, so the live
@@ -12,13 +13,15 @@ EVALUATION scope stays fail-closed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+import hashlib
 import json
 import math
 from pathlib import Path
 import secrets
 import socket
 from time import monotonic
+from types import MappingProxyType
 from typing import Any, Mapping
 
 from web_agent.runtime.contracts import EpisodeSummary, OpaqueTerminalSignal
@@ -27,6 +30,7 @@ from .common import canonical_json_bytes, sha256_file
 from .process_broker_protocol import (
     MAX_PROCESS_BROKER_MESSAGE_BYTES,
     PROCESS_BROKER_PROTOCOL_VERSION,
+    ProcessBrokerTranscript,
     ProcessBrokerProtocolError,
     authenticated_envelope,
     receive_frame,
@@ -39,7 +43,19 @@ from .process_broker_protocol import (
 PROCESS_BROKER_IMPORT_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
 
 SEALED_FINALIZATION_OPERATION = "sealed_finalize_episode"
-SEALED_FINALIZATION_SCHEMA_VERSION = "table2-process-broker-finalization-v3"
+SEALED_FINALIZATION_SCHEMA_VERSION = "table2-process-broker-finalization-v4"
+SEALED_CALLBACK_GUARD_IDENTITY_SCHEMA_VERSION = (
+    "table2-process-broker-sealed-callback-state-guard-sidecar-identity-v1"
+)
+SEALED_CALLBACK_GUARD_IDENTITY_RECORD_TYPE = (
+    "ProcessBrokerSealedCallbackStateGuardSidecarIdentity"
+)
+SEALED_CALLBACK_GUARD_RELATIVE_PATH = (
+    "sealed_callback_state_guard.child.jsonl"
+)
+PROCESS_BROKER_FINALIZATION_RECEIPT_SCHEMA_VERSION = (
+    "table2-process-broker-sealed-finalization-receipt-v1"
+)
 
 
 def _detached_object(value: object, *, context: str) -> dict[str, Any]:
@@ -123,10 +139,13 @@ def validate_finalization_request_payload(value: object) -> dict[str, Any]:
 
 
 def validate_finalization_result(value: object) -> dict[str, Any]:
-    """Accept only one outer opaque terminal acknowledgement from the child."""
+    """Accept one opaque signal plus its child-owned state-guard identity."""
 
     result = _detached_object(value, context="sealed finalization result")
-    if set(result) != {"opaque_terminal_signal"} or not isinstance(
+    if set(result) != {
+        "opaque_terminal_signal",
+        "sealed_callback_guard_identity",
+    } or not isinstance(
         result.get("opaque_terminal_signal"), Mapping
     ):
         raise ProcessBrokerProtocolError(
@@ -142,7 +161,129 @@ def validate_finalization_result(value: object) -> dict[str, Any]:
         raise ProcessBrokerProtocolError(
             "sealed finalization acknowledgement must terminate"
         )
-    return {"opaque_terminal_signal": signal.to_dict()}
+    guard = validate_sealed_callback_guard_identity(
+        result.get("sealed_callback_guard_identity")
+    )
+    return {
+        "opaque_terminal_signal": signal.to_dict(),
+        "sealed_callback_guard_identity": guard,
+    }
+
+
+def validate_sealed_callback_guard_identity(value: object) -> dict[str, Any]:
+    """Validate the final child-owned sealed-callback guard sidecar identity."""
+
+    identity = _detached_object(
+        value, context="sealed callback state-guard identity"
+    )
+    if set(identity) != {
+        "schema_version",
+        "record_type",
+        "relative_path",
+        "record_count",
+        "tail_sha256",
+        "content_sha256",
+    }:
+        raise ProcessBrokerProtocolError(
+            "sealed callback state-guard identity fields differ"
+        )
+    if (
+        identity.get("schema_version")
+        != SEALED_CALLBACK_GUARD_IDENTITY_SCHEMA_VERSION
+        or identity.get("record_type")
+        != SEALED_CALLBACK_GUARD_IDENTITY_RECORD_TYPE
+        or identity.get("relative_path")
+        != SEALED_CALLBACK_GUARD_RELATIVE_PATH
+    ):
+        raise ProcessBrokerProtocolError(
+            "sealed callback state-guard identity differs"
+        )
+    count = identity.get("record_count")
+    if type(count) is not int or count < 1:
+        raise ProcessBrokerProtocolError(
+            "sealed callback state-guard identity lacks a completed final guard"
+        )
+    for field in ("tail_sha256", "content_sha256"):
+        digest = identity.get(field)
+        if type(digest) is not str or len(digest) != 64 or any(
+            character not in "0123456789abcdef" for character in digest
+        ):
+            raise ProcessBrokerProtocolError(
+                f"sealed callback state-guard {field} is not lowercase SHA-256"
+            )
+    return identity
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessIsolatedFinalizationReceipt:
+    """Immutable parent receipt for one authenticated finalization response."""
+
+    schema_version: str
+    record_type: str
+    opaque_terminal_signal: Mapping[str, Any]
+    sealed_callback_guard_identity: Mapping[str, Any]
+    authenticated_response_payload_sha256: str
+    transcript_root_sha256: str
+    transcript_entry_count: int
+
+    def __post_init__(self) -> None:
+        if (
+            self.schema_version
+            != PROCESS_BROKER_FINALIZATION_RECEIPT_SCHEMA_VERSION
+            or self.record_type != "ProcessIsolatedFinalizationReceipt"
+        ):
+            raise ProcessBrokerProtocolError(
+                "process finalization receipt identity differs"
+            )
+        try:
+            signal = OpaqueTerminalSignal.from_dict(self.opaque_terminal_signal)
+        except (TypeError, ValueError) as exc:
+            raise ProcessBrokerProtocolError(
+                "process finalization receipt signal is invalid"
+            ) from exc
+        if type(signal) is not OpaqueTerminalSignal or signal.terminate is not True:
+            raise ProcessBrokerProtocolError(
+                "process finalization receipt signal must terminate"
+            )
+        guard = validate_sealed_callback_guard_identity(
+            self.sealed_callback_guard_identity
+        )
+        for field in (
+            "authenticated_response_payload_sha256",
+            "transcript_root_sha256",
+        ):
+            digest = getattr(self, field)
+            if type(digest) is not str or len(digest) != 64 or any(
+                character not in "0123456789abcdef" for character in digest
+            ):
+                raise ProcessBrokerProtocolError(
+                    f"process finalization receipt {field} is not SHA-256"
+                )
+        if type(self.transcript_entry_count) is not int or (
+            self.transcript_entry_count < 2
+            or self.transcript_entry_count % 2 != 0
+        ):
+            raise ProcessBrokerProtocolError(
+                "process finalization receipt transcript count is invalid"
+            )
+        object.__setattr__(
+            self,
+            "opaque_terminal_signal",
+            MappingProxyType(signal.to_dict()),
+        )
+        object.__setattr__(
+            self,
+            "sealed_callback_guard_identity",
+            MappingProxyType(dict(guard)),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        value = {field.name: getattr(self, field.name) for field in fields(self)}
+        value["opaque_terminal_signal"] = dict(self.opaque_terminal_signal)
+        value["sealed_callback_guard_identity"] = dict(
+            self.sealed_callback_guard_identity
+        )
+        return value
 
 
 class ProcessIsolatedFinalizationClient:
@@ -153,9 +294,11 @@ class ProcessIsolatedFinalizationClient:
         "__failed",
         "__finalized",
         "__key",
+        "__receipt",
         "__sequence",
         "__session_id",
         "__timeout_seconds",
+        "__transcript",
     )
 
     def __init__(
@@ -165,6 +308,7 @@ class ProcessIsolatedFinalizationClient:
         authentication_key: bytes,
         session_id: str,
         timeout_seconds: float,
+        transcript: ProcessBrokerTranscript | None = None,
     ) -> None:
         timeout = float(timeout_seconds)
         if (
@@ -179,10 +323,28 @@ class ProcessIsolatedFinalizationClient:
         self.__endpoint = str(endpoint)
         self.__key = bytes(authentication_key)
         self.__session_id = session_id
+        if transcript is not None and type(transcript) is not ProcessBrokerTranscript:
+            raise TypeError("process finalization transcript capability has wrong type")
+        self.__transcript = transcript or ProcessBrokerTranscript(
+            session_id=session_id
+        )
         self.__timeout_seconds = timeout
         self.__sequence = 0
         self.__finalized = False
         self.__failed = False
+        self.__receipt: ProcessIsolatedFinalizationReceipt | None = None
+
+    @property
+    def finalization_receipt(self) -> ProcessIsolatedFinalizationReceipt:
+        if self.__receipt is None:
+            raise ProcessBrokerProtocolError(
+                "process finalization receipt is unavailable before finalization"
+            )
+        return self.__receipt
+
+    @property
+    def sealed_callback_guard_identity(self) -> Mapping[str, Any]:
+        return self.finalization_receipt.sealed_callback_guard_identity
 
     def finalize_episode(
         self,
@@ -220,18 +382,43 @@ class ProcessIsolatedFinalizationClient:
             "payload": payload,
         }
         try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-                set_socket_timeout_to_deadline(connection, deadline)
-                connection.connect(self.__endpoint)
-                send_frame(
-                    connection,
-                    authenticated_envelope(body, authentication_key=self.__key),
-                    deadline_monotonic=deadline,
-                )
-                response = verify_authenticated_envelope(
-                    receive_frame(connection, deadline_monotonic=deadline),
-                    authentication_key=self.__key,
-                )
+            request_frame = authenticated_envelope(
+                body, authentication_key=self.__key
+            )
+            with self.__transcript.exchange():
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                    set_socket_timeout_to_deadline(connection, deadline)
+                    connection.connect(self.__endpoint)
+                    send_frame(
+                        connection,
+                        request_frame,
+                        deadline_monotonic=deadline,
+                    )
+                    self.__transcript.commit_authenticated_frame(
+                        direction="request",
+                        role="orchestration",
+                        sequence=sequence,
+                        operation=SEALED_FINALIZATION_OPERATION,
+                        frame=request_frame,
+                        payload=payload,
+                    )
+                    response_frame = receive_frame(
+                        connection, deadline_monotonic=deadline
+                    )
+                    response = verify_authenticated_envelope(
+                        response_frame,
+                        authentication_key=self.__key,
+                    )
+                    finalization_transcript = (
+                        self.__transcript.commit_authenticated_frame(
+                            direction="response",
+                            role="orchestration",
+                            sequence=sequence,
+                            operation=SEALED_FINALIZATION_OPERATION,
+                            frame=response_frame,
+                            payload=response.get("result"),
+                        )
+                    )
             expected = {
                 "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
                 "role": "sealed_orchestration_response",
@@ -266,6 +453,25 @@ class ProcessIsolatedFinalizationClient:
             result = validate_finalization_result(response.get("result"))
             signal = OpaqueTerminalSignal.from_dict(
                 result["opaque_terminal_signal"]
+            )
+            self.__receipt = ProcessIsolatedFinalizationReceipt(
+                schema_version=(
+                    PROCESS_BROKER_FINALIZATION_RECEIPT_SCHEMA_VERSION
+                ),
+                record_type="ProcessIsolatedFinalizationReceipt",
+                opaque_terminal_signal=signal.to_dict(),
+                sealed_callback_guard_identity=result[
+                    "sealed_callback_guard_identity"
+                ],
+                authenticated_response_payload_sha256=(
+                    hashlib.sha256(canonical_json_bytes(result)).hexdigest()
+                ),
+                transcript_root_sha256=str(
+                    finalization_transcript["root_sha256"]
+                ),
+                transcript_entry_count=int(
+                    finalization_transcript["entry_count"]
+                ),
             )
             self.__finalized = True
             return signal
@@ -302,12 +508,22 @@ class ProcessIsolatedEpisodeFinalizationBinding:
             )
         return self.client.finalize_episode(episode_summary=summary)
 
+    @property
+    def finalization_receipt(self) -> ProcessIsolatedFinalizationReceipt:
+        return self.client.finalization_receipt
+
 
 __all__ = [
+    "PROCESS_BROKER_FINALIZATION_RECEIPT_SCHEMA_VERSION",
     "ProcessIsolatedEpisodeFinalizationBinding",
     "ProcessIsolatedFinalizationClient",
+    "ProcessIsolatedFinalizationReceipt",
     "SEALED_FINALIZATION_OPERATION",
     "SEALED_FINALIZATION_SCHEMA_VERSION",
+    "SEALED_CALLBACK_GUARD_IDENTITY_RECORD_TYPE",
+    "SEALED_CALLBACK_GUARD_IDENTITY_SCHEMA_VERSION",
+    "SEALED_CALLBACK_GUARD_RELATIVE_PATH",
     "validate_finalization_request_payload",
     "validate_finalization_result",
+    "validate_sealed_callback_guard_identity",
 ]

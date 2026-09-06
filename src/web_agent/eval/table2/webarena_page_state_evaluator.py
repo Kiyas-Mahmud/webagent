@@ -19,7 +19,7 @@ registered live-page digest unchanged.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import html
 from pathlib import Path
@@ -27,6 +27,7 @@ import re
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from web_agent.benchmarks.base import EnvironmentAdapter
 from web_agent.benchmarks.webarena import FrozenWebArenaObservationSnapshot
 from web_agent.runtime.contracts import (
     EpisodeSummary,
@@ -1285,12 +1286,18 @@ class _EpisodePageStateEvaluator:
         compiled: CompiledPageStateEvaluator,
         writer: SealedVerifierWriter,
         capability: SealedPageEvaluatorCapability,
+        manual_rescue_identity_provider: Callable[[], Mapping[str, Any]] | None = None,
     ) -> None:
         self.task_id = task_id
         self.start_state_sha256 = start_state_sha256
         self.compiled = compiled
         self.writer = writer
         self.capability = capability
+        if manual_rescue_identity_provider is not None and not callable(
+            manual_rescue_identity_provider
+        ):
+            raise TypeError("manual-rescue identity provider must be callable")
+        self.manual_rescue_identity_provider = manual_rescue_identity_provider
         self.history: list[_BoundHistory] = []
         self.episode_id: str | None = None
 
@@ -1887,12 +1894,65 @@ class _EpisodePageStateEvaluator:
             "runtime_terminal_reason": runtime_reason.value,
             "final_page_evaluation": final_page.sealed_evidence(),
         }
+        if self.manual_rescue_identity_provider is not None:
+            identity = self.manual_rescue_identity_provider()
+            expected_fields = {
+                "schema_version",
+                "record_type",
+                "relative_path",
+                "record_count",
+                "tail_sha256",
+                "content_sha256",
+            }
+            if not isinstance(identity, Mapping) or set(identity) != expected_fields:
+                raise WebArenaPageStateEvaluatorError(
+                    "manual-rescue sidecar identity fields differ"
+                )
+            count = identity.get("record_count")
+            tail = identity.get("tail_sha256")
+            if (
+                identity.get("schema_version")
+                != "table2-process-broker-manual-rescue-sidecar-identity-v1"
+                or identity.get("record_type")
+                != "ProcessBrokerManualRescueSidecarIdentity"
+                or identity.get("relative_path")
+                != "manual_rescue_guard.child.jsonl"
+                or type(count) is not int
+                or count < 0
+                or (tail is None) is not (count == 0)
+                or (
+                    tail is not None
+                    and (
+                        type(tail) is not str
+                        or len(tail) != 64
+                        or any(character not in "0123456789abcdef" for character in tail)
+                    )
+                )
+            ):
+                raise WebArenaPageStateEvaluatorError(
+                    "manual-rescue sidecar identity is invalid"
+                )
+            content_sha256 = identity.get("content_sha256")
+            if (
+                type(content_sha256) is not str
+                or len(content_sha256) != 64
+                or any(
+                    character not in "0123456789abcdef"
+                    for character in content_sha256
+                )
+            ):
+                raise WebArenaPageStateEvaluatorError(
+                    "manual-rescue sidecar content identity is invalid"
+                )
+            evidence["manual_rescue_guard_sidecar_identity"] = dict(identity)
         return SealedFinalEvaluation(verification=evidence)
 
 
 def create_sealed_webarena_page_state_evaluator(
     task_row: Mapping[str, Any],
     writer: SealedVerifierWriter,
+    *,
+    manual_rescue_identity_provider: Callable[[], Mapping[str, Any]] | None = None,
 ) -> SealedEvaluatorBinding:
     """Engineering factory shape for one sealed task evaluator binding.
 
@@ -1911,6 +1971,7 @@ def create_sealed_webarena_page_state_evaluator(
         compiled=compiled,
         writer=writer,
         capability=process_sealed_page_evaluator_capability(),
+        manual_rescue_identity_provider=manual_rescue_identity_provider,
     )
     return SealedEvaluatorBinding(
         benchmark_version=REGISTERED_BROWSERGYM_VERSION,
@@ -1921,3 +1982,177 @@ def create_sealed_webarena_page_state_evaluator(
         frozen=True,
         oracle_labels_exposed_to_runtime=False,
     )
+
+
+_PROCESS_BROKER_TASK_ROW_FIELDS = frozenset(
+    {
+        "task_id",
+        "upstream_index",
+        "benchmark_task_id",
+        "benchmark_task_version",
+        "instruction",
+        "start_state",
+        "task_config",
+        "evaluator",
+        "source_content_sha256",
+    }
+)
+
+
+def _load_process_broker_evaluator_task_row(
+    *,
+    task: TaskSpecification,
+) -> Mapping[str, Any]:
+    """Fail closed until a child-only resolved-task bootstrap is registered."""
+
+    del task
+    raise WebArenaPageStateEvaluatorError(
+        "process-broker sealed task-row bootstrap is not registered; the full "
+        "resolved evaluator row must be supplied by an external child-only "
+        "deployment integration"
+    )
+
+
+def _process_broker_sealed_binding(
+    *,
+    task: TaskSpecification,
+    adapter: EnvironmentAdapter,
+    evidence_writer: SealedVerifierWriter,
+    allow_create: bool,
+) -> SealedEvaluatorBinding:
+    if (
+        type(task) is not TaskSpecification
+        or not isinstance(adapter, EnvironmentAdapter)
+        or type(evidence_writer) is not SealedVerifierWriter
+    ):
+        raise TypeError("process-broker sealed callback received the wrong contract")
+    getter = getattr(adapter, "process_broker_sealed_evaluator", None)
+    binder = getattr(adapter, "process_broker_bind_sealed_evaluator", None)
+    if not callable(getter) or not callable(binder):
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker browser adapter lacks its sealed callback bridge"
+        )
+    current = getter(evidence_writer=evidence_writer)
+    if current is not None:
+        if type(current) is not SealedEvaluatorBinding:
+            raise WebArenaPageStateEvaluatorError(
+                "process-broker sealed callback bridge returned a wrong binding"
+            )
+        return current
+    if not allow_create:
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker finalizer lacks prior causal transition binding"
+        )
+    row_value = _load_process_broker_evaluator_task_row(task=task)
+    if not isinstance(row_value, Mapping):
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker sealed task-row bootstrap returned non-mapping data"
+        )
+    row = dict(row_value)
+    if set(row) != _PROCESS_BROKER_TASK_ROW_FIELDS:
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker sealed task row fields differ from the frozen snapshot"
+        )
+    content = {
+        key: row[key]
+        for key in _PROCESS_BROKER_TASK_ROW_FIELDS
+        if key != "source_content_sha256"
+    }
+    metadata = task.metadata
+    try:
+        typed_start = RuntimeStartState.from_webarena_mapping(row["start_state"])
+    except (TypeError, ValueError) as exc:
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker sealed task row has invalid start state"
+        ) from exc
+    if (
+        row.get("source_content_sha256") != canonical_sha256(content)
+        or row.get("source_content_sha256")
+        != metadata.get("source_content_sha256")
+        or row.get("task_id") != task.task_id
+        or row.get("instruction") != task.goal
+        or row.get("upstream_index") != metadata.get("upstream_index")
+        or row.get("benchmark_task_id") != metadata.get("benchmark_task_id")
+        or task.runtime_start_state is None
+        or typed_start.start_state_sha256
+        != task.runtime_start_state.start_state_sha256
+    ):
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker sealed task row differs from its oracle-blind task projection"
+        )
+    identity_provider = getattr(
+        adapter,
+        "process_broker_manual_rescue_sidecar_identity",
+        None,
+    )
+    if not callable(identity_provider):
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker adapter lacks child-owned manual-rescue evidence"
+        )
+    created = create_sealed_webarena_page_state_evaluator(
+        row,
+        evidence_writer,
+        manual_rescue_identity_provider=identity_provider,
+    )
+    binder(evaluator=created, evidence_writer=evidence_writer)
+    rebound = getter(evidence_writer=evidence_writer)
+    if rebound is not created:
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker sealed callback bridge did not retain exact binding"
+        )
+    return created
+
+
+def evaluate_environment_transition(
+    *,
+    task: TaskSpecification,
+    adapter: EnvironmentAdapter,
+    receipt_binding: VerifierReceiptBinding,
+    evidence_writer: SealedVerifierWriter,
+) -> OpaqueTerminalSignal:
+    """Source-attested transition entrypoint returning only an opaque signal."""
+
+    if type(receipt_binding) is not VerifierReceiptBinding:
+        raise TypeError("process-broker transition requires receipt binding")
+    _process_broker_sealed_binding(
+        task=task,
+        adapter=adapter,
+        evidence_writer=evidence_writer,
+        allow_create=True,
+    )
+    signal = adapter.terminal_signal(task, receipt_binding)
+    if type(signal) is not OpaqueTerminalSignal:
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker transition exposed a non-opaque result"
+        )
+    return signal
+
+
+def finalize_environment_episode(
+    *,
+    task: TaskSpecification,
+    adapter: EnvironmentAdapter,
+    episode_summary: EpisodeSummary,
+    episode_runtime_dir: Path,
+    evidence_writer: SealedVerifierWriter,
+) -> OpaqueTerminalSignal:
+    """Source-attested child finalizer over the already-bound sealed stream."""
+
+    if type(episode_summary) is not EpisodeSummary:
+        raise TypeError("process-broker finalizer requires EpisodeSummary")
+    binding = _process_broker_sealed_binding(
+        task=task,
+        adapter=adapter,
+        evidence_writer=evidence_writer,
+        allow_create=False,
+    )
+    signal = binding.finalize_episode_evidence(
+        episode_summary,
+        evidence_writer,
+        Path(episode_runtime_dir),
+    )
+    if type(signal) is not OpaqueTerminalSignal or signal.terminate is not True:
+        raise WebArenaPageStateEvaluatorError(
+            "process-broker finalizer exposed a non-opaque acknowledgement"
+        )
+    return signal

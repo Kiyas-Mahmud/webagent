@@ -25,26 +25,30 @@ production-runner process path are wired. The concrete live BrowserGym plus
 sealed-evaluator factory is not registered. Local launch/cleanup receipts are
 explicitly not deployment authority, and the older same-process broker remains
 fixture-only.
-The frozen runner records
-`BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, so production still
-fails before provider import.
+Pilot dispatch still fails before provider import because the complete live
+factory, immutable locally replayed measured-timeout bundle, host
+remeasurement, request/response hash chain, oracle-free runtime-value
+provenance, and deployment evidence have not been supplied.
 
 The implemented worker remains a same-UID child and inherits its launch
 environment. Its receipt therefore proves local address-space/message-flow
 architecture only, never hostile-runtime isolation or secret confidentiality.
-Any future externally trusted deployment receipt must bind the exact
-source/session and independently prove a separate UID or container/process
-sandbox, runtime-inaccessible evaluator memory/filesystem state, an allowlisted
-scrubbed evaluator environment with no inherited runtime/provider secrets,
-authenticated peer identity, and cleanup under the same controls. A
-verification-only Ed25519 receipt/challenge schema and local replay ledger now
-exist, but the packaged registry intentionally contains zero authorities, no
-independent public key or global replay anchor is registered, and this verifier
-is not integrated as dispatch authority. It cannot authorize a campaign.
-This independent-authority requirement is conservative implementation
-hardening beyond the plan's explicit hash/isolation language and remains
-`AWAITING_PROJECT_OWNER_RATIFICATION` for the `PILOT_ONLY` campaign; it is not
-silently treated as an approved scientific-design change.
+For `PILOT_ONLY`, promotion requires proof that the source-attested
+distinct-process boundary, scrubbed environment, authenticated peer, immutable
+live measurements, host remeasurement, hash-chained requests/responses, and
+oracle-free value origins were used on the actual campaign host. This supports
+provisional scientific dataflow claims only; it does not claim hostile-code
+secrecy or a separate-UID sandbox.
+
+Independent Ed25519 deployment signatures and a global replay anchor are
+`FINAL_CAMPAIGN_ONLY`. The final deployment must additionally bind the exact
+source/session, prove a separate UID or registered container/process sandbox
+with runtime-inaccessible evaluator state, and independently sign and replay
+the registered phase measurements. The verification-only receipt/challenge
+schema and local replay ledger may be retained for that gate, but the packaged
+registry intentionally contains zero authorities and the local ledger is not a
+global replay anchor. This absence blocks the later final campaign, not a
+complete `PILOT_ONLY` package.
 Exact operation-specific contracts are now source-registered for all twelve
 runtime request/result schema paths. Runtime-visible value provenance remains unregistered:
 schema conformance cannot prove where a permitted scalar value originated.
@@ -200,12 +204,15 @@ not provide; only indices 44, 45, and 46 are page-state URL tasks compatible
 with that contract. Thirteen of the 47 answer tasks additionally depend on the
 registered model-based fuzzy judge. The handoff recomputes this audit and
 fails closed. It must not silently remap evaluators, drop tasks, or invent a
-seventh action. A live pilot therefore requires one explicit, user-approved
-and preregistered resolution: either replace the pilot registry with 50 public
-page-state-compatible development tasks, or add a scientifically justified
-answer/termination interface and update the P3/protocol contract before
-outcomes are observed. The exact unapproved replacement and consequences are
-recorded in `docs/TABLE2_PILOT_TASK_INTERFACE_DECISION.md`.
+seventh action. The project owner selected the page-state-compatible
+replacement before any WebArena outcome was observed. Its 50-task execution
+order is registered in
+`benchmarks/table2/pilot/task_manifest_page_state_v2.json`; the original 0--49
+and active 50-task sets are jointly protected from final reuse by
+`benchmarks/table2/pilot/final_exclusion_registry_v2.json`. The original 0--49
+registry remains unchanged as a permanent development exclusion. The decision
+and consequences are recorded in
+`docs/TABLE2_PILOT_TASK_INTERFACE_DECISION.md`.
 
 The pilot is also blocked on measured WebArena services, sealed-evaluator
 compatibility evidence, reset callbacks, the genuine joint train/WebArena
@@ -290,15 +297,16 @@ PYTHONPATH=src python3 scripts/build_table2_dependency_lock.py \
 The browser bootstrap repeats `browser_host` validation, and the browser/live
 capability gate repeats the browser runtime check before every physical block.
 The future DGX inference service must own separate `dgx_host` remeasurement at
-service startup, before model load, and before every physical block. A
-promotable receipt must bind the campaign ID, physical block ID, fresh challenge
-nonce, semantic-lock hash, DGX host/runtime identities, phase, and issue time.
-The browser process cannot claim that remote check on the DGX's behalf. The
-repository can verify four exact Ed25519-signed receipt phases, but its packaged
-authority registry is empty and its local ledger is not a global replay anchor
-or dispatch authority. The split lock therefore records
-`BLOCKED_DGX_REMEASUREMENT_RECEIPT_AND_EXTERNAL_TRUST_ANCHOR_REQUIRED` and both
-the execution guard and standard-library bootstrap reject split dispatch.
+service startup, before model load, and before every physical block. Every
+record must bind the campaign ID, physical block ID, fresh nonce, semantic-lock
+hash, DGX host/runtime identities, phase, and issue time into the authenticated
+request/response hash chain. The browser process cannot claim that remote check
+on the DGX's behalf. For `PILOT_ONLY`, the source-attested, locally replayed
+measured records provide the registered host evidence. The later final campaign
+requires those same phase bindings to be independently Ed25519-signed and
+protected by a global replay anchor. The packaged authority registry is empty,
+so final split dispatch remains blocked; that final-only absence is not a pilot
+dispatch condition.
 
 The validator cross-checks measured Python/platform identity, all five pinned
 package versions, Chromium/version/viewport, Playwright, BrowserGym/WebArena,
@@ -2151,13 +2159,13 @@ incompatible. No operator may silently drop the 47 tasks, replace their
 evaluators, map an answer to a TYPE action, or add STOP/ANSWER after seeing
 outcomes.
 
-The next scientific decision must be user-approved and preregistered before a
-live pilot: either register 50 public page-state-compatible development tasks,
-with a versioned exporter/audit/protocol update, or introduce and justify an
-answer/termination interface as a material P3 and protocol change. The
-original 0--49 tasks remain recorded as development
-exposures and are never eligible for the final campaign. All workflow steps
-below the interface audit are conditional on resolving this stop condition.
+The task-interface decision is resolved through the registered Option A
+page-state set in
+`benchmarks/table2/pilot/task_manifest_page_state_v2.json`. The original 0--49
+tasks remain recorded as development exposures and are never eligible for the
+final campaign. The active set remains fail-closed until its pinned content
+export, safety/reset review, exact interface audit, and joint duplicate audit
+all pass.
 
 ### 16.0.2 Exact fail-closed preparation order
 
@@ -2189,10 +2197,11 @@ are separate inputs; their five shared origins must agree exactly.
      --output /secure/table2-inputs/webarena-task-interface-audit.json
    ```
 
-   For the currently registered 0--49 set this writes the measured `FAIL`
-   result above. Stop here until the protocol decision is resolved. Handoff
-   accepts only an audit that exactly recomputes from the authenticated export
-   and has `handoff_eligible: true`.
+   For the active page-state registry this must reproduce 50 compatible tasks,
+   zero incompatible tasks, and `handoff_eligible: true`. The historical
+   0--49 export remains a permanent development exclusion whose earlier audit
+   correctly records 47 unsupported answer/STOP tasks. Handoff accepts only an
+   audit that exactly recomputes from the authenticated active export.
 
 3. On a task-compatible protocol, test the DGX as the preferred single host:
 
@@ -2245,8 +2254,11 @@ are separate inputs; their five shared origins must agree exactly.
    semantically oracle-free, or authenticate endpoint origin. The v2 DGX record
    described above must include the typed DGX host/package/model/source/runtime
    inventories. Handoff and the standard-library bootstrap reject a missing or
-   legacy inventory, but split dispatch remains blocked because there is no
-   externally trusted DGX startup/per-block receipt.
+   legacy inventory. The pilot additionally requires source-attested,
+   host-remeasured startup/model-load/before-block records in the authenticated
+   request/response hash chain; those real records are not yet available. The
+   later final campaign additionally requires independently Ed25519-signed
+   phase receipts and a global replay anchor.
 
 4. The deployment owner then supplies real evidence for exactly seven live
    capabilities and validates the `table2-pc01-live-deployment-v2` manifest
@@ -2308,11 +2320,13 @@ are separate inputs; their five shared origins must agree exactly.
    A permitted scalar such as visible browser text can still carry
    content of unknown origin, so local schema evidence does not prove runtime
    value provenance or semantic oracle isolation. The
-   handoff/runner
-   source attestation includes those sources but records local architecture
-   evidence as unpromotable. Production remains stopped until an externally
-   authenticated deployment receipt proves the actual host used the boundary
-   and runtime-visible value provenance is independently attested.
+   handoff/runner source attestation includes those sources but records the
+   fixture-only architecture evidence as unpromotable. Pilot execution remains
+   stopped until the complete live package proves, through immutable locally
+   replayed measurements, source/host bindings, request/response hashes, and
+   oracle-free value-origin records, that the actual host used the registered
+   boundary. The later final campaign additionally requires independent
+   Ed25519 deployment attestation and global replay protection.
    If the frozen campaign cannot reopen and
    validate the manifest and every readiness file, stop before handoff.
 
@@ -2392,12 +2406,13 @@ out-of-scope top-level keys are rejected before handoff construction.
   additionally requires distinct frozen `expected_dgx_model_runtime_identity`
   and `expected_bridge_identity` authorities, a validated split preflight, and
   a v2 semantic dependency lock containing separate `browser_host` and
-  `dgx_host` identities, the per-process remeasurement responsibilities, and
-  the explicit non-authorizing DGX dispatch-receipt requirement. The
-  verification-only Ed25519 schema is present, but no independent authority is
-  registered, the local ledger is not an external/global replay anchor, and the
-  verifier is not integrated into dispatch. This split topology can therefore
-  be frozen for compatibility review but cannot launch;
+  `dgx_host` identities and the per-process remeasurement responsibilities.
+  `PILOT_ONLY` additionally binds the locally replayed startup/model-load/
+  before-block measurements and authenticated request/response transcript.
+  The verification-only Ed25519 schema is present for the later final campaign,
+  but no independent authority or global replay anchor is registered. Final
+  split dispatch therefore remains closed without blocking a complete pilot
+  package;
 - `pc01_live_deployment_manifest` and
   `pc01_live_deployment_evidence_root`, pointing to the independently measured
   seven-capability manifest and the evidence package it references. The source
@@ -2508,15 +2523,16 @@ out-of-scope top-level keys are rejected before handoff construction.
   capability readiness `deployment_state_sha256` values are the hashes of the
   actual provider operation/config public states, not caller-chosen labels.
 
-Under the current blocked pilot protocol, the task export must contain exactly
-the registered upstream indices 0--49 and must reproduce from the pinned
-upstream source bytes. An approved replacement registry requires a new
-versioned protocol/exporter/audit contract before handoff. Every row supplies
+Under the current pilot protocol, the task export must contain exactly the 50
+ordered upstream indices in the registered page-state replacement and must
+reproduce from the pinned upstream source bytes. Every row supplies
 benchmark task ID/version, instruction, all six reset inputs (`sites`,
 `start_url`, `require_login`, the storage-state reference, `geolocation`, and
 `require_reset`), full task config, and evaluator config. The tracked
-`benchmarks/table2/pilot/task_manifest.json` remains the ID/order exclusion
-registry; it is not treated as task content. Processor-contract inputs are
+`benchmarks/table2/pilot/task_manifest_page_state_v2.json` is the active
+ID/order registry, while `benchmarks/table2/pilot/task_manifest.json` remains
+the historical 0--49 exclusion registry; neither is treated as task content.
+Processor-contract inputs are
 reconstructed as `ProcessorParityContract` and staged as the exact canonical
 `to_dict()` JSON bytes so their raw-file SHA-256 equals `record_sha256`.
 
@@ -2642,14 +2658,15 @@ immutable state. The receipt's scope is
 operations provider factory and
 `kernel_filesystem_sandbox: false`. It proves which typed data the reviewed
 entrypoint is passed; it is not a sandbox or a hostile-code security claim.
-It also cannot repair the separate page-broker deployment-evidence gap: this
-source version records
-`BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`, and both
+It also cannot repair the separate page-broker deployment-evidence gap:
 provider-boundary preparation and campaign execution stop before importing the
-provider factory.
+provider factory until the actual source-attested process boundary, immutable
+locally replayed live measurements, host remeasurement, request/response hash
+chain, and oracle-free runtime-value provenance are bound.
 The commands above document the future sequence only; they are intentionally
-non-runnable until value-provenance evidence and a separately authenticated
-process-isolation deployment receipt and trust anchor are preregistered.
+non-runnable until those `PILOT_ONLY` deployment inputs are preregistered. The
+later final campaign additionally requires the independent Ed25519 deployment
+authority and global replay anchor.
 The credential capability root must be an existing non-symlink tree that is
 disjoint in both directions from the campaign and repository; filesystem root,
 campaign/source ancestors or descendants, and symlinked leaf/parent components
@@ -2683,11 +2700,11 @@ injected directly. Ordinary production execution now requires the
 source-attested process-isolated WebArena path; the older in-process broker and
 recovery fixtures are unreachable legacy engineering paths and cannot
 authorize live dispatch. The generic child bridge is implemented, but the
-concrete live BrowserGym plus sealed-evaluator child factory and its external
-attestation remain absent. Callable/source checks are scientific-integrity
-controls, not a hostile-code sandbox. Evaluating adversarial third-party code
-still requires the registered external process/container authority described
-above.
+concrete live BrowserGym plus sealed-evaluator child factory and its complete
+live evidence remain absent. Callable/source checks are scientific-integrity
+controls, not a hostile-code sandbox. The `PILOT_ONLY` campaign must report
+that limitation; the later final campaign requires the registered independent
+process/container authority described above.
 
 There is no additional Table 2 model seed: repeat neither the memory build nor
 the browser campaign for seeds 43--44. The only matched model seed is 42.
@@ -3179,7 +3196,8 @@ environment rather than collapsed into one failure bucket.
 
 - [x] The original 0--49 development/exclusion registry and locked-boundary guard are frozen
 - [x] The original 0--49 task/action-interface audit records 47 incompatible answer tasks and fails closed
-- [ ] User-approved, preregistered task-interface resolution and compatible 50-task export
+- [x] User-approved, preregistered task-interface resolution and ordered 50-task registry
+- [ ] Compatible 50-task content export, safety/reset review, interface audit, and joint duplicate audit
 - [ ] Live WebArena host/split-deployment preflight PASS
 - [ ] Complete seven-capability live deployment and sealed-evaluator evidence PASS
 - [ ] Live WebArena mapper emits validated `observable_select_controls` and `recovery_target_evidence`
@@ -3203,10 +3221,10 @@ environment rather than collapsed into one failure bucket.
 - [x] Semantic dependency-lock generator and fail-closed cross-validation
 - [x] Generic source-attested WebArena broker bridge and its repository source closure registered and hash-bound
 - [ ] Concrete live BrowserGym plus sealed-evaluator factory's complete transitive source closure registered and hash-bound
-- [ ] Broker IPC timeout frozen against measured live reset/settle/normal-and-failed-cleanup behavior (strict outcome-blind calibration v2, typed immutable local authority bundle, deterministic derivation, dedicated framed readiness channel, absolute IPC deadlines, replay-only broker binding, and adversarial tests implemented; live 50-task measurements, typed safe-probe/harness/source/non-persistence receipts, and external authority cross-binding remain absent, so true `EVALUATION` is closed)
+- [ ] Pilot broker IPC timeout frozen against measured live reset/settle/normal-and-failed-cleanup behavior (strict outcome-blind calibration v2, deterministic derivation, dedicated framed readiness channel, absolute IPC deadlines, and adversarial tests are implemented; the live 50-task measurements, typed safe-probe/harness/source/non-persistence receipts, immutable local replay bundle, and campaign/source/host/task/service/transcript hash binding remain absent, so `PILOT_ONLY` `EVALUATION` is closed)
 - [x] Internal browser-error URL representation and cross-layer broker observation test registered
-- [ ] Runtime-visible value-provenance authority registered
-- [ ] Independently authenticated campaign-host isolation receipt and trust anchor (plus DGX startup/model-load/per-block receipts for split deployment)
+- [ ] Pilot runtime-visible oracle-free value-origin evidence registered and hash-bound
+- [ ] Final-only independent Ed25519 campaign-host authority and global replay anchor (plus signed DGX startup/model-load/before-block/after-block receipts for split deployment)
 - [ ] Isolated live first-normal-block readiness probe PASS and target-local receipt frozen
 - [ ] Selected-checkpoint WebArena compatibility smoke PASS
 - [ ] Checkpoint, memory, and measured environment attestations frozen

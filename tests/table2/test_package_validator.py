@@ -191,6 +191,18 @@ SHA_B = "b" * 64
 SHA_C = "c" * 64
 
 
+def _active_pilot_config() -> dict[str, Any]:
+    return yaml.safe_load(PILOT_CONFIG.read_text(encoding="utf-8"))
+
+
+def _active_pilot_registry_path() -> Path:
+    return REPOSITORY_ROOT / _active_pilot_config()["task_manifest"]
+
+
+def _active_pilot_duplicate_audit_path() -> Path:
+    return REPOSITORY_ROOT / _active_pilot_config()["duplicate_audit_manifest"]
+
+
 def _fixture_model_compatibility_payloads() -> dict[str, bytes]:
     """Return distinct, schema-valid report bytes for synthetic candidates.
 
@@ -660,12 +672,7 @@ def _campaign_config(
 
 
 def _verified_duplicate_audit(path: Path, *, task_manifest: Path) -> Path:
-    value = json.loads(
-        (
-            REPOSITORY_ROOT
-            / "benchmarks/table2/pilot/duplicate_audit_manifest.json"
-        ).read_text(encoding="utf-8")
-    )
+    value = read_json(_active_pilot_duplicate_audit_path())
     value["manifest_state"] = "FROZEN_REGISTRATION"
     value["normal_task_evidence_status"] = "VERIFIED"
     value["normal_task_runtime_policy"] = "VERIFIED_NONEMPTY_CLUSTERS_REQUIRED"
@@ -718,6 +725,11 @@ def _verified_duplicate_audit(path: Path, *, task_manifest: Path) -> Path:
 
 
 def _valid_deployment_preflight(root: Path) -> dict[str, Any]:
+    active_registry = read_json(_active_pilot_registry_path())
+    active_indices = [
+        int(row["upstream_index"]) for row in active_registry["tasks"]
+    ]
+    first_active_index = active_indices[0]
     url_map_path = _write_json(
         root / PREFLIGHT_SERVICE_URL_MAP_RELATIVE_PATH,
         WEBARENA_SERVICE_URL_MAP,
@@ -746,7 +758,8 @@ def _valid_deployment_preflight(root: Path) -> dict[str, Any]:
             "reward_read": False,
             "evaluator_output_read": False,
         },
-        live_reset_task_index=0,
+        live_reset_task_index=first_active_index,
+        registered_task_indices=active_indices,
     )
     evidence_path = _write_json(
         root / PREFLIGHT_ARTIFACT_RELATIVE_PATH,
@@ -756,12 +769,12 @@ def _valid_deployment_preflight(root: Path) -> dict[str, Any]:
         evidence_path=evidence_path,
         service_url_map_path=url_map_path,
         deployment_topology=SINGLE_HOST_TOPOLOGY,
-        expected_live_reset_task_index=0,
+        expected_live_reset_task_index=first_active_index,
     )
 
 
 def _fixture_page_state_task_export(environment_value: dict[str, Any]) -> dict[str, Any]:
-    registry_path = REPOSITORY_ROOT / "benchmarks/table2/pilot/task_manifest.json"
+    registry_path = _active_pilot_registry_path()
     registry = read_json(registry_path)
     evaluator = environment_value["evaluator"]
     tasks: list[dict[str, Any]] = []
@@ -805,7 +818,7 @@ def _fixture_page_state_task_export(environment_value: dict[str, Any]) -> dict[s
     return {
         "schema_version": PUBLIC_PILOT_EXPORT_SCHEMA_VERSION,
         "record_type": PUBLIC_PILOT_EXPORT_RECORD_TYPE,
-        "snapshot_id": "fixture-resolved-webarena-0-49",
+        "snapshot_id": "fixture-resolved-webarena-active-50",
         "benchmark": "webarena",
         "benchmark_version": environment_value["benchmark_version"],
         "task_definition_version": "fixture-task-v1",
@@ -998,7 +1011,7 @@ def _valid_environment(path: Path) -> Path:
 def _valid_resolved_task_snapshot(
     path: Path, *, environment: Path, duplicate_audit_manifest: Path
 ) -> Path:
-    registry_path = REPOSITORY_ROOT / "benchmarks/table2/pilot/task_manifest.json"
+    registry_path = _active_pilot_registry_path()
     registry = read_json(registry_path)
     environment_value = read_json(environment)
     evaluator = environment_value["evaluator"]
@@ -3840,9 +3853,7 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
     environment["benchmark_version"] = PINNED_BROWSERGYM_WEBARENA_VERSION
     environment["task_definition_version"] = PINNED_TASK_DEFINITION_VERSION
 
-    duplicate_input = read_json(
-        REPOSITORY_ROOT / "benchmarks/table2/pilot/duplicate_audit_manifest.json"
-    )
+    duplicate_input = read_json(_active_pilot_duplicate_audit_path())
     duplicate_input["manifest_state"] = "FROZEN_REGISTRATION"
     duplicate_input["normal_task_evidence_status"] = "VERIFIED"
     duplicate_input["normal_task_runtime_policy"] = (
@@ -3851,8 +3862,12 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
 
     url_map = WEBARENA_TASK_URL_MAP
     tokens = sorted(url_map)
+    active_registry = read_json(_active_pilot_registry_path())
+    active_indices = [
+        int(row["upstream_index"]) for row in active_registry["tasks"]
+    ]
     upstream_rows = []
-    for index in range(50):
+    for index in range(max(active_indices) + 1):
         token = tokens[index % len(tokens)]
         site = token.strip("_").casefold()
         upstream_rows.append(
@@ -3890,7 +3905,7 @@ def test_supported_handoff_preparer_freezes_a_resolvable_evaluation_bundle(
     task_export = build_public_pilot_task_export(
         source=upstream_source_path,
         registry_path=(
-            REPOSITORY_ROOT / "benchmarks/table2/pilot/task_manifest.json"
+            _active_pilot_registry_path()
         ),
         site_url_map=url_map,
         snapshot_id="external-webarena-export-v1",
@@ -4894,7 +4909,11 @@ class _CompletePilotRunner(_NestedEvidenceRunner):
         if task_id.startswith("webarena.") and system_id == "E0":
             return False
         if task_id.startswith("webarena.") and system_id == "E3":
-            return int(task_id.rsplit(".", maxsplit=1)[1]) >= 3
+            first_three = {
+                str(row["task_id"])
+                for row in read_json(_active_pilot_registry_path())["tasks"][:3]
+            }
+            return task_id not in first_three
         return True
 
 

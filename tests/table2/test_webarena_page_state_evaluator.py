@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import hashlib
+import inspect
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from web_agent.benchmarks.base import AdapterExecution, EnvironmentAdapter
 from web_agent.benchmarks.webarena import FrozenWebArenaObservationSnapshot
 from web_agent.eval.table2.live_page_broker_assembly import (
     assert_process_wide_broker_assembly,
     process_runtime_page_publisher,
     process_sealed_page_evaluator_capability,
 )
+from web_agent.eval.table2 import webarena_page_state_evaluator as evaluator_module
+from web_agent.eval.table2.production_runner import SealedEvaluatorBinding
 from web_agent.eval.table2.common import read_jsonl
 from web_agent.eval.table2.package_validator import _validate_final_evidence
 from web_agent.eval.table2.sealed_page_broker import (
@@ -40,8 +45,10 @@ from web_agent.eval.table2.webarena_page_state_evaluator import (
 )
 from web_agent.runtime.contracts import (
     EpisodeSummary,
+    ConcreteAction,
     Observation,
     ObservationStage,
+    OpaqueTerminalSignal,
     RuntimeStartState,
     SystemID,
     TaskSpecification,
@@ -298,6 +305,199 @@ def test_process_uses_one_disjoint_broker_pair() -> None:
     )
     assert not hasattr(process_runtime_page_publisher(), "evaluate_bound")
     assert not hasattr(process_sealed_page_evaluator_capability(), "publish")
+
+
+class _ProcessEntrypointAdapter(EnvironmentAdapter):
+    benchmark_id = "webarena"
+    benchmark_version = "0.14.3"
+
+    def __init__(self) -> None:
+        self.binding = None
+        self.writer = None
+
+    def reset(self, task, *, episode_id, seed):
+        raise NotImplementedError
+
+    def observe(self, *, stage, prior_action_id=None):
+        raise NotImplementedError
+
+    def execute(self, action: ConcreteAction) -> AdapterExecution:
+        raise NotImplementedError
+
+    def terminal_signal(self, task, binding=None):
+        assert self.binding is not None
+        return self.binding.terminal_signal_mapper(None, task, binding)
+
+    def close(self) -> None:
+        return None
+
+    def process_broker_bind_sealed_evaluator(self, *, evaluator, evidence_writer):
+        assert self.binding is None
+        self.binding = evaluator
+        self.writer = evidence_writer
+
+    def process_broker_sealed_evaluator(self, *, evidence_writer):
+        if self.binding is not None:
+            assert evidence_writer is self.writer
+        return self.binding
+
+    @staticmethod
+    def process_broker_manual_rescue_sidecar_identity():
+        return {
+            "schema_version": (
+                "table2-process-broker-manual-rescue-sidecar-identity-v1"
+            ),
+            "record_type": "ProcessBrokerManualRescueSidecarIdentity",
+            "relative_path": "manual_rescue_guard.child.jsonl",
+            "record_count": 0,
+            "tail_sha256": None,
+            "content_sha256": hashlib.sha256(b"").hexdigest(),
+        }
+
+
+def test_exported_child_callbacks_have_exact_shapes_and_fail_closed_without_bootstrap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected_parameters = {
+        evaluator_module.evaluate_environment_transition: (
+            "task",
+            "adapter",
+            "receipt_binding",
+            "evidence_writer",
+        ),
+        evaluator_module.finalize_environment_episode: (
+            "task",
+            "adapter",
+            "episode_summary",
+            "episode_runtime_dir",
+            "evidence_writer",
+        ),
+    }
+    for callback, names in expected_parameters.items():
+        parameters = tuple(inspect.signature(callback).parameters.values())
+        assert tuple(item.name for item in parameters) == names
+        assert all(
+            item.kind is inspect.Parameter.KEYWORD_ONLY
+            and item.default is inspect.Parameter.empty
+            for item in parameters
+        )
+
+    index = 777
+    task = _task(index)
+    adapter = _ProcessEntrypointAdapter()
+    sink = _sink(
+        tmp_path,
+        episode_id="entrypoint:E2:webarena.777:repeat-0:seed-42",
+        task_id=task.task_id,
+        system_id="E2",
+    )
+    writer = SealedVerifierWriter(sink)
+    observation = Observation(
+        observation_id="entrypoint-reset",
+        episode_id="entrypoint:E2:webarena.777:repeat-0:seed-42",
+        stage=ObservationStage.RESET,
+        screenshot_sha256=SHA_A,
+        url=task.start_url,
+        title="fixture",
+        page_state={},
+    )
+    receipt_binding = VerifierReceiptBinding(
+        receipt_kind="after_reset",
+        observation_id=observation.observation_id,
+        observation_sha256=observation.record_sha256,
+    )
+    with pytest.raises(
+        WebArenaPageStateEvaluatorError,
+        match="bootstrap is not registered",
+    ):
+        evaluator_module.evaluate_environment_transition(
+            task=task,
+            adapter=adapter,
+            receipt_binding=receipt_binding,
+            evidence_writer=writer,
+        )
+
+    row = _task_row(index, _url_config("https://shop.test/done"))
+    content = dict(row)
+    row["source_content_sha256"] = canonical_sha256(content)
+    task = replace(
+        task,
+        metadata={
+            "task_partition": "normal",
+            "upstream_index": index,
+            "benchmark_task_id": str(index),
+            "source_content_sha256": row["source_content_sha256"],
+        },
+    )
+
+    def fake_factory(task_row, supplied_writer, *, manual_rescue_identity_provider):
+        assert task_row == row
+        assert supplied_writer is writer
+        assert manual_rescue_identity_provider()["record_count"] == 0
+        return SealedEvaluatorBinding(
+            benchmark_version="0.14.3",
+            evaluator_id=EVALUATOR_ID,
+            evaluator_version=EVALUATOR_VERSION,
+            terminal_signal_mapper=lambda _snapshot, _task, _receipt: (
+                OpaqueTerminalSignal(
+                    event_id="entrypoint-bound",
+                    token_sha256="b" * 64,
+                    terminate=False,
+                )
+            ),
+            finalize_episode_evidence=lambda _summary, _writer, _runtime: (
+                OpaqueTerminalSignal(
+                    event_id="entrypoint-final",
+                    token_sha256="c" * 64,
+                    terminate=True,
+                )
+            ),
+        )
+
+    monkeypatch.setattr(
+        evaluator_module,
+        "_load_process_broker_evaluator_task_row",
+        lambda *, task: row,
+    )
+    monkeypatch.setattr(
+        evaluator_module,
+        "create_sealed_webarena_page_state_evaluator",
+        fake_factory,
+    )
+    transition = evaluator_module.evaluate_environment_transition(
+        task=task,
+        adapter=adapter,
+        receipt_binding=receipt_binding,
+        evidence_writer=writer,
+    )
+    assert transition.event_id == "entrypoint-bound"
+    summary = EpisodeSummary(
+        episode_id=observation.episode_id,
+        protocol_id="table2-pc01-pilot-v1",
+        system_id=SystemID.E2,
+        task_id=task.task_id,
+        repeat_id=0,
+        model_seed=42,
+        valid_for_primary=True,
+        terminal_reason=TerminalReason.TIMEOUT,
+        executor_steps=0,
+        normal_actions=0,
+        recovery_actions=0,
+        recovery_attempts=0,
+        failure_incidents=0,
+        memory_queries=0,
+        memory_interventions=0,
+        elapsed_seconds=1.0,
+    )
+    final = evaluator_module.finalize_environment_episode(
+        task=task,
+        adapter=adapter,
+        episode_summary=summary,
+        episode_runtime_dir=tmp_path,
+        evidence_writer=writer,
+    )
+    assert final.event_id == "entrypoint-final"
 
 
 def test_reference_fixture_is_replayable_and_source_attested() -> None:

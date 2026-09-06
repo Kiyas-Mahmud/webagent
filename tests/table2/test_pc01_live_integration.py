@@ -563,9 +563,18 @@ def _register(provider: live.PC01LiveOperationsProvider) -> str:
 
 
 class _FakePC01Factory:
-    def __init__(self, *, create_webarena_runtime, seed_services):
+    def __init__(
+        self,
+        *,
+        create_webarena_runtime,
+        seed_services,
+        create_process_isolated_webarena=None,
+    ):
         self.create_webarena_runtime = create_webarena_runtime
         self.seed_services = seed_services
+        self.create_process_isolated_webarena = (
+            create_process_isolated_webarena
+        )
 
     def __call__(self, context):
         manifest = _model_manifest()
@@ -611,6 +620,9 @@ class _FakePC01Factory:
             runtime_identity=dict(context.runtime_identity),
             seed_bindings={42: seed_binding},
             create_webarena_runtime=self.create_webarena_runtime,
+            create_process_isolated_webarena=(
+                self.create_process_isolated_webarena
+            ),
         )
 
 
@@ -623,6 +635,33 @@ def _install_and_create(monkeypatch, provider, context):
 def test_missing_provider_fails_before_context_or_model_use() -> None:
     with pytest.raises(live.PC01LiveIntegrationError, match="not registered"):
         live.create_pc01_live_runtime(object())
+
+
+def test_process_isolated_episode_factory_threads_without_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider, context, _ = _provider_and_context(tmp_path)
+    process_factory = object.__new__(
+        live.CredentialFreeProcessIsolatedWebArenaEpisodeFactory
+    )
+    provider = replace(
+        provider,
+        create_process_isolated_webarena=process_factory,
+    )
+
+    binding = _install_and_create(monkeypatch, provider, context)
+
+    assert binding.create_process_isolated_webarena is process_factory
+
+
+def test_provider_rejects_untyped_process_episode_factory(tmp_path: Path) -> None:
+    provider, _, _ = _provider_and_context(tmp_path)
+    with pytest.raises(
+        live.PC01LiveIntegrationError,
+        match="exact credential-free source-attested implementation",
+    ):
+        replace(provider, create_process_isolated_webarena=lambda *_: None)
 
 
 def test_provider_registry_is_one_install_and_identity_is_reproducible(

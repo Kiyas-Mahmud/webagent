@@ -32,6 +32,10 @@ from web_agent.eval.table2.webarena_preflight import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPOSITORY_ROOT / "scripts/prepare_table2_split_preflight.py"
+ACTIVE_TASK_REGISTRY = (
+    REPOSITORY_ROOT
+    / "benchmarks/table2/pilot/task_manifest_page_state_v2.json"
+)
 SERVICE_URL_MAP = {
     "WA_GITLAB": "http://gitlab.private.example",
     "WA_MAP": "http://map.private.example",
@@ -52,6 +56,8 @@ def _write_json(path: Path, value: object) -> Path:
 
 
 def _local_pass() -> dict:
+    registry = json.loads(ACTIVE_TASK_REGISTRY.read_text(encoding="utf-8"))
+    registered_indices = [row["upstream_index"] for row in registry["tasks"]]
     return run_webarena_host_preflight(
         service_url_map=SERVICE_URL_MAP,
         version_getter=lambda name: PINNED_WEBARENA_PACKAGES[name],
@@ -76,6 +82,8 @@ def _local_pass() -> dict:
             "reward_read": False,
             "evaluator_output_read": False,
         },
+        live_reset_task_index=registered_indices[0],
+        registered_task_indices=registered_indices,
     )
 
 

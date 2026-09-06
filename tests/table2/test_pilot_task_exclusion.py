@@ -23,12 +23,20 @@ def _authority():
     )
 
 
-def test_tracked_registry_is_the_permanent_0_to_49_exclusion_authority() -> None:
+def test_tracked_registry_is_the_permanent_combined_exclusion_authority() -> None:
     authority = _authority()
 
     assert authority.benchmark == "webarena"
-    assert authority.upstream_indices == frozenset(range(50))
-    assert authority.benchmark_task_ids == frozenset(str(index) for index in range(50))
+    active = {
+        102, 156, 157, 158, 159, 238, 258, 260, 269, 274,
+        283, 284, 298, 324, 356, 369, 370, 371, 372, 373,
+        374, 375, 377, 378, 379, 380, 381, 676, 677, 678,
+        679, 680, 704, 705, 706, 707, 708, 709, 710, 711,
+        712, 757, 758, 761, 762, 763, 764, 765, 766, 767,
+    }
+    expected = frozenset(set(range(50)) | active)
+    assert authority.upstream_indices == expected
+    assert authority.benchmark_task_ids == frozenset(str(index) for index in expected)
     assert pilot_task_exclusion_provenance(authority)["identity_version"] == (
         PILOT_TASK_EXCLUSION_IDENTITY_VERSION
     )
@@ -61,6 +69,21 @@ def test_changed_local_index_cannot_hide_pilot_benchmark_task_identity() -> None
     with pytest.raises(SchemaError, match=r"benchmark_task_ids=\['17'\]"):
         validate_locked_final_pilot_exclusion(
             [disguised_overlap],
+            task_metadata={"benchmark": "webarena"},
+            authority=_authority(),
+        )
+
+
+def test_active_page_state_pilot_task_is_also_permanently_excluded() -> None:
+    with pytest.raises(SchemaError, match="permanent pilot exclusion"):
+        validate_locked_final_pilot_exclusion(
+            [
+                {
+                    "task_id": "renamed-active-pilot-task",
+                    "upstream_index": 676,
+                    "benchmark_task_id": "676",
+                }
+            ],
             task_metadata={"benchmark": "webarena"},
             authority=_authority(),
         )

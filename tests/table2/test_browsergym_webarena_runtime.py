@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from web_agent.benchmarks import browsergym_webarena as browsergym_module
 from web_agent.benchmarks.base import BenchmarkUnavailableError
 from web_agent.benchmarks.browsergym_webarena import (
+    BrowserGymWebArenaRuntimeFactory,
     BrowserGymEpisodeAbortReceipt,
     BrowserGymRuntimeConfiguration,
     BrowserGymTaskStateResetReceipt,
@@ -15,12 +19,14 @@ from web_agent.benchmarks.browsergym_webarena import (
     OracleBlindWebArenaTask,
     PinnedBrowserGymAPI,
     _BrowserGymEpisodeCallbacks,
+    _ProcessBrokerBrowserGymWebArenaAdapter,
     _action_code,
     _runtime_visible_page_url,
     callable_source_sha256,
     load_pinned_browsergym_api,
     module_source_sha256,
 )
+from web_agent.benchmarks.webarena import WebArenaAdapter
 from web_agent.eval.table2.process_broker_protocol import (
     registered_browser_error_observation_url,
     validate_runtime_result,
@@ -511,3 +517,88 @@ def test_missing_authenticated_storage_fails_before_browser_creation(
         environment.reset(seed=42)
     receipt = callbacks.abort_episode("never-published", "webarena.44")
     assert receipt.outcome == "NO_BROWSER_CREATED"
+
+
+def test_process_broker_adapter_close_defers_browser_until_control_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    callbacks = _callbacks(tmp_path)
+    runtime_dir = tmp_path / "episode-runtime"
+    runtime_dir.mkdir()
+    factory = SimpleNamespace(
+        benchmark_version="0.14.3",
+        environment_adapter_id="fixture-child-browsergym",
+        environment_adapter_version="v1",
+        environment_state_digester_id="fixture-page-state",
+        environment_state_digester_version="v1",
+        infrastructure_fault_classifier=None,
+        reset_state_attester=None,
+        action_safety_policy=None,
+        manual_rescue_guard=None,
+        page_settle_policy_id="fixture-settle",
+        configuration=BrowserGymRuntimeConfiguration(),
+    )
+    # This test supplies deterministic callbacks directly; dependency/policy
+    # completeness is covered by BrowserGymWebArenaRuntimeFactory construction.
+    monkeypatch.setattr(WebArenaAdapter, "_require_contract", lambda _self: None)
+    adapter = _ProcessBrokerBrowserGymWebArenaAdapter(
+        task=callbacks.task,
+        callbacks=callbacks,
+        runtime_factory=factory,
+        episode_runtime_dir=runtime_dir,
+    )
+    episode_id = "campaign:E2:webarena.44:repeat-0:seed-42"
+    adapter.reset(callbacks.task, episode_id=episode_id, seed=42)
+    browser = _FakeBrowserEnv.instances[-1]
+    adapter.close()
+    assert browser.close_calls == 0
+
+    # A sealed finalizer can still read the exact state after runtime close.
+    committed_before_cleanup = adapter.process_broker_environment_state_sha256()
+    assert len(committed_before_cleanup) == 64
+    assert browser.page.content()
+
+    receipt = adapter.process_broker_close_browser()
+    assert receipt is not None
+    assert receipt.outcome == "BROKER_ABORTED"
+    assert browser.close_calls == 1
+    with pytest.raises(BrowserGymWebArenaError, match="exactly once"):
+        adapter.process_broker_close_browser()
+
+
+def test_exported_process_broker_adapter_entrypoint_is_exact_and_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signature = inspect.signature(browsergym_module.create_environment_adapter)
+    assert tuple(signature.parameters) == ("task", "episode_runtime_dir")
+    assert all(
+        parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        and parameter.default is inspect.Parameter.empty
+        for parameter in signature.parameters.values()
+    )
+    runtime_dir = tmp_path / "episode-runtime"
+    runtime_dir.mkdir()
+    with pytest.raises(BrowserGymWebArenaError, match="bootstrap is not registered"):
+        browsergym_module.create_environment_adapter(
+            task=_task(),
+            episode_runtime_dir=runtime_dir,
+        )
+
+    exact_factory = object.__new__(BrowserGymWebArenaRuntimeFactory)
+    expected = object.__new__(WebArenaAdapter)
+    monkeypatch.setattr(
+        browsergym_module,
+        "_load_process_broker_browser_runtime_factory",
+        lambda: exact_factory,
+    )
+    monkeypatch.setattr(
+        BrowserGymWebArenaRuntimeFactory,
+        "create_process_broker_environment_adapter",
+        lambda _self, *, task, episode_runtime_dir: expected,
+    )
+    assert browsergym_module.create_environment_adapter(
+        task=_task(),
+        episode_runtime_dir=runtime_dir,
+    ) is expected

@@ -172,6 +172,10 @@ _NORMALIZED_ALLOWED_RUNTIME_EVIDENCE_KEYS = frozenset(
         "verifiereventid",
         "verifiertokensha256",
         "predictedfailureresolved",
+        # Structural pilot assurance flag only. Package validation requires
+        # the exact boolean value and its source/deployment cross-bindings;
+        # nested content is still recursively inspected.
+        "sourceattestedoraclefreevalueoriginevidence",
     }
 )
 _NORMALIZED_INDIRECT_CONTROL_KEYS = frozenset(

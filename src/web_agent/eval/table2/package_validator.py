@@ -98,6 +98,7 @@ from .execution_guard import (
     PC01_PROVIDER_BOOTSTRAP_BINDING_FIELD,
     PC01ProviderInstallationReceipt,
     PRODUCTION_RUNNER_ENTRYPOINT,
+    attested_source_hashes,
     validate_dependency_lock_for_environment,
     validate_frozen_dependency_lock,
     validate_infrastructure_evidence_record,
@@ -139,6 +140,21 @@ from .paper_claims import (
     SOURCE_REGISTRY_RELATIVE_PATH as PAPER_CLAIM_REGISTRY_SOURCE_RELATIVE_PATH,
     validate_claim_registry,
     validate_claim_registry_binding,
+)
+from .process_broker_finalization import (
+    PROCESS_BROKER_FINALIZATION_RECEIPT_SCHEMA_VERSION,
+    SEALED_CALLBACK_GUARD_IDENTITY_RECORD_TYPE,
+    SEALED_CALLBACK_GUARD_IDENTITY_SCHEMA_VERSION,
+    ProcessIsolatedFinalizationReceipt,
+    validate_sealed_callback_guard_identity,
+)
+from .process_broker import PROCESS_BROKER_PILOT_EVALUATION_SCOPE
+from .process_broker_protocol import (
+    PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE,
+    PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION,
+    PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM,
+    ProcessBrokerProtocolError,
+    validate_child_cleanup_result,
 )
 from .retrieval_metrics import compute_retrieval_diagnostics
 from .pilot_task_exclusion import (
@@ -209,6 +225,33 @@ RUNTIME_FILES = (
     "environment_events.jsonl",
     "terminal_signals.jsonl",
     "artifact_hashes.json",
+)
+PROCESS_BROKER_MANUAL_RESCUE_EVIDENCE_FILENAME = (
+    "manual_rescue_guard.child.jsonl"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_FILENAME = (
+    "sealed_callback_state_guard.child.jsonl"
+)
+PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_SCHEMA_VERSION = (
+    "table2-process-broker-manual-rescue-sidecar-v1"
+)
+PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_RECORD_TYPE = (
+    "ProcessBrokerManualRescueEvidence"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_SCHEMA_VERSION = (
+    "table2-process-broker-sealed-callback-state-guard-v1"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_RECORD_TYPE = (
+    "ProcessBrokerSealedCallbackStateGuard"
+)
+PROCESS_BROKER_STARTUP_ASSURANCE_SCHEMA_VERSION = (
+    "table2-process-broker-startup-assurance-v1"
+)
+PROCESS_BROKER_CLEANUP_ASSURANCE_SCHEMA_VERSION = (
+    "table2-process-broker-cleanup-assurance-v1"
+)
+PROCESS_BROKER_PILOT_ASSURANCE_CLAIM_SCOPE = (
+    "SOURCE_ATTESTED_PROCESS_ISOLATION_PILOT_EVIDENCE_NOT_FINAL_AUTHORITY"
 )
 FINAL_READY_STATUS = "READY_FOR_TABLE2"
 DRAFT_PILOT_STATUS = "DRAFT_PILOT_ONLY"
@@ -329,7 +372,7 @@ JOINT_DUPLICATE_AUDIT_CONFIG_RELATIVE_PATH = Path(
     "configs/eval/table2/joint_duplicate_audit_v1.json"
 )
 JOINT_DUPLICATE_AUDIT_REGISTRATION_RELATIVE_PATH = Path(
-    "benchmarks/table2/pilot/duplicate_audit_manifest.json"
+    "benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json"
 )
 JOINT_DUPLICATE_EVIDENCE_RELATIVE_PATH = Path(
     "frozen/joint_duplicate_evidence"
@@ -4604,14 +4647,46 @@ def _validate_infrastructure_partial_runtime_package(
     )
     terminal_records = records_by_name["terminal_signals.jsonl"]
     partial_campaign = read_json(campaign_root / "campaign_manifest.json")
+    production_normal = (
+        partial_campaign.get("runner_entrypoint")
+        == "web_agent.eval.table2.production_runner:create_runner"
+        and str(schedule_row.get("task_partition")) == "normal"
+    )
+    process_mode = False
+    process_evidence: Mapping[str, Any] | None = None
+    if production_normal:
+        process_mode, process_evidence = _validate_process_broker_episode_assurance(
+            campaign_root=campaign_root,
+            runtime=runtime,
+            environment_events=records_by_name["environment_events.jsonl"],
+            terminal_signals=terminal_records,
+            require_finalization=False,
+        )
+        if process_mode:
+            child_cleanup = process_evidence.get("child_cleanup_result")
+            if not isinstance(child_cleanup, Mapping):
+                raise SchemaError("partial process episode lacks child cleanup")
+            _validate_process_manual_rescue_sidecar(
+                runtime=runtime,
+                cleanup_result=child_cleanup,
+            )
     _validate_evaluator_backend_guards(
         environment_events=records_by_name["environment_events.jsonl"],
         terminal_signals=terminal_records,
         required=(
             bool(terminal_records)
-            and partial_campaign.get("runner_entrypoint")
-            == "web_agent.eval.table2.production_runner:create_runner"
-            and str(schedule_row.get("task_partition")) == "normal"
+            and production_normal
+        ),
+        runtime=runtime,
+        process_guard_identity=(
+            process_evidence.get("sealed_callback_guard_identity")
+            if process_mode and isinstance(process_evidence, Mapping)
+            else None
+        ),
+        environment=(
+            read_json(campaign_root / "frozen" / "environment.json")
+            if process_mode
+            else None
         ),
     )
     sealed_episode = package / "sealed" / _path_id(episode_id) / "verifier_events.jsonl"
@@ -5045,6 +5120,16 @@ def _validate_system_package(
     production_runtime = campaign_manifest.get("runner_entrypoint") == (
         "web_agent.eval.table2.production_runner:create_runner"
     )
+    process_mode = False
+    process_evidence: Mapping[str, Any] | None = None
+    if production_runtime and str(schedule_row.get("task_partition")) == "normal":
+        process_mode, process_evidence = _validate_process_broker_episode_assurance(
+            campaign_root=campaign_root,
+            runtime=runtime,
+            environment_events=environment_events,
+            terminal_signals=terminal_signals,
+            require_finalization=bool(summary["completed"]),
+        )
     _validate_evaluator_backend_guards(
         environment_events=environment_events,
         terminal_signals=terminal_signals,
@@ -5052,9 +5137,22 @@ def _validate_system_package(
             production_runtime
             and str(schedule_row.get("task_partition")) == "normal"
         ),
+        runtime=runtime,
+        process_guard_identity=(
+            process_evidence.get("sealed_callback_guard_identity")
+            if process_mode and isinstance(process_evidence, Mapping)
+            else None
+        ),
+        environment=(
+            read_json(campaign_root / "frozen" / "environment.json")
+            if process_mode
+            else None
+        ),
     )
     if production_runtime and str(schedule_row.get("task_partition")) == "normal":
         _validate_manual_rescue_guard_events(
+            runtime=runtime,
+            process_evidence=process_evidence if process_mode else None,
             environment_events=environment_events,
             actions=actions,
             terminal_signals=terminal_signals,
@@ -5713,13 +5811,188 @@ def _validate_frozen_runtime_budget_evidence(
         raise SchemaError("ABORT must be the final recovery attempt in an episode")
 
 
+def _read_canonical_child_sidecar(path: Path) -> list[dict[str, Any]]:
+    if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+        raise SchemaError(f"child evidence sidecar is not a single-link file: {path}")
+    raw = path.read_bytes()
+    if raw and not raw.endswith(b"\n"):
+        raise SchemaError(f"child evidence sidecar lacks its final newline: {path}")
+    records: list[dict[str, Any]] = []
+    for line_number, line in enumerate(raw.splitlines(keepends=True), start=1):
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise SchemaError(
+                f"child evidence sidecar is invalid at {path}:{line_number}"
+            ) from exc
+        if not isinstance(value, dict) or canonical_json_bytes(value) + b"\n" != line:
+            raise SchemaError(
+                f"child evidence sidecar is not canonical at {path}:{line_number}"
+            )
+        assert_no_verifier_evidence(
+            {"child_evidence": value}, context=f"{path}:{line_number}"
+        )
+        records.append(value)
+    return records
+
+
+def _validate_process_manual_rescue_sidecar(
+    *,
+    runtime: Path,
+    cleanup_result: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    path = runtime / PROCESS_BROKER_MANUAL_RESCUE_EVIDENCE_FILENAME
+    records = _read_canonical_child_sidecar(path)
+    previous = "0" * 64
+    expected_keys = {
+        "schema_version",
+        "record_type",
+        "record_index",
+        "previous_record_sha256",
+        "check",
+        "check_sha256",
+        "receipt",
+        "receipt_sha256",
+        "record_sha256",
+    }
+    for expected_index, record in enumerate(records, start=1):
+        if set(record) != expected_keys:
+            raise SchemaError("child manual-rescue sidecar fields differ")
+        if (
+            record.get("schema_version")
+            != PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_SCHEMA_VERSION
+            or record.get("record_type")
+            != PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_RECORD_TYPE
+            or record.get("record_index") != expected_index
+            or record.get("previous_record_sha256") != previous
+        ):
+            raise SchemaError("child manual-rescue sidecar chain differs")
+        body = dict(record)
+        claimed = body.pop("record_sha256")
+        if not _is_sha256(claimed) or sha256_json(body) != claimed:
+            raise SchemaError("child manual-rescue sidecar record digest differs")
+        previous = str(claimed)
+    expected_count = cleanup_result.get("manual_rescue_check_count")
+    expected_tail = cleanup_result.get("manual_rescue_tail_sha256")
+    if (
+        type(expected_count) is not int
+        or expected_count != len(records)
+        or expected_tail != (previous if records else None)
+    ):
+        raise SchemaError(
+            "child manual-rescue sidecar differs from authenticated cleanup"
+        )
+    return records
+
+
+def _validate_process_sealed_callback_guards(
+    *,
+    runtime: Path,
+    guard_identity: Mapping[str, Any],
+    terminal_signals: Sequence[Mapping[str, Any]],
+    environment: Mapping[str, Any],
+) -> None:
+    path = runtime / PROCESS_BROKER_SEALED_CALLBACK_GUARD_FILENAME
+    identity = validate_sealed_callback_guard_identity(guard_identity)
+    if (
+        identity.get("relative_path") != PROCESS_BROKER_SEALED_CALLBACK_GUARD_FILENAME
+        or not path.is_file()
+        or path.is_symlink()
+        or sha256_file(path) != identity.get("content_sha256")
+    ):
+        raise SchemaError("sealed-callback sidecar identity differs")
+    records = _read_canonical_child_sidecar(path)
+    if len(records) != identity.get("record_count"):
+        raise SchemaError("sealed-callback sidecar count differs")
+    digester = environment.get("environment_state_digester")
+    if not isinstance(digester, Mapping):
+        raise SchemaError("sealed-callback sidecar lacks frozen digester identity")
+    expected_callbacks: list[str] = []
+    for signal in terminal_signals:
+        kind = str(signal.get("event_type", ""))
+        if kind in {"after_reset", "after_normal_action", "after_recovery_action"}:
+            expected_callbacks.append("sealed_transition")
+        elif kind == "episode_final_receipt":
+            expected_callbacks.append("sealed_finalizer")
+        else:
+            raise SchemaError(f"terminal signal has no child callback guard: {kind}")
+    if not expected_callbacks or len(records) != len(expected_callbacks):
+        raise SchemaError("sealed-callback guards do not cover callbacks 1:1")
+    expected_keys = {
+        "schema_version",
+        "record_type",
+        "callback_guard_index",
+        "previous_record_sha256",
+        "callback_kind",
+        "environment_state_digester_id",
+        "environment_state_digester_version",
+        "environment_state_sha256_before",
+        "environment_state_sha256_after",
+        "environment_state_unchanged",
+        "record_sha256",
+    }
+    previous = "0" * 64
+    for expected_index, (record, callback_kind) in enumerate(
+        zip(records, expected_callbacks, strict=True), start=1
+    ):
+        if set(record) != expected_keys:
+            raise SchemaError("sealed-callback guard fields differ")
+        before = record.get("environment_state_sha256_before")
+        after = record.get("environment_state_sha256_after")
+        if (
+            record.get("schema_version")
+            != PROCESS_BROKER_SEALED_CALLBACK_GUARD_SCHEMA_VERSION
+            or record.get("record_type")
+            != PROCESS_BROKER_SEALED_CALLBACK_GUARD_RECORD_TYPE
+            or record.get("callback_guard_index") != expected_index
+            or record.get("previous_record_sha256") != previous
+            or record.get("callback_kind") != callback_kind
+            or record.get("environment_state_digester_id")
+            != digester.get("digester_id")
+            or record.get("environment_state_digester_version")
+            != digester.get("digester_version")
+            or not _is_sha256(before)
+            or before != after
+            or record.get("environment_state_unchanged") is not True
+        ):
+            raise SchemaError("sealed-callback guard evidence differs")
+        body = dict(record)
+        claimed = body.pop("record_sha256")
+        if not _is_sha256(claimed) or sha256_json(body) != claimed:
+            raise SchemaError("sealed-callback guard record digest differs")
+        previous = str(claimed)
+    if previous != identity.get("tail_sha256"):
+        raise SchemaError("sealed-callback guard tail differs from finalization")
+
+
 def _validate_evaluator_backend_guards(
     *,
     environment_events: Sequence[Mapping[str, Any]],
     terminal_signals: Sequence[Mapping[str, Any]],
     required: bool,
+    runtime: Path | None = None,
+    process_guard_identity: Mapping[str, Any] | None = None,
+    environment: Mapping[str, Any] | None = None,
 ) -> None:
     """Prove a monotonic one-to-one guard for every sealed callback."""
+
+    if process_guard_identity is not None:
+        if runtime is None or environment is None:
+            raise SchemaError("process callback guard lacks package context")
+        if any(
+            str(record.get("event_type", "")) == "sealed_evaluator_backend_guard"
+            for record in environment_events
+        ):
+            raise SchemaError(
+                "process episode cannot mix parent and child callback guards"
+            )
+        _validate_process_sealed_callback_guards(
+            runtime=runtime,
+            guard_identity=process_guard_identity,
+            terminal_signals=terminal_signals,
+            environment=environment,
+        )
+        return
 
     guards = [
         record
@@ -5782,8 +6055,352 @@ def _validate_evaluator_backend_guards(
             raise SchemaError("sealed evaluator backend guard must be unchanged=true")
 
 
+def _validated_process_finalization_receipt(
+    value: object,
+) -> ProcessIsolatedFinalizationReceipt:
+    if not isinstance(value, Mapping):
+        raise SchemaError("process finalization receipt is absent or malformed")
+    expected = {
+        item.name for item in dataclass_fields(ProcessIsolatedFinalizationReceipt)
+    }
+    if set(value) != expected:
+        raise SchemaError("process finalization receipt fields differ from schema")
+    try:
+        receipt = ProcessIsolatedFinalizationReceipt(
+            **json.loads(json.dumps(dict(value), sort_keys=True))
+        )
+    except (ProcessBrokerProtocolError, TypeError, ValueError) as exc:
+        raise SchemaError(f"process finalization receipt is invalid: {exc}") from exc
+    if receipt.to_dict() != dict(value):
+        raise SchemaError("process finalization receipt is not canonical")
+    return receipt
+
+
+def _validate_process_broker_episode_assurance(
+    *,
+    campaign_root: Path,
+    runtime: Path,
+    environment_events: Sequence[Mapping[str, Any]],
+    terminal_signals: Sequence[Mapping[str, Any]],
+    require_finalization: bool,
+) -> tuple[bool, Mapping[str, Any] | None]:
+    """Validate the process-only pilot launch, transcript, and cleanup chain."""
+
+    startup_rows = [
+        (index, record)
+        for index, record in enumerate(environment_events)
+        if str(record.get("event_type", ""))
+        == "process_broker_startup_assurance"
+    ]
+    cleanup_rows = [
+        (index, record)
+        for index, record in enumerate(environment_events)
+        if str(record.get("event_type", ""))
+        == "process_broker_cleanup_assurance"
+    ]
+    manual_path = runtime / PROCESS_BROKER_MANUAL_RESCUE_EVIDENCE_FILENAME
+    callback_path = runtime / PROCESS_BROKER_SEALED_CALLBACK_GUARD_FILENAME
+    process_material_present = bool(
+        startup_rows or cleanup_rows or manual_path.exists() or callback_path.exists()
+    )
+    if not process_material_present:
+        return False, None
+    if len(startup_rows) != 1 or len(cleanup_rows) != 1:
+        raise SchemaError(
+            "process WebArena episode requires exactly one startup and cleanup assurance"
+        )
+    startup_position, startup_record = startup_rows[0]
+    cleanup_position, cleanup_record = cleanup_rows[0]
+    if startup_position >= cleanup_position:
+        raise SchemaError("process-broker cleanup precedes its startup assurance")
+    contract_positions = [
+        index
+        for index, record in enumerate(environment_events)
+        if str(record.get("event_type", "")) == "episode_contract_validation"
+    ]
+    if require_finalization and (
+        len(contract_positions) != 1
+        or not (startup_position < contract_positions[0] < cleanup_position)
+    ):
+        raise SchemaError(
+            "completed process episode has an invalid contract/cleanup ordering"
+        )
+
+    startup = _event_payload(startup_record)
+    startup_keys = {
+        "schema_version",
+        "record_type",
+        "claim_scope",
+        "evidence_label",
+        "paper_table_status",
+        "launch_receipt_sha256",
+        "execution_scope",
+        "runtime_pid",
+        "sealed_child_pid",
+        "process_ids_distinct",
+        "transport",
+        "protocol_version",
+        "peer_credentials_enforced",
+        "role_separated_authentication",
+        "loaded_source_closure_enforced",
+        "child_environment_allowlist_version",
+        "child_environment_variable_names",
+        "child_environment_exact_allowlist_enforced",
+        "child_environment_credentials_scrubbed",
+        "authenticated_transcript_chaining",
+        "parent_child_transcript_convergence_required",
+        "transcript_chain_algorithm",
+        "ipc_timeout_binding_sha256",
+        "immutable_timeout_authority_bundle_validated",
+        "source_files",
+        "source_set_sha256",
+        "live_deployment_binding_sha256",
+        "live_deployment_manifest_sha256",
+        "episode_factory_descriptor_sha256",
+        "provider_installation_receipt_sha256",
+        "runner_attestation_sha256",
+        "runtime_value_provenance_attested",
+        "source_attested_oracle_free_value_origin_evidence",
+        "independent_runtime_value_provenance_attested",
+        "external_deployment_authority",
+    }
+    if set(startup) != startup_keys:
+        raise SchemaError("process-broker startup assurance fields differ")
+    startup_fixed = {
+        "schema_version": PROCESS_BROKER_STARTUP_ASSURANCE_SCHEMA_VERSION,
+        "record_type": "ProcessBrokerStartupAssurance",
+        "claim_scope": PROCESS_BROKER_PILOT_ASSURANCE_CLAIM_SCOPE,
+        "evidence_label": "PILOT_ONLY",
+        "paper_table_status": "N/R",
+        "execution_scope": PROCESS_BROKER_PILOT_EVALUATION_SCOPE,
+        "process_ids_distinct": True,
+        "peer_credentials_enforced": True,
+        "role_separated_authentication": True,
+        "loaded_source_closure_enforced": True,
+        "child_environment_exact_allowlist_enforced": True,
+        "child_environment_credentials_scrubbed": True,
+        "authenticated_transcript_chaining": True,
+        "parent_child_transcript_convergence_required": True,
+        "transcript_chain_algorithm": PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM,
+        "immutable_timeout_authority_bundle_validated": True,
+        "runtime_value_provenance_attested": False,
+        "source_attested_oracle_free_value_origin_evidence": True,
+        "independent_runtime_value_provenance_attested": False,
+        "external_deployment_authority": False,
+    }
+    if any(startup.get(name) != expected for name, expected in startup_fixed.items()):
+        raise SchemaError("process-broker startup assurance claim differs")
+    runtime_pid = startup.get("runtime_pid")
+    sealed_pid = startup.get("sealed_child_pid")
+    if (
+        type(runtime_pid) is not int
+        or runtime_pid <= 0
+        or type(sealed_pid) is not int
+        or sealed_pid <= 0
+        or runtime_pid == sealed_pid
+    ):
+        raise SchemaError("process-broker startup process identities are invalid")
+    for field_name in (
+        "launch_receipt_sha256",
+        "ipc_timeout_binding_sha256",
+        "source_set_sha256",
+        "live_deployment_binding_sha256",
+        "live_deployment_manifest_sha256",
+        "episode_factory_descriptor_sha256",
+        "provider_installation_receipt_sha256",
+        "runner_attestation_sha256",
+    ):
+        if not _is_sha256(startup.get(field_name)):
+            raise SchemaError(f"process-broker startup {field_name} is invalid")
+    source_rows = startup.get("source_files")
+    if not isinstance(source_rows, list) or not source_rows:
+        raise SchemaError("process-broker startup source rows are absent")
+    normalized_sources: list[dict[str, str]] = []
+    for row in source_rows:
+        if not isinstance(row, Mapping) or set(row) != {"relative_path", "sha256"}:
+            raise SchemaError("process-broker startup source row is malformed")
+        relative = str(safe_relative_path(str(row.get("relative_path") or "")))
+        digest = row.get("sha256")
+        if not relative or not _is_sha256(digest):
+            raise SchemaError("process-broker startup source identity is invalid")
+        normalized_sources.append({"relative_path": relative, "sha256": str(digest)})
+    if (
+        normalized_sources
+        != sorted(normalized_sources, key=lambda row: row["relative_path"])
+        or len({row["relative_path"] for row in normalized_sources})
+        != len(normalized_sources)
+        or sha256_json(normalized_sources) != startup["source_set_sha256"]
+    ):
+        raise SchemaError("process-broker startup source set is not canonical")
+    attestation_path = campaign_root / "frozen" / "runner_attestation.json"
+    if sha256_file(attestation_path) != startup["runner_attestation_sha256"]:
+        raise SchemaError("process-broker startup runner attestation differs")
+    attested = attested_source_hashes(read_json(attestation_path))
+    if any(
+        attested.get(row["relative_path"]) != row["sha256"]
+        for row in normalized_sources
+    ):
+        raise SchemaError("process-broker startup contains unattested source bytes")
+    manifest = read_json(campaign_root / "campaign_manifest.json")
+    live_binding = manifest.get(LIVE_DEPLOYMENT_BINDING_FIELD)
+    if not isinstance(live_binding, Mapping):
+        raise SchemaError("process-broker campaign lacks live-deployment binding")
+    if (
+        sha256_json(live_binding) != startup["live_deployment_binding_sha256"]
+        or live_binding.get("manifest_content_sha256")
+        != startup["live_deployment_manifest_sha256"]
+    ):
+        raise SchemaError("process-broker startup live-deployment binding differs")
+    expected_provider = require_pc01_provider_installation_ledger(
+        campaign_root, manifest
+    )
+    if expected_provider.receipt_sha256 != startup[
+        "provider_installation_receipt_sha256"
+    ]:
+        raise SchemaError("process-broker startup provider receipt differs")
+
+    cleanup = _event_payload(cleanup_record)
+    cleanup_keys = {
+        "schema_version",
+        "record_type",
+        "claim_scope",
+        "evidence_label",
+        "paper_table_status",
+        "launch_receipt_sha256",
+        "cleanup_receipt_sha256",
+        "session_identity_sha256",
+        "sealed_child_pid",
+        "worker_exit_code",
+        "graceful_authenticated_shutdown",
+        "endpoint_removed",
+        "temporary_directory_removed",
+        "source_set_sha256",
+        "transcript_chain_algorithm",
+        "shutdown_request_previous_transcript_root_sha256",
+        "shutdown_request_previous_transcript_entry_count",
+        "transcript_root_sha256",
+        "transcript_entry_count",
+        "child_cleanup_result",
+        "finalization_receipt",
+        "external_deployment_authority",
+    }
+    if set(cleanup) != cleanup_keys:
+        raise SchemaError("process-broker cleanup assurance fields differ")
+    cleanup_fixed = {
+        "schema_version": PROCESS_BROKER_CLEANUP_ASSURANCE_SCHEMA_VERSION,
+        "record_type": "ProcessBrokerCleanupAssurance",
+        "claim_scope": PROCESS_BROKER_PILOT_ASSURANCE_CLAIM_SCOPE,
+        "evidence_label": "PILOT_ONLY",
+        "paper_table_status": "N/R",
+        "worker_exit_code": 0,
+        "graceful_authenticated_shutdown": True,
+        "endpoint_removed": True,
+        "temporary_directory_removed": True,
+        "transcript_chain_algorithm": PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM,
+        "external_deployment_authority": False,
+    }
+    if any(cleanup.get(name) != expected for name, expected in cleanup_fixed.items()):
+        raise SchemaError("process-broker cleanup assurance claim differs")
+    if (
+        cleanup.get("launch_receipt_sha256") != startup["launch_receipt_sha256"]
+        or cleanup.get("source_set_sha256") != startup["source_set_sha256"]
+        or cleanup.get("sealed_child_pid") != sealed_pid
+    ):
+        raise SchemaError("process-broker cleanup differs from startup")
+    for field_name in (
+        "cleanup_receipt_sha256",
+        "session_identity_sha256",
+        "shutdown_request_previous_transcript_root_sha256",
+        "transcript_root_sha256",
+    ):
+        if not _is_sha256(cleanup.get(field_name)):
+            raise SchemaError(f"process-broker cleanup {field_name} is invalid")
+    before_count = cleanup.get("shutdown_request_previous_transcript_entry_count")
+    final_count = cleanup.get("transcript_entry_count")
+    if (
+        type(before_count) is not int
+        or before_count < 0
+        or before_count % 2 != 0
+        or type(final_count) is not int
+        or final_count != before_count + 2
+    ):
+        raise SchemaError("process-broker cleanup transcript counts differ")
+    try:
+        child_cleanup = validate_child_cleanup_result(
+            cleanup.get("child_cleanup_result")
+        )
+    except ProcessBrokerProtocolError as exc:
+        raise SchemaError(f"process-broker child cleanup is invalid: {exc}") from exc
+
+    guard_identity: Mapping[str, Any] | None = None
+    finalization_value = cleanup.get("finalization_receipt")
+    if finalization_value is None:
+        if require_finalization:
+            raise SchemaError("completed process episode lacks finalization receipt")
+    else:
+        finalization = _validated_process_finalization_receipt(finalization_value)
+        if (
+            finalization.transcript_root_sha256
+            != cleanup["shutdown_request_previous_transcript_root_sha256"]
+            or finalization.transcript_entry_count != before_count
+        ):
+            raise SchemaError(
+                "process finalization transcript differs from pre-shutdown receipt"
+            )
+        final_events = [
+            _event_payload(record)
+            for record in terminal_signals
+            if str(record.get("event_type", "")) == "episode_final_receipt"
+        ]
+        if len(final_events) != 1 or final_events[0] != dict(
+            finalization.opaque_terminal_signal
+        ):
+            raise SchemaError(
+                "process finalization receipt differs from runtime opaque receipt"
+            )
+        guard_identity = validate_sealed_callback_guard_identity(
+            finalization.sealed_callback_guard_identity
+        )
+        guard_path = runtime / str(guard_identity["relative_path"])
+        if (
+            guard_path != callback_path
+            or not guard_path.is_file()
+            or guard_path.is_symlink()
+            or sha256_file(guard_path) != guard_identity["content_sha256"]
+        ):
+            raise SchemaError(
+                "process sealed-callback guard sidecar differs from finalization"
+            )
+    if not manual_path.is_file() or manual_path.is_symlink():
+        raise SchemaError("process episode lacks child-owned manual-rescue sidecar")
+    if not callback_path.is_file() or callback_path.is_symlink():
+        raise SchemaError("process episode lacks child-owned callback-guard sidecar")
+    if guard_identity is None and callback_path.is_file() and not callback_path.is_symlink():
+        callback_records = _read_canonical_child_sidecar(callback_path)
+        if callback_records:
+            candidate_identity = {
+                "schema_version": SEALED_CALLBACK_GUARD_IDENTITY_SCHEMA_VERSION,
+                "record_type": SEALED_CALLBACK_GUARD_IDENTITY_RECORD_TYPE,
+                "relative_path": PROCESS_BROKER_SEALED_CALLBACK_GUARD_FILENAME,
+                "record_count": len(callback_records),
+                "tail_sha256": callback_records[-1].get("record_sha256"),
+                "content_sha256": sha256_file(callback_path),
+            }
+            guard_identity = validate_sealed_callback_guard_identity(
+                candidate_identity
+            )
+    return True, {
+        "child_cleanup_result": child_cleanup,
+        "sealed_callback_guard_identity": (
+            dict(guard_identity) if guard_identity is not None else None
+        ),
+    }
+
+
 def _validate_manual_rescue_guard_events(
     *,
+    runtime: Path | None = None,
+    process_evidence: Mapping[str, Any] | None = None,
     environment_events: Sequence[Mapping[str, Any]],
     actions: Sequence[Mapping[str, Any]],
     terminal_signals: Sequence[Mapping[str, Any]],
@@ -5826,11 +6443,27 @@ def _validate_manual_rescue_guard_events(
             raise SchemaError("manual-rescue action binding is missing or ambiguous")
         action_by_id[action_id] = payload
 
-    guard_records = [
+    parent_guard_records = [
         record
         for record in environment_events
         if str(record.get("event_type", "")) == "manual_rescue_guard"
     ]
+    if process_evidence is not None:
+        if runtime is None:
+            raise SchemaError("process manual-rescue guard lacks runtime context")
+        if parent_guard_records:
+            raise SchemaError(
+                "process episode cannot mix parent and child manual-rescue evidence"
+            )
+        child_cleanup = process_evidence.get("child_cleanup_result")
+        if not isinstance(child_cleanup, Mapping):
+            raise SchemaError("process manual-rescue cleanup evidence is absent")
+        guard_records = _validate_process_manual_rescue_sidecar(
+            runtime=runtime,
+            cleanup_result=child_cleanup,
+        )
+    else:
+        guard_records = parent_guard_records
     if not guard_records:
         raise SchemaError("production WebArena episode lacks manual-rescue evidence")
     checks: list[WebArenaManualRescueCheck] = []
@@ -5998,11 +6631,23 @@ def _validate_episode_contract_validation_receipt(
     if len(receipt_positions) != 1:
         raise SchemaError("episode has duplicate in-memory contract validation receipts")
     receipt_position = receipt_positions[0]
-    trailing_types = {
+    trailing_sequence = [
         str(record.get("event_type", ""))
         for record in environment_events[receipt_position + 1 :]
-    }
-    if trailing_types - {"sealed_evaluator_backend_guard"}:
+    ]
+    process_startups = sum(
+        str(record.get("event_type", ""))
+        == "process_broker_startup_assurance"
+        for record in environment_events[:receipt_position]
+    )
+    if process_startups:
+        if process_startups != 1 or trailing_sequence != [
+            "process_broker_cleanup_assurance"
+        ]:
+            raise SchemaError(
+                "process cleanup must be the sole event after contract validation"
+            )
+    elif set(trailing_sequence) - {"sealed_evaluator_backend_guard"}:
         raise SchemaError(
             "runtime decision evidence was appended after contract validation"
         )
@@ -6950,7 +7595,11 @@ def _validate_runtime_artifact_hashes(runtime: Path, *, system_id: str) -> None:
     }
     if listed != actual:
         raise SchemaError(f"runtime artifact hash manifest lacks exact file closure: {runtime}")
-    allowed_regular = required_names | {"memory_queries.jsonl"}
+    allowed_regular = required_names | {
+        "memory_queries.jsonl",
+        PROCESS_BROKER_MANUAL_RESCUE_EVIDENCE_FILENAME,
+        PROCESS_BROKER_SEALED_CALLBACK_GUARD_FILENAME,
+    }
     for relative in sorted(actual - allowed_regular):
         screenshot_match = re.fullmatch(
             r"screenshots/[0-9]{6}-([0-9a-f]{64})\.png",

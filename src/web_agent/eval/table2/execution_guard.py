@@ -15,6 +15,8 @@ import subprocess
 from typing import Any
 
 from .common import (
+    CAMPAIGN_PROFILE_FINAL,
+    CAMPAIGN_PROFILE_PILOT,
     SCHEMA_VERSION,
     SchemaError,
     Table2Error,
@@ -59,7 +61,7 @@ PC01_PAGE_BROKER_SECURITY_SCHEMA_VERSION = (
     "table2-pc01-page-broker-security-v1"
 )
 PC01_PROCESS_BROKER_SECURITY_SCHEMA_VERSION = (
-    "table2-pc01-page-broker-security-v9"
+    "table2-pc01-page-broker-security-v10"
 )
 PC01_PAGE_BROKER_SECURITY_CLAIM_SCOPE = (
     "REVIEWED_CODE_DATAFLOW_ONLY_NOT_PROCESS_ISOLATION"
@@ -69,11 +71,12 @@ PC01_PAGE_BROKER_SECURITY_BLOCKED_STATUS = (
 )
 PC01_PROCESS_BROKER_SECURITY_CLAIM_SCOPE = (
     "SOURCE_ATTESTED_DISTINCT_PROCESS_AND_KEY_ENVELOPE_ARCHITECTURE_"
-    "NOT_VALUE_PROVENANCE_OR_DEPLOYMENT_AUTHORITY"
+    "PILOT_ONLY_NOT_FINAL_DEPLOYMENT_AUTHORITY"
 )
-PC01_PROCESS_BROKER_SECURITY_BLOCKED_STATUS = (
-    "BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED"
+PC01_PROCESS_BROKER_SECURITY_PILOT_STATUS = (
+    "PILOT_SOURCE_GATE_ELIGIBLE_SUBJECT_TO_FROZEN_RUNTIME_GATES"
 )
+PC01_PILOT_DEPLOYMENT_ASSURANCE_SCOPE = "source_attested_engineering_pilot"
 PC01_PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/__init__.py",
     "src/web_agent/benchmarks/__init__.py",
@@ -83,6 +86,7 @@ PC01_PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/eval/table2/common.py",
     "src/web_agent/eval/table2/execution_guard.py",
     "src/web_agent/eval/table2/process_broker.py",
+    "src/web_agent/eval/table2/process_broker_episode_factory.py",
     "src/web_agent/eval/table2/process_broker_finalization.py",
     "src/web_agent/eval/table2/process_broker_protocol.py",
     "src/web_agent/eval/table2/process_broker_runtime.py",
@@ -165,7 +169,7 @@ def blocked_pc01_page_broker_security_binding() -> dict[str, Any]:
 def process_isolated_pc01_page_broker_security_binding(
     *, source_hashes: Mapping[str, str]
 ) -> dict[str, Any]:
-    """Bind the implemented process architecture without self-authorizing it.
+    """Bind the implemented process architecture for the PC-01 pilot source gate.
 
     These rows attest distinct local processes, exact outer envelopes,
     recursive named-key rejection, a complete loaded-source closure, and
@@ -175,11 +179,13 @@ def process_isolated_pc01_page_broker_security_binding(
     register measured, outcome-blind IPC timeout calibration as a mandatory
     but currently absent evaluation input; developer-selected fixture
     timeouts cannot satisfy it. They do not attest the origin of scalar values
-    within those schemas. A real
-    deployment therefore still requires external runtime-value provenance and
-    a separately authenticated receipt proving that its processes used the
-    reviewed bytes and boundaries. This repository has no registered trust
-    anchor for such a receipt, so dispatch stays false.
+    within those schemas.  For the engineering pilot, the approved protocol
+    relies on the complete frozen live-deployment package, source closure,
+    immutable measured timeout bundle, causal hashes, and oracle-free value-
+    origin evidence.  Independent Ed25519/global-replay authority is reserved
+    for the later locked-final campaign.  This source record authorizes only
+    the pilot's *source architecture gate*; every live/runtime/data gate still
+    has to pass before dispatch.
     """
 
     rows: list[dict[str, str]] = []
@@ -193,7 +199,7 @@ def process_isolated_pc01_page_broker_security_binding(
     rows.sort(key=lambda row: row["relative_path"])
     return {
         "schema_version": PC01_PROCESS_BROKER_SECURITY_SCHEMA_VERSION,
-        "status": PC01_PROCESS_BROKER_SECURITY_BLOCKED_STATUS,
+        "status": PC01_PROCESS_BROKER_SECURITY_PILOT_STATUS,
         "claim_scope": PC01_PROCESS_BROKER_SECURITY_CLAIM_SCOPE,
         "architecture": (
             "separate_process_child_owned_sealed_sink_"
@@ -232,7 +238,7 @@ def process_isolated_pc01_page_broker_security_binding(
         "measured_ipc_timeout_calibration_present": False,
         "caller_injected_evaluation_timeout_forbidden": True,
         "ipc_timeout_calibration_schema_version": (
-            "table2-process-broker-ipc-timeout-calibration-v2"
+            "table2-process-broker-ipc-timeout-calibration-v3"
         ),
         "immutable_timeout_authority_bundle_present": False,
         "external_timeout_authority_cross_binding_present": False,
@@ -249,7 +255,7 @@ def process_isolated_pc01_page_broker_security_binding(
             PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
         ),
         "same_process_fixture_production_eligible": False,
-        "local_receipt_schema_version": "table2-process-page-broker-receipt-v9",
+        "local_receipt_schema_version": "table2-process-page-broker-receipt-v10",
         "local_cleanup_receipt_schema_version": (
             "table2-process-page-broker-cleanup-receipt-v1"
         ),
@@ -258,6 +264,11 @@ def process_isolated_pc01_page_broker_security_binding(
         "external_deployment_receipt_schema_version": None,
         "external_deployment_receipt_present": False,
         "external_trust_anchor_registered": False,
+        "deployment_assurance_scope": PC01_PILOT_DEPLOYMENT_ASSURANCE_SCOPE,
+        "independent_ed25519_required": False,
+        "global_replay_anchor_required": False,
+        "pilot_dispatch_source_gate_authorized": True,
+        "final_campaign_dispatch_authorized": False,
         "production_dispatch_authorized": False,
     }
 
@@ -310,29 +321,44 @@ def validate_pc01_page_broker_security_binding(
     return expected_v2
 
 
-def assert_pc01_page_broker_production_authorized(value: object) -> None:
-    """Always stop this source version before live provider/runtime dispatch."""
+def assert_pc01_page_broker_production_authorized(
+    value: object, *, campaign_profile: str
+) -> None:
+    """Authorize only the registered pilot source gate; final stays fail-closed.
+
+    ``production_dispatch_authorized`` deliberately remains false because the
+    local binding is not blanket deployment authority.  The pilot-specific
+    source gate is safe only after the caller has classified the immutable
+    campaign and the independent package/runtime guards have passed.
+    """
 
     binding = validate_pc01_page_broker_security_binding(value)
-    if binding["production_dispatch_authorized"] is not True:
+    if campaign_profile == CAMPAIGN_PROFILE_PILOT:
         if binding["schema_version"] == PC01_PAGE_BROKER_SECURITY_SCHEMA_VERSION:
             raise SchemaError(
-                "PC-01 live campaign is blocked: the same-process broker requires "
-                "externally evidenced process isolation before any provider or "
-                "browser runtime loads"
+                "PC-01 pilot is blocked: the same-process broker is never "
+                "eligible for live dispatch"
             )
+        if (
+            binding.get("deployment_assurance_scope")
+            == PC01_PILOT_DEPLOYMENT_ASSURANCE_SCOPE
+            and binding.get("pilot_dispatch_source_gate_authorized") is True
+            and binding.get("independent_ed25519_required") is False
+            and binding.get("global_replay_anchor_required") is False
+            and binding.get("final_campaign_dispatch_authorized") is False
+            and binding.get("production_dispatch_authorized") is False
+        ):
+            return
         raise SchemaError(
-            "PC-01 live campaign is blocked: local broker architecture/source "
-            "evidence includes registered operation-specific inner schemas but "
-            "still requires frozen measured IPC-timeout calibration, does not "
-            "attest runtime-value provenance, and is not external "
-            "deployment authority; a registered, independently authenticated "
-            "value-provenance/deployment receipt is required "
-            "before any provider or browser runtime loads"
+            "PC-01 pilot source gate lacks the exact registered process-isolated "
+            "assurance binding"
         )
-    raise SchemaError(
-        "PC-01 page-broker authority is unsupported by this registered schema"
-    )
+    if campaign_profile == CAMPAIGN_PROFILE_FINAL:
+        raise SchemaError(
+            "locked-final dispatch requires registered independent Ed25519 "
+            "deployment authority and a global replay anchor"
+        )
+    raise SchemaError("PC-01 campaign profile is not registered")
 
 
 @dataclass(frozen=True, slots=True)
@@ -893,6 +919,7 @@ def validate_dependency_lock_for_environment(
     remeasure_host_role: str | None = None,
     supplied_runtime_identity: Mapping[str, Any] | None = None,
     require_dispatch_authority: bool = False,
+    dispatch_campaign_profile: str | None = None,
 ) -> Path:
     """Verify dependency-lock bytes *and* measured semantic host identity."""
 
@@ -954,8 +981,15 @@ def validate_dependency_lock_for_environment(
             host_role=role,
             supplied_runtime_identity=supplied_runtime_identity,
         )
-    if require_dispatch_authority:
-        assert_split_dispatch_authority_registered(lock)
+    if require_dispatch_authority and dispatch_campaign_profile is None:
+        raise SchemaError(
+            "dependency dispatch authority requires a classified campaign profile"
+        )
+    if dispatch_campaign_profile is not None:
+        assert_split_dispatch_authority_registered(
+            lock,
+            campaign_profile=dispatch_campaign_profile,
+        )
     return candidate
 
 
@@ -966,6 +1000,7 @@ def validate_frozen_dependency_lock(
     remeasure_host_role: str | None = None,
     supplied_runtime_identity: Mapping[str, Any] | None = None,
     require_dispatch_authority: bool = False,
+    dispatch_campaign_profile: str | None = None,
 ) -> Path:
     """Verify the exact dependency-lock bytes copied into an evaluation package."""
 
@@ -975,6 +1010,7 @@ def validate_frozen_dependency_lock(
         remeasure_host_role=remeasure_host_role,
         supplied_runtime_identity=supplied_runtime_identity,
         require_dispatch_authority=require_dispatch_authority,
+        dispatch_campaign_profile=dispatch_campaign_profile,
     )
 
 
@@ -993,7 +1029,9 @@ def validate_analysis_source_identity(
 
     campaign_path = Path(campaign_root).resolve()
     campaign = read_json(campaign_path / "campaign_manifest.json")
-    classify_campaign_profile(campaign, require_campaign_mode=True)
+    campaign_profile = classify_campaign_profile(
+        campaign, require_campaign_mode=True
+    )
     if campaign.get("campaign_mode") == "smoke":
         return {
             "schema_version": ANALYSIS_SOURCE_IDENTITY_SCHEMA_VERSION,
@@ -1073,7 +1111,9 @@ def verify_runner_before_execution(
     """Verify live runner, loaded identities, source bytes, and checkout commit."""
 
     campaign = read_json(campaign_root / "campaign_manifest.json")
-    classify_campaign_profile(campaign, require_campaign_mode=True)
+    campaign_profile = classify_campaign_profile(
+        campaign, require_campaign_mode=True
+    )
     mode = str(campaign["campaign_mode"])
     if mode == "smoke":
         if campaign.get("runner_identity_scope") != ENGINEERING_SMOKE_SCOPE:
@@ -1093,7 +1133,7 @@ def verify_runner_before_execution(
     validate_frozen_dependency_lock(
         campaign_root,
         remeasure_current_host=True,
-        require_dispatch_authority=True,
+        dispatch_campaign_profile=campaign_profile,
     )
 
     target = _runner_target(runner)

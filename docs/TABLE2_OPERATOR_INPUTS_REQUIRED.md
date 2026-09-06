@@ -10,20 +10,16 @@ This checklist records the decisions and deployment evidence that cannot be
 created honestly by repository code. Completing a source validator, local
 fixture, or self-authored receipt does not satisfy any item below.
 
-## 1. Development-task interface decision
+## 1. Development-task interface decision — complete
 
-Choose one option explicitly before any WebArena outcome is observed:
-
-- **Option A (recommended):** approve the 50 non-mutating, page-state-scored
-  candidate indices in `docs/TABLE2_PILOT_TASK_INTERFACE_DECISION.md`.
-- **Option B:** authorize a material protocol change that adds an
-  answer/termination action. This is not recommended because PC-01 was not
-  trained with that action and will not be retrained.
-
-No tracked task manifest treats Option A as approved. Approval permanently
-excludes both the historical indices 0--49 and the replacement 50 from the
-later final-paper campaign. The selected tasks still require a deployment
-safety review and identical E0--E3 reset-state evidence before registration.
+Option A was registered before any WebArena model outcome was observed. The
+active ordered registry is
+`benchmarks/table2/pilot/task_manifest_page_state_v2.json`; the historical
+indices 0--49 remain a separate permanent development exclusion. The combined
+100-task final-campaign exclusion is frozen in
+`benchmarks/table2/pilot/final_exclusion_registry_v2.json`. The active
+50 still require their pinned content export, deployment safety review, joint
+duplicate audit, and identical E0--E3 reset-state checks before execution.
 
 ## 2. Kaggle execution authorization
 
@@ -62,6 +58,13 @@ receipt.
 
 ## 4. Live WebArena deployment
 
+Use separate URL-map schemas for the two boundaries. The structural task
+export accepts the five placeholder keys demonstrated in
+`configs/eval/table2/webarena_task_url_map.example.json`. The host preflight
+accepts the seven BrowserGym deployment-origin keys demonstrated in
+`configs/eval/table2/webarena_url_map.example.json`. Example origins are not
+live services and cannot make a campaign eligible.
+
 The deployment owner must supply all seven reachable service origins, the
 external credential capability, deterministic service/reset state, and the
 reviewed evaluator implementation. Secrets remain outside the repository and
@@ -90,11 +93,13 @@ Required evidence includes:
   outcomes are observed and rederived by the registered timeout contract (a
   caller-selected timeout or configured upper bound is rejected), together
   with immutable typed harness-source and measurement-source receipts;
-- an external authority cross-binding of the exact calibration artifact,
-  typed manifests/receipts, ordered task registry, topology, browser host and
-  configuration, preflight, dependency lock, service map, budgets, and
-  collector source closure. The local typed bundle is non-authorizing by
-  design and `MEASURED_CALIBRATION_REPLAY_ONLY` is never production evidence;
+- an immutable, locally replayed, source-attested cross-binding of the exact
+  calibration artifact, typed manifests/receipts, ordered task registry,
+  topology, browser host and configuration, preflight, dependency lock,
+  service map, budgets, request/response hash chain, and collector source
+  closure. This measured bundle may authorize only the `PILOT_ONLY` campaign;
+  it is never final-paper evidence, and raw in-memory or synthetic timing data
+  cannot substitute for it;
 - compatibility-port parity and independent evaluator review;
 - a successful live first-normal-task matched E0--E3 readiness block.
 
@@ -102,17 +107,19 @@ The separate local x86 environment currently proves only package import and
 Chromium launch. It does not prove service reachability, login/reset behavior,
 evaluator parity, or campaign readiness.
 
-## 5. Independent deployment authority
+## 5. Final-campaign independent deployment authority
 
-Scope-decision status: `AWAITING_PROJECT_OWNER_RATIFICATION`. The supplied
-research-locked execution plan requires source/request/response hashes and a
-sealed split deployment, but it does not explicitly require an independent
-Ed25519 attestor or global replay anchor for the engineering pilot. The
-repository currently applies this stronger requirement conservatively and
-fails closed. Before pilot dispatch, the project owner must explicitly choose
-whether Section 5 remains mandatory for `PILOT_ONLY` or becomes final-campaign
-hardening; changing that choice requires a reviewed source/protocol update,
-not a runtime flag.
+Scope: `FINAL_CAMPAIGN_ONLY`. The `PILOT_ONLY` campaign does not require an
+independent Ed25519 attestor or a global replay anchor. Its deployment gate is
+instead the complete Section 4 package: source-attested distinct-process
+execution, immutable locally replayed live measurements, host remeasurement,
+request/response hash chains, oracle-free runtime-value provenance, evaluator
+review, and the remaining registered pilot evidence. This is sufficient only
+for provisional engineering evidence and never promotes a paper Table 2 cell.
+
+The later materialized final campaign adds the stronger independent authority
+requirements below. They do not replace any source, process-isolation, causal,
+hash, evaluator, P4-provenance, or host-remeasurement control.
 
 The lab must nominate an independent deployment attestor and provide its
 Ed25519 public key, authority/key identifiers, validity interval, permitted
@@ -132,12 +139,13 @@ phases, Ed25519 verification, and cryptographic replay of every consumed
 receipt in one local ledger. It does not generate or accept private keys. The
 packaged registry currently has zero authorities, and the local ledger is
 explicitly neither a global replay anchor nor dispatch authority. Registering
-the reviewed public key and wiring authenticated receipts into handoff,
-startup, and physical-block dispatch remain required source changes after the
-lab supplies the independent authority.
+the reviewed public key and wiring authenticated receipts into the final
+handoff, startup, and physical-block dispatch remain required source changes
+after the lab supplies the independent authority.
 
-Until a real authority is registered and its signed evidence validates, live
-dispatch remains blocked even when all local tests pass.
+Until a real authority is registered and its signed evidence validates, final-
+campaign dispatch remains blocked even when all local tests pass. This does not
+block a fully validated `PILOT_ONLY` dispatch under Section 4.
 
 ## 6. Final-model promotion inputs
 
@@ -216,9 +224,8 @@ outcome access is prohibited and all paper claims and Table 2 cells remain
 
 ## Pilot launch rule
 
-Under the current conservative implementation, the provisional 60 controlled
-recovery episodes and 200 normal WebArena episodes may begin only after
-Sections 1--5 pass and the frozen package validator authorizes the matched
-readiness block. If the owner makes Section 5 final-only, that decision must
-first be implemented and revalidated in a clean source snapshot. The pilot
-remains `PILOT_ONLY`; it cannot populate the paper's Table 2.
+The provisional 60 controlled recovery episodes and 200 normal WebArena
+episodes may begin only after Sections 1--4 pass and the frozen package
+validator authorizes the matched readiness block. Section 5 is a final-
+campaign-only requirement. The pilot remains `PILOT_ONLY`; it cannot populate
+the paper's Table 2.

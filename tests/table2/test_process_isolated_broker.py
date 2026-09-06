@@ -19,6 +19,8 @@ import pytest
 
 from web_agent.benchmarks.base import AdapterExecution
 from web_agent.eval.table2.common import (
+    CAMPAIGN_PROFILE_FINAL,
+    CAMPAIGN_PROFILE_PILOT,
     SchemaError,
     atomic_write_json,
     sha256_file,
@@ -46,13 +48,20 @@ from web_agent.eval.table2.process_broker import (
 )
 from web_agent.eval.table2.process_broker_protocol import (
     POLICY_SCREENSHOT_TRANSPORT_CONTRACT,
+    PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE,
+    PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION,
+    PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION,
+    PROCESS_BROKER_CHILD_ENVIRONMENT_FIXED_NAMES,
+    PROCESS_BROKER_CHILD_ENVIRONMENT_INHERITED_ALLOWLIST,
     PROCESS_BROKER_INNER_SCHEMA_REGISTRY,
     PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS,
     PROCESS_BROKER_INNER_SCHEMA_REGISTRY_SHA256,
     PROCESS_BROKER_INNER_SCHEMA_REGISTRY_VERSION,
     PROCESS_BROKER_PROTOCOL_VERSION,
+    PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM,
     RUNTIME_INNER_SCHEMA_PATHS,
     ProcessBrokerProtocolError,
+    ProcessBrokerTranscript,
     authenticated_envelope,
     expected_verifier_receipt_binding,
     receive_frame,
@@ -102,6 +111,14 @@ TIMESTAMP = "2026-01-01T00:00:00+00:00"
 FIXTURE_BACKEND_CONFIG = {
     "schema_version": "table2-process-broker-fixture-backend-v1"
 }
+CHILD_ENVIRONMENT_NAMES = [
+    "HOME",
+    "LANG",
+    "PATH",
+    "PYTHONNOUSERSITE",
+    "TMPDIR",
+    "XDG_CACHE_HOME",
+]
 
 
 def _navigate_action(
@@ -422,6 +439,25 @@ def test_process_broker_has_distinct_processes_exact_outer_envelopes_and_cleanup
     assert cleanup.launch_receipt_sha256 == launch_receipt_sha256
     assert cleanup.sealed_evaluator_pid == receipt.sealed_evaluator_pid
     assert cleanup.source_set_sha256 == receipt.source_set_sha256
+    assert cleanup.transcript_chain_algorithm == (
+        PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM
+    )
+    assert cleanup.transcript_entry_count == 14
+    assert cleanup.shutdown_request_previous_transcript_entry_count == 12
+    assert cleanup.transcript_entry_count == (
+        cleanup.shutdown_request_previous_transcript_entry_count + 2
+    )
+    assert len(cleanup.shutdown_request_previous_transcript_root_sha256) == 64
+    assert len(cleanup.transcript_root_sha256) == 64
+    assert cleanup.child_cleanup_result == {
+        "schema_version": PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION,
+        "record_type": PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE,
+        "cleanup_disposition": "RUNTIME_CLOSE_ACKNOWLEDGED",
+        "browser_close_attempted": True,
+        "browser_close_completed": True,
+        "manual_rescue_check_count": 0,
+        "manual_rescue_tail_sha256": None,
+    }
     assert cleanup.external_deployment_authority is False
 
 
@@ -462,6 +498,80 @@ def test_process_broker_transports_root_confined_content_addressed_screenshots(
             client, observation=post, action=action
         ).terminate is True
         client.close(episode_id="episode-1", task_id="task-1")
+
+
+def test_child_exec_environment_is_exact_allowlisted_and_uses_private_home(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-cross-exec")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "must-not-cross-exec")
+    monkeypatch.setenv("WA_GITLAB", "https://must-not-cross-exec.invalid")
+    broker = _broker()
+    temporary_root = broker._temp_root
+    child_environment = dict(broker._child_environment)
+    assert set(child_environment).issubset(
+        set(PROCESS_BROKER_CHILD_ENVIRONMENT_INHERITED_ALLOWLIST)
+        | set(PROCESS_BROKER_CHILD_ENVIRONMENT_FIXED_NAMES)
+    )
+    assert not {
+        "OPENAI_API_KEY",
+        "AWS_SECRET_ACCESS_KEY",
+        "WA_GITLAB",
+    }.intersection(child_environment)
+    assert Path(child_environment["HOME"]).parent == temporary_root
+    assert Path(child_environment["XDG_CACHE_HOME"]).parent == temporary_root
+    assert child_environment["HOME"] != os.environ.get("HOME")
+    with broker:
+        receipt = broker.receipt
+        assert receipt.child_environment_exact_allowlist_enforced is True
+        assert receipt.child_environment_credentials_scrubbed is True
+        assert list(receipt.child_environment_variable_names) == sorted(
+            child_environment
+        )
+    assert not temporary_root.exists()
+
+
+def test_control_abort_propagates_child_owned_cleanup_result_and_is_idempotent() -> None:
+    broker = _broker()
+    broker.start()
+    cleanup = broker.stop()
+    assert cleanup is broker.cleanup_receipt
+    assert cleanup.child_cleanup_result["cleanup_disposition"] == (
+        "CONTROL_ABORT_COMPLETED"
+    )
+    assert cleanup.child_cleanup_result["browser_close_attempted"] is True
+    assert cleanup.child_cleanup_result["browser_close_completed"] is True
+    assert cleanup.transcript_entry_count == 2
+    assert cleanup.shutdown_request_previous_transcript_entry_count == 0
+    assert broker.stop() is cleanup
+
+
+def test_untracked_authenticated_exchange_prevents_transcript_cleanup_receipt() -> None:
+    broker = _broker()
+    broker.start()
+    body = {
+        "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
+        "role": "runtime",
+        "session_id": broker._session_id,
+        "sequence": 0,
+        "nonce": secrets.token_hex(32),
+        "operation": "evaluate_final",
+        "payload": {},
+    }
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.connect(str(broker._endpoint))
+        send_frame(
+            connection,
+            authenticated_envelope(body, authentication_key=broker._runtime_key),
+        )
+        response = verify_authenticated_envelope(
+            receive_frame(connection), authentication_key=broker._runtime_key
+        )
+    assert response["status"] == "REJECTED"
+    assert broker.stop() is None
+    assert broker.cleaned
+    with pytest.raises(RuntimeError, match="authenticated cleanup"):
+        _ = broker.cleanup_receipt
 
 
 def test_process_broker_rejects_screenshot_from_another_registered_root(
@@ -1778,6 +1888,10 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
         "ipc_timeout_binding_sha256": SHA,
         "sealed_finalization_available": False,
         "sealed_finalization_required": False,
+        "child_environment_allowlist_version": (
+            PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION
+        ),
+        "child_environment_variable_names": CHILD_ENVIRONMENT_NAMES,
     }
     envelope = authenticated_envelope(body, authentication_key=key)
     assert (
@@ -1791,6 +1905,7 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
             policy_screenshot_root_identity_sha256=None,
             ipc_timeout_binding_sha256=SHA,
             sealed_finalization_required=False,
+            child_environment_variable_names=tuple(CHILD_ENVIRONMENT_NAMES),
         )
         == (123, False)
     )
@@ -1805,6 +1920,7 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
             policy_screenshot_root_identity_sha256=None,
             ipc_timeout_binding_sha256=SHA,
             sealed_finalization_required=False,
+            child_environment_variable_names=tuple(CHILD_ENVIRONMENT_NAMES),
         )
     with pytest.raises(Exception, match="readiness failed"):
         _validated_readiness_envelope(
@@ -1817,6 +1933,7 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
             policy_screenshot_root_identity_sha256=None,
             ipc_timeout_binding_sha256=SHA,
             sealed_finalization_required=False,
+            child_environment_variable_names=tuple(CHILD_ENVIRONMENT_NAMES),
         )
     extra = authenticated_envelope(
         {**body, "extra": True}, authentication_key=key
@@ -1832,6 +1949,7 @@ def test_readiness_requires_authentication_exact_child_pid_and_fields() -> None:
             policy_screenshot_root_identity_sha256=None,
             ipc_timeout_binding_sha256=SHA,
             sealed_finalization_required=False,
+            child_environment_variable_names=tuple(CHILD_ENVIRONMENT_NAMES),
         )
 
 
@@ -1882,6 +2000,42 @@ def test_frame_trickle_cannot_restart_absolute_receive_budget() -> None:
 
 def test_shutdown_response_is_bound_to_role_session_sequence_and_nonce() -> None:
     key = secrets.token_bytes(32)
+    request_body = {
+        "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
+        "role": "control",
+        "session_id": "session-1",
+        "sequence": 0,
+        "nonce": "nonce-1",
+        "operation": "sealed_control_shutdown",
+        "payload": {},
+    }
+
+    def transcript_after_request() -> ProcessBrokerTranscript:
+        transcript = ProcessBrokerTranscript(session_id="session-1")
+        request_frame = authenticated_envelope(
+            request_body, authentication_key=key
+        )
+        transcript.commit_authenticated_frame(
+            direction="request",
+            role="control",
+            sequence=0,
+            operation="sealed_control_shutdown",
+            frame=request_frame,
+            payload={},
+        )
+        return transcript
+
+    transcript = transcript_after_request()
+    before_response = transcript.snapshot()
+    cleanup_result = {
+        "schema_version": PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION,
+        "record_type": PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE,
+        "cleanup_disposition": "CONTROL_ABORT_COMPLETED",
+        "browser_close_attempted": True,
+        "browser_close_completed": True,
+        "manual_rescue_check_count": 0,
+        "manual_rescue_tail_sha256": None,
+    }
     body = {
         "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
         "role": "sealed_control_response",
@@ -1889,16 +2043,31 @@ def test_shutdown_response_is_bound_to_role_session_sequence_and_nonce() -> None
         "sequence": 0,
         "nonce": "nonce-1",
         "status": "PASS",
-        "result": {"shutdown": True},
+        "result": {
+            "shutdown": True,
+            "child_cleanup_result": cleanup_result,
+            "transcript_root_before_response_sha256": before_response[
+                "root_sha256"
+            ],
+            "transcript_entry_count_before_response": before_response[
+                "entry_count"
+            ],
+        },
     }
     envelope = authenticated_envelope(body, authentication_key=key)
-    _validate_shutdown_response(
+    evidence = _validate_shutdown_response(
         envelope,
         control_key=key,
         session_id="session-1",
         sequence=0,
         nonce="nonce-1",
+        transcript=transcript,
     )
+    assert evidence["child_cleanup_result"] == cleanup_result
+    assert evidence["transcript_entry_count"] == 2
+    assert evidence["transcript_root_sha256"] == transcript.snapshot()[
+        "root_sha256"
+    ]
     for changed in (
         {**body, "role": "sealed_runtime_response"},
         {**body, "session_id": "other"},
@@ -1913,6 +2082,7 @@ def test_shutdown_response_is_bound_to_role_session_sequence_and_nonce() -> None
                 session_id="session-1",
                 sequence=0,
                 nonce="nonce-1",
+                transcript=transcript_after_request(),
             )
 
 
@@ -1994,7 +2164,7 @@ def test_server_rejects_wrong_authentication_and_replayed_message() -> None:
         assert responses[1]["result"] == {}
 
 
-def test_source_authority_stays_fail_closed_without_external_receipt() -> None:
+def test_source_attested_process_binding_authorizes_pilot_but_not_final() -> None:
     source_hashes = {
         relative: sha256_file(ROOT / relative)
         for relative in PROCESS_BROKER_SOURCE_PATHS
@@ -2008,8 +2178,15 @@ def test_source_authority_stays_fail_closed_without_external_receipt() -> None:
         )
         == binding
     )
-    with pytest.raises(SchemaError, match="not external deployment authority"):
-        assert_pc01_page_broker_production_authorized(binding)
+    assert_pc01_page_broker_production_authorized(
+        binding,
+        campaign_profile=CAMPAIGN_PROFILE_PILOT,
+    )
+    with pytest.raises(SchemaError, match="locked-final dispatch requires"):
+        assert_pc01_page_broker_production_authorized(
+            binding,
+            campaign_profile=CAMPAIGN_PROFILE_FINAL,
+        )
     forged = dict(binding)
     forged["production_dispatch_authorized"] = True
     with pytest.raises(SchemaError):

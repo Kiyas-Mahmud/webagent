@@ -19,9 +19,11 @@ from web_agent.runtime.contracts import SystemID
 from web_agent.runtime.protocol import (
     REGISTERED_BUDGETS,
     REGISTERED_FINAL_CANDIDATE_IDS,
+    REGISTERED_FINAL_DEPLOYMENT_ASSURANCE,
     REGISTERED_FINAL_SELECTION_MODE,
     REGISTERED_PARAMETER_PROVIDER_DECODING_PARAMETERS,
     REGISTERED_PC01_CANDIDATE_IDS,
+    REGISTERED_PILOT_DEPLOYMENT_ASSURANCE,
     REGISTERED_PC01_PILOT_PROTOCOL_ID,
     REGISTERED_PC01_SELECTION_MODE,
     REGISTERED_RECOVERY_POLICY_SIGNAL_ORDER,
@@ -61,6 +63,9 @@ def test_registered_protocol_freezes_pilot_boundaries_and_budgets():
     assert protocol["protocol_id"] == REGISTERED_PC01_PILOT_PROTOCOL_ID
     assert protocol["evidence_label"] == "PILOT_ONLY"
     assert protocol["paper_table_status"] == "N/R"
+    assert protocol["deployment_assurance"] == (
+        REGISTERED_PILOT_DEPLOYMENT_ASSURANCE
+    )
     assert protocol["selection"] == {
         "mode": REGISTERED_PC01_SELECTION_MODE,
         "candidate_ids": list(REGISTERED_PC01_CANDIDATE_IDS),
@@ -276,6 +281,9 @@ def test_selection_profiles_cannot_cross_pilot_and_final_boundaries():
     assert final["protocol_status"] == "AWAITING_MODEL_PROMOTION"
     assert final["evidence_label"] == "FINAL_TEMPLATE_ONLY"
     assert final["paper_table_status"] == "N/R"
+    assert final["deployment_assurance"] == (
+        REGISTERED_FINAL_DEPLOYMENT_ASSURANCE
+    )
     validate_frozen_protocol_mapping(pilot)
     validate_frozen_protocol_mapping(final)
 
@@ -285,6 +293,7 @@ def test_selection_profiles_cannot_cross_pilot_and_final_boundaries():
         "evidence_label",
         "selection",
         "benchmark",
+        "deployment_assurance",
     }
     assert shared_sections == set(final) - {
         "protocol_id",
@@ -292,11 +301,18 @@ def test_selection_profiles_cannot_cross_pilot_and_final_boundaries():
         "evidence_label",
         "selection",
         "benchmark",
+        "deployment_assurance",
     }
     assert all(pilot[key] == final[key] for key in shared_sections)
+    assert pilot["deployment_assurance"]["independent_ed25519_required"] is False
+    assert pilot["deployment_assurance"]["global_replay_anchor_required"] is False
+    assert final["deployment_assurance"]["independent_ed25519_required"] is True
+    assert final["deployment_assurance"]["global_replay_anchor_required"] is True
     assert pilot["benchmark"] == {
         **final["benchmark"],
-        "task_manifest": "benchmarks/table2/pilot/task_manifest.json",
+        "task_manifest": (
+            "benchmarks/table2/pilot/task_manifest_page_state_v2.json"
+        ),
     }
     assert final["benchmark"]["task_manifest"] == (
         "locked_benchmark_mount/table2/final/task_manifest.json"
@@ -317,6 +333,9 @@ def test_selection_profiles_cannot_cross_pilot_and_final_boundaries():
             "protocol_status": "AWAITING_MODEL_PROMOTION",
             "evidence_label": "FINAL_TEMPLATE_ONLY",
         }
+    )
+    relabeled_pilot["deployment_assurance"] = deepcopy(
+        REGISTERED_FINAL_DEPLOYMENT_ASSURANCE
     )
     with pytest.raises(ValueError, match="selection.mode"):
         validate_frozen_protocol_mapping(relabeled_pilot)

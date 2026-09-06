@@ -93,7 +93,7 @@ REGISTERED_FINAL_CANDIDATE_IDS = (
 REGISTERED_BENCHMARK_NAME = "webarena"
 REGISTERED_BENCHMARK_ADAPTER = "web_agent.benchmarks.webarena.WebArenaAdapter"
 REGISTERED_PC01_BENCHMARK_TASK_MANIFEST = (
-    "benchmarks/table2/pilot/task_manifest.json"
+    "benchmarks/table2/pilot/task_manifest_page_state_v2.json"
 )
 REGISTERED_FINAL_BENCHMARK_TASK_MANIFEST = (
     "locked_benchmark_mount/table2/final/task_manifest.json"
@@ -167,6 +167,28 @@ REGISTERED_RECOVERY_EVIDENCE_SOURCES = (
 )
 REGISTERED_HEADLINE_RECOVERY_PARTITION = "normal"
 REGISTERED_CONTROLLED_RECOVERY_ROLE = "pilot_diagnostic_only"
+REGISTERED_PILOT_DEPLOYMENT_ASSURANCE = {
+    "scope": "source_attested_engineering_pilot",
+    "policy_browser_evaluator_process_isolation_required": True,
+    "immutable_measured_timeout_bundle_required": True,
+    "authenticated_broker_envelopes_required": True,
+    "hash_chained_runtime_artifacts_required": True,
+    "split_request_response_hash_chain_required": True,
+    "source_attested_oracle_free_value_origin_evidence_required": True,
+    "independent_ed25519_required": False,
+    "global_replay_anchor_required": False,
+}
+REGISTERED_FINAL_DEPLOYMENT_ASSURANCE = {
+    "scope": "independently_attested_locked_final",
+    "policy_browser_evaluator_process_isolation_required": True,
+    "immutable_measured_timeout_bundle_required": True,
+    "authenticated_broker_envelopes_required": True,
+    "hash_chained_runtime_artifacts_required": True,
+    "split_request_response_hash_chain_required": True,
+    "source_attested_oracle_free_value_origin_evidence_required": True,
+    "independent_ed25519_required": True,
+    "global_replay_anchor_required": True,
+}
 
 
 class RuntimeStage(str, Enum):
@@ -271,6 +293,7 @@ def validate_frozen_protocol_mapping(mapping: Mapping[str, Any]) -> None:
         }
         candidate_ids = REGISTERED_PC01_CANDIDATE_IDS
         benchmark_task_manifest = REGISTERED_PC01_BENCHMARK_TASK_MANIFEST
+        deployment_assurance = REGISTERED_PILOT_DEPLOYMENT_ASSURANCE
     elif protocol_id == REGISTERED_FINAL_PROTOCOL_ID:
         protocol_profile = {
             "schema_version": "1.0",
@@ -289,12 +312,24 @@ def validate_frozen_protocol_mapping(mapping: Mapping[str, Any]) -> None:
         }
         candidate_ids = REGISTERED_FINAL_CANDIDATE_IDS
         benchmark_task_manifest = REGISTERED_FINAL_BENCHMARK_TASK_MANIFEST
+        deployment_assurance = REGISTERED_FINAL_DEPLOYMENT_ASSURANCE
     else:
         raise ValueError(
             "frozen protocol protocol_id must identify the registered PC-01 "
             "pilot or not-yet-runnable final-selection template"
         )
     require_exact(mapping, protocol_profile, location="protocol")
+    configured_assurance = section("deployment_assurance")
+    require_exact(
+        configured_assurance,
+        deployment_assurance,
+        location="deployment_assurance",
+    )
+    if set(configured_assurance) != set(deployment_assurance):
+        raise ValueError(
+            "frozen protocol deployment_assurance must contain exactly the "
+            "registered keys"
+        )
     paper_claims = section("paper_claims")
     registered_paper_claims = {
         "registry": REGISTERED_PAPER_CLAIM_REGISTRY,
@@ -1082,6 +1117,7 @@ _PROTOCOL_TOP_KEYS = {
     "evidence_label",
     "paper_table_status",
     "paper_claims",
+    "deployment_assurance",
     "selection",
     "benchmark",
     "manual_rescue",
@@ -1338,6 +1374,7 @@ def load_protocol_bundle(
             "selection_locked_task_eligible": bool(
                 payload["selection"]["locked_task_eligible"]
             ),
+            "deployment_assurance": dict(payload["deployment_assurance"]),
         },
     )
 

@@ -54,6 +54,15 @@ URL_MAP = {
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_tracked_task_url_map_example_matches_export_schema() -> None:
+    loaded = load_url_map(
+        REPOSITORY_ROOT
+        / "configs/eval/table2/webarena_task_url_map.example.json"
+    )
+
+    assert set(loaded) == set(PINNED_REQUIRED_URL_TOKENS)
+
+
 def _registry(path: Path) -> Path:
     path.write_text(
         json.dumps(

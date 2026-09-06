@@ -44,6 +44,7 @@ PC01_PROCESS_BROKER_SOURCE_PATHS = (
     "src/web_agent/eval/table2/common.py",
     "src/web_agent/eval/table2/execution_guard.py",
     "src/web_agent/eval/table2/process_broker.py",
+    "src/web_agent/eval/table2/process_broker_episode_factory.py",
     "src/web_agent/eval/table2/process_broker_finalization.py",
     "src/web_agent/eval/table2/process_broker_protocol.py",
     "src/web_agent/eval/table2/process_broker_runtime.py",
@@ -174,6 +175,9 @@ PC01_PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS = [
     "CROSS_BIND_IMMUTABLE_TIMEOUT_CALIBRATION_AUTHORITY_BUNDLE",
     "CALIBRATE_AND_CROSS_BIND_SEALED_FINALIZATION_TIMEOUT",
 ]
+PC01_PILOT_PROFILE = ("engineering_pilot", "PILOT_ONLY")
+PC01_FINAL_PROFILE = ("locked_final", "FINAL_LOCKED")
+PC01_PILOT_DEPLOYMENT_ASSURANCE_SCOPE = "source_attested_engineering_pilot"
 PINNED_SEMANTIC_DEPENDENCIES = {
     "browsergym-core": "0.14.3",
     "browsergym-webarena": "0.14.3",
@@ -198,10 +202,8 @@ PC01_SPLIT_RUNTIME_IDENTITY = {
     ),
 }
 SPLIT_DGX_DISPATCH_REQUIREMENT = {
-    "schema_version": "table2-split-dgx-remeasurement-requirement-v1",
-    "status": (
-        "BLOCKED_DGX_REMEASUREMENT_RECEIPT_AND_EXTERNAL_TRUST_ANCHOR_REQUIRED"
-    ),
+    "schema_version": "table2-split-dgx-remeasurement-requirement-v2",
+    "status": "PILOT_DGX_REMEASUREMENT_AND_LIVE_TRANSCRIPT_REQUIRED",
     "required_phases": [
         "DGX_INFERENCE_SERVICE_STARTUP",
         "BEFORE_MODEL_LOAD",
@@ -217,8 +219,19 @@ SPLIT_DGX_DISPATCH_REQUIREMENT = {
         "phase",
         "issued_at_utc",
     ],
-    "registered_receipt_schema_version": None,
-    "registered_external_trust_anchor": None,
+    "pilot_assurance_scope": "source_attested_engineering_pilot",
+    "pilot_runtime_remeasurement_required": True,
+    "pilot_request_response_hash_chain_required": True,
+    "pilot_independent_ed25519_required": False,
+    "pilot_global_replay_anchor_required": False,
+    "registered_pilot_runtime_receipt_schema_version": None,
+    "registered_pilot_live_transcript_schema_version": None,
+    "pilot_dispatch_authorized": False,
+    "locked_final_independent_ed25519_required": True,
+    "locked_final_global_replay_anchor_required": True,
+    "registered_locked_final_receipt_schema_version": None,
+    "registered_locked_final_external_trust_anchor": None,
+    "locked_final_dispatch_authorized": False,
     "production_dispatch_authorized": False,
 }
 
@@ -310,7 +323,11 @@ def _sha256_json(value: object) -> str:
 
 
 def _bootstrap_validate_split_dependency_lock(
-    *, environment: Mapping[str, Any], preflight: Mapping[str, Any], lock: Mapping[str, Any]
+    *,
+    environment: Mapping[str, Any],
+    preflight: Mapping[str, Any],
+    lock: Mapping[str, Any],
+    campaign_profile: tuple[object, object],
 ) -> None:
     """Stdlib-only replay of the dual-host v2 dependency authority."""
 
@@ -673,14 +690,26 @@ def _bootstrap_validate_split_dependency_lock(
         raise RuntimeError(
             "evaluation bootstrap browser-host package versions differ from lock"
         )
-    raise RuntimeError(
-        "split deployment dispatch is blocked: no externally trusted DGX "
-        "startup/per-block remeasurement receipt schema or trust anchor is registered"
-    )
+    if campaign_profile == PC01_PILOT_PROFILE:
+        raise RuntimeError(
+            "split pilot dispatch is blocked until a typed DGX startup/per-block "
+            "remeasurement receipt and live request/response transcript chain are "
+            "implemented and registered"
+        )
+    if campaign_profile == PC01_FINAL_PROFILE:
+        raise RuntimeError(
+            "locked-final split deployment requires an independently signed "
+            "DGX startup/per-block receipt and global replay anchor"
+        )
+    raise RuntimeError("split deployment campaign profile is not registered")
 
 
 def _bootstrap_validate_semantic_dependency_lock(
-    *, campaign_root: Path, environment: Mapping[str, Any], dependency_lock: Path
+    *,
+    campaign_root: Path,
+    environment: Mapping[str, Any],
+    dependency_lock: Path,
+    campaign_profile: tuple[object, object],
 ) -> None:
     """Stdlib-only semantic replay before importing evaluation package code."""
 
@@ -711,6 +740,7 @@ def _bootstrap_validate_semantic_dependency_lock(
             environment=environment,
             preflight=preflight,
             lock=lock,
+            campaign_profile=campaign_profile,
         )
         return
     host_preflight = preflight if topology == "SINGLE_DGX_HOST" else None
@@ -919,8 +949,10 @@ def _read_mapping(path: Path) -> Mapping[str, Any]:
 
 def _bootstrap_assert_pc01_page_broker_isolation(
     attestation: Mapping[str, Any],
+    *,
+    campaign_profile: tuple[object, object],
 ) -> None:
-    """Stop before provider import while broker evidence is unpromotable.
+    """Authorize only the exact process-isolated PC-01 pilot source gate.
 
     This standard-library-only check intentionally duplicates the frozen
     non-claim in ``execution_guard``. Importing the evaluation package merely
@@ -939,14 +971,14 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         for row in attestation.get("source_files", [])
         if isinstance(row, dict)
     }
-    process_blocked = (
-        binding.get("schema_version") == "table2-pc01-page-broker-security-v9"
+    process_pilot = (
+        binding.get("schema_version") == "table2-pc01-page-broker-security-v10"
         and binding.get("status")
-        == "BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED"
+        == "PILOT_SOURCE_GATE_ELIGIBLE_SUBJECT_TO_FROZEN_RUNTIME_GATES"
         and binding.get("claim_scope")
         == (
             "SOURCE_ATTESTED_DISTINCT_PROCESS_AND_KEY_ENVELOPE_ARCHITECTURE_"
-            "NOT_VALUE_PROVENANCE_OR_DEPLOYMENT_AUTHORITY"
+            "PILOT_ONLY_NOT_FINAL_DEPLOYMENT_AUTHORITY"
         )
         and binding.get("architecture")
         == (
@@ -984,7 +1016,7 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         and binding.get("measured_ipc_timeout_calibration_present") is False
         and binding.get("caller_injected_evaluation_timeout_forbidden") is True
         and binding.get("ipc_timeout_calibration_schema_version")
-        == "table2-process-broker-ipc-timeout-calibration-v2"
+        == "table2-process-broker-ipc-timeout-calibration-v3"
         and binding.get("immutable_timeout_authority_bundle_present") is False
         and binding.get("external_timeout_authority_cross_binding_present") is False
         and binding.get("measured_replay_scope_production_eligible") is False
@@ -1000,12 +1032,18 @@ def _bootstrap_assert_pc01_page_broker_isolation(
         == PC01_PROCESS_BROKER_FUTURE_PROMOTION_REQUIREMENTS
         and binding.get("same_process_fixture_production_eligible") is False
         and binding.get("local_receipt_schema_version")
-        == "table2-process-page-broker-receipt-v9"
+        == "table2-process-page-broker-receipt-v10"
         and binding.get("local_cleanup_receipt_schema_version")
         == "table2-process-page-broker-cleanup-receipt-v1"
         and binding.get("external_deployment_receipt_schema_version") is None
         and binding.get("external_deployment_receipt_present") is False
         and binding.get("external_trust_anchor_registered") is False
+        and binding.get("deployment_assurance_scope")
+        == PC01_PILOT_DEPLOYMENT_ASSURANCE_SCOPE
+        and binding.get("independent_ed25519_required") is False
+        and binding.get("global_replay_anchor_required") is False
+        and binding.get("pilot_dispatch_source_gate_authorized") is True
+        and binding.get("final_campaign_dispatch_authorized") is False
         and binding.get("production_dispatch_authorized") is False
         and isinstance(source_rows, list)
         and [row.get("relative_path") for row in source_rows]
@@ -1079,20 +1117,31 @@ def _bootstrap_assert_pc01_page_broker_isolation(
             "external_deployment_receipt_schema_version",
             "external_deployment_receipt_present",
             "external_trust_anchor_registered",
+            "deployment_assurance_scope",
+            "independent_ed25519_required",
+            "global_replay_anchor_required",
+            "pilot_dispatch_source_gate_authorized",
+            "final_campaign_dispatch_authorized",
             "production_dispatch_authorized",
         }
     )
-    if not legacy_blocked and not process_blocked:
+    if legacy_blocked:
+        raise RuntimeError(
+            "PC-01 live pilot is blocked before provider import: the legacy "
+            "same-process broker is never eligible"
+        )
+    if not process_pilot:
         raise RuntimeError(
             "evaluation bootstrap has no authenticated page-broker security status"
         )
-    raise RuntimeError(
-        "PC-01 live campaign is blocked before provider import: local broker "
-        "evidence covers distinct processes, exact outer/inner schemas, and named-key "
-        "rejection; frozen measured IPC-timeout calibration, external runtime-value "
-        "provenance, and a separately authenticated deployment receipt are still "
-        "required"
-    )
+    if campaign_profile == PC01_PILOT_PROFILE:
+        return
+    if campaign_profile == PC01_FINAL_PROFILE:
+        raise RuntimeError(
+            "locked-final campaign requires independent Ed25519 deployment "
+            "authority and a global replay anchor before provider import"
+        )
+    raise RuntimeError("evaluation bootstrap campaign profile is not registered")
 
 
 def _bootstrap_verify_evaluation_source(
@@ -1175,7 +1224,10 @@ def _bootstrap_verify_evaluation_source(
             or provider_binding.get("source_plane") != "runtime_only"
         ):
             raise RuntimeError("evaluation bootstrap provider entrypoint is not exact")
-        _bootstrap_assert_pc01_page_broker_isolation(attestation)
+        _bootstrap_assert_pc01_page_broker_isolation(
+            attestation,
+            campaign_profile=profile,
+        )
 
     repository_root = Path(__file__).resolve().parents[1]
     try:
@@ -1272,6 +1324,7 @@ def _bootstrap_verify_evaluation_source(
         campaign_root=campaign_root,
         environment=environment,
         dependency_lock=dependency_lock,
+        campaign_profile=profile,
     )
 
 
@@ -1385,8 +1438,27 @@ def _preflight_pc01_provider_install(
     # the canonical CLI, before importing the integration module that assembles
     # that fixture.
     campaign_root = campaign_root.resolve()
+    attestation = _read_mapping(
+        campaign_root / "frozen" / "runner_attestation.json"
+    )
+    # Preserve the earliest possible rejection for the legacy same-process
+    # fixture even when a caller has not supplied any campaign metadata.
+    if (
+        attestation.get(PC01_PAGE_BROKER_SECURITY_FIELD)
+        == PC01_PAGE_BROKER_SECURITY_BLOCKED_BINDING
+    ):
+        _bootstrap_assert_pc01_page_broker_isolation(
+            attestation,
+            campaign_profile=(None, None),
+        )
+    campaign_manifest = _read_mapping(campaign_root / "campaign_manifest.json")
+    campaign_profile = (
+        campaign_manifest.get("campaign_kind"),
+        campaign_manifest.get("evidence_label"),
+    )
     _bootstrap_assert_pc01_page_broker_isolation(
-        _read_mapping(campaign_root / "frozen" / "runner_attestation.json")
+        attestation,
+        campaign_profile=campaign_profile,
     )
 
     from web_agent.eval.table2.common import (

@@ -25,6 +25,7 @@ from importlib import metadata
 import inspect
 import json
 import math
+import os
 from pathlib import Path
 import re
 import stat
@@ -41,6 +42,9 @@ from web_agent.benchmarks.webarena import (
     FrozenWebArenaInfrastructureFaultClassifier,
     FrozenWebArenaManualRescueGuard,
     FrozenWebArenaPageSettlePolicy,
+    WebArenaAdapter,
+    WebArenaManualRescueCheck,
+    WebArenaManualRescueReceipt,
 )
 from web_agent.runtime.action_parameters import validate_action_parameters
 from web_agent.runtime.contracts import (
@@ -49,6 +53,7 @@ from web_agent.runtime.contracts import (
     JsonValue,
     Observation,
     ObservationStage,
+    OpaqueTerminalSignal,
     RuntimeStartState,
     TaskSpecification,
     VersionedRecord,
@@ -63,6 +68,7 @@ from web_agent.eval.table2.live_deployment import (
     REGISTERED_BROWSERGYM_VERSION,
     REGISTERED_VALIDATION_DISABLED_EXECUTION_PATH,
 )
+from web_agent.eval.table2.common import canonical_json_bytes
 from web_agent.eval.table2.process_broker_protocol import (
     ProcessBrokerProtocolError,
     registered_browser_error_observation_url,
@@ -82,6 +88,36 @@ from web_agent.eval.table2.webarena_preflight_binding import (
 CAUSAL_OBSERVATION_SCHEMA = "table2-browsergym-causal-observation-v1"
 TASK_STATE_RESET_SCHEMA = "table2-browsergym-task-state-reset-v1"
 EPISODE_ABORT_SCHEMA = "table2-browsergym-episode-abort-v1"
+PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_SCHEMA_VERSION = (
+    "table2-process-broker-manual-rescue-sidecar-v1"
+)
+PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_RECORD_TYPE = (
+    "ProcessBrokerManualRescueEvidence"
+)
+PROCESS_BROKER_MANUAL_RESCUE_IDENTITY_SCHEMA_VERSION = (
+    "table2-process-broker-manual-rescue-sidecar-identity-v1"
+)
+PROCESS_BROKER_MANUAL_RESCUE_IDENTITY_RECORD_TYPE = (
+    "ProcessBrokerManualRescueSidecarIdentity"
+)
+PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_FILENAME = (
+    "manual_rescue_guard.child.jsonl"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_SCHEMA_VERSION = (
+    "table2-process-broker-sealed-callback-state-guard-v1"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_RECORD_TYPE = (
+    "ProcessBrokerSealedCallbackStateGuard"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_IDENTITY_SCHEMA_VERSION = (
+    "table2-process-broker-sealed-callback-state-guard-sidecar-identity-v1"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_IDENTITY_RECORD_TYPE = (
+    "ProcessBrokerSealedCallbackStateGuardSidecarIdentity"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_SIDECAR_FILENAME = (
+    "sealed_callback_state_guard.child.jsonl"
+)
 REGISTERED_BROWSERGYM_DEPENDENCY_MODULE = "browsergym"
 REGISTERED_ACTION_TYPES = tuple(ActionType)
 REGISTERED_SERVICE_KEYS = frozenset(
@@ -955,6 +991,7 @@ class ValidationDisabledBrowserGymEnvironment:
         self._session_id: str | None = None
         self._deferred_close_requested = False
         self._underlying_closed = False
+        self._closed_page_state_sha256: str | None = None
         self._underlying_created = False
         self._cleanup_origin: str | None = None
         self._abort_requested = False
@@ -967,11 +1004,30 @@ class ValidationDisabledBrowserGymEnvironment:
         self._underlying_closed = True
         self._cleanup_origin = "sealed_broker"
         environment = self.browser_env
-        self.browser_env = None
+        digest_error: BaseException | None = None
         if environment is not None:
-            result = environment.close()
-            if result is not None:
-                raise TypeError("BrowserGym close must return None")
+            try:
+                self._closed_page_state_sha256 = _page_state_digest(
+                    environment.page
+                )
+            except BaseException as exc:
+                digest_error = exc
+        self.browser_env = None
+        try:
+            if environment is not None:
+                result = environment.close()
+                if result is not None:
+                    raise TypeError("BrowserGym close must return None")
+        except BaseException as close_error:
+            if digest_error is not None:
+                raise BrowserGymWebArenaError(
+                    "BrowserGym page digest and close both failed"
+                ) from close_error
+            raise
+        if digest_error is not None:
+            raise BrowserGymWebArenaError(
+                "BrowserGym final page state could not be committed before close"
+            ) from digest_error
 
     def reset(self, *, seed: int) -> BrowserGymCausalRawObservation:
         if seed != self.expected_seed:
@@ -1274,6 +1330,12 @@ class ValidationDisabledBrowserGymEnvironment:
         )
 
     def page_state_sha256(self) -> str:
+        if self._underlying_closed:
+            if self._closed_page_state_sha256 is None:
+                raise BrowserGymWebArenaError(
+                    "closed BrowserGym page lacks its final state commitment"
+                )
+            return self._closed_page_state_sha256
         return _page_state_digest(self._require_live_page())
 
 
@@ -1289,6 +1351,554 @@ def _page_state_digest(page: Any) -> str:
             "open_page_urls": [str(getattr(item, "url", "")) for item in pages],
         }
     )
+
+
+class _ProcessBrokerManualRescueSidecar:
+    """Single-writer append-only guard evidence owned by the browser child."""
+
+    __slots__ = (
+        "_closed",
+        "_count",
+        "_descriptor",
+        "_file_identity",
+        "_last_receipt_sha256",
+        "_path",
+        "_tail_sha256",
+    )
+
+    def __init__(self, episode_runtime_dir: Path) -> None:
+        runtime_dir = Path(episode_runtime_dir).absolute()
+        if (
+            not runtime_dir.is_dir()
+            or runtime_dir.is_symlink()
+            or runtime_dir.resolve(strict=True) != runtime_dir
+        ):
+            raise BrowserGymWebArenaError(
+                "process-broker episode runtime directory is not canonical"
+            )
+        path = runtime_dir / PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_FILENAME
+        flags = os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_EXCL
+        flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path, flags, 0o600)
+        except OSError as exc:
+            raise BrowserGymWebArenaError(
+                "child manual-rescue sidecar must be a fresh file"
+            ) from exc
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            os.close(descriptor)
+            raise BrowserGymWebArenaError(
+                "child manual-rescue sidecar is not a single-link regular file"
+            )
+        self._path = path
+        self._descriptor = descriptor
+        self._file_identity = (
+            metadata.st_dev,
+            metadata.st_ino,
+            metadata.st_mode,
+            metadata.st_nlink,
+        )
+        self._count = 0
+        self._tail_sha256: str | None = None
+        self._last_receipt_sha256 = "0" * 64
+        self._closed = False
+
+    def _validate_open_file(self) -> None:
+        if self._closed:
+            raise BrowserGymWebArenaError(
+                "child manual-rescue sidecar is already closed"
+            )
+        try:
+            opened = os.fstat(self._descriptor)
+            rebound = self._path.lstat()
+        except OSError as exc:
+            raise BrowserGymWebArenaError(
+                "child manual-rescue sidecar identity is unavailable"
+            ) from exc
+        opened_identity = (
+            opened.st_dev,
+            opened.st_ino,
+            opened.st_mode,
+            opened.st_nlink,
+        )
+        rebound_identity = (
+            rebound.st_dev,
+            rebound.st_ino,
+            rebound.st_mode,
+            rebound.st_nlink,
+        )
+        if (
+            opened_identity != self._file_identity
+            or rebound_identity != self._file_identity
+            or not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+        ):
+            raise BrowserGymWebArenaError(
+                "child manual-rescue sidecar pathname changed"
+            )
+
+    def append(
+        self,
+        check: WebArenaManualRescueCheck,
+        receipt: WebArenaManualRescueReceipt,
+    ) -> None:
+        self._validate_open_file()
+        if type(check) is not WebArenaManualRescueCheck or type(receipt) is not (
+            WebArenaManualRescueReceipt
+        ):
+            raise BrowserGymWebArenaError(
+                "child manual-rescue sidecar requires typed check and receipt"
+            )
+        expected_check_index = self._count + 1
+        if (
+            check.check_index != expected_check_index
+            or receipt.check_index != expected_check_index
+            or check.previous_receipt_sha256 != self._last_receipt_sha256
+            or receipt.check_sha256 != check.record_sha256
+            or receipt.stage != check.stage
+            or receipt.guard_id != check.guard_id
+            or receipt.guard_version != check.guard_version
+            or receipt.evidence_mode != check.evidence_mode
+        ):
+            raise BrowserGymWebArenaError(
+                "child manual-rescue evidence is out of order or misbound"
+            )
+        body = {
+            "schema_version": PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_SCHEMA_VERSION,
+            "record_type": PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_RECORD_TYPE,
+            "record_index": expected_check_index,
+            "previous_record_sha256": self._tail_sha256 or ("0" * 64),
+            "check": check.to_dict(),
+            "check_sha256": check.record_sha256,
+            "receipt": receipt.to_dict(),
+            "receipt_sha256": receipt.record_sha256,
+        }
+        record_sha256 = hashlib.sha256(canonical_json_bytes(body)).hexdigest()
+        encoded = canonical_json_bytes(
+            {**body, "record_sha256": record_sha256}
+        ) + b"\n"
+        view = memoryview(encoded)
+        while view:
+            written = os.write(self._descriptor, view)
+            if written <= 0:  # pragma: no cover - regular-file write contract
+                raise BrowserGymWebArenaError(
+                    "child manual-rescue sidecar append made no progress"
+                )
+            view = view[written:]
+        os.fsync(self._descriptor)
+        self._count = expected_check_index
+        self._tail_sha256 = record_sha256
+        self._last_receipt_sha256 = receipt.record_sha256
+
+    def identity(self) -> dict[str, Any]:
+        self._validate_open_file()
+        os.fsync(self._descriptor)
+        current_offset = os.lseek(self._descriptor, 0, os.SEEK_CUR)
+        os.lseek(self._descriptor, 0, os.SEEK_SET)
+        digest = hashlib.sha256()
+        try:
+            while True:
+                block = os.read(self._descriptor, 1024 * 1024)
+                if not block:
+                    break
+                digest.update(block)
+        finally:
+            os.lseek(self._descriptor, current_offset, os.SEEK_SET)
+        self._validate_open_file()
+        return {
+            "schema_version": (
+                PROCESS_BROKER_MANUAL_RESCUE_IDENTITY_SCHEMA_VERSION
+            ),
+            "record_type": PROCESS_BROKER_MANUAL_RESCUE_IDENTITY_RECORD_TYPE,
+            "relative_path": PROCESS_BROKER_MANUAL_RESCUE_SIDECAR_FILENAME,
+            "record_count": self._count,
+            "tail_sha256": self._tail_sha256,
+            "content_sha256": digest.hexdigest(),
+        }
+
+    def close(self) -> None:
+        if self._closed:
+            return None
+        self._validate_open_file()
+        os.fsync(self._descriptor)
+        os.close(self._descriptor)
+        self._closed = True
+        return None
+
+
+class _ProcessBrokerSealedCallbackGuardSidecar:
+    """Append-only before/after digest evidence for child sealed callbacks."""
+
+    __slots__ = (
+        "_closed",
+        "_count",
+        "_descriptor",
+        "_file_identity",
+        "_path",
+        "_tail_sha256",
+    )
+
+    def __init__(self, episode_runtime_dir: Path) -> None:
+        runtime_dir = Path(episode_runtime_dir).absolute()
+        if (
+            not runtime_dir.is_dir()
+            or runtime_dir.is_symlink()
+            or runtime_dir.resolve(strict=True) != runtime_dir
+        ):
+            raise BrowserGymWebArenaError(
+                "process-broker episode runtime directory is not canonical"
+            )
+        path = runtime_dir / PROCESS_BROKER_SEALED_CALLBACK_GUARD_SIDECAR_FILENAME
+        flags = os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_EXCL
+        flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path, flags, 0o600)
+        except OSError as exc:
+            raise BrowserGymWebArenaError(
+                "child sealed-callback guard sidecar must be a fresh file"
+            ) from exc
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            os.close(descriptor)
+            raise BrowserGymWebArenaError(
+                "child sealed-callback guard sidecar is not a single-link file"
+            )
+        self._path = path
+        self._descriptor = descriptor
+        self._file_identity = (
+            metadata.st_dev,
+            metadata.st_ino,
+            metadata.st_mode,
+            metadata.st_nlink,
+        )
+        self._count = 0
+        self._tail_sha256: str | None = None
+        self._closed = False
+
+    def _validate_open_file(self) -> None:
+        if self._closed:
+            raise BrowserGymWebArenaError(
+                "child sealed-callback guard sidecar is already closed"
+            )
+        try:
+            opened = os.fstat(self._descriptor)
+            rebound = self._path.lstat()
+        except OSError as exc:
+            raise BrowserGymWebArenaError(
+                "child sealed-callback guard sidecar identity is unavailable"
+            ) from exc
+        opened_identity = (
+            opened.st_dev,
+            opened.st_ino,
+            opened.st_mode,
+            opened.st_nlink,
+        )
+        rebound_identity = (
+            rebound.st_dev,
+            rebound.st_ino,
+            rebound.st_mode,
+            rebound.st_nlink,
+        )
+        if (
+            opened_identity != self._file_identity
+            or rebound_identity != self._file_identity
+            or not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+        ):
+            raise BrowserGymWebArenaError(
+                "child sealed-callback guard sidecar pathname changed"
+            )
+
+    def append(
+        self,
+        *,
+        callback_kind: str,
+        environment_state_sha256_before: str,
+        environment_state_sha256_after: str,
+        digester_id: str,
+        digester_version: str,
+    ) -> None:
+        self._validate_open_file()
+        if callback_kind not in {"sealed_transition", "sealed_finalizer"}:
+            raise BrowserGymWebArenaError(
+                "sealed callback guard kind is unregistered"
+            )
+        for label, value in (
+            ("before", environment_state_sha256_before),
+            ("after", environment_state_sha256_after),
+        ):
+            _require_sha256(value, field_name=f"sealed callback guard {label}")
+        if environment_state_sha256_before != environment_state_sha256_after:
+            raise BrowserGymWebArenaError(
+                "mutating sealed callback cannot be recorded as unchanged"
+            )
+        if (
+            type(digester_id) is not str
+            or not digester_id.strip()
+            or type(digester_version) is not str
+            or not digester_version.strip()
+        ):
+            raise BrowserGymWebArenaError(
+                "sealed callback guard lacks the registered digester identity"
+            )
+        next_index = self._count + 1
+        body = {
+            "schema_version": PROCESS_BROKER_SEALED_CALLBACK_GUARD_SCHEMA_VERSION,
+            "record_type": PROCESS_BROKER_SEALED_CALLBACK_GUARD_RECORD_TYPE,
+            "callback_guard_index": next_index,
+            "previous_record_sha256": self._tail_sha256 or ("0" * 64),
+            "callback_kind": callback_kind,
+            "environment_state_digester_id": digester_id,
+            "environment_state_digester_version": digester_version,
+            "environment_state_sha256_before": environment_state_sha256_before,
+            "environment_state_sha256_after": environment_state_sha256_after,
+            "environment_state_unchanged": True,
+        }
+        record_sha256 = hashlib.sha256(canonical_json_bytes(body)).hexdigest()
+        encoded = canonical_json_bytes(
+            {**body, "record_sha256": record_sha256}
+        ) + b"\n"
+        view = memoryview(encoded)
+        while view:
+            written = os.write(self._descriptor, view)
+            if written <= 0:  # pragma: no cover - regular-file write contract
+                raise BrowserGymWebArenaError(
+                    "child sealed-callback guard append made no progress"
+                )
+            view = view[written:]
+        os.fsync(self._descriptor)
+        self._count = next_index
+        self._tail_sha256 = record_sha256
+
+    def identity(self) -> dict[str, Any]:
+        self._validate_open_file()
+        os.fsync(self._descriptor)
+        current_offset = os.lseek(self._descriptor, 0, os.SEEK_CUR)
+        os.lseek(self._descriptor, 0, os.SEEK_SET)
+        digest = hashlib.sha256()
+        try:
+            while True:
+                block = os.read(self._descriptor, 1024 * 1024)
+                if not block:
+                    break
+                digest.update(block)
+        finally:
+            os.lseek(self._descriptor, current_offset, os.SEEK_SET)
+        self._validate_open_file()
+        return {
+            "schema_version": (
+                PROCESS_BROKER_SEALED_CALLBACK_GUARD_IDENTITY_SCHEMA_VERSION
+            ),
+            "record_type": (
+                PROCESS_BROKER_SEALED_CALLBACK_GUARD_IDENTITY_RECORD_TYPE
+            ),
+            "relative_path": PROCESS_BROKER_SEALED_CALLBACK_GUARD_SIDECAR_FILENAME,
+            "record_count": self._count,
+            "tail_sha256": self._tail_sha256,
+            "content_sha256": digest.hexdigest(),
+        }
+
+    def close(self) -> None:
+        if self._closed:
+            return None
+        self._validate_open_file()
+        os.fsync(self._descriptor)
+        os.close(self._descriptor)
+        self._closed = True
+        return None
+
+
+class _ProcessBrokerTerminalSignalBridge:
+    """Evaluator-free browser callback populated only by the sealed entrypoint."""
+
+    __slots__ = ("_callback",)
+
+    def __init__(self) -> None:
+        self._callback: Callable[..., OpaqueTerminalSignal] | None = None
+
+    def bind(self, callback: Callable[..., OpaqueTerminalSignal]) -> None:
+        if not callable(callback):
+            raise TypeError("process-broker terminal mapper must be callable")
+        if self._callback is None:
+            self._callback = callback
+        elif self._callback is not callback:
+            raise BrowserGymWebArenaError(
+                "process-broker sealed evaluator changed within one episode"
+            )
+
+    def __call__(self, *args: Any, **kwargs: Any) -> OpaqueTerminalSignal:
+        callback = self._callback
+        if callback is None:
+            raise BrowserGymWebArenaError(
+                "process-broker sealed evaluator is not bound"
+            )
+        return callback(*args, **kwargs)
+
+
+class _ProcessBrokerBrowserGymWebArenaAdapter(WebArenaAdapter):
+    """Child-only adapter retaining the page until sealed finalization."""
+
+    def __init__(
+        self,
+        *,
+        task: TaskSpecification,
+        callbacks: "_BrowserGymEpisodeCallbacks",
+        runtime_factory: "BrowserGymWebArenaRuntimeFactory",
+        episode_runtime_dir: Path,
+    ) -> None:
+        self._process_broker_sidecar = _ProcessBrokerManualRescueSidecar(
+            episode_runtime_dir
+        )
+        self._process_broker_terminal_bridge = _ProcessBrokerTerminalSignalBridge()
+        self._process_broker_abort_episode = callbacks.abort_episode
+        self._process_broker_sealed_evaluator: Any | None = None
+        self._process_broker_sealed_writer: Any | None = None
+        self._process_broker_shutdown_called = False
+        try:
+            super().__init__(
+                benchmark_version=runtime_factory.benchmark_version,
+                adapter_id=runtime_factory.environment_adapter_id,
+                adapter_version=runtime_factory.environment_adapter_version,
+                dependency_module=REGISTERED_BROWSERGYM_DEPENDENCY_MODULE,
+                environment_factory=callbacks.environment_factory,
+                observation_mapper=callbacks.observation_mapper,
+                action_mapper=callbacks.action_mapper,
+                screenshot_bytes_provider=callbacks.screenshot_bytes_provider,
+                episode_runtime_dir=episode_runtime_dir,
+                terminal_signal_mapper=self._process_broker_terminal_bridge,
+                environment_state_digester=(
+                    FrozenWebArenaEnvironmentStateDigester(
+                        digester_id=runtime_factory.environment_state_digester_id,
+                        digester_version=(
+                            runtime_factory.environment_state_digester_version
+                        ),
+                        benchmark_version=runtime_factory.benchmark_version,
+                        callback=callbacks.environment_state_digest,
+                    )
+                ),
+                infrastructure_fault_classifier=(
+                    runtime_factory.infrastructure_fault_classifier
+                ),
+                reset_state_attester=runtime_factory.reset_state_attester,
+                require_reset_state_receipt=True,
+                page_settle_policy=FrozenWebArenaPageSettlePolicy(
+                    policy_id=runtime_factory.page_settle_policy_id,
+                    benchmark_version=runtime_factory.benchmark_version,
+                    network_idle_required=(
+                        runtime_factory.configuration.network_idle_required
+                    ),
+                    settle_timeout_seconds=(
+                        runtime_factory.configuration.page_settle_timeout_seconds
+                    ),
+                    callback=callbacks.settle,
+                ),
+                require_page_settle_policy=True,
+                action_safety_policy=runtime_factory.action_safety_policy,
+                require_action_safety_policy=True,
+                manual_rescue_guard=runtime_factory.manual_rescue_guard,
+                manual_rescue_evidence_sink=self._process_broker_sidecar.append,
+                require_manual_rescue_guard=True,
+            )
+        except BaseException:
+            self._process_broker_sidecar.close()
+            raise
+        if task.record_sha256 != callbacks.task.record_sha256:
+            self._process_broker_sidecar.close()
+            raise BrowserGymWebArenaError(
+                "process-broker adapter task changed during construction"
+            )
+
+    def process_broker_bind_terminal_signal_mapper(
+        self,
+        callback: Callable[..., OpaqueTerminalSignal],
+    ) -> None:
+        self._process_broker_terminal_bridge.bind(callback)
+
+    def process_broker_bind_sealed_evaluator(
+        self,
+        *,
+        evaluator: Any,
+        evidence_writer: Any,
+    ) -> None:
+        """Bind evaluator-owned callbacks without importing evaluator code here."""
+
+        terminal_mapper = getattr(evaluator, "terminal_signal_mapper", None)
+        finalizer = getattr(evaluator, "finalize_episode_evidence", None)
+        if not callable(terminal_mapper) or not callable(finalizer):
+            raise BrowserGymWebArenaError(
+                "process-broker sealed evaluator binding is malformed"
+            )
+        if self._process_broker_sealed_evaluator is None:
+            self._process_broker_sealed_evaluator = evaluator
+            self._process_broker_sealed_writer = evidence_writer
+            self._process_broker_terminal_bridge.bind(terminal_mapper)
+            return None
+        if (
+            self._process_broker_sealed_evaluator is not evaluator
+            or self._process_broker_sealed_writer is not evidence_writer
+        ):
+            raise BrowserGymWebArenaError(
+                "process-broker sealed evaluator changed within one episode"
+            )
+        return None
+
+    def process_broker_sealed_evaluator(self, *, evidence_writer: Any) -> Any | None:
+        if (
+            self._process_broker_sealed_evaluator is not None
+            and self._process_broker_sealed_writer is not evidence_writer
+        ):
+            raise BrowserGymWebArenaError(
+                "process-broker sealed evaluator writer identity changed"
+            )
+        return self._process_broker_sealed_evaluator
+
+    def process_broker_environment_state_sha256(self) -> str:
+        environment = self._environment
+        digester = self._environment_state_digester
+        if environment is None or digester is None:
+            raise BrowserGymWebArenaError(
+                "process-broker adapter lacks a created browser environment"
+            )
+        return digester.digest(environment)
+
+    def process_broker_manual_rescue_sidecar_identity(self) -> dict[str, Any]:
+        return self._process_broker_sidecar.identity()
+
+    def close(self) -> None:
+        """Request sealed close but retain the state-digest capability."""
+
+        if self._closed:
+            return None
+        environment = self._environment
+        if environment is not None and hasattr(environment, "close"):
+            result = environment.close()
+            if result is not None:
+                raise BrowserGymWebArenaError(
+                    "process-broker BrowserGym close returned data"
+                )
+        self._closed = True
+        return None
+
+    def process_broker_close_browser(self) -> BrowserGymEpisodeAbortReceipt | None:
+        if self._process_broker_shutdown_called:
+            raise BrowserGymWebArenaError(
+                "process-broker browser shutdown may run exactly once"
+            )
+        self._process_broker_shutdown_called = True
+        episode_id = self._episode_id
+        task = self._task
+        try:
+            if episode_id is None or task is None:
+                return None
+            receipt = self._process_broker_abort_episode(episode_id, task.task_id)
+            if type(receipt) is not BrowserGymEpisodeAbortReceipt:
+                raise BrowserGymWebArenaError(
+                    "process-broker browser abort returned the wrong receipt"
+                )
+            return receipt
+        finally:
+            self._process_broker_sidecar.close()
 
 
 @dataclass(slots=True)
@@ -1510,7 +2120,10 @@ class BrowserGymWebArenaRuntimeFactory:
         if self.api_loader is not load_pinned_browsergym_api:
             raise ValueError("production BrowserGym factory forbids alternate API loaders")
 
-    def __call__(self, task: TaskSpecification) -> Any:
+    def _episode_callbacks(
+        self,
+        task: TaskSpecification,
+    ) -> _BrowserGymEpisodeCallbacks:
         if type(task) is not TaskSpecification or task.runtime_start_state is None:
             raise BrowserGymWebArenaError("BrowserGym runtime task lacks six-field state")
         if task.benchmark_id.lower() != "webarena":
@@ -1520,7 +2133,7 @@ class BrowserGymWebArenaRuntimeFactory:
         api = self.api_loader()
         if api.production_loader is not True:
             raise BrowserGymWebArenaError("production BrowserGym API was not source-loaded")
-        callbacks = _BrowserGymEpisodeCallbacks(
+        return _BrowserGymEpisodeCallbacks(
             task=task,
             api=api,
             configuration=self.configuration,
@@ -1530,6 +2143,9 @@ class BrowserGymWebArenaRuntimeFactory:
             runtime_page_publisher=self.runtime_page_publisher,
             boundary_source_sha256=self.wrapper_source_sha256,
         )
+
+    def __call__(self, task: TaskSpecification) -> Any:
+        callbacks = self._episode_callbacks(task)
         # Local import preserves the dependency direction: importing benchmark
         # adapters never imports the production campaign runner.
         from web_agent.eval.table2.production_runner import WebArenaRuntimeBinding
@@ -1563,6 +2179,60 @@ class BrowserGymWebArenaRuntimeFactory:
             abort_episode=callbacks.abort_episode,
             frozen=True,
         )
+
+    def create_process_broker_environment_adapter(
+        self,
+        *,
+        task: TaskSpecification,
+        episode_runtime_dir: Path,
+    ) -> WebArenaAdapter:
+        """Build the evaluator-free child adapter used by the process broker."""
+
+        callbacks = self._episode_callbacks(task)
+        return _ProcessBrokerBrowserGymWebArenaAdapter(
+            task=task,
+            callbacks=callbacks,
+            runtime_factory=self,
+            episode_runtime_dir=Path(episode_runtime_dir),
+        )
+
+
+def _load_process_broker_browser_runtime_factory() -> BrowserGymWebArenaRuntimeFactory:
+    """Fail closed until an operator supplies an externally validated bootstrap.
+
+    Credential and service discovery is deliberately not implemented here.  A
+    deployment integration may replace this narrow loader only before the
+    source-attested entrypoint is invoked in its isolated child.
+    """
+
+    raise BrowserGymWebArenaError(
+        "process-broker BrowserGym runtime bootstrap is not registered; "
+        "validated preflight, credentials, resetter, policies, and page "
+        "publisher must be supplied by the deployment integration"
+    )
+
+
+def create_environment_adapter(
+    *,
+    task: TaskSpecification,
+    episode_runtime_dir: Path,
+) -> WebArenaAdapter:
+    """Source-attested child entrypoint with the broker's exact call shape."""
+
+    factory = _load_process_broker_browser_runtime_factory()
+    if type(factory) is not BrowserGymWebArenaRuntimeFactory:
+        raise BrowserGymWebArenaError(
+            "process-broker bootstrap returned the wrong BrowserGym factory type"
+        )
+    adapter = factory.create_process_broker_environment_adapter(
+        task=task,
+        episode_runtime_dir=episode_runtime_dir,
+    )
+    if not isinstance(adapter, WebArenaAdapter):
+        raise BrowserGymWebArenaError(
+            "process-broker bootstrap returned a non-WebArena adapter"
+        )
+    return adapter
 
 
 assert REGISTERED_VALIDATION_DISABLED_EXECUTION_PATH == (

@@ -60,14 +60,14 @@ needed for review. Do not transfer the Gold images. Validate the store on the
 DGX or split-deployment campaign host before E3 can load it. The transfer
 manifest is a verifier, not a copy utility.
 
-The joint duplicate namespace cannot be frozen against an unresolved browser
-task registry. The measured WebArena public 0--49 audit found 47
-assistant-answer/`string_match` tasks incompatible with the current six-action
-P3 interface and only three compatible URL tasks. Therefore P4 candidate
+The historical WebArena public 0--49 audit found 47 assistant-answer/
+`string_match` tasks incompatible with the current six-action P3 interface.
+Those tasks remain permanent development exclusions. The active pilot now uses
+the registered page-state-compatible 50-task set in
+`benchmarks/table2/pilot/task_manifest_page_state_v2.json`. P4 candidate
 screening may proceed, but the joint Gold-train/WebArena duplicate audit,
-provenance closure, and production store freeze must wait for the user-approved
-and preregistered task-interface resolution. No P4 tool may silently replace or
-drop browser tasks to make that audit pass.
+provenance closure, and production store freeze still require the exact active
+task-content export. No P4 tool may silently replace or drop browser tasks.
 
 ## 1. Prepare the train-only review queue
 
@@ -185,8 +185,8 @@ PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py build-assignme
   --supplement-train-json /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
   --approved-task-registry /kaggle/working/table2/evidence/approved-pilot-task-registry.json \
-  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
-  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest.json \
+  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios_page_state_v2.json \
+  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json \
   --output-dir /kaggle/working/table2/evidence/joint-duplicate-assignments
 ```
 
@@ -221,8 +221,8 @@ PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py validate-assig
   --supplement-train-json /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
   --approved-task-registry /kaggle/working/table2/evidence/approved-pilot-task-registry.json \
-  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
-  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest.json \
+  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios_page_state_v2.json \
+  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json \
   --assignment-package /kaggle/working/table2/evidence/joint-duplicate-assignments
 ```
 
@@ -281,8 +281,8 @@ PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py finalize-audit
   --supplement-train-json /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
   --approved-task-registry /kaggle/working/table2/evidence/approved-pilot-task-registry.json \
-  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
-  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest.json \
+  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios_page_state_v2.json \
+  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json \
   --assignment-package /kaggle/working/table2/evidence/joint-duplicate-assignments \
   --provenance-manifest /kaggle/working/table2/evidence/table2-memory-provenance-v1.json \
   --output /kaggle/working/table2/evidence/joint-duplicate-audit.json
@@ -306,8 +306,8 @@ PYTHONPATH=src python scripts/run_table2_joint_duplicate_audit.py validate-final
   --supplement-train-json /kaggle/input/gold-40k-retry/web_gold_40k_retry_abort_supplement_v2_kaggle/data/supplement_train.json \
   --resolved-task-export /kaggle/working/table2/evidence/webarena-tasks.json \
   --approved-task-registry /kaggle/working/table2/evidence/approved-pilot-task-registry.json \
-  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
-  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest.json \
+  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios_page_state_v2.json \
+  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json \
   --assignment-package /kaggle/working/table2/evidence/joint-duplicate-assignments \
   --provenance-manifest /kaggle/working/table2/evidence/table2-memory-provenance-v1.json \
   --audit /kaggle/working/table2/evidence/joint-duplicate-audit.json
@@ -343,8 +343,8 @@ PYTHONPATH=src python scripts/build_table2_memory.py \
   --joint-audit-config configs/eval/table2/joint_duplicate_audit_v1.json \
   --p4-source-authority configs/eval/table2/p4_source_authority_v1.json \
   --p4-preparation-package /kaggle/working/table2-p4-prepare-only-v1/preparation \
-  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios.json \
-  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest.json \
+  --recovery-scenarios benchmarks/table2/pilot/recovery_scenarios_page_state_v2.json \
+  --duplicate-audit-registration benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json \
   --protocol-config configs/eval/table2/protocol.yaml \
   --model-seed 42 \
   --output-dir /kaggle/working/table2/frozen-memory/seed_42
@@ -384,11 +384,10 @@ by the provenance manifest.
 
 When a separately extracted raw task JSON is used instead of the pinned wheel,
 also pass `--authorized-raw-task-source-sha256 <sha256>`; the extracted bytes
-must still equal the pinned task-source hash. Supplying a registry path is not
-approval and this command does not choose a replacement registry. With the
-currently registered public 0--49 tasks, the exact task-interface audit remains
-`FAIL` (47 incompatible tasks), so the builder correctly stops before checkpoint
-access until the user-approved, preregistered protocol resolution exists.
+must still equal the pinned task-source hash. The builder uses the registered
+page-state-compatible manifest and stops before checkpoint access unless its
+50-task export, exact interface audit, and joint duplicate registration all
+match.
 
 ## 4. Create and validate a cross-host transfer manifest
 

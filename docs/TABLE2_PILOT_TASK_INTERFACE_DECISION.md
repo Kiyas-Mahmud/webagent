@@ -1,8 +1,8 @@
 # Table 2 Pilot Task-Interface Decision
 
-Status: `AWAITING_USER_APPROVAL`
+Status: `OPTION_A_APPROVED_AND_REGISTERED`
 
-Evidence role: `PROPOSAL_ONLY_NOT_A_CAMPAIGN_INPUT`
+Evidence role: `ACTIVE_PILOT_REGISTRY_DECISION`
 
 Paper Table 2 status: `N/R`
 
@@ -16,7 +16,7 @@ indices 44--46 are page-state URL tasks compatible with the current P3
 contract. Silently translating, dropping, or auto-answering the other tasks
 would change the experiment and could falsely inflate E0--E3 results.
 
-## Option A — page-state replacement set requiring reset proof (recommended)
+## Registered decision — Option A page-state replacement set
 
 Approve an outcome-blind set of 50 public tasks whose official evaluators use
 page state (`url_match` and/or `program_html`) and therefore remain executable
@@ -41,7 +41,7 @@ state-isolation decision, not a result-based choice:
 | Shopping | 10 |
 | Shopping Admin | 17 |
 
-Proposed upstream indices, in candidate order (not registered or frozen):
+Registered upstream indices in frozen execution order:
 
 ```text
 102, 156, 157, 158, 159, 238, 258, 260, 269, 274,
@@ -59,7 +59,7 @@ configuration and prove identical reset fingerprints across E0--E3. A failed
 classification or reset check stops registration; it does not authorize a
 silent task substitution.
 
-Approval consequences:
+Registration consequences:
 
 - both the historical 0--49 set and this replacement set become permanent
   development exclusions from the later final campaign, which requires a
@@ -84,10 +84,15 @@ is a material P3 and protocol change, not a small adapter fix. Because PC-01
 will not be retrained and time is limited, this option creates a substantial
 validity risk and is not recommended for the current pilot.
 
-## Approval record required
+## Registration record
 
-No code or tracked manifest currently treats Option A as approved. To proceed,
-the project owner must explicitly choose one option. If Option A is approved,
-the approval is recorded before any WebArena outcome is observed, then a new
-versioned pilot registry/export is generated and the existing fail-closed
-handoff is replayed.
+The project owner directed completion of the next phase before any WebArena
+model outcome was observed. Option A is therefore registered in
+`benchmarks/table2/pilot/task_manifest_page_state_v2.json`, and
+`configs/eval/table2/pilot_webarena.yaml` selects that manifest. The historical
+0--49 registry remains unchanged as a permanent development exclusion. Both
+sets are bound together by the metadata-only final-campaign authority
+`benchmarks/table2/pilot/final_exclusion_registry_v2.json`. Task
+registration does not waive the still-required content export, non-mutation
+check, reset-state check, interface audit, or joint duplicate audit; a failure
+of any of those checks stops execution.

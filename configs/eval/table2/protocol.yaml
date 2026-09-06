@@ -10,6 +10,17 @@ paper_claims:
   pre_evaluation_status: N/R
   pilot_resolution_forbidden: true
 
+deployment_assurance:
+  scope: source_attested_engineering_pilot
+  policy_browser_evaluator_process_isolation_required: true
+  immutable_measured_timeout_bundle_required: true
+  authenticated_broker_envelopes_required: true
+  hash_chained_runtime_artifacts_required: true
+  split_request_response_hash_chain_required: true
+  source_attested_oracle_free_value_origin_evidence_required: true
+  independent_ed25519_required: false
+  global_replay_anchor_required: false
+
 selection:
   mode: pc01_provisional
   candidate_ids: [qwen2vl_2b_gold_v2_8_dgx]
@@ -20,7 +31,7 @@ selection:
 benchmark:
   name: webarena
   adapter: web_agent.benchmarks.webarena.WebArenaAdapter
-  task_manifest: benchmarks/table2/pilot/task_manifest.json
+  task_manifest: benchmarks/table2/pilot/task_manifest_page_state_v2.json
   locked_mount: locked_benchmark_mount
   allow_locked_reads: false
   invalidate_if_successful_after_reset: true

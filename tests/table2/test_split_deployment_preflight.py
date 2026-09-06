@@ -15,6 +15,7 @@ from web_agent.eval.table2.split_deployment_preflight import (
     PC01_PROCESSOR_CONTRACT_SHA256,
     PC01_RESOLVED_CONFIG_SHA256,
     SINGLE_HOST_TOPOLOGY,
+    SPLIT_DISPATCH_BLOCKER,
     SPLIT_BRIDGE_REQUEST_SCHEMA_VERSION,
     SPLIT_BRIDGE_RESPONSE_SCHEMA_VERSION,
     SPLIT_BRIDGE_IDENTITY_SCHEMA_VERSION,
@@ -214,7 +215,7 @@ def test_split_artifact_records_compatibility_but_remains_dispatch_blocked() -> 
     assert evidence["status"] == "PASS"
     assert evidence["campaign_eligible"] is False
     assert evidence["dispatch_authorized"] is False
-    assert evidence["dispatch_blocker"].startswith("BLOCKED_DGX_")
+    assert evidence["dispatch_blocker"] == SPLIT_DISPATCH_BLOCKER
     assert evidence["failed_dgx_routing_report_used"] is False
     assert evidence["deployment_topology"] == SPLIT_HOST_TOPOLOGY
     assert evidence["bridge_transcript"]["entry_count"] == 2

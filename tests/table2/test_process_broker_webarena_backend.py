@@ -359,6 +359,111 @@ def test_backend_rejects_oracle_config_and_unattested_factory_source(
     assert broker.cleaned
 
 
+def test_child_entrypoint_shape_is_rejected_before_module_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_dir = tmp_path / "episode"
+    runtime_dir.mkdir()
+    config = _backend_config(_task(), runtime_dir)
+    config.update(
+        {
+            "adapter_factory_entrypoint": (
+                "web_agent.benchmarks.browsergym_webarena:"
+                "BrowserGymWebArenaRuntimeFactory"
+            ),
+            "adapter_factory_source_relative_path": (
+                "src/web_agent/benchmarks/browsergym_webarena.py"
+            ),
+            "adapter_factory_source_sha256": sha256_file(
+                ROOT / "src/web_agent/benchmarks/browsergym_webarena.py"
+            ),
+        }
+    )
+    imported = False
+
+    def forbidden_import(_name: str):
+        nonlocal imported
+        imported = True
+        raise AssertionError("malformed entrypoint must fail before import")
+
+    monkeypatch.setattr(backend_module.importlib, "import_module", forbidden_import)
+    with pytest.raises(
+        ProcessBrokerProtocolError,
+        match="top-level synchronous function",
+    ):
+        create_backend(config)
+    assert imported is False
+
+
+def test_sealed_callback_guard_is_separate_from_zero_manual_rescue_chain(
+    tmp_path: Path,
+) -> None:
+    from web_agent.eval.table2.process_broker_fixture_backend import (
+        create_environment_adapter,
+    )
+
+    runtime_dir = tmp_path / "episode"
+    runtime_dir.mkdir()
+    adapter = create_environment_adapter(
+        task=_task(),
+        episode_runtime_dir=runtime_dir,
+    )
+    guard = backend_module._SealedCallbackGuardSidecar(runtime_dir)
+    assert backend_module._call_state_preserving_sealed_callback(
+        adapter,
+        lambda: "opaque-only-placeholder",
+        callback_kind="sealed_transition",
+        context="fixture sealed transition",
+        evidence_sidecar=guard,
+    ) == "opaque-only-placeholder"
+    manual_identity = adapter.process_broker_manual_rescue_sidecar_identity()
+    callback_identity = guard.identity()
+    assert manual_identity["record_count"] == 0
+    assert manual_identity["tail_sha256"] is None
+    assert callback_identity["record_count"] == 1
+    assert callback_identity["tail_sha256"] is not None
+    assert callback_identity["relative_path"] == (
+        "sealed_callback_state_guard.child.jsonl"
+    )
+    guard.close()
+    adapter.close()
+
+
+def test_sealed_callback_guard_rejects_environment_mutation_without_receipt(
+    tmp_path: Path,
+) -> None:
+    from web_agent.eval.table2.process_broker_fixture_backend import (
+        create_environment_adapter,
+    )
+
+    runtime_dir = tmp_path / "episode"
+    runtime_dir.mkdir()
+    adapter = create_environment_adapter(
+        task=_task(),
+        episode_runtime_dir=runtime_dir,
+    )
+    guard = backend_module._SealedCallbackGuardSidecar(runtime_dir)
+
+    def mutate_page() -> None:
+        adapter._backend._raw_page.url = "https://fixture.invalid/mutated"
+
+    with pytest.raises(
+        ProcessBrokerProtocolError,
+        match="mutated the child-owned environment state",
+    ):
+        backend_module._call_state_preserving_sealed_callback(
+            adapter,
+            mutate_page,
+            callback_kind="sealed_transition",
+            context="fixture sealed transition",
+            evidence_sidecar=guard,
+        )
+    assert guard.identity()["record_count"] == 0
+    guard.close()
+    adapter.close()
+
+
 def test_reset_binds_complete_oracle_blind_task_record_across_processes(
     tmp_path: Path,
 ) -> None:

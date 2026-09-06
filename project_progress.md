@@ -19,6 +19,86 @@ Historical source corpus: Kaggle `thesisdata` →
 steps; train 38,875 / val 16,070 / test 16,020). Current experiment row/split
 authority comes only from each reviewed Gold v2.8 run manifest.
 
+## 2026-09-06 — Uncommitted Table 2 integration verification
+
+- Repaired the interrupted split-deployment test edit and synchronized two
+  stale fail-closed assertions with the registered
+  `PILOT_DGX_REMEASUREMENT_AND_LIVE_TRANSCRIPT_REQUIRED` blocker. Added the
+  missing import-time source digest to the deterministic process-broker fixture
+  so parent/child source-identity checks bind the bytes actually imported.
+- Confirmed that the apparent package-validator hang is not a deadlock. The
+  full-pilot integrity test completes after repeatedly recomputing the frozen
+  10,000-sample statistics under several deliberate tampering cases. Constant
+  task-cluster rate/mean columns now return their mathematically exact
+  degenerate percentile interval without redundant random draws; nonconstant
+  bootstrap behavior and the registered sample count are unchanged.
+- Current uncommitted verification: the complete Table 2 suite passes
+  **1,541/1,541**. The repository-wide suite reports **1,662 passed, 4 failed,
+  2 warnings**. `git diff` confirms all eight files involved in those four
+  failures are unchanged: the historical v2.3/v2.5 notebook stage literals,
+  saved execution output in the historical v2.7 resume notebook, and the
+  legacy shape test that bypasses `WebAgentModel` initialization and therefore
+  omits its bbox attributes. Python compilation, diff whitespace checks, and
+  all seven Table 2 YAML parses pass.
+- Nothing in this verification was committed or pushed. No DGX checkpoint,
+  training code, Gold data, or locked-test data was modified. Table 2 remains
+  `N/R`; no live WebArena pilot episode is claimed.
+- After that local gate passed, the project owner directed completion of the
+  next phase. The outcome-blind Option A replacement is now registered as the
+  active ordered 50-task pilot set in
+  `benchmarks/table2/pilot/task_manifest_page_state_v2.json`, with its
+  permanent combined exclusion authority in
+  `benchmarks/table2/pilot/final_exclusion_registry_v2.json`, plus the matching
+  page-state source authority, recovery registry, and pending joint-duplicate
+  registration. The original 0--49 manifest remains unchanged as the permanent
+  historical development exclusion. No task outcome was run or inspected when
+  making this registration.
+- The permanent final-campaign exclusion guard now binds the union of the
+  historical and active registries: 100 unique WebArena development tasks.
+  Its embedded source hashes and ordering reproduce exactly from the two
+  tracked source manifests. The Kaggle P4 preparation/staging entrypoints and
+  WebArena export, preflight, and evaluation entrypoints all load successfully
+  under the project runtime. Local deterministic E0--E3 success/failure-memory
+  blocks and the 15-scenario x four-system recovery matrix pass as
+  `ENGINEERING_SMOKE_ONLY`; these are not live WebArena pilot outcomes.
+- A fresh current-worktree smoke rerun passed all three modes: the six-action
+  E0--E3 success chain, the P1/P4 failure-memory block, and all 60 controlled
+  episodes (15 registered scenarios x E0--E3). The current host audit found no
+  BrowserGym/WebArena or Playwright Python deployment, no WA service bindings,
+  no Kaggle runtime/data mount, and no completed frozen P4 store. Existing
+  Kaggle staging bundles are tied to committed source snapshots and therefore
+  cannot represent the present uncommitted worktree. Consequently no live
+  WebArena episode or 200-episode result is claimed.
+- The dedicated pinned browser environment was subsequently located and
+  checked directly: BrowserGym core/WebArena 0.14.3, libwebarena 0.0.4,
+  Playwright 1.44.0, Gymnasium 1.0.0, and Cryptography 46.0.5 import, and the
+  pinned Chromium launches at 1280x720. This probe exposed and corrected an
+  example-map ambiguity: task-source placeholder URLs and the seven live
+  BrowserGym service origins now have separate example JSON files. No actual
+  WebArena service deployment or P4 store is present.
+- Using the separated task-placeholder map, the current source re-exported the
+  pinned libwebarena 0.0.4 task member with both registered source hashes
+  matching. The ordered active indices were exactly reproduced; the interface
+  audit reports 50 compatible page-state tasks, zero answer/fuzzy tasks, zero
+  incompatible tasks, and `handoff_eligible: true`. This remains structural
+  pre-campaign work because all seven example service origins correctly fail
+  the live-service probe and the live reset was not run.
+- The public Kaggle API was used only for the registered 24.8 MiB
+  `split_train.json`, not the 24.5 GB corpus. Its SHA-256 exactly matches
+  `0522807d...ae3de` and it contains the registered 23,499 train rows. A local
+  fail-closed candidate-screening rehearsal, combined with the already
+  authenticated 608-row supplement, reports exactly 2,065 candidate rows whose
+  state artifacts must remain available to the Kaggle job (1,888 original and
+  177 supplement); validation, test, and locked-test reads are all zero. The
+  review queue is correctly suppressed while those artifacts are absent. No
+  images were downloaded and no eligibility or memory-store claim was made.
+- The existing clean-commit Kaggle prepare-only transport for `432b5b9` was
+  reverified: its Git bundle is complete, its recorded bundle/bootstrap hashes
+  match, and the private CPU/no-internet kernel attaches exactly the two Gold
+  datasets plus the source-transport dataset. It can support a prepare-only
+  rehearsal, but it does not include the present uncommitted Table 2 changes
+  and therefore cannot be represented as the final current-source transport.
+
 ## 2026-09-05 — Table 2 execution-boundary hardening and external-input stop
 
 - Table 2 remains `N/R`. PC-01 epoch 6, seed 42 remains a provisional
@@ -55,8 +135,10 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   finalization only through an orchestration capability; the runtime adapter
   retains no sink, key, target, writer, evidence socket, or sealed path. Live
   execution still requires a concrete BrowserGym plus sealed-evaluator child
-  factory, scrubbed credential capability, measured timeout authority, and
-  external deployment/value-provenance evidence. None was invented locally.
+  factory, scrubbed credential capability, an immutable locally replayed
+  measured-timeout bundle, host remeasurement, request/response hash chains,
+  oracle-free value-origin evidence, and the complete live deployment package.
+  None was invented locally.
 - Added timeout-calibration schema v2 and a distinct
   `MEASURED_CALIBRATION_REPLAY_ONLY` scope. A complete local bundle must bind
   the ordered 50 tasks, topology, host/config, preflight, dependency/service
@@ -67,20 +149,22 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   startup/readiness now uses a dedicated framed socket, and connect/send/
   partial-receive/shutdown/wait paths use absolute monotonic deadlines.
   Immutable inputs reject symlinks, hardlinks, writable/raced/ambiguous/
-  non-finite/oversized files. True `EVALUATION` rejects in-memory or locally
-  self-consistent evidence and remains closed until external cross-binding.
+  non-finite/oversized files. `PILOT_ONLY` `EVALUATION` rejects in-memory,
+  synthetic, or merely digest-shaped evidence and remains closed until the
+  actual measured artifact and typed evidence bundle are locally replayed and
+  hash-bound to the frozen campaign, source, hosts, tasks, services, and
+  request/response transcript.
 - Added verification-only Ed25519 deployment authority schemas for DGX
   startup, model-load completion, before-block, and after-block/value-
   provenance receipts. Challenges are single-use within one locked ledger;
   issue and consume cryptographically replay every preserved signature under
   the active registry. The CLI has no signing/key-generation path. The
   packaged registry intentionally has zero authorities, and the local ledger
-  explicitly is not a global replay anchor or dispatch authority. No campaign
-  authorization is claimed. Requiring that independent authority for the
-  engineering pilot is conservative hardening beyond the supplied plan's
-  explicit hash/isolation language and remains
-  `AWAITING_PROJECT_OWNER_RATIFICATION`; it has not been silently adopted as a
-  new scientific-design requirement.
+  explicitly is not a global replay anchor or dispatch authority. Independent
+  Ed25519 deployment signatures and global replay protection are now scoped
+  `FINAL_CAMPAIGN_ONLY`; their absence does not block a complete source-
+  attested and hash-bound `PILOT_ONLY` package. The pilot still cannot launch
+  until all of its measured deployment evidence above exists.
 - Campaign kind/evidence label is now one strict joint profile across handoff,
   freeze, validation, execution, summary, and paper-claim paths: only
   `engineering_pilot` + `PILOT_ONLY` or `locked_final` + `FINAL_LOCKED` is
@@ -122,10 +206,12 @@ authority comes only from each reviewed Gold v2.8 run manifest.
   episodes, blinded audit, or paper Table 2 result has been produced.
 - Remaining external inputs are the explicit task-interface decision, Kaggle
   authentication/execution and independent P4 provenance, DGX CUDA/model-
-  forward evidence, the seven-service WebArena deployment and exact live child
-  factory contract, the project-owner decision on whether independent lab
-  authority/global replay is mandatory for `PILOT_ONLY` (and, if retained,
-  its public key and signed phase receipts), and the PC-02/PC-03 validation packages.
+  forward and host-remeasurement evidence, the seven-service WebArena
+  deployment and exact live child factory contract, evaluator review, the
+  immutable locally replayed timeout bundle, request/response hash chain,
+  oracle-free value-origin evidence, and the PC-02/PC-03 validation packages.
+  An independent lab public key and global replay anchor are later final-
+  campaign inputs, not pilot blockers.
   The exact operator checklist is `docs/TABLE2_OPERATOR_INPUTS_REQUIRED.md`.
 
 ## 2026-09-04 — Research-locked Table 2 PC-01 pilot preparation

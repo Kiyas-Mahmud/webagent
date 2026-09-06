@@ -154,3 +154,52 @@ def test_evaluation_analysis_rejects_commit_or_source_omission(
     _write_json(manifest_path, manifest)
     with pytest.raises(SchemaError, match="not live/frozen attested"):
         validate_analysis_source_identity(campaign, repository_root=repo)
+
+
+def test_live_runner_dependency_gate_receives_classified_pilot_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    campaign = tmp_path / "campaign"
+    attestation = _write_json(
+        campaign / "frozen/runner_attestation.json",
+        {"runner_entrypoint": "example.runner:run"},
+    )
+    _write_json(
+        campaign / "campaign_manifest.json",
+        {
+            "campaign_kind": "engineering_pilot",
+            "evidence_label": "PILOT_ONLY",
+            "campaign_mode": "evaluation",
+            "runner_identity_scope": EVALUATION_RUNNER_SCOPE,
+            "runner_attestation_sha256": sha256_file(attestation),
+        },
+    )
+
+    observed: dict[str, object] = {}
+
+    def stop_at_dependency_gate(
+        supplied_root: Path,
+        **kwargs: object,
+    ) -> None:
+        observed["root"] = supplied_root
+        observed.update(kwargs)
+        raise RuntimeError("dependency gate reached")
+
+    monkeypatch.setattr(
+        execution_guard,
+        "validate_frozen_dependency_lock",
+        stop_at_dependency_gate,
+    )
+    with pytest.raises(RuntimeError, match="dependency gate reached"):
+        verify_runner_before_execution(
+            campaign,
+            runner=object(),
+            runner_entrypoint="example.runner:run",
+        )
+
+    assert observed == {
+        "root": campaign,
+        "remeasure_current_host": True,
+        "dispatch_campaign_profile": "pilot",
+    }

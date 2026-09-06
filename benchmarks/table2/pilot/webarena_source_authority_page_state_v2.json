@@ -1,0 +1,35 @@
+{
+  "schema_version": "table2-webarena-source-authority-v2",
+  "benchmark": "webarena",
+  "partition": "public_development",
+  "selection_status": "REGISTERED_BEFORE_MODEL_OUTCOMES",
+  "selection_option": "OPTION_A_PAGE_STATE_REPLACEMENT",
+  "ordered_task_indices": [102, 156, 157, 158, 159, 238, 258, 260, 269, 274, 283, 284, 298, 324, 356, 369, 370, 371, 372, 373, 374, 375, 377, 378, 379, 380, 381, 676, 677, 678, 679, 680, 704, 705, 706, 707, 708, 709, 710, 711, 712, 757, 758, 761, 762, 763, 764, 765, 766, 767],
+  "task_count": 50,
+  "browsergym_webarena": {
+    "distribution": "browsergym-webarena",
+    "version": "0.14.3",
+    "wheel_sha256": "746f1233c9a8c4a408b4b5013f7bf9f21973d0d0721b22efc39b17ea2c03f44d"
+  },
+  "browsergym_core": {
+    "distribution": "browsergym-core",
+    "version": "0.14.3"
+  },
+  "libwebarena": {
+    "distribution": "libwebarena",
+    "version": "0.0.4",
+    "wheel_sha256": "9ebee3b4371502c4f0f7e727a72e5846235d6750d420db9a3b8a168107654feb",
+    "task_member": "webarena/test.raw.json",
+    "task_member_sha256": "7b50386fd69163dbc05d615d834df4c6ed2c35596e97a1b10d17451c02537652"
+  },
+  "selection_constraints": {
+    "official_evaluator_family": ["url_match", "program_html"],
+    "requires_frozen_answer_action": false,
+    "persistent_account_or_content_mutation": false,
+    "model_outcomes_observed_during_selection": false
+  },
+  "historical_development_exclusion_registry": "benchmarks/table2/pilot/task_manifest.json",
+  "runtime_oracle_policy": "official evaluator configuration remains sealed; runtime receives only the oracle-blind task projection",
+  "final_paper_evaluation_eligible": false,
+  "paper_table_status": "N/R"
+}

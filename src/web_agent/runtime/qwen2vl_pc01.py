@@ -1312,10 +1312,17 @@ class PC01EvaluationRuntimeFactory:
 
     create_webarena_runtime: Callable[..., Any]
     seed_services: Mapping[int, PC01SeedOperationalServices]
+    create_process_isolated_webarena: Callable[..., Any] | None = None
 
     def __post_init__(self) -> None:
         if not callable(self.create_webarena_runtime):
             raise PC01RuntimeError("a concrete BrowserGym/WebArena runtime factory is required")
+        if self.create_process_isolated_webarena is not None and not callable(
+            self.create_process_isolated_webarena
+        ):
+            raise PC01RuntimeError(
+                "process-isolated WebArena factory must be callable when supplied"
+            )
         if set(self.seed_services) != {PC01_MODEL_SEED}:
             raise PC01RuntimeError(
                 "PC-01 live operational services must cover seed 42 exactly"
@@ -1437,6 +1444,9 @@ class PC01EvaluationRuntimeFactory:
             create_webarena_runtime=self.create_webarena_runtime,
             frozen=True,
             oracle_labels_exposed_to_runtime=False,
+            create_process_isolated_webarena=(
+                self.create_process_isolated_webarena
+            ),
         )
 
 

@@ -178,6 +178,29 @@ def task_clustered_rate(
             "ci_reason": "fewer than two unique task clusters",
             "display": f"{100.0 * estimate:.2f}% ({numerator}/{denominator})",
         }
+    # A task-cluster bootstrap is mathematically degenerate when every task
+    # has a positive denominator and the same exact rate.  Avoid performing
+    # millions of redundant PRNG draws for constant pilot columns while
+    # preserving the registered sample count and percentile result exactly.
+    first_numerator, first_denominator = task_totals[task_ids[0]]
+    if all(
+        task_denominator > 0
+        and task_numerator * first_denominator
+        == first_numerator * task_denominator
+        for task_numerator, task_denominator in task_totals.values()
+    ):
+        exact = float(estimate)
+        return {
+            **common,
+            "estimate": exact,
+            "ci_low": exact,
+            "ci_high": exact,
+            "ci95_low": exact if confidence == 0.95 else None,
+            "ci95_high": exact if confidence == 0.95 else None,
+            "valid_bootstrap_samples": samples,
+            "interval_status": "ESTIMATED",
+            "display": f"{100.0 * estimate:.2f}% ({numerator}/{denominator})",
+        }
     rng = random.Random(derived_seed)
     estimates: list[float] = []
     for _ in range(samples):
@@ -371,6 +394,23 @@ def task_clustered_mean(
             "valid_bootstrap_samples": 0,
             "interval_status": "NOT_ESTIMABLE_FEWER_THAN_TWO_TASK_CLUSTERS",
             "ci_reason": "fewer than two unique task clusters",
+            "display": f"{descriptive['mean']:.2f} ({descriptive['total']:.2f}/{descriptive['n']})",
+        }
+
+    # Resampling cannot change a mean whose complete set of eligible cell
+    # values is constant.  Return the exact percentile interval directly;
+    # this is equivalent to executing every registered bootstrap draw and
+    # prevents constant efficiency columns from dominating validation time.
+    if len(set(ordered)) == 1:
+        exact = float(descriptive["mean"])
+        return {
+            **common,
+            "ci_low": exact,
+            "ci_high": exact,
+            "ci95_low": exact if confidence == 0.95 else None,
+            "ci95_high": exact if confidence == 0.95 else None,
+            "valid_bootstrap_samples": samples,
+            "interval_status": "ESTIMATED",
             "display": f"{descriptive['mean']:.2f} ({descriptive['total']:.2f}/{descriptive['n']})",
         }
 

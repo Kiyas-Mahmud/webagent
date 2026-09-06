@@ -40,35 +40,32 @@ permitted scalar such as visible browser text can still carry data whose origin
 cannot be inferred from schema conformance, so these checks do not establish
 semantic oracle isolation or runtime value provenance.
 Its local fixture tests are key/envelope architecture evidence only. The active
-WebArena deployment has not supplied an independently authenticated receipt proving
-that these process/source/credential boundaries were used on the campaign
-host. Handoff therefore records
-`BLOCKED_VALUE_PROVENANCE_AND_EXTERNAL_RECEIPT_REQUIRED`; the canonical bootstrap still
-stops before importing the provider factory. The older same-process broker is
-retained for engineering fixtures and is explicitly unpromotable. A
-self-authored Boolean, local test receipt, or copied receipt cannot lift this
-block.
+WebArena deployment has not supplied the complete source-attested, hash-bound
+live package proving that the registered process/source/credential boundaries
+and oracle-free value origins were used on the campaign host. Handoff and
+bootstrap must therefore remain blocked before provider import. The older
+same-process broker is retained for engineering fixtures and is explicitly
+unpromotable. A self-authored Boolean, local fixture receipt, copied receipt,
+or digest-shaped claim cannot lift this block.
 
-The local broker child currently shares the runtime UID and inherits its launch
-environment. That is address-space separation, not a same-UID hostile-code or
-secret-confidentiality claim. A promotable external deployment receipt must be
-bound to the exact attested source/session and independently prove a separate
-UID or container/process sandbox, a filesystem policy that prevents runtime
-inspection of evaluator memory/state, an allowlisted scrubbed evaluator
-environment with no inherited runtime/provider secrets, authenticated peer
-identity, and cleanup under those same controls. Promotion additionally
-requires externally reviewable provenance showing where every runtime-visible
-value came from. The registered inner contracts do not establish that
-provenance. A separate verification-only Ed25519 receipt/challenge schema now
-exists, but its packaged authority registry is deliberately empty, its local
-ledger is not an external/global replay anchor, and it is not integrated as
-dispatch authority. There is therefore still no registered independent key or
-trust path capable of promoting a live deployment.
-For `PILOT_ONLY`, requiring that independent Ed25519/global-replay authority is
-conservative hardening beyond the supplied plan's explicit hash/isolation
-language and remains `AWAITING_PROJECT_OWNER_RATIFICATION`; see
-`docs/TABLE2_OPERATOR_INPUTS_REQUIRED.md` Section 5. This runbook describes the
-current fail-closed implementation, not a silently approved scientific change.
+For `PILOT_ONLY`, the required assurance is the actual source-attested
+distinct-process deployment, scrubbed credential/evaluator environment,
+authenticated peer identity, complete request/response hash chain, immutable
+locally replayed live measurements, host remeasurement, cleanup evidence, and
+reviewable provenance for every runtime-visible value. The local child may
+share the runtime UID, so this pilot evidence establishes address-space and
+scientific dataflow separation, not hostile-code secrecy or a separate-UID
+sandbox. That limitation must be reported with the provisional pilot.
+
+Independent Ed25519 signatures and a global replay anchor are
+`FINAL_CAMPAIGN_ONLY`. The later final deployment must additionally prove a
+separate UID or registered container/process sandbox, runtime-inaccessible
+evaluator state, independently signed startup/model-load/before-block/after-
+block measurements, and global replay protection. The verification-only
+receipt/challenge schema may be retained for that future gate; its packaged
+registry is deliberately empty and its local ledger is not an external/global
+replay anchor. Absence of that final-only authority does not block a fully
+validated `PILOT_ONLY` package.
 
 The generic child-only WebArena adapter bridge, strict dependency-source
 closure mechanism, typed internal browser-error URL mapping, child-owned
@@ -95,16 +92,17 @@ The derivation is fixed in source before outcomes: for each broker operation,
 take its maximum registered monotonic duration, apply `2 × maximum + 1000 ms`,
 round upward to 100 ms, respect the already frozen BrowserGym operation floors,
 and reject rather than clip any value exceeding the setup/task budget. The
-calibration artifact is size-bounded, immutable, and non-authorizing and must
-later be cross-bound by the independent deployment receipt. Engineering fixtures retain explicit
-developer timeouts under `ENGINEERING_FIXTURE_ONLY`. Synthetic/raw measured
-evidence can run only under `MEASURED_CALIBRATION_REPLAY_ONLY`, whose receipt
-is explicitly non-authorizing and production-ineligible. `EVALUATION` rejects
-raw in-memory evidence, requires an immutable calibration artifact plus the
-complete typed expected-authority bundle, validates every local relationship,
-and then still fails before worker launch until an external authority
-cross-binds that bundle. Caller-injected timeouts are forbidden in either
-measured scope. Launch configuration and authenticated readiness use a
+calibration artifact is size-bounded and immutable. Engineering fixtures retain
+explicit developer timeouts under `ENGINEERING_FIXTURE_ONLY`. Synthetic or raw
+in-memory measurements may run only under
+`MEASURED_CALIBRATION_REPLAY_ONLY` and never authorize an evaluation.
+`PILOT_ONLY` `EVALUATION` requires the immutable artifact plus the complete
+typed expected-evidence bundle, locally replays every relationship, and
+hash-binds that bundle to the frozen source, campaign, host, tasks, services,
+and request/response transcript. The later final campaign additionally
+requires independent Ed25519 cross-binding and global replay protection.
+Caller-injected timeouts are forbidden in every measured scope. Launch
+configuration and authenticated readiness use a
 dedicated framed socket rather than stdout; stdout/stderr cannot impersonate
 readiness or create pipe backpressure. Connect, send, every partial receive,
 control shutdown, and normal worker wait share absolute monotonic calibrated
@@ -115,15 +113,16 @@ calibration collector/harness, and preregistered safe probe-action manifest do
 not exist. That is the current expected stop condition, not an infrastructure
 rerun license.
 
-Campaign-package persistence and deployment-receipt cross-binding for this
-artifact are intentionally still pending. The active task registry has not
-been approved for live execution, no safe calibration-probe manifest exists,
-and no live measurement has been made. Therefore no handoff/campaign field may
-be populated with synthetic evidence, and the unchecked timeout-readiness item
+Campaign-package persistence and pilot evidence cross-binding for this artifact
+are intentionally still pending. The active task registry has not been
+approved for live execution, no safe calibration-probe manifest exists, and no
+live measurement has been made. Therefore no handoff/campaign field may be
+populated with synthetic evidence, and the unchecked timeout-readiness item
 below must remain open. Once those operator inputs exist, the handoff schema
-must copy the immutable calibration bytes, bind their artifact/content hashes,
-and require the external deployment authority to attest the same binding
-before this prerequisite can be promoted.
+must copy the immutable calibration bytes and locally replay and bind their
+artifact/content, source, host, task, service, and transcript hashes. The later
+final campaign adds the independent deployment-authority signature over that
+same binding.
 
 ## Freeze prerequisites
 
@@ -174,13 +173,16 @@ repeats its runtime check per block. The comparison CLI can run on the DGX with
 `--supplied-dgx-runtime-identity <CURRENT_V2_IDENTITY.json>`. It remeasures the
 executing Python/platform/package stack but only compares the supplied
 model/source/environment record; it does not independently generate that
-record. A future startup/model-load/per-block receipt must bind campaign ID,
-block ID, fresh nonce, semantic-lock hash, DGX host/runtime identities, phase,
-and issue time. The source can verify the four exact signed phases, but the
-packaged registry has no authority, no independent key or global replay anchor
-is registered, and the verifier is not connected to dispatch. Split dispatch
-therefore fails closed; a browser-side self-claim or copied JSON cannot
-substitute. Single-host v1 locks remain supported.
+record. For `PILOT_ONLY`, the DGX startup, model-load, and before-block host
+remeasurements must bind campaign ID, block ID, nonce, semantic-lock hash, DGX
+host/runtime identities, phase, and issue time into the authenticated
+request/response hash chain. A browser-side self-claim or copied JSON cannot
+substitute for those measured records. The later final campaign requires the
+same bindings in independently Ed25519-signed startup/model-load/before-block/
+after-block receipts and a global replay anchor. The packaged authority
+registry is empty, so final split dispatch remains closed; that final-only
+absence does not invalidate a complete pilot evidence package. Single-host v1
+locks remain supported.
 
 Both runner attestations and their frozen `runner_source/` trees must include
 the exact current bytes for:
@@ -231,11 +233,13 @@ leaf and every parent component are non-symlinks. It must be tree-disjoint in
 both directions from the campaign and source checkout: `/`, either tree, a
 descendant, or an ancestor such as the campaign/source parent is rejected.
 
-After the deployment owner supplies and preregisters independent process-
-isolation evidence for the actual campaign host, generate the probe's
-provider-boundary receipt with the tracked CLI. The command below documents
-that later deterministic preparation; in the current source version it fails
-closed at the external-deployment-receipt gate:
+After the deployment owner supplies and preregisters the source-attested
+process-isolation evidence, complete live deployment package, locally replayed
+measured timeout bundle, host remeasurement, request/response hash chain, and
+oracle-free value-origin evidence for the actual campaign host, generate the
+probe's provider-boundary receipt with the tracked CLI. The command below
+documents that later deterministic preparation; until those real inputs exist
+it must fail closed at the pilot deployment-evidence gate:
 
 ```bash
 PYTHONPATH=src python3 scripts/run_table2_evaluation.py \

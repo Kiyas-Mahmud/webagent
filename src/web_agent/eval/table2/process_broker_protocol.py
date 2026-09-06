@@ -11,8 +11,10 @@ import re
 import socket
 import stat
 import struct
+import threading
 from time import monotonic
-from typing import Any, Mapping
+from contextlib import contextmanager
+from typing import Any, Iterator, Mapping
 from urllib.parse import urlsplit
 
 from web_agent.benchmarks.base import AdapterExecution
@@ -34,8 +36,44 @@ from .common import canonical_json_bytes, sha256_file
 
 
 PROCESS_BROKER_IMPORT_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
-PROCESS_BROKER_PROTOCOL_VERSION = "table2-process-page-broker-ipc-v3"
+PROCESS_BROKER_PROTOCOL_VERSION = "table2-process-page-broker-ipc-v4"
 MAX_PROCESS_BROKER_MESSAGE_BYTES = 1_048_576
+PROCESS_BROKER_TRANSCRIPT_SCHEMA_VERSION = (
+    "table2-process-broker-authenticated-transcript-v1"
+)
+PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM = (
+    "SHA256_CANONICAL_JSON_AUTHENTICATED_FRAME_PAYLOAD_CHAIN_V1"
+)
+PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION = (
+    "table2-process-broker-child-cleanup-result-v1"
+)
+PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE = "ProcessBrokerChildCleanupResult"
+PROCESS_BROKER_CHILD_CLEANUP_DISPOSITIONS = frozenset(
+    {
+        "RUNTIME_CLOSE_ACKNOWLEDGED",
+        "CONTROL_ABORT_COMPLETED",
+        "NO_BROWSER_CREATED",
+    }
+)
+PROCESS_BROKER_CHILD_ENVIRONMENT_ALLOWLIST_VERSION = (
+    "table2-process-broker-child-environment-allowlist-v1"
+)
+PROCESS_BROKER_CHILD_ENVIRONMENT_INHERITED_ALLOWLIST = (
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "PATH",
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "SSL_CERT_DIR",
+    "SSL_CERT_FILE",
+    "TZ",
+)
+PROCESS_BROKER_CHILD_ENVIRONMENT_FIXED_NAMES = (
+    "HOME",
+    "PYTHONNOUSERSITE",
+    "TMPDIR",
+    "XDG_CACHE_HOME",
+)
 RUNTIME_BROKER_OPERATIONS = frozenset(
     {
         "runtime_reset",
@@ -1649,6 +1687,197 @@ def _json_object(value: object, *, context: str) -> dict[str, Any]:
     if not isinstance(detached, dict):  # defensive; ``value`` was a Mapping
         raise ProcessBrokerProtocolError(f"{context} must be a JSON object")
     return detached
+
+
+def _lowercase_sha256(value: object, *, context: str) -> str:
+    if type(value) is not str or len(value) != 64 or any(
+        character not in "0123456789abcdef" for character in value
+    ):
+        raise ProcessBrokerProtocolError(f"{context} must be lowercase SHA-256")
+    return value
+
+
+def validate_child_cleanup_result(value: object) -> dict[str, Any]:
+    """Validate child-owned browser cleanup evidence without inferring close.
+
+    Only the backend that owns the browser/controller can populate this record.
+    Worker exit, socket removal, and an acknowledged control message are not
+    accepted as substitutes for ``browser_close_completed``.
+    """
+
+    result = _json_object(value, context="process-broker child cleanup result")
+    if set(result) != {
+        "schema_version",
+        "record_type",
+        "cleanup_disposition",
+        "browser_close_attempted",
+        "browser_close_completed",
+        "manual_rescue_check_count",
+        "manual_rescue_tail_sha256",
+    }:
+        raise ProcessBrokerProtocolError(
+            "process-broker child cleanup result fields differ"
+        )
+    if (
+        result.get("schema_version")
+        != PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION
+        or result.get("record_type")
+        != PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE
+        or result.get("cleanup_disposition")
+        not in PROCESS_BROKER_CHILD_CLEANUP_DISPOSITIONS
+    ):
+        raise ProcessBrokerProtocolError(
+            "process-broker child cleanup result identity differs"
+        )
+    attempted = result.get("browser_close_attempted")
+    completed = result.get("browser_close_completed")
+    if type(attempted) is not bool or type(completed) is not bool:
+        raise ProcessBrokerProtocolError(
+            "process-broker child cleanup browser-close flags are not boolean"
+        )
+    disposition = str(result["cleanup_disposition"])
+    if disposition == "NO_BROWSER_CREATED":
+        if attempted is not False or completed is not False:
+            raise ProcessBrokerProtocolError(
+                "process-broker no-browser cleanup claims a browser close"
+            )
+    elif attempted is not True or completed is not True:
+        raise ProcessBrokerProtocolError(
+            "process-broker created-browser cleanup lacks completed close evidence"
+        )
+    count = result.get("manual_rescue_check_count")
+    tail = result.get("manual_rescue_tail_sha256")
+    if type(count) is not int or count < 0:
+        raise ProcessBrokerProtocolError(
+            "process-broker child cleanup manual-rescue count is invalid"
+        )
+    if count == 0:
+        if tail is not None:
+            raise ProcessBrokerProtocolError(
+                "process-broker empty manual-rescue stream has a tail"
+            )
+    else:
+        _lowercase_sha256(
+            tail,
+            context="process-broker child cleanup manual-rescue tail",
+        )
+    return result
+
+
+class ProcessBrokerTranscript:
+    """Thread-safe deterministic chain over authenticated broker wire frames."""
+
+    __slots__ = (
+        "__entry_count",
+        "__lock",
+        "__root_sha256",
+        "__session_identity_sha256",
+    )
+
+    def __init__(self, *, session_id: str) -> None:
+        if type(session_id) is not str or not session_id:
+            raise ValueError("process-broker transcript requires a session identity")
+        self.__session_identity_sha256 = hashlib.sha256(
+            session_id.encode("utf-8")
+        ).hexdigest()
+        self.__root_sha256 = hashlib.sha256(
+            canonical_json_bytes(
+                {
+                    "schema_version": PROCESS_BROKER_TRANSCRIPT_SCHEMA_VERSION,
+                    "chain_algorithm": PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM,
+                    "protocol_version": PROCESS_BROKER_PROTOCOL_VERSION,
+                    "session_identity_sha256": self.__session_identity_sha256,
+                }
+            )
+        ).hexdigest()
+        self.__entry_count = 0
+        # One shared parent instance serializes runtime, orchestration, and
+        # control exchanges so its global order is identical to the worker's
+        # single accept loop. RLock lets commit/snapshot run inside exchange().
+        self.__lock = threading.RLock()
+
+    @contextmanager
+    def exchange(self) -> Iterator[None]:
+        """Serialize a complete request/response exchange across role clients."""
+
+        with self.__lock:
+            yield
+
+    def snapshot(self) -> dict[str, Any]:
+        with self.__lock:
+            return {
+                "root_sha256": self.__root_sha256,
+                "entry_count": self.__entry_count,
+            }
+
+    def commit_authenticated_frame(
+        self,
+        *,
+        direction: str,
+        role: str,
+        sequence: int,
+        operation: str,
+        frame: Mapping[str, Any],
+        payload: object,
+    ) -> dict[str, Any]:
+        """Commit one already authenticated canonical frame and payload/result."""
+
+        if direction not in {"request", "response"}:
+            raise ProcessBrokerProtocolError(
+                "process-broker transcript direction is invalid"
+            )
+        if role not in {"runtime", "orchestration", "control"}:
+            raise ProcessBrokerProtocolError("process-broker transcript role is invalid")
+        if type(sequence) is not int or sequence < 0:
+            raise ProcessBrokerProtocolError(
+                "process-broker transcript sequence is invalid"
+            )
+        if type(operation) is not str or not operation:
+            raise ProcessBrokerProtocolError(
+                "process-broker transcript operation is invalid"
+            )
+        canonical_frame = canonical_json_bytes(
+            _json_object(frame, context="process-broker transcript frame")
+        )
+        try:
+            canonical_payload = canonical_json_bytes(payload)
+        except (TypeError, ValueError) as exc:
+            raise ProcessBrokerProtocolError(
+                "process-broker transcript payload is not canonical JSON"
+            ) from exc
+        if (
+            len(canonical_frame) > MAX_PROCESS_BROKER_MESSAGE_BYTES
+            or len(canonical_payload) > MAX_PROCESS_BROKER_MESSAGE_BYTES
+        ):
+            raise ProcessBrokerProtocolError(
+                "process-broker transcript material exceeds the IPC size limit"
+            )
+        with self.__lock:
+            entry = {
+                "schema_version": PROCESS_BROKER_TRANSCRIPT_SCHEMA_VERSION,
+                "chain_algorithm": PROCESS_BROKER_TRANSCRIPT_CHAIN_ALGORITHM,
+                "session_identity_sha256": self.__session_identity_sha256,
+                "entry_index": self.__entry_count,
+                "previous_root_sha256": self.__root_sha256,
+                "direction": direction,
+                "role": role,
+                "sequence": sequence,
+                "operation": operation,
+                "canonical_frame_sha256": hashlib.sha256(
+                    canonical_frame
+                ).hexdigest(),
+                "canonical_payload_sha256": hashlib.sha256(
+                    canonical_payload
+                ).hexdigest(),
+            }
+            self.__root_sha256 = hashlib.sha256(
+                canonical_json_bytes(entry)
+            ).hexdigest()
+            self.__entry_count += 1
+            return {
+                "root_sha256": self.__root_sha256,
+                "entry_count": self.__entry_count,
+            }
 
 
 def authenticated_envelope(

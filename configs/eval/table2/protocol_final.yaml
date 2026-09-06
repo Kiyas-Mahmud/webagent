@@ -10,6 +10,17 @@ paper_claims:
   pre_evaluation_status: N/R
   pilot_resolution_forbidden: true
 
+deployment_assurance:
+  scope: independently_attested_locked_final
+  policy_browser_evaluator_process_isolation_required: true
+  immutable_measured_timeout_bundle_required: true
+  authenticated_broker_envelopes_required: true
+  hash_chained_runtime_artifacts_required: true
+  split_request_response_hash_chain_required: true
+  source_attested_oracle_free_value_origin_evidence_required: true
+  independent_ed25519_required: true
+  global_replay_anchor_required: true
+
 selection:
   mode: three_candidate_final
   candidate_ids:

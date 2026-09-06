@@ -861,7 +861,7 @@ def _fixture_campaign_repository(
             Path(__file__).resolve().parents[2]
             / "src/web_agent/memory/joint_duplicate_audit.py"
         ),
-        "benchmarks/table2/pilot/duplicate_audit_manifest.json": (
+        "benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json": (
             DUPLICATE_REGISTRATION
         ),
     }
@@ -939,7 +939,7 @@ def _bound_store_context(
         "registered_recovery_scenarios_path": inputs["recovery_scenarios"],
         "duplicate_audit_registration_path": (
             repository
-            / "benchmarks/table2/pilot/duplicate_audit_manifest.json"
+            / "benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json"
         ),
         "provenance_manifest_path": provenance_path,
     }
@@ -1277,7 +1277,8 @@ def test_campaign_binding_rejects_frozen_store_item_cluster_rebinding(
         sha256_file(inputs["source_authority"]),
     )
     copied_registration = (
-        repository / "benchmarks/table2/pilot/duplicate_audit_manifest.json"
+        repository
+        / "benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json"
     )
     common = {
         "memory_by_seed": {42: manifest_path},

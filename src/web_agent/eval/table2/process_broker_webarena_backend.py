@@ -24,8 +24,12 @@ must separately satisfy the external receipt/trust-anchor gates.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import ast
+import hashlib
 import importlib
+import inspect
 import json
+import os
 from pathlib import Path
 import stat
 from typing import Any
@@ -75,6 +79,32 @@ PROCESS_BROKER_WEBARENA_BACKEND_ENTRYPOINT = (
 PROCESS_BROKER_WEBARENA_BACKEND_SOURCE = (
     "src/web_agent/eval/table2/process_broker_webarena_backend.py"
 )
+PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION = (
+    "table2-process-broker-child-cleanup-result-v1"
+)
+PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE = "ProcessBrokerChildCleanupResult"
+PROCESS_BROKER_CHILD_CLEANUP_DISPOSITIONS = frozenset(
+    {
+        "RUNTIME_CLOSE_ACKNOWLEDGED",
+        "CONTROL_ABORT_COMPLETED",
+        "NO_BROWSER_CREATED",
+    }
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_SCHEMA_VERSION = (
+    "table2-process-broker-sealed-callback-state-guard-v1"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_RECORD_TYPE = (
+    "ProcessBrokerSealedCallbackStateGuard"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_IDENTITY_SCHEMA_VERSION = (
+    "table2-process-broker-sealed-callback-state-guard-sidecar-identity-v1"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_IDENTITY_RECORD_TYPE = (
+    "ProcessBrokerSealedCallbackStateGuardSidecarIdentity"
+)
+PROCESS_BROKER_SEALED_CALLBACK_GUARD_SIDECAR_FILENAME = (
+    "sealed_callback_state_guard.child.jsonl"
+)
 # Captured when the parent-side runtime bridge is imported. The broker compares
 # this with its launch receipt so later file replacement cannot pair stale
 # in-memory bridge code with newly hashed child bytes.
@@ -106,6 +136,21 @@ _RUNTIME_TASK_METADATA_FIELDS = {
 WebArenaEpisodeAdapterFactory = Callable[..., EnvironmentAdapter]
 WebArenaEpisodeSealedFinalizer = Callable[..., OpaqueTerminalSignal]
 WebArenaSealedTransitionEvaluator = Callable[..., OpaqueTerminalSignal]
+
+_ADAPTER_FACTORY_KEYWORD_PARAMETERS = ("task", "episode_runtime_dir")
+_SEALED_TRANSITION_KEYWORD_PARAMETERS = (
+    "task",
+    "adapter",
+    "receipt_binding",
+    "evidence_writer",
+)
+_SEALED_FINALIZER_KEYWORD_PARAMETERS = (
+    "task",
+    "adapter",
+    "episode_summary",
+    "episode_runtime_dir",
+    "evidence_writer",
+)
 
 
 def _lowercase_sha256(value: object, *, label: str) -> str:
@@ -291,56 +336,162 @@ def _validated_repository_factory_source(
     return resolved, lexical.as_posix()
 
 
-def _load_source_attested_adapter_factory(
-    config: Mapping[str, Any],
-) -> WebArenaEpisodeAdapterFactory:
-    entrypoint = config.get("adapter_factory_entrypoint")
-    if type(entrypoint) is not str:
-        raise ProcessBrokerProtocolError(
-            "WebArena adapter factory entrypoint is invalid"
-        )
-    module_name, separator, attribute_name = entrypoint.partition(":")
+def _validated_entrypoint_parts(
+    value: object,
+    *,
+    label: str,
+) -> tuple[str, str]:
+    if type(value) is not str:
+        raise ProcessBrokerProtocolError(f"{label} entrypoint is invalid")
+    module_name, separator, attribute_name = value.partition(":")
     if (
         separator != ":"
+        or not module_name
         or any(not part.isidentifier() for part in module_name.split("."))
         or not attribute_name.isidentifier()
     ):
+        raise ProcessBrokerProtocolError(f"{label} entrypoint is malformed")
+    return module_name, attribute_name
+
+
+def _validate_preimport_function_contract(
+    source: Path,
+    *,
+    attribute_name: str,
+    keyword_parameters: tuple[str, ...],
+    label: str,
+) -> None:
+    """Reject an absent or impossible child entrypoint before module import.
+
+    Source hashing alone does not prove that ``module:attribute`` exists or has
+    the call shape used by the worker.  Parsing the already-attested bytes first
+    also prevents a malformed module's top-level code from running merely to
+    discover that its advertised attribute was a class, alias, or wrong-shaped
+    function.
+    """
+
+    try:
+        tree = ast.parse(source.read_bytes(), filename=str(source))
+    except (OSError, SyntaxError, ValueError) as exc:
         raise ProcessBrokerProtocolError(
-            "WebArena adapter factory entrypoint is malformed"
+            f"{label} source cannot be parsed before import"
+        ) from exc
+    declarations = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == attribute_name
+    ]
+    if len(declarations) != 1 or not isinstance(declarations[0], ast.FunctionDef):
+        raise ProcessBrokerProtocolError(
+            f"{label} entrypoint is not one top-level synchronous function"
         )
+    function = declarations[0]
+    arguments = function.args
+    if (
+        function.decorator_list
+        or arguments.posonlyargs
+        or arguments.args
+        or arguments.vararg is not None
+        or arguments.kwarg is not None
+        or tuple(item.arg for item in arguments.kwonlyargs) != keyword_parameters
+        or any(default is not None for default in arguments.kw_defaults)
+    ):
+        raise ProcessBrokerProtocolError(
+            f"{label} entrypoint signature differs from the child contract"
+        )
+
+
+def _validate_loaded_function_contract(
+    callback: object,
+    *,
+    module_name: str,
+    attribute_name: str,
+    keyword_parameters: tuple[str, ...],
+    label: str,
+) -> Callable[..., Any]:
+    if (
+        not inspect.isfunction(callback)
+        or getattr(callback, "__module__", None) != module_name
+        or getattr(callback, "__name__", None) != attribute_name
+    ):
+        raise ProcessBrokerProtocolError(
+            f"{label} entrypoint changed after pre-import validation"
+        )
+    try:
+        parameters = tuple(inspect.signature(callback).parameters.values())
+    except (TypeError, ValueError) as exc:
+        raise ProcessBrokerProtocolError(
+            f"{label} entrypoint signature is unavailable"
+        ) from exc
+    if (
+        tuple(item.name for item in parameters) != keyword_parameters
+        or any(item.kind is not inspect.Parameter.KEYWORD_ONLY for item in parameters)
+        or any(item.default is not inspect.Parameter.empty for item in parameters)
+    ):
+        raise ProcessBrokerProtocolError(
+            f"{label} entrypoint signature differs from the child contract"
+        )
+    return callback
+
+
+def _load_source_attested_function(
+    config: Mapping[str, Any],
+    *,
+    field_prefix: str,
+    label: str,
+    keyword_parameters: tuple[str, ...],
+) -> Callable[..., Any]:
+    entrypoint = config.get(f"{field_prefix}_entrypoint")
+    module_name, attribute_name = _validated_entrypoint_parts(
+        entrypoint,
+        label=label,
+    )
     repository_root = Path(__file__).resolve().parents[4]
     source, source_relative = _validated_repository_factory_source(
         repository_root=repository_root,
-        relative_path=config.get("adapter_factory_source_relative_path"),
+        relative_path=config.get(f"{field_prefix}_source_relative_path"),
     )
     expected_module_path = Path(*module_name.split(".")).with_suffix(".py")
     if Path(source_relative) not in {
         expected_module_path,
         Path("src") / expected_module_path,
     }:
-        raise ProcessBrokerProtocolError(
-            "WebArena adapter factory source differs from entrypoint"
-        )
+        raise ProcessBrokerProtocolError(f"{label} source differs from entrypoint")
     expected_sha256 = _lowercase_sha256(
-        config.get("adapter_factory_source_sha256"),
-        label="WebArena adapter factory source",
+        config.get(f"{field_prefix}_source_sha256"),
+        label=f"{label} source",
     )
     if sha256_file(source) != expected_sha256:
-        raise ProcessBrokerProtocolError(
-            "WebArena adapter factory source hash differs"
-        )
+        raise ProcessBrokerProtocolError(f"{label} source hash differs")
+    _validate_preimport_function_contract(
+        source,
+        attribute_name=attribute_name,
+        keyword_parameters=keyword_parameters,
+        label=label,
+    )
     module = importlib.import_module(module_name)
     loaded_source = Path(str(getattr(module, "__file__", ""))).resolve()
     if loaded_source != source or sha256_file(loaded_source) != expected_sha256:
-        raise ProcessBrokerProtocolError(
-            "loaded WebArena adapter factory identity differs"
-        )
-    factory = getattr(module, attribute_name, None)
-    if not callable(factory):
-        raise ProcessBrokerProtocolError(
-            "WebArena adapter factory entrypoint is not callable"
-        )
-    return factory
+        raise ProcessBrokerProtocolError(f"loaded {label} identity differs")
+    return _validate_loaded_function_contract(
+        getattr(module, attribute_name, None),
+        module_name=module_name,
+        attribute_name=attribute_name,
+        keyword_parameters=keyword_parameters,
+        label=label,
+    )
+
+
+def _load_source_attested_adapter_factory(
+    config: Mapping[str, Any],
+) -> WebArenaEpisodeAdapterFactory:
+    return _load_source_attested_function(
+        config,
+        field_prefix="adapter_factory",
+        label="WebArena adapter factory",
+        keyword_parameters=_ADAPTER_FACTORY_KEYWORD_PARAMETERS,
+    )
 
 
 def _load_source_attested_finalizer(
@@ -348,71 +499,318 @@ def _load_source_attested_finalizer(
 ) -> WebArenaEpisodeSealedFinalizer:
     """Load only the explicitly hash-bound child-side finalizer."""
 
-    entrypoint = config.get("sealed_finalizer_entrypoint")
-    if type(entrypoint) is not str:
-        raise ProcessBrokerProtocolError(
-            "WebArena sealed finalizer entrypoint is invalid"
-        )
-    module_name, separator, attribute_name = entrypoint.partition(":")
-    if (
-        separator != ":"
-        or any(not part.isidentifier() for part in module_name.split("."))
-        or not attribute_name.isidentifier()
-    ):
-        raise ProcessBrokerProtocolError(
-            "WebArena sealed finalizer entrypoint is malformed"
-        )
-    repository_root = Path(__file__).resolve().parents[4]
-    source, source_relative = _validated_repository_factory_source(
-        repository_root=repository_root,
-        relative_path=config.get("sealed_finalizer_source_relative_path"),
+    return _load_source_attested_function(
+        config,
+        field_prefix="sealed_finalizer",
+        label="WebArena sealed finalizer",
+        keyword_parameters=_SEALED_FINALIZER_KEYWORD_PARAMETERS,
     )
-    expected_module_path = Path(*module_name.split(".")).with_suffix(".py")
-    if Path(source_relative) not in {
-        expected_module_path,
-        Path("src") / expected_module_path,
-    }:
-        raise ProcessBrokerProtocolError(
-            "WebArena sealed finalizer source differs from entrypoint"
-        )
-    expected_sha256 = _lowercase_sha256(
-        config.get("sealed_finalizer_source_sha256"),
-        label="WebArena sealed finalizer source",
-    )
-    if sha256_file(source) != expected_sha256:
-        raise ProcessBrokerProtocolError(
-            "WebArena sealed finalizer source hash differs"
-        )
-    module = importlib.import_module(module_name)
-    loaded_source = Path(str(getattr(module, "__file__", ""))).resolve()
-    if loaded_source != source or sha256_file(loaded_source) != expected_sha256:
-        raise ProcessBrokerProtocolError(
-            "loaded WebArena sealed finalizer identity differs"
-        )
-    finalizer = getattr(module, attribute_name, None)
-    if not callable(finalizer):
-        raise ProcessBrokerProtocolError(
-            "WebArena sealed finalizer entrypoint is not callable"
-        )
-    return finalizer
 
 
 def _load_source_attested_transition_evaluator(
     config: Mapping[str, Any],
 ) -> WebArenaSealedTransitionEvaluator:
-    translated = {
-        **config,
-        "sealed_finalizer_entrypoint": config.get(
-            "sealed_transition_callback_entrypoint"
-        ),
-        "sealed_finalizer_source_relative_path": config.get(
-            "sealed_transition_callback_source_relative_path"
-        ),
-        "sealed_finalizer_source_sha256": config.get(
-            "sealed_transition_callback_source_sha256"
-        ),
-    }
-    return _load_source_attested_finalizer(translated)
+    return _load_source_attested_function(
+        config,
+        field_prefix="sealed_transition_callback",
+        label="WebArena sealed transition callback",
+        keyword_parameters=_SEALED_TRANSITION_KEYWORD_PARAMETERS,
+    )
+
+
+def _adapter_environment_state_sha256(
+    adapter: EnvironmentAdapter,
+    *,
+    context: str,
+) -> str:
+    callback = getattr(adapter, "process_broker_environment_state_sha256", None)
+    if not callable(callback):
+        raise ProcessBrokerProtocolError(
+            f"{context} lacks the source-attested environment-state digest"
+        )
+    try:
+        value = callback()
+    except BaseException as exc:
+        raise ProcessBrokerProtocolError(
+            f"{context} environment-state digest failed"
+        ) from exc
+    return _lowercase_sha256(value, label=f"{context} environment-state digest")
+
+
+class _SealedCallbackGuardSidecar:
+    """Child/backend-owned append-only sealed-callback state evidence."""
+
+    __slots__ = (
+        "_closed",
+        "_count",
+        "_descriptor",
+        "_file_identity",
+        "_path",
+        "_tail_sha256",
+    )
+
+    def __init__(self, runtime_dir: Path) -> None:
+        path = runtime_dir / PROCESS_BROKER_SEALED_CALLBACK_GUARD_SIDECAR_FILENAME
+        flags = os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_EXCL
+        flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path, flags, 0o600)
+        except OSError as exc:
+            raise ProcessBrokerProtocolError(
+                "sealed-callback guard sidecar must be a fresh child-owned file"
+            ) from exc
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            os.close(descriptor)
+            raise ProcessBrokerProtocolError(
+                "sealed-callback guard sidecar must be a single-link regular file"
+            )
+        self._path = path
+        self._descriptor = descriptor
+        self._file_identity = (
+            metadata.st_dev,
+            metadata.st_ino,
+            metadata.st_mode,
+            metadata.st_nlink,
+        )
+        self._count = 0
+        self._tail_sha256: str | None = None
+        self._closed = False
+
+    def _validate_open(self) -> None:
+        if self._closed:
+            raise ProcessBrokerProtocolError(
+                "sealed-callback guard sidecar is already closed"
+            )
+        try:
+            descriptor_metadata = os.fstat(self._descriptor)
+            path_metadata = self._path.lstat()
+        except OSError as exc:
+            raise ProcessBrokerProtocolError(
+                "sealed-callback guard sidecar identity is unavailable"
+            ) from exc
+        descriptor_identity = (
+            descriptor_metadata.st_dev,
+            descriptor_metadata.st_ino,
+            descriptor_metadata.st_mode,
+            descriptor_metadata.st_nlink,
+        )
+        path_identity = (
+            path_metadata.st_dev,
+            path_metadata.st_ino,
+            path_metadata.st_mode,
+            path_metadata.st_nlink,
+        )
+        if (
+            descriptor_identity != self._file_identity
+            or path_identity != self._file_identity
+            or not stat.S_ISREG(descriptor_metadata.st_mode)
+            or descriptor_metadata.st_nlink != 1
+        ):
+            raise ProcessBrokerProtocolError(
+                "sealed-callback guard sidecar pathname changed"
+            )
+
+    def append(
+        self,
+        *,
+        callback_kind: str,
+        environment_state_sha256_before: str,
+        environment_state_sha256_after: str,
+    ) -> None:
+        self._validate_open()
+        if callback_kind not in {"sealed_transition", "sealed_finalizer"}:
+            raise ProcessBrokerProtocolError(
+                "sealed-callback guard kind is unregistered"
+            )
+        before = _lowercase_sha256(
+            environment_state_sha256_before,
+            label="sealed-callback guard before state",
+        )
+        after = _lowercase_sha256(
+            environment_state_sha256_after,
+            label="sealed-callback guard after state",
+        )
+        if before != after:
+            raise ProcessBrokerProtocolError(
+                "mutating sealed callback cannot be recorded as unchanged"
+            )
+        index = self._count + 1
+        body = {
+            "schema_version": PROCESS_BROKER_SEALED_CALLBACK_GUARD_SCHEMA_VERSION,
+            "record_type": PROCESS_BROKER_SEALED_CALLBACK_GUARD_RECORD_TYPE,
+            "callback_guard_index": index,
+            "previous_record_sha256": self._tail_sha256 or ("0" * 64),
+            "callback_kind": callback_kind,
+            "environment_state_sha256_before": before,
+            "environment_state_sha256_after": after,
+            "environment_state_unchanged": True,
+        }
+        record_sha256 = hashlib.sha256(canonical_json_bytes(body)).hexdigest()
+        encoded = canonical_json_bytes(
+            {**body, "record_sha256": record_sha256}
+        ) + b"\n"
+        view = memoryview(encoded)
+        while view:
+            written = os.write(self._descriptor, view)
+            if written <= 0:  # pragma: no cover - regular-file write contract
+                raise ProcessBrokerProtocolError(
+                    "sealed-callback guard sidecar append made no progress"
+                )
+            view = view[written:]
+        os.fsync(self._descriptor)
+        self._count = index
+        self._tail_sha256 = record_sha256
+
+    def identity(self) -> dict[str, Any]:
+        self._validate_open()
+        os.fsync(self._descriptor)
+        current_offset = os.lseek(self._descriptor, 0, os.SEEK_CUR)
+        os.lseek(self._descriptor, 0, os.SEEK_SET)
+        digest = hashlib.sha256()
+        try:
+            while True:
+                block = os.read(self._descriptor, 1024 * 1024)
+                if not block:
+                    break
+                digest.update(block)
+        finally:
+            os.lseek(self._descriptor, current_offset, os.SEEK_SET)
+        self._validate_open()
+        return {
+            "schema_version": (
+                PROCESS_BROKER_SEALED_CALLBACK_GUARD_IDENTITY_SCHEMA_VERSION
+            ),
+            "record_type": PROCESS_BROKER_SEALED_CALLBACK_GUARD_IDENTITY_RECORD_TYPE,
+            "relative_path": PROCESS_BROKER_SEALED_CALLBACK_GUARD_SIDECAR_FILENAME,
+            "record_count": self._count,
+            "tail_sha256": self._tail_sha256,
+            "content_sha256": digest.hexdigest(),
+        }
+
+    def close(self) -> None:
+        if self._closed:
+            return None
+        self._validate_open()
+        os.fsync(self._descriptor)
+        os.close(self._descriptor)
+        self._closed = True
+        return None
+
+
+def _call_state_preserving_sealed_callback(
+    adapter: EnvironmentAdapter,
+    callback: Callable[[], Any],
+    *,
+    callback_kind: str,
+    context: str,
+    evidence_sidecar: _SealedCallbackGuardSidecar,
+) -> Any:
+    """Require a sealed callback to preserve the child-owned browser state."""
+
+    before = _adapter_environment_state_sha256(adapter, context=context)
+    callback_error: BaseException | None = None
+    result: object | None = None
+    try:
+        result = callback()
+    except BaseException as exc:
+        callback_error = exc
+    try:
+        after = _adapter_environment_state_sha256(adapter, context=context)
+    except BaseException as digest_error:
+        if callback_error is not None:
+            raise digest_error from callback_error
+        raise
+    if after != before:
+        error = ProcessBrokerProtocolError(
+            f"{context} mutated the child-owned environment state"
+        )
+        if callback_error is not None:
+            raise error from callback_error
+        raise error
+    try:
+        evidence_sidecar.append(
+            callback_kind=callback_kind,
+            environment_state_sha256_before=before,
+            environment_state_sha256_after=after,
+        )
+    except BaseException as evidence_error:
+        if callback_error is not None:
+            raise ProcessBrokerProtocolError(
+                f"{context} state-guard evidence append failed"
+            ) from evidence_error
+        raise ProcessBrokerProtocolError(
+            f"{context} state-guard evidence append failed"
+        ) from evidence_error
+    if callback_error is not None:
+        raise callback_error
+    return result
+
+
+def _manual_rescue_sidecar_identity(
+    adapter: EnvironmentAdapter,
+    *,
+    required: bool,
+) -> tuple[int, str | None]:
+    callback = getattr(
+        adapter,
+        "process_broker_manual_rescue_sidecar_identity",
+        None,
+    )
+    if not callable(callback):
+        if required:
+            raise ProcessBrokerProtocolError(
+                "finalizing WebArena adapter lacks child-owned manual-rescue evidence"
+            )
+        return 0, None
+    try:
+        value = callback()
+    except BaseException as exc:
+        raise ProcessBrokerProtocolError(
+            "child-owned manual-rescue sidecar identity failed"
+        ) from exc
+    if not isinstance(value, Mapping):
+        raise ProcessBrokerProtocolError(
+            "child-owned manual-rescue sidecar identity is malformed"
+        )
+    if set(value) != {
+        "schema_version",
+        "record_type",
+        "relative_path",
+        "record_count",
+        "tail_sha256",
+        "content_sha256",
+    }:
+        raise ProcessBrokerProtocolError(
+            "child-owned manual-rescue sidecar identity fields differ"
+        )
+    if (
+        value.get("schema_version")
+        != "table2-process-broker-manual-rescue-sidecar-identity-v1"
+        or value.get("record_type")
+        != "ProcessBrokerManualRescueSidecarIdentity"
+        or value.get("relative_path") != "manual_rescue_guard.child.jsonl"
+    ):
+        raise ProcessBrokerProtocolError(
+            "child-owned manual-rescue sidecar identity version differs"
+        )
+    count = value.get("record_count")
+    tail = value.get("tail_sha256")
+    if type(count) is not int or count < 0:
+        raise ProcessBrokerProtocolError(
+            "child-owned manual-rescue sidecar count is invalid"
+        )
+    if (tail is None) is not (count == 0):
+        raise ProcessBrokerProtocolError(
+            "child-owned manual-rescue sidecar tail/count disagree"
+        )
+    if tail is not None:
+        _lowercase_sha256(tail, label="child-owned manual-rescue sidecar tail")
+    _lowercase_sha256(
+        value.get("content_sha256"),
+        label="child-owned manual-rescue sidecar content",
+    )
+    return count, tail
 
 
 class WebArenaProcessBrokerBackend:
@@ -427,6 +825,7 @@ class WebArenaProcessBrokerBackend:
         "_reset_receipt",
         "_runtime_closed",
         "_runtime_dir",
+        "_sealed_callback_guard",
         "_sealed_sink",
         "_sealed_writer",
         "_task",
@@ -460,6 +859,23 @@ class WebArenaProcessBrokerBackend:
             raise ValueError(
                 "WebArena process backend finalization components are incomplete"
             )
+        if all(finalizing_components):
+            if not callable(
+                getattr(adapter, "process_broker_environment_state_sha256", None)
+            ):
+                raise ValueError(
+                    "finalizing WebArena adapter lacks its source-attested state digest"
+                )
+            if not callable(
+                getattr(
+                    adapter,
+                    "process_broker_manual_rescue_sidecar_identity",
+                    None,
+                )
+            ):
+                raise ValueError(
+                    "finalizing WebArena adapter lacks its child-owned manual-rescue sidecar"
+                )
         self._task = detached_record_copy(task)
         self._adapter = adapter
         self._episode_id: str | None = None
@@ -468,6 +884,11 @@ class WebArenaProcessBrokerBackend:
         self._finalizer = finalizer
         self._transition_evaluator = transition_evaluator
         self._sealed_sink = sealed_sink
+        self._sealed_callback_guard = (
+            _SealedCallbackGuardSidecar(runtime_dir)
+            if all(finalizing_components) and runtime_dir is not None
+            else None
+        )
         self._sealed_writer = (
             SealedVerifierWriter(sealed_sink)
             if type(sealed_sink) is SealedVerifierSink
@@ -810,12 +1231,19 @@ class WebArenaProcessBrokerBackend:
         if self.sealed_finalization_available:
             assert self._transition_evaluator is not None
             assert self._sealed_writer is not None
+            assert type(self._sealed_callback_guard) is _SealedCallbackGuardSidecar
             before = self._sealed_records()
-            signal = self._transition_evaluator(
-                task=detached_record_copy(self._task),
-                adapter=self._adapter,
-                receipt_binding=binding,
-                evidence_writer=self._sealed_writer,
+            signal = _call_state_preserving_sealed_callback(
+                self._adapter,
+                lambda: self._transition_evaluator(
+                    task=detached_record_copy(self._task),
+                    adapter=self._adapter,
+                    receipt_binding=binding,
+                    evidence_writer=self._sealed_writer,
+                ),
+                callback_kind="sealed_transition",
+                context="WebArena sealed transition evaluator",
+                evidence_sidecar=self._sealed_callback_guard,
             )
             after = self._sealed_records()
             if len(after) != len(before) + 1 or after[:-1] != before:
@@ -867,9 +1295,11 @@ class WebArenaProcessBrokerBackend:
             raise ProcessBrokerProtocolError(
                 "WebArena process backend has not reset"
             )
-        # Close only the runtime decision capability.  The child retains the
-        # live page for the separate orchestration finalizer; adapter/browser
-        # cleanup occurs during authenticated control shutdown afterwards.
+        result = self._adapter.close()
+        if result is not None:
+            raise ProcessBrokerProtocolError(
+                "WebArena adapter runtime close returned unregistered data"
+            )
         self._runtime_closed = True
         return {"closed": True}
 
@@ -927,13 +1357,31 @@ class WebArenaProcessBrokerBackend:
             raise ProcessBrokerProtocolError(
                 "WebArena process finalizer summary identity differs"
             )
+        if not self._runtime_closed:
+            close_result = self._adapter.close()
+            if close_result is not None:
+                raise ProcessBrokerProtocolError(
+                    "WebArena adapter pre-finalization close returned data"
+                )
+            self._runtime_closed = True
         before = self._sealed_records()
-        signal = self._finalizer(
-            task=detached_record_copy(self._task),
-            adapter=self._adapter,
-            episode_summary=summary,
-            episode_runtime_dir=self._runtime_dir,
-            evidence_writer=self._sealed_writer,
+        guard_sidecar = self._sealed_callback_guard
+        if type(guard_sidecar) is not _SealedCallbackGuardSidecar:
+            raise ProcessBrokerProtocolError(
+                "WebArena finalizer lacks its child-owned callback guard sidecar"
+            )
+        signal = _call_state_preserving_sealed_callback(
+            self._adapter,
+            lambda: self._finalizer(
+                task=detached_record_copy(self._task),
+                adapter=self._adapter,
+                episode_summary=summary,
+                episode_runtime_dir=self._runtime_dir,
+                evidence_writer=self._sealed_writer,
+            ),
+            callback_kind="sealed_finalizer",
+            context="WebArena sealed finalizer",
+            evidence_sidecar=guard_sidecar,
         )
         after = self._sealed_records()
         if len(after) != len(before) + 1 or after[:-1] != before:
@@ -954,26 +1402,105 @@ class WebArenaProcessBrokerBackend:
             raise ProcessBrokerProtocolError(
                 "WebArena sealed finalizer returned a non-opaque acknowledgement"
             )
-        self._runtime_closed = True
         self._finalized = True
-        return {"opaque_terminal_signal": signal.to_dict()}
+        callback_guard_identity = guard_sidecar.identity()
+        if (
+            callback_guard_identity.get("record_count", 0) < 1
+            or callback_guard_identity.get("tail_sha256") is None
+        ):
+            raise ProcessBrokerProtocolError(
+                "WebArena finalizer lacks completed callback-guard evidence"
+            )
+        return {
+            "opaque_terminal_signal": signal.to_dict(),
+            "sealed_callback_guard_identity": callback_guard_identity,
+        }
 
-    def shutdown(self) -> None:
-        """Best-effort child cleanup when control shutdown follows a failed session."""
+    def shutdown(self) -> dict[str, Any]:
+        """Close the browser and return only the strict cleanup commitment."""
 
         if self._closed:
-            return None
+            raise ProcessBrokerProtocolError(
+                "WebArena process backend shutdown may run exactly once"
+            )
+        manual_count, manual_tail = _manual_rescue_sidecar_identity(
+            self._adapter,
+            required=self._sealed_sink is not None,
+        )
+        browser_created = self._reset_receipt is not None
+        close_attempted = browser_created
+        close_completed = False
         try:
-            result = self._adapter.close()
+            process_close = getattr(
+                self._adapter,
+                "process_broker_close_browser",
+                None,
+            )
+            if callable(process_close):
+                receipt = process_close()
+                if receipt is None:
+                    browser_created = False
+                    close_attempted = False
+                    close_completed = False
+                else:
+                    created_value = getattr(
+                        receipt,
+                        "underlying_browser_created",
+                        None,
+                    )
+                    closed_value = getattr(
+                        receipt,
+                        "underlying_browser_close_called",
+                        None,
+                    )
+                    if type(created_value) is not bool or type(closed_value) is not bool:
+                        raise ProcessBrokerProtocolError(
+                            "WebArena child browser close receipt is malformed"
+                        )
+                    browser_created = created_value
+                    close_attempted = created_value
+                    close_completed = closed_value
+                    if close_completed is not browser_created:
+                        raise ProcessBrokerProtocolError(
+                            "WebArena child browser close receipt is incomplete"
+                        )
+            else:
+                result = self._adapter.close()
+                if result is not None:
+                    raise ProcessBrokerProtocolError(
+                        "WebArena adapter shutdown returned unregistered data"
+                    )
+                close_completed = close_attempted
         finally:
+            if type(self._sealed_callback_guard) is _SealedCallbackGuardSidecar:
+                self._sealed_callback_guard.close()
             if type(self._sealed_sink) is SealedVerifierSink:
                 self._sealed_sink.release_child_ownership()
-        if result is not None:
+        if browser_created and not (close_attempted and close_completed):
             raise ProcessBrokerProtocolError(
-                "WebArena adapter shutdown returned unregistered data"
+                "WebArena child cleanup did not complete browser close"
             )
+        disposition = (
+            "NO_BROWSER_CREATED"
+            if not browser_created
+            else (
+                "RUNTIME_CLOSE_ACKNOWLEDGED"
+                if self._runtime_closed
+                else "CONTROL_ABORT_COMPLETED"
+            )
+        )
+        if disposition not in PROCESS_BROKER_CHILD_CLEANUP_DISPOSITIONS:
+            raise AssertionError("unregistered child cleanup disposition")
         self._closed = True
-        return None
+        return {
+            "schema_version": PROCESS_BROKER_CHILD_CLEANUP_SCHEMA_VERSION,
+            "record_type": PROCESS_BROKER_CHILD_CLEANUP_RECORD_TYPE,
+            "cleanup_disposition": disposition,
+            "browser_close_attempted": close_attempted,
+            "browser_close_completed": close_completed,
+            "manual_rescue_check_count": manual_count,
+            "manual_rescue_tail_sha256": manual_tail,
+        }
 
 
 class ProcessBrokerWebArenaEnvironmentAdapter(EnvironmentAdapter):
