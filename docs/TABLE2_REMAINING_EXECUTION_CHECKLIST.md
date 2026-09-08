@@ -1,6 +1,12 @@
 # Table 2 Remaining Execution Checklist
 
-Last reviewed: 2026-09-07
+Last reviewed: 2026-09-08
+
+Execution source remains pinned to commit
+`178c24ac898f1feb17848ed1fa40fa22b97d053f`. This checklist is a progress record;
+documentation updates do not replace the producing commit or invalidate its
+validated preparation package. Use a clean checkout of the pinned commit for
+commands that require a clean execution repository.
 
 ## Purpose
 
@@ -40,7 +46,7 @@ Status values are `DONE`, `IN_PROGRESS`, `WAITING_FOR_AUTHORIZATION`,
 
 ### T2-07 — Freeze the active source
 
-Status: `WAITING_FOR_AUTHORIZATION`
+Status: `DONE`
 
 - [x] Review worktree scope and confirm no DGX training/checkpoint source was
   intentionally modified.
@@ -56,31 +62,36 @@ Status: `WAITING_FOR_AUTHORIZATION`
   historical failures, and two warnings in 314.53 seconds on 2026-09-07. All
   eight source/test files implicated by the four failures are byte-unchanged
   from `HEAD`.
-- [ ] Commit the verified Table 2 source only after explicit user
+- [x] Commit the verified Table 2 source only after explicit user
   authorization.
-- [ ] Record the full commit SHA used by every later Table 2 artifact.
+- [x] Record the execution commit:
+  `178c24ac898f1feb17848ed1fa40fa22b97d053f`.
 
 Stop condition: any new Table 2 failure, whitespace error, unexpected training
 change, or unreviewed generated/raw artifact in Git.
 
 ### T2-08 — Reissue the authenticated Kaggle preparation package
 
-Status: `NOT_STARTED`
+Status: `DONE`
 
-- [ ] Regenerate the Git-bundle transport from the authorized active-source
+- [x] Regenerate the Git-bundle transport from the authorized active-source
   commit.
-- [ ] Update the existing private Kaggle source-transport dataset.
-- [ ] Re-run the CPU-only, internet-disabled prepare-only job.
-- [ ] Download and validate the new receipt and package against the exact
+- [x] Update the existing private Kaggle source-transport dataset.
+- [x] Re-run the CPU-only, internet-disabled prepare-only job.
+- [x] Download and validate the new receipt and package against the exact
   producing commit.
-- [ ] Require `REVIEW_REQUIRED`, zero fatal errors, and zero
+- [x] Require `REVIEW_REQUIRED`, zero fatal errors, and zero
   validation/test/locked-test reads.
 
-This is a short data-preparation rerun, not model training.
+Validated `results-178c24a.zip`: 24,107 training rows, 2,065 candidates,
+zero fatal errors, and application-recorded zero validation/test/locked reads.
+Receipt core SHA-256:
+`9d9bf5474b7b0eab44cbd73191f66c6ebc3f07e41928202937c1c9fead82b013`.
+This preparation step is complete; no further preparation rerun is scheduled.
 
 ### T2-09 — Freeze the active 50-task WebArena content and duplicate assignments
 
-Status: `NOT_STARTED`
+Status: `IN_PROGRESS`
 
 - [x] Complete an explicitly uncommitted rehearsal from the pinned
   `libwebarena-0.0.4` wheel: exact 50-task export `PASS`; interface audit
@@ -88,9 +99,20 @@ Status: `NOT_STARTED`
   `handoff_eligible: true`. The resolved task-set SHA-256 is
   `33cc316005b8b5974755f7c382394ce80255ce18eb2900021baee3fb7ded0cc5`.
   This rehearsal is not the final source-frozen artifact.
-- [ ] Export the exact active 50 tasks from the pinned WebArena source.
-- [ ] Recompute the six-action/page-state interface audit and require 50/50
+- [x] Export the exact active 50 tasks from the pinned WebArena source using
+  commit `178c24a` and the example URL map. Live deployment URLs remain pending.
+- [x] Recompute the six-action/page-state interface audit and require 50/50
   compatible tasks.
+- [x] Create a clean detached checkout of `178c24a` outside the worktree and
+  revalidate the downloaded preparation receipt there: `PASS`. Checklist edits
+  therefore do not require a new Kaggle preparation run.
+- [x] Stage the next joint-audit launcher, pinned source bundle, and all eight
+  preparation evidence files in
+  `/home/kiyas-mahmud/Thesis/table2-inputs/table2-joint-job-178c24a/`.
+  Local checks pass: Bash syntax, nine payload hashes, missing-argument
+  rejection, and rejection of the example-domain task export before Gold reads.
+  The launcher builds then independently replays assignments using the existing
+  pinned producer. Raw-image execution has NOT been performed.
 - [ ] Bind the approved registry, task-content hashes, source wheel, task URL
   placeholders, and interface-audit result.
 - [ ] Run joint exact/near duplicate assignment across the 2,065 P4 candidates
@@ -131,10 +153,45 @@ Status: `NOT_STARTED`
 
 No PC-01 retraining and no seeds 43--44 are part of this step.
 
+### Local CUDA diagnostic prerequisite (not the registered DGX gate)
+
+- [x] Install isolated CUDA-enabled PyTorch at
+  `/home/kiyas-mahmud/Thesis/table2-envs/local-cuda-diagnostic-v1`.
+  Python 3.14.4, PyTorch 2.13.0+cu126, torchvision 0.28.0+cu126.
+- [x] Verify CUDA visibility and an FP16 256x256 matrix multiplication on the
+  NVIDIA MX450: PASS. Compute capability 7.5; PyTorch reports 1,763,901,440
+  device-memory bytes. NVIDIA-SMI reports 2,048 MiB physical VRAM.
+- [x] Run a separate checkpoint-backed local load diagnostic with unchanged
+  model settings: FAIL with measured CUDA OutOfMemoryError during the existing
+  QLoRA model-construction path. Checkpoint SHA-256 matched the registered value
+  and deserialization succeeded; model construction requested 892 MiB with only
+  79.31 MiB free. No trained-weight attachment or inference completed.
+  Result: `/home/kiyas-mahmud/Thesis/table2-inputs/local-pc01-load-diagnostic-result.json`.
+  No offloading, precision changes, image-size reduction, or gate bypass was
+  applied. Local diagnostic dependencies differ from the DGX environment; this
+  records failure of the unchanged loader on this local stack, not all possible
+  implementations. Next checkpoint inference test should run at the university
+  lab under the registered environment.
+
+The existing CPU environment, driver, model weights, model configuration, and
+DGX compatibility gate were not changed. This local environment is not the
+registered DGX runtime and does not qualify as a Table 2 compatibility PASS.
+
 ### T2-12 — Bring up the live WebArena runtime
 
 Status: `WAITING_FOR_EXTERNAL_RUNTIME`
 
+- [x] Confirm Docker CLI installation on the local x86 host: Docker Engine
+  Community client `29.8.0`, `linux/amd64`.
+- [x] Verify Docker daemon access from the execution session: client and server
+  `29.8.0`, `linux/amd64`; Docker group access works.
+- [x] Inventory existing containers and images: only the stopped
+  `awesome_faraday` hello-world container and hello-world image were found.
+  Both are preserved; no WebArena services are installed yet.
+- [ ] Check per-service download, unpacked-image, runtime-disk, and RAM needs
+  against local capacity before downloading (currently 352 GB free disk).
+- [ ] Pin compatible WebArena service images and map backend, then download
+  and launch benchmark services with access restricted to the experiment hosts.
 - [x] Validate the pinned local BrowserGym/WebArena/Playwright packages and
   launch Chromium at the registered viewport.
 - [ ] Supply reachable runtime URLs for GitLab, Reddit, Shopping, Shopping
@@ -187,6 +244,15 @@ Status: `NOT_STARTED`
 
 ## Immediate next action
 
-The exact pre-commit verification in T2-07 reproduced the prior results and the
-stop-before-commit boundary has been reached. Request explicit authorization,
-then commit the verified source and begin T2-08.
+Docker daemon access and container inventory are complete. Do not
+download the full WebArena image set until its storage requirements are checked.
+Then configure and preflight the actual benchmark websites before binding their
+addresses to the task export. Docker installation alone is not website setup.
+
+The joint duplicate-assignment job is staged at
+`/home/kiyas-mahmud/Thesis/table2-inputs/table2-joint-job-178c24a/README.md`.
+Next resolve the actual WebArena service URL map and produce the deployment-bound
+active task export, then execute the staged job where the Gold images already
+live. No further prepare-only rerun is required. Independent success review,
+checkpoint-backed embeddings, live service preflight, and real episodes remain
+unchecked; neither preparation nor synthetic smoke substitutes for them.
