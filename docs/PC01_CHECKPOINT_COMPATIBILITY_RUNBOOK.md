@@ -48,6 +48,14 @@ The historical training environment remains 130.662936576 GB with unchanged
 bytes and hashes. This is an exact runtime-identity correction, not a tolerance
 or a model/configuration change; all other compatibility checks remain required.
 
+The evaluation runtime uses a source-bound, per-instance `Linear4bit.forward`
+implementation for selected and E0 models. It preserves the reviewed
+bitsandbytes 0.50.0 CUDA casts and matmul, but casts bias into a temporary tensor
+instead of assigning to stored `bias.data`. Installed packages and training
+construction remain unchanged. The runtime checks the upstream forward source
+hash and version before installation. Whole-state immutability remains mandatory;
+no warm-up or state-hash exclusion substitutes for it.
+
 ## Run command on the DGX
 
 First record the committed source identity:

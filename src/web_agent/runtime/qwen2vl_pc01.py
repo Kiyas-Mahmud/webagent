@@ -313,6 +313,57 @@ def _runtime_action_value_evidence_sha256(
     return action_value_evidence_sha256
 
 
+def _immutable_linear4bit_forward(self: Any, x: Any) -> Any:
+    """Pinned bitsandbytes CUDA arithmetic with a temporary, non-mutating bias cast."""
+    import bitsandbytes as bnb
+    from bitsandbytes.nn.modules import fix_4bit_weight_quant_state_from_module
+
+    if self.training or x.device.type != "cuda" or self.weight.requires_grad:
+        raise PC01RuntimeError("immutable Linear4bit is frozen CUDA inference only")
+    fix_4bit_weight_quant_state_from_module(self)
+    quant_state = self.weight.quant_state
+    if not self.compute_type_is_set:
+        self.set_compute_type(x)
+        self.compute_type_is_set = True
+    inp_dtype = x.dtype
+    if self.compute_dtype is not None:
+        x = x.to(self.compute_dtype)
+    bias = self.bias
+    if bias is not None:
+        if bias.requires_grad:
+            raise PC01RuntimeError("immutable Linear4bit bias must be frozen")
+        if bias.dtype != x.dtype:
+            bias = bias.to(x.dtype)
+        bias = bias.to(self.compute_dtype)
+    return bnb.matmul_4bit(x, self.weight, bias=bias, quant_state=quant_state).to(inp_dtype)
+
+
+def _install_immutable_linear4bit(model: Any) -> None:
+    """Apply only to this runtime's models; never patch the installed library.
+
+    PEFT promotes biases to FP32; bitsandbytes 0.50.0 mutates them to the
+    compute dtype in forward. Keep the identical casts and matmul, but retain
+    original stored parameters so the complete state hash remains invariant.
+    """
+    import inspect
+    from importlib.metadata import version
+    from types import MethodType
+    from bitsandbytes.nn import Linear4bit
+
+    if version("bitsandbytes") != "0.50.0" or hashlib.sha256(
+        inspect.getsource(Linear4bit.forward).encode("utf-8")
+    ).hexdigest() != "d52cf63457717cc718ca0a449dad0967171e679be90d5d2adcafe2e8a141093d":
+        raise PC01RuntimeError("immutable bias cast requires the reviewed bitsandbytes forward")
+    for module in model.modules():
+        if isinstance(module, Linear4bit):
+            forward = getattr(module.forward, "__func__", None)
+            if forward is _immutable_linear4bit_forward:
+                continue
+            if forward is not Linear4bit.forward:
+                raise PC01RuntimeError("unexpected Linear4bit forward override")
+            module.forward = MethodType(_immutable_linear4bit_forward, module)
+
+
 def _load_selected_model(
     *,
     selection: ValidationSelectedCheckpoint,
@@ -393,6 +444,7 @@ def _load_selected_model(
         raise PC01RuntimeError("failed to construct the exact frozen PC-01 model") from exc
     if model.training or any(parameter.requires_grad for parameter in model.parameters()):
         raise PC01RuntimeError("selected PC-01 model is not fully frozen in evaluation mode")
+    _install_immutable_linear4bit(model)
     return model, loaded_processor.processor, torch, identity.mapping, expected_processor
 
 
@@ -472,6 +524,7 @@ def _load_unadapted_base(
         raise PC01RuntimeError("failed to load the frozen unadapted E0 base model") from exc
     if model.training or any(parameter.requires_grad for parameter in model.parameters()):
         raise PC01RuntimeError("E0 base model is not frozen in evaluation mode")
+    _install_immutable_linear4bit(model)
     return model, torch
 
 

@@ -277,6 +277,88 @@ external backup and a path-scoped Git stash, commit only the approved gate/test
 and documentation changes, and restore the unrelated work after execution.
 No push is part of this step. Record the measured rerun outcome below.
 
+#### Approved lab rerun outcome — 2026-09-09
+
+**FAIL at final selected-model state immutability, after real inference.**
+Execution source: `8879dbb5095da224ee972a024fe866333f6494d6`, committed locally
+and clean throughout the gate. No source or model check was bypassed.
+
+- [x] Exact corrected CUDA runtime identity, all artifact bindings, and
+  clean-source attestation pass.
+- [x] Resolve an initial processor-path rejection by moving only the prepared
+  snapshot into the required revision-bearing directory layout:
+  `/home/aiub/kiyas/table2-inputs/Qwen2-VL-2B-Instruct/snapshots/895c3a49bc3fa70a340399125c650a463535e71c/`.
+  This supersedes its earlier flat path. All payload bytes remain unchanged;
+  the gate revalidates the complete snapshot. Initial failure log:
+  `/home/aiub/kiyas/table2-evidence/pc01-compatibility-8879dbb.log`.
+- [x] Construct the exact selected model on CUDA, restore all seven checkpoint
+  roles, and pass frozen/evaluation/CUDA assertions. No OOM occurs.
+- [x] Load the separate unadapted E0 base and pass adaptation-absence checks.
+- [x] Complete the gate's direct/runtime/repeat pre-action, diagnosis,
+  executed-recovery assessment, and P4 embedding checks on its deterministic
+  synthetic observations. These are compatibility checks, not live episodes.
+- [ ] Pass final whole-model state immutability. The second full attempt exits
+  1 at `pc01_checkpoint_compatibility.py:2261` with
+  `selected model state changed during inference-only compatibility checks`.
+  The before/after full state identities differ. The current failure log does
+  not identify the specific changed tensors or establish why they changed;
+  do not label this optimizer training or harmless caching without evidence.
+  Full log:
+  `/home/aiub/kiyas/table2-evidence/pc01-compatibility-8879dbb-attempt2.log`.
+- [x] Restore notebook and VS Code settings byte-for-byte against the external
+  backup manifest after execution. Backup:
+  `/home/aiub/kiyas/table2-evidence/local-work-backup-20260909T125252/`.
+  Safety stash `67b617ab83d73fb3a14a716fd9f267731ca211f2` is retained.
+  Existing kernels were not stopped; the gate process exited and released GPU
+  allocations. No changes were pushed.
+
+No PASS receipt exists. Next investigate exactly which selected-model state
+entries change during first inference, preserving the immutability check and
+model settings. Pilot execution remains blocked and paper Table 2 stays `N/R`.
+
+#### Per-tensor diagnosis — 2026-09-09
+
+**Cause identified; compatibility still FAIL, no repair applied.** A diagnostic
+rerun from clean `8879dbb` used read-only Python tracing of the existing state
+hash function's metadata/raw bytes. No gate function, model tensor, library,
+model setting, or check was replaced. The original gate again rejected final
+state immutability; this diagnostic does not produce a compatibility PASS.
+
+- Exactly 214 of 2,823 state entries change, all backbone bias parameters:
+  float32 before inference, float16 afterward. All 2,609 other entries retain
+  their exact keys, dtype, shape, byte count, and payload hash.
+- The selected state payload changes from 2,990,977,941 to 2,990,112,661 bytes.
+  Before SHA-256:
+  `eb5daaa74e15a1e4c626a061ab9d58fe324e0f00bda4d5a9790a81879957a75d`;
+  after SHA-256:
+  `25f572f6315d44152bd6c295ea02a4ee41fdba15484e78d5202b9cc4e38bbfd8`.
+- All 214 before/after bias hashes were independently checked against their
+  corresponding tensors in the pinned base safetensors files. Before matches
+  the configured FP16 load promoted to FP32; after matches that FP16 load
+  exactly. The observed changes are fully explained by this dtype conversion.
+  Learned adapter/head state entries are among the unchanged entries.
+- Installed PEFT 0.20.0, `peft/utils/other.py:197-202`, promotes non-quantized
+  FP16/BF16 parameters to FP32 during `prepare_model_for_kbit_training`.
+  Installed bitsandbytes 0.50.0, `bitsandbytes/nn/modules.py:630-635`, changes
+  `bias.data` in place to the forward compute dtype in `Linear4bit.forward`.
+  This source behavior explains the measured first-inference state mutation;
+  evaluation mode and disabled gradients do not prevent a `.data` assignment.
+- Direct/runtime/repeat and P4 checks again pass, but that does not satisfy
+  whole-state immutability. Do not waive the failure or silently warm up before
+  hashing. A remedy must preserve the original registered compute arithmetic
+  while preventing mutation of stored bias parameters, with separate review
+  and validation before any new compatibility claim.
+
+Evidence directory:
+`/home/aiub/kiyas/table2-evidence/state-diagnostic-8879dbb/`.
+`result.json` contains both per-entry inventories, exact differences, restore
+and inference results, and the failure traceback. `bias-cast-verification.json`
+binds all 214 changed biases to the pinned base payload and records hashes of
+the inspected installed library sources. `diagnose.py` and `run.log` preserve
+the diagnostic method and output. Local notebook, VS Code, and prior checklist
+edits were restored byte-for-byte before this update; safety stash
+`20bd91509dc56d5ba3ebc4ae54a3a643cb452610` and external backups are retained.
+
 Lab live-runtime inspection: the generic broker factory bridge and monotonic
 collector/CLI are implemented. The concrete live BrowserGym/sealed-evaluator
 factory and calibration harness remain missing; the only production
@@ -359,9 +441,22 @@ Status: `NOT_STARTED`
 
 ## Immediate next action
 
+Approved bias-mutation remedy implemented on 2026-09-09 in the evaluation
+runtime only: preserve the pinned CUDA arithmetic using a temporary bias cast,
+with an exact installed bitsandbytes version/forward-source guard. Both selected
+and E0 models use the same implementation; installed libraries and training
+source are untouched. All 39 targeted tests pass, including real CUDA numerical
+equivalence to upstream with/without bias and FP16/FP32 inputs, exact repeated
+outputs, and complete layer-state immutability. A new source-bound full gate
+receipt is still required; record its measured outcome after the run.
+
 At the lab, the transferred inputs and complete pinned snapshot are now verified.
-Resolve the exact host-identity rejection and clean-source prerequisite recorded
-above. The full checkpoint-backed gate was attempted and failed before inference.
+The approved runtime identity correction and temporary clean-source procedure
+allowed real checkpoint-backed inference at commit `8879dbb`. The final state
+failure is now traced to 214 bitsandbytes bias dtype mutations, with every change
+verified against the pinned base snapshot. Review a non-mutating bias-cast remedy
+that preserves compute arithmetic and all checks, then validate it before
+rerunning the gate. No compatibility PASS is available.
 The earlier Docker daemon access and container inventory were laptop results;
 lab daemon access is denied in this session. Service hosting, including Map,
 needs a concrete compatible deployment and verified URLs before task binding.
