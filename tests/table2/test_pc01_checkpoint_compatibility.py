@@ -312,6 +312,11 @@ def test_valid_receipt_stays_pilot_only_and_binds_export_and_source() -> None:
     (
         (("paper_table_status",), "READY", "paper_table_status"),
         (
+            ("host_attestation", "cuda_device_total_memory_bytes"),
+            130_662_936_576,
+            "cuda_device_total_memory_bytes",
+        ),
+        (
             ("model_load", "e0_unadapted_base", "adaptation_loaded"),
             True,
             "adaptation_loaded",

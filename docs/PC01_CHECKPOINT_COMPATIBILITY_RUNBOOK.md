@@ -39,8 +39,14 @@ artifacts outside Git.
 
 The environment must report Python `3.12.3`, PyTorch `2.13.0+cu130`,
 Transformers `4.57.6`, and CUDA device 0 as `NVIDIA GB10` with
-130,662,936,576 bytes. This intentionally prevents the local 2 GB MX450 from
+130,662,940,672 bytes. This intentionally prevents the local 2 GB MX450 from
 creating DGX evidence.
+
+The runtime memory identity was corrected with user approval on 2026-09-09 to
+the measured lab GB10 value, 4,096 bytes above the historical registration.
+The historical training environment remains 130.662936576 GB with unchanged
+bytes and hashes. This is an exact runtime-identity correction, not a tolerance
+or a model/configuration change; all other compatibility checks remain required.
 
 ## Run command on the DGX
 

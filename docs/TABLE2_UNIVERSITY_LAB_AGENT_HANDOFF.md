@@ -172,7 +172,9 @@ The v3 export manifest identity is
 Also resolve PC-01 full `report.json` and `run_contract.json`.
 
 The existing gate requires Python 3.12.3, PyTorch 2.13.0+cu130,
-Transformers 4.57.6, aarch64, and NVIDIA GB10 with 130,662,936,576 bytes.
+Transformers 4.57.6, aarch64, and NVIDIA GB10 with 130,662,940,672 bytes
+(runtime identity corrected with user approval on 2026-09-09; historical
+training-environment bytes and hashes remain unchanged).
 Inspect the already-working lab environment first. A mismatch is a setup issue
 to explain, not permission to change registered requirements or upgrade active
 training packages.

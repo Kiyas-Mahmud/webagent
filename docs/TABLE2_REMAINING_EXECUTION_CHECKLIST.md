@@ -177,6 +177,121 @@ The existing CPU environment, driver, model weights, model configuration, and
 DGX compatibility gate were not changed. This local environment is not the
 registered DGX runtime and does not qualify as a Table 2 compatibility PASS.
 
+### University lab checkpoint prerequisite — measured 2026-09-09
+
+Status: `WAITING_FOR_EXTERNAL_RUNTIME`
+
+These are new lab observations; earlier laptop and synthetic results above do
+not describe this host. No full checkpoint compatibility run or inference has
+completed, and no compatibility PASS receipt exists.
+
+- [x] Inspect the existing `/home/aiub/kiyas/webagent` repository and safely run
+  `git pull --ff-only origin Code`. HEAD is
+  `875bbae27095e3e808875403a9f253cd2f0b02a1`; `178c24a` is an ancestor.
+  Preserve the pre-existing modified notebook and untracked `.vscode/` files.
+- [x] Inventory running processes and GPU use. Two existing ipykernels
+  (PIDs 228460 and 228462) were present; neither appeared in NVIDIA-SMI's
+  GPU process list. No training command was apparent. No process was stopped.
+- [x] Locate and hash the checkpoint, full report, and contract under
+  `/home/aiub/kiyas/webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/`.
+  The checkpoint is at
+  `full/checkpoints/Y_QWEN2VL_2B_GOLD_V2_8_DGX_FULL_SEED42/best_e6_outcome-mcc0.624.ckpt`:
+  291,071,781 bytes, SHA-256
+  `9eaab6d24719b7bce8d0dd2ccf9169c3ddf83e0a800714a84531679c0c94895a`.
+  `full/report.json` SHA-256 is
+  `4d8990ecf4ed642a17c5be54af3a897a7785e76458343170d4edc098fbdcdcc8`;
+  `run_contract.json` SHA-256 is
+  `7ed17a7c68ff02a4cd693908aeb85710cee7ef0190339a52eb277cabd083a930`.
+  Their selection facts match epoch 6, seed 42, the pinned revision, and zero
+  test reads. Corresponding copies inside the repository have identical hashes.
+  Export-manifest cross-binding still requires the transferred v3 export.
+- [x] Measure the existing `.venv`: Python 3.12.3, aarch64, PyTorch
+  2.13.0+cu130, Transformers 4.57.6, PEFT 0.20.0, bitsandbytes 0.50.0,
+  torchvision 0.28.0+cu130, CUDA available on NVIDIA GB10.
+- [x] Invoke the unchanged gate's `_require_registered_dgx_cuda` prerequisite.
+  **FAIL:** `DGX CUDA runtime.cuda_device_total_memory_bytes differs: expected
+  130662936576, got 130662940672`. The observed value is 4,096 bytes larger.
+  This is an exact host-identity rejection, not an OOM, checkpoint corruption,
+  or inference-quality result. The full gate checks this before artifact loading.
+- [x] Independently invoke its `_repository_attestation` prerequisite.
+  **FAIL:** `runtime source repository is dirty; commit all gate/runtime changes first`.
+  Local work was not stashed, discarded, hidden, or committed to satisfy it.
+- [x] Locate both cached Qwen revision directories under
+  `/home/aiub/kiyas/webagent_comparison/hf_cache/hub/` and
+  `/home/aiub/kiyas/webagent_full/hf_cache/hub/`, each at
+  `models--Qwen--Qwen2-VL-2B-Instruct/snapshots/895c3a49bc3fa70a340399125c650a463535e71c/`.
+  The unchanged snapshot validator rejects symlinks. Both contain 11 symlinked
+  entries and lack the registered `.gitattributes`, `LICENSE`, and `README.md`.
+  Neither is yet a verified complete 14-file snapshot; cached files are preserved.
+- [x] Locate transferred `results-178c24a.zip` and the exact 11-file v3 export
+  in `/home/aiub/kiyas/table2-inputs/` after the user completed the transfer.
+  All v3 manifest/payload hashes and report/contract cross-bindings pass.
+  Preserve both transferred originals unchanged.
+- [x] Inspect all 477 ZIP entry names for traversal, duplicates, and symlinks;
+  extract only the eight registered evidence files, read-only, under
+  `/home/aiub/kiyas/table2-inputs/kaggle-p4-output-178c24a/table2-p4-prepare-only-v1/`.
+  Outer receipt file/core hashes match the handoff. The strict downloaded-output
+  validator returns `PASS`, package status `REVIEW_REQUIRED`, using a temporary
+  clean verification checkout of the producing `178c24a` commit. That temporary
+  checkout was removed; the existing lab repository remains the working repo.
+  No preparation rerun or Gold reads occurred.
+- [x] Prepare a complete regular-file Qwen snapshot at
+  `/home/aiub/kiyas/table2-inputs/qwen2-vl-2b-instruct-895c3a49bc3fa70a340399125c650a463535e71c/`.
+  Reuse all 11 cached payloads and fetch only the three missing metadata files
+  from the exact pinned Hugging Face revision. Preserve the cache. All 14 file
+  sizes/hashes and the full directory payload match the transferred manifest;
+  all output files are read-only. No model weights were downloaded.
+- [x] Invoke the full unchanged checkpoint compatibility CLI after transfer.
+  It exits 1 at `_require_registered_dgx_cuda`, with the same exact 4,096-byte
+  memory mismatch above, before artifact loading. No PASS receipt is written.
+  Separately run `_validate_pc01_export_bundle` with the complete snapshot:
+  checkpoint deserialization/config binding, processor parity, training-source
+  identity and snapshot checks pass through to line 705, where clean-source
+  attestation rejects the existing local changes. This input validation is
+  not a model-inference run or a substitute for the failed CUDA gate.
+- [ ] Resolve the registered host-identity mismatch without weakening checks,
+  resolve the clean-source prerequisite with the owner, and supply the complete
+  snapshot and authenticated export. No gate constant, model setting, package,
+  or driver was changed.
+- [ ] Run the full real checkpoint-backed gate using verified paths and a new
+  output path. Model construction, restoration, E0 absence checks, callback
+  parity, P4 tensor checks, and state immutability remain unexecuted on this host.
+
+Local diagnostic inventory and exact prerequisite tracebacks are preserved at
+`/home/aiub/kiyas/table2-evidence/lab-preflight-20260909T063546Z/`.
+This is `LAB_PREREQUISITE_DIAGNOSTIC_ONLY`, not a compatibility receipt.
+
+Post-transfer evidence is saved under `/home/aiub/kiyas/table2-evidence/`:
+`kaggle-transfer-validation-20260909.log`,
+`qwen-snapshot-validation-20260909.json`,
+`pc01-compatibility-transfer-attempt-20260909.log`, and
+`pc01-input-validation-20260909.log`. The full CLI attempt failed before model
+construction; the GPU registration and clean-source prerequisites remain open.
+
+Approved follow-up on 2026-09-09: correct only the runtime GPU-memory identity
+to the measured `130662940672` bytes. Historical training environment records
+and all model/configuration, artifact, inference, and exact-match checks remain
+unchanged. Targeted compatibility, receipt-handoff, and selection-binding tests:
+25 passed. Before the real rerun, preserve notebook/VS Code edits in a hashed
+external backup and a path-scoped Git stash, commit only the approved gate/test
+and documentation changes, and restore the unrelated work after execution.
+No push is part of this step. Record the measured rerun outcome below.
+
+Lab live-runtime inspection: the generic broker factory bridge and monotonic
+collector/CLI are implemented. The concrete live BrowserGym/sealed-evaluator
+factory and calibration harness remain missing; the only production
+`run_registered_operation`/`reset_and_fingerprint` declarations found are the
+collector protocol. Approved probes, measured timing, reset non-persistence,
+and campaign evidence bindings remain pending. No live measurements were made.
+Docker daemon inventory is blocked by socket permission denial in this session;
+do not infer that no containers exist. BrowserGym, libwebarena, and Playwright
+are absent from the inspected model `.venv`. Disk has approximately 3.4 TiB
+available and RAM approximately 113 GiB available at inspection; this does not
+establish service-image architecture compatibility or map deployment readiness.
+No download, service launch, package installation, Gold read, Kaggle rerun,
+memory admission, or pilot episode was performed. P4 and final Table 2 remain
+unchanged: no eligible store established; paper status `N/R`.
+
 ### T2-12 — Bring up the live WebArena runtime
 
 Status: `WAITING_FOR_EXTERNAL_RUNTIME`
@@ -244,10 +359,12 @@ Status: `NOT_STARTED`
 
 ## Immediate next action
 
-Docker daemon access and container inventory are complete. Do not
-download the full WebArena image set until its storage requirements are checked.
-Then configure and preflight the actual benchmark websites before binding their
-addresses to the task export. Docker installation alone is not website setup.
+At the lab, the transferred inputs and complete pinned snapshot are now verified.
+Resolve the exact host-identity rejection and clean-source prerequisite recorded
+above. The full checkpoint-backed gate was attempted and failed before inference.
+The earlier Docker daemon access and container inventory were laptop results;
+lab daemon access is denied in this session. Service hosting, including Map,
+needs a concrete compatible deployment and verified URLs before task binding.
 
 The joint duplicate-assignment job is staged at
 `/home/kiyas-mahmud/Thesis/table2-inputs/table2-joint-job-178c24a/README.md`.
