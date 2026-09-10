@@ -1,0 +1,68 @@
+# Recovery v2.9 -- corrects three measured defects in the v2.8 training recipe.
+#
+# Inherits the entire v2.8 DGX profile (backbone, QLoRA, data, causal routing,
+# heads, selection rule, pixel bounds, effective batch 32).  Only the items
+# below change, so a reviewer can read this file as the complete diff.
+#
+# 1. LOSS SIGN.  v2.8 used learned uncertainty weighting,
+#    `exp(-log_var)*L + log_var`, which is unbounded below.  Measured on the
+#    completed 2B v2.8 run: train_loss fell monotonically +0.566 -> -17.458
+#    across ten epochs while outcome_mcc stayed flat at 0.590 -> 0.624.  The
+#    weighting was also not doing its job: all nine log_vars sat inside a 0.29
+#    band while their stationary points span 5.85, i.e. a lockstep ramp driven
+#    by AdamW's per-parameter scale invariance, not per-task weighting.
+#    v2.9 uses the registered fixed weights.  The total is then a sum of
+#    non-negative weighted terms and is bounded below by zero.
+#
+# 2. WARMUP / EARLY STOPPING.  v2.8 derived warmup as a ratio of the whole
+#    ten-epoch budget: int(754 * 10 * 0.1) = 754 steps = exactly 1.00 epochs.
+#    Epoch 0 never saw peak LR yet set `best_metric` (7B v2.8 epoch 0 = 0.6783
+#    is still the selected checkpoint).  v2.9 sets warmup in absolute steps and
+#    refuses to arm early stopping before `min_epochs`.
+#
+# 3. GROUNDING.  At max_pixels 200704 a 1280x720 screenshot becomes a 21x12
+#    token grid (~61x60 source px per cell).  The median target is 160x36 px, so
+#    the vertical budget is +-18 px against a 60 px cell -- 3.3x too coarse, and
+#    still 1.7x too coarse at 4x the compute.  v2.9 adds a zero-initialised
+#    sub-cell centre offset (identity at step 0) and shifts the box loss toward
+#    GIoU, which is scale-aware, and away from raw L1, which weights a 20 px
+#    error on a 160 px-wide box the same as on a 36 px-tall box.
+#
+# NOT included: the anisotropic pixel budget (pre-resizing 1280x720 -> 640x720).
+# It needed two mini arms to choose between and the mini stage was skipped for
+# time.  Recorded as future work; see docs/RECOVERY_V2_9_EXPERIMENT.md.
+
+name: Y_QWEN25VL_7B_GOLD_V2_9
+extends: backbones/qwen25vl_7b_gold_v2_8_dgx.yaml
+
+loss:
+  # Defect 1. The parent class already implements this branch.
+  dynamic_weighting: fixed
+  # Defect 3b: GIoU is scale-aware, plain L1 is not.
+  bbox_l1_ratio: 2.0
+  bbox_giou_ratio: 5.0
+
+model:
+  # Defect 3a. Bounded so the correction can reach just past one grid cell
+  # (one vertical cell is 1/12 ~= 0.083 of the image) but no further.
+  centre_offset_max: 0.10
+
+optim:
+  # configs/base.yaml sets optim.early_stopping_patience, which trainer.py never
+  # reads (it reads train.early_stop_patience) but which IS inside the resume
+  # signature. Deep-merge cannot delete a key, so it is explicitly nulled here
+  # and TrainerV29 fails closed if it is ever set to a real value again.
+  early_stopping_patience: null
+
+train:
+  controlled_experiment_tag: recovery_v2_9
+  metrics_csv: results/gold_recovery_v2_9_metrics.csv
+  epochs: 10
+  # Defect 2. ~0.25 of an epoch instead of a full one.
+  warmup_steps: 190
+  min_epochs: 3
+  early_stop_patience: 3
+  # At the measured ~14 s/batch, 50 optimiser steps is 400 physical batches,
+  # about 1.5 h of work at risk per crash, plus the replay cost on resume.
+  # 10 steps is roughly 18 minutes of exposure.
+  checkpoint_every_steps: 10

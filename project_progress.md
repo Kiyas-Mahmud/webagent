@@ -1910,3 +1910,56 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   progress signal on both backbones.
 - Cross-model note: the 7B's epoch-0 `outcome_mcc` of 0.6783 already exceeds the 2B's best
   across all ten epochs (0.6242, epoch 6). The 2B did not early-stop; it ran the full ten.
+
+## 2026-09-10 - Recovery v2.9 written (additive only; v2.8 run untouched)
+
+- Wrote a corrected training recipe as **seven new files**. Every file the running
+  v2.8 job (PID 41753) has loaded is byte-identical; asserted by
+  `tests/test_v2_9.py::test_v2_8_files_are_untouched_by_v2_9`. Full protocol in
+  `docs/RECOVERY_V2_9_EXPERIMENT.md`.
+- **Defect 1 - loss unbounded below.** `loss.py:511` uses `exp(-log_var)*L + log_var`.
+  On the completed 2B v2.8 run `train_loss` fell monotonically `+0.566 -> -17.458` over
+  ten epochs while `outcome_mcc` stayed flat at `0.590 -> 0.624`. The weighting was also
+  not working: all nine `log_vars` sat inside a 0.29 band while their stationary points
+  span 5.85, because AdamW normalises per-parameter gradient magnitude and drove them all
+  at ~lr/step regardless of their own loss. Fix: `loss.dynamic_weighting: fixed`, a branch
+  `CombinedLoss` already implements, so the total is a sum of non-negative weighted terms.
+  No new loss code - chosen deliberately over a softplus rewrite because reproducing the
+  parent's eleven-branch `active_tasks` gating would be real risk in a run with no mini gate.
+- **Defect 2 - early stop off a warmup epoch.** `warmup = int(754*10*0.1) = 754` = exactly
+  1.00 epochs, so epoch 0 never saw peak LR yet set `best_metric` (7B v2.8 epoch 0 = 0.6783
+  is still selected). Fix: `train.warmup_steps: 190` absolute, `train.min_epochs: 3`.
+  Also found a latent bug: `configs/base.yaml:43` sets `optim.early_stopping_patience`
+  but `trainer.py:367` reads `train.early_stop_patience` - different section AND key, so
+  it is dead config, yet `optim` is inside the resume signature, so editing it breaks
+  resume and changes nothing. `TrainerV29` fails closed on it; the v2.9 config nulls it
+  (deep-merge cannot delete an inherited key).
+- **Defect 3 - grounding.** All screenshots are exactly 1280x720. At `max_pixels 200704`
+  that becomes a 21x12 token grid (~61x60 source px/cell). Median target is 160x36 px, so
+  vertical needs +-18px against a 60px cell = 3.3x too coarse, and still 1.7x too coarse
+  at 4x compute. The head is NOT broken - vs a constant mean-box predictor it scores mean
+  IoU 0.160 vs 0.015 and recall@50 0.086 vs 0.000. Fix: a zero-initialised sub-cell centre
+  offset (tanh-bounded to +-0.10) plus shifting the box loss toward scale-aware GIoU
+  (`l1 5->2`, `giou 2->5`). The anisotropic pixel budget is NOT included - it needed two
+  mini arms to choose between; recorded as future work.
+- **Registered deviation: the 5k mini is skipped.** At the measured ~14 s/batch the mini
+  costs 24.3 h and validates on 500 rows, while full-run epoch 0 costs 23.4 h and validates
+  on all 7,861. Epoch 0 is the gate; its abort thresholds are fixed BEFORE the run in the
+  experiment doc and checked by `run_gold_v2_9.py --check-epoch0`. The bbox floors are
+  v2.8's own epoch-0 values, which is only fair because the offset head is zero-init and
+  v2.9 therefore starts numerically identical - proven by a unit test. Follows the
+  2026-08-01 precedent for an explicitly recorded protocol deviation.
+- GOTCHA - `gold_full_v2_9` rebinds `gold_full.Trainer` and `gold_full.build_gold_components`
+  inside a scoped context manager rather than forking `run_gold_full`. Deliberate: the eight
+  registered quality gates, resume validation, split hashing and round-trip must stay
+  bit-identical to v2.8, and two copies could silently drift so a reviewer could no longer
+  tell whether v2.9 passed the same gates. Restoration is asserted and tested on both the
+  normal and exception paths.
+- **v2.9 is NOT comparable to v2.8** - the loss changed. Report it as a separate corrected
+  recipe alongside the three-model comparison; do not substitute it into that table.
+- Cost at ~14 s/batch: ~23 h/epoch, ~9.8 days for 10 epochs. `checkpoint_every_steps`
+  lowered 50 -> 10, cutting crash exposure from ~1.5 h to ~18 min.
+- Verification: `tests/test_v2_9.py` 18/18 pass. Full suite `139 passed` (was 121) with the
+  same four pre-existing failures. `tests/table2` needs the optional `table2` extra
+  (`cryptography`), not installed on this training box.
+- NOT YET RUN. Requires the 16-row smoke first, then the full run on the other PC.
