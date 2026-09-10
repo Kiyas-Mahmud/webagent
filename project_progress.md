@@ -1233,3 +1233,75 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   resumes give faster visible feedback (proposed to the owner, not yet applied — would
   need to be set before the *next* mini/full launch, not on the currently-running
   process).
+
+## 2026-09-10 - PC migration analysis + learned-uncertainty ramp found in the 7B full run
+
+### Live state at the time of this analysis
+- `qwen25vl_7b_gold_v2_8_dgx` seed 42 **full** stage was running (PID 41753, relaunched
+  10:23 from `last.ckpt`, GPU 85-95%). `last.ckpt` = epoch 2, `epoch_complete=False`,
+  `batch_in_epoch=3136`, `global_step=1900`, `bad_epochs=1`, `best_metric=0.6783`.
+  Epochs 0 and 1 are complete in `full/epoch_metrics.csv`; `best_e0=0.678`, `best_e1=0.667`.
+- Mini and compatibility gates are both `PASS` with `test_rows_read: 0`. Contract commit is
+  `2bd3d0d`, matching current HEAD.
+
+### Cross-machine resume: what actually gates it (verified, not assumed)
+- Batch order is machine-independent. `TaskPairBatchSampler.__iter__`
+  (`data/dataloader.py:137`) shuffles with `random.Random(seed + epoch)`, not the global RNG,
+  and `num_workers` does not affect batch composition. The same 6,027-batch sequence is
+  reproduced anywhere.
+- `training_signature` (`train/resume.py:106`) excludes only the **top-level** `data` keys
+  `{num_workers, root}`. `data.recovery_supplement.root` is a nested dict and IS in the
+  signature. Verified by mutation: changing `data.root` -> still matches; changing
+  `num_workers` -> still matches; changing `recovery_supplement.root` -> **signature
+  mismatch, resume refused**. The supplement absolute path must be byte-identical on the
+  new PC.
+- `train.epochs` (10), `train.controlled_experiment_tag`, `train.early_stop_metric`,
+  `train.quality_selection_rule` and `seeds` are also in the signature.
+- The checkpoint *directory* may move: `load_checkpoint` (`trainer.py:772-780`) rebases
+  `best` and `epoch_checkpoints` onto `self.ckpt_dir` using `Path(item["path"]).name`.
+- `gold_full.py:75` renames the config to `{name}_FULL_SEED{seed}` before training, so any
+  standalone signature check must apply the same rename or it reports a false `name` diff.
+- `run_comparison_candidate.py:137-141` compares the whole `run_contract.json`, **including
+  `git_commit`**, and raises `existing run contract differs; use a new run directory` on any
+  mismatch. The new PC must sit on exactly `2bd3d0d`. The two
+  `run_contract.json.bak.628c1fa` / `.bak.d488a13` files are prior workarounds where the
+  contract was renamed after a commit moved; that silently rewrites provenance and should not
+  be repeated.
+- `run_comparison_candidate.py:225` also raises if `full/epoch_metrics.csv` exists without
+  `last.ckpt`, and re-runs the 5k mini if `mini/report.json` is absent. Both must be copied.
+- Added `scripts/verify_resume.py`, a read-only preflight that checks every condition above
+  and prints the resume position. Run it on the NEW machine before relaunching the candidate
+  cell. It reports `RESUME PREFLIGHT: PASS` on this box against the real epoch-2 checkpoint.
+- MIGRATION ORDER MATTERS: `origin/Code` was two commits behind, so the contract commit
+  `2bd3d0d` was not on GitHub at all. Push first, then on the new machine
+  `git checkout 2bd3d0de` (detached) so HEAD matches the contract. Cloning the branch tip
+  gives a newer commit and trips the contract check.
+
+### GOTCHA - learned-uncertainty log_vars are a lockstep ramp, not task weighting
+- `models/loss.py:511` uses `exp(-log_var) * weighted_loss + log_var`, with the nine
+  `log_vars` in the **heads** AdamW group at `lr_heads=1e-3` and no clamp.
+- AdamW is scale-invariant per parameter, so every `log_var` descends at ~`lr` per step
+  regardless of its own task loss. Measured: all nine sit in `[-0.94, -0.66]` (spread 0.29)
+  while their Kendall stationary points `log(L_weighted)` span `[-6.94, -1.09]`
+  (spread 5.85). Per-task gaps run `+0.44` (bbox) to `+6.02` (confidence).
+- Consequences: (1) `train_loss` is dominated by `sum(log_var)` and falls without bound -
+  `+0.493` (e0) -> `-2.542` (e1) -> `-5.011` (e2 running mean). It is not comparable across
+  epochs and is not a convergence signal. (2) `exp(-log_var)` acts as a uniform, growing
+  global gradient multiplier: `1.00 -> 1.28 -> 1.97 -> 2.57` (now), so the *effective* step
+  size is still rising while the cosine schedule believes it is decaying.
+  `train_grad_bbox_first` rose `0.635 -> 5.014` from e0 to e1 accordingly.
+- The registered gates are NOT corrupted by this: `gold_full.py:171` and
+  `gold_stages.py:1468` both read `train_nominal_weighted_loss`, which is healthy
+  (`1.130 -> 0.958`). Only the human-readable `train_loss` and the optimization dynamics are
+  affected.
+
+### GOTCHA - epoch 0 is 100% LR warmup and is currently the selected checkpoint
+- `warmup = int(steps_per_epoch * epochs * 0.1)` = `int(754 * 10 * 0.1)` = 754 ~= exactly one
+  epoch. Epoch 0 therefore never reaches peak LR, yet it holds `best_metric=0.6783`.
+- With `early_stopping_patience: 3` and `bad_epochs=1` already, if epochs 2 and 3 both fail to
+  beat `0.6783` the run stops after epoch 3 having used 4 of 10 epochs, with the cosine
+  schedule only ~40% through, and ships the warmup-only epoch-0 checkpoint.
+- Not changed. Both findings alter the registered v2.8 recipe and would invalidate comparison
+  with the accepted mini and the Qwen2-VL-2B reference. Recorded as a known limitation and a
+  candidate v2.9 change (separate `log_vars` param group at a much lower LR, or a clamp, plus
+  a warmup measured in steps rather than a ratio of the full 10-epoch budget).
