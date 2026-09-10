@@ -193,3 +193,86 @@ def test_v2_8_files_are_untouched_by_v2_9(path):
         capture_output=True, text=True, cwd=Path(__file__).resolve().parents[1],
     )
     assert diff.stdout == "", f"v2.9 work modified {path}:\n{diff.stdout[:400]}"
+
+
+# --------------------------------------------------------------------------
+# Regressions found during self-review (2026-09-10)
+# --------------------------------------------------------------------------
+
+def test_from_v2_8_preserves_parameterless_hyperparameters():
+    """load_state_dict cannot catch these -- dropout carries no tensors.
+
+    model.py passes bbox_attention_dropout from config (0.0 in v2.8). Rebuilding
+    without it falls back to None, which ActionHead resolves to `dropout` (0.3),
+    silently making the v2.9 grounding attention noisier than v2.8.
+    """
+    torch.manual_seed(0)
+    source = ActionHead(
+        DIM,
+        hidden=128,
+        dropout=0.25,
+        spatial_grounding=True,
+        bbox_parameterization="cxcywh",
+        bbox_grounding_mode="coordinate_softargmax",
+        bbox_size_parameterization="log_space",
+        bbox_attention_dropout=0.0,
+    )
+    head = ActionHeadV29.from_v2_8(source)
+    assert head.grounding_attention.dropout == source.grounding_attention.dropout == 0.0
+    assert head.trunk[2].p == source.trunk[2].p == 0.25
+    assert head.trunk[0].out_features == source.trunk[0].out_features == 128
+    assert head.bbox_trunk[0].out_features == source.bbox_trunk[0].out_features
+
+
+def test_offset_is_identity_in_train_mode_too():
+    """The v2.8-vs-v2.9 epoch-0 comparison happens under training, not eval."""
+    torch.manual_seed(0)
+    source = ActionHead(
+        DIM, dropout=0.0, spatial_grounding=True, bbox_parameterization="cxcywh",
+        bbox_grounding_mode="coordinate_softargmax",
+        bbox_size_parameterization="log_space", bbox_attention_dropout=0.0,
+    ).train()
+    head = ActionHeadV29.from_v2_8(source).train()
+    data = _inputs()
+    kw = dict(spatial_tokens=data["spatial_tokens"], spatial_mask=data["spatial_mask"],
+              spatial_coords=data["spatial_coords"])
+    torch.manual_seed(7)
+    want = source(data["fused"], data["bbox_fused"], **kw)
+    torch.manual_seed(7)
+    got = head(data["fused"], data["bbox_fused"], **kw)
+    torch.testing.assert_close(got["bbox"], want["bbox"])
+
+
+def test_offset_receives_gradient_through_the_loss_path():
+    """The DETR loss reads preds['bbox_cxcywh'], which the offset modifies."""
+    head = ActionHeadV29.from_v2_8(_v2_8_head())
+    data = _inputs()
+    out = head(data["fused"], data["bbox_fused"],
+               spatial_tokens=data["spatial_tokens"], spatial_mask=data["spatial_mask"],
+               spatial_coords=data["spatial_coords"])
+    out["bbox_cxcywh"].sum().backward()
+    assert head.centre_offset.weight.grad is not None
+    assert head.centre_offset.weight.grad.abs().sum() > 0
+
+
+def test_bindings_patch_gold_stages_too():
+    """build_gold_components is a separate name binding in each module.
+
+    run_gold_smoke resolves gold_stages'; patching only gold_full would leave the
+    smoke -- the only cheap pre-flight -- silently running the v2.8 head.
+    """
+    from web_agent.train import gold_stages as gs
+    original = gs.build_gold_components
+    with gold_full_v2_9.v2_9_bindings():
+        assert gs.build_gold_components is not original
+        assert gold_full.build_gold_components is not original
+    assert gs.build_gold_components is original
+
+
+def test_upgrade_refuses_double_application():
+    class _Model:
+        pass
+    model = _Model()
+    model.action_head = ActionHeadV29.from_v2_8(_v2_8_head())
+    with pytest.raises(RuntimeError, match="already been upgraded"):
+        gold_full_v2_9.upgrade_action_head(model)

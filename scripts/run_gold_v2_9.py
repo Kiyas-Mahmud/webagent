@@ -10,8 +10,10 @@ on all 7,861 original-Gold rows.  Epoch 0 is therefore the gate, and its abort
 thresholds are registered up front in docs/RECOVERY_V2_9_EXPERIMENT.md.  Use
 ``--check-epoch0`` after the first epoch lands to evaluate them.
 
-The 16-row compatibility smoke still runs through ``scripts/run_gold.py
---stage smoke`` and should be run first; it is fail-closed and costs minutes.
+Run ``--stage smoke`` here FIRST.  Do not use ``scripts/run_gold.py --stage
+smoke`` for a v2.9 config: that path would verify the v2.9 *config* while
+forwarding and backwarding through the v2.8 *action head*, so the only cheap
+pre-flight before a multi-day run would test nothing new.
 
 The locked test split is never read.
 """
@@ -26,7 +28,10 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from web_agent.config import load_config  # noqa: E402
-from web_agent.train.gold_full_v2_9 import run_gold_full_v2_9  # noqa: E402
+from web_agent.train.gold_full_v2_9 import (  # noqa: E402
+    run_gold_full_v2_9,
+    run_gold_smoke_v2_9,
+)
 
 CONFIG = "configs/backbones/qwen25vl_7b_gold_v2_9.yaml"
 
@@ -80,6 +85,7 @@ def check_epoch0(metrics_csv: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=CONFIG)
+    parser.add_argument("--stage", choices=("smoke", "full"), default="full")
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--supplement-root", required=True)
     parser.add_argument("--checkpoint-root")
@@ -98,6 +104,25 @@ def main() -> int:
 
     if args.check_epoch0:
         return check_epoch0(Path(args.check_epoch0))
+
+    if args.stage == "smoke":
+        cfg = load_config(args.config)
+        cfg["data"]["root"] = args.data_root
+        cfg["data"]["num_workers"] = args.num_workers
+        cfg["data"].setdefault("recovery_supplement", {}).update({
+            "enabled": True,
+            "root": args.supplement_root,
+            "include_in_primary_validation": False,
+        })
+        report = run_gold_smoke_v2_9(cfg, seed=args.seed)
+        if args.report_json:
+            path = Path(args.report_json)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+            print(f"wrote {path}")
+        status = str(report.get("status"))
+        print(f"v2.9 SMOKE: {status}")
+        return 0 if status == "PASS" else 1
 
     for required in ("checkpoint_root", "metrics_csv", "report_json"):
         if getattr(args, required) is None:

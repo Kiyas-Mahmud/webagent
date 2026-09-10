@@ -29,6 +29,8 @@ This module adds a NEW class.  It never modifies ``heads.py``.
 
 from __future__ import annotations
 
+import contextlib
+
 import torch
 import torch.nn as nn
 
@@ -85,9 +87,19 @@ class ActionHeadV29(ActionHead):
         ``build_gold_components`` calls ``initialize_bbox_size_prior`` on the head
         it constructs.  Swapping in a freshly constructed head would discard that
         prior, so the state dict is copied across instead of recomputed.
+
+        Every hyper-parameter is read back off the source instance rather than
+        re-derived from config.  ``hidden``, ``dropout`` and especially
+        ``bbox_attention_dropout`` carry no parameters, so ``load_state_dict``
+        cannot detect a mismatch: ``model.py`` passes
+        ``bbox_attention_dropout=0.0`` from the v2.8 config, and reconstructing
+        without it would silently give the v2.9 head attention dropout 0.3.
         """
         head = cls(
             source.trunk[0].in_features,
+            hidden=source.trunk[0].out_features,
+            dropout=source.trunk[2].p,
+            bbox_attention_dropout=source.grounding_attention.dropout,
             spatial_grounding=source.spatial_grounding,
             bbox_parameterization=source.bbox_parameterization,
             bbox_grounding_mode=source.bbox_grounding_mode,
@@ -114,13 +126,21 @@ class ActionHeadV29(ActionHead):
             raise RuntimeError("v2.9 head expected a cxcywh box from the parent")
 
         query = bbox_fused if bbox_fused is not None else fused
-        offset = torch.tanh(
-            self.centre_offset(query.to(raw.dtype))
-        ) * self.centre_offset_max
-
-        centre = (raw[:, :2] + offset).clamp(0.0, 1.0)
-        corrected = torch.cat([centre, raw[:, 2:]], dim=-1)
-        result["bbox_cxcywh"] = corrected
-        result["bbox"] = cxcywh_to_bounded_xywh(corrected)
+        # The parent runs the whole box path outside autocast in fp32 when
+        # bbox_fp32_grounding is set. The centre correction is part of that path,
+        # so it must use the same precision or it silently reintroduces bf16
+        # rounding into a branch the config deliberately keeps in fp32.
+        force_fp32 = bool(kwargs.get("force_fp32_bbox", False))
+        context = (
+            torch.autocast("cuda", enabled=False)
+            if force_fp32 else contextlib.nullcontext()
+        )
+        with context:
+            projected = query.float() if force_fp32 else query.to(raw.dtype)
+            offset = torch.tanh(self.centre_offset(projected)) * self.centre_offset_max
+            centre = (raw[:, :2].to(offset.dtype) + offset).clamp(0.0, 1.0)
+            corrected = torch.cat([centre, raw[:, 2:].to(offset.dtype)], dim=-1)
+            result["bbox_cxcywh"] = corrected
+            result["bbox"] = cxcywh_to_bounded_xywh(corrected)
         result["bbox_centre_offset"] = offset
         return result

@@ -109,8 +109,13 @@ real distribution. The mini is therefore skipped and **epoch 0 is the gate**.
 This follows the precedent set on 2026-08-01, where a time-limited v2.8 mini was
 accepted with an explicit recorded deviation.
 
-The 16-row compatibility smoke (`scripts/run_gold.py --stage smoke`) still runs
-first. It is fail-closed and costs minutes.
+The 16-row compatibility smoke still runs first — but it must be launched as
+`scripts/run_gold_v2_9.py --stage smoke`, **not** `scripts/run_gold.py --stage
+smoke`. The v2.8 script would verify the v2.9 *config* while forwarding and
+backwarding through the v2.8 *action head*, so the only cheap pre-flight before
+a multi-day run would test nothing new. (`build_gold_components` is defined in
+`gold_stages` and imported into `gold_full` — two independent name bindings, so
+`v2_9_bindings` patches both.) It is fail-closed and costs minutes.
 
 ### Epoch-0 abort gate — fixed before the run
 
@@ -157,7 +162,7 @@ Every file the running v2.8 job has loaded is byte-identical; this is asserted b
 | `src/web_agent/train/gold_full_v2_9.py` | scoped injection of the two components |
 | `configs/backbones/qwen25vl_7b_gold_v2_9.yaml` | the complete diff from v2.8 |
 | `scripts/run_gold_v2_9.py` | entry point + `--check-epoch0` |
-| `tests/test_v2_9.py` | 18 tests |
+| `tests/test_v2_9.py` | 23 tests |
 
 `gold_full_v2_9` rebinds two names inside the `gold_full` module namespace for
 the duration of one call rather than forking `run_gold_full`. This is deliberate:

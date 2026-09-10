@@ -97,7 +97,8 @@ class TrainerV29(Trainer):
         print(
             f"v2.9 schedule: warmup {self.warmup_steps} steps "
             f"({self.warmup_steps / self.steps_per_epoch:.2f} epochs), total {total}; "
-            f"early stopping arms after epoch {self.min_epochs}",
+            f"early stopping arms once {self.min_epochs} epochs have completed "
+            f"(earliest stop: epoch {self.min_epochs - 1 + self.patience})",
             flush=True,
         )
 
