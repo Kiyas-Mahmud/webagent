@@ -1,5 +1,10 @@
 # Phase 2 — Dataset & DataLoader
 
+> **HISTORICAL TUTORIAL — DO NOT EXECUTE AS THE CURRENT RESEARCH PROTOCOL.**
+> It predates the current six-action and locked-evaluation contracts. Use
+> `docs/AGENT.md`, `docs/DGX_THREE_MODEL_COMPARISON.md`, and
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md` as authority.
+
 ## 1. Learning topics
 
 - **PyTorch `Dataset`** — a class that turns "record #i" into tensors.

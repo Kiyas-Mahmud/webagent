@@ -1,0 +1,87 @@
+{
+  "archive": {
+    "expected_sha256": "c82fd5cb3567ffcbe7c3bf664a3c0aa9b0f4a408f733d321366e1343798b8c02",
+    "note": "Archive-level bytes are unavailable after Kaggle extraction; SHA256SUMS.txt still verifies the mounted package files.",
+    "status": "NOT_AVAILABLE_KAGGLE_MOUNT_EXTRACTED"
+  },
+  "checksum_manifest": {
+    "checked_files": 1614,
+    "failures": [],
+    "manifest": "/home/aiub/kiyas/webagent_full/data/supplement/web_gold_40k_retry_abort_supplement_v2_kaggle/SHA256SUMS.txt",
+    "status": "PASS"
+  },
+  "errors": [],
+  "loss_masks": {
+    "action": 0.0,
+    "bbox": 0.0,
+    "calibration": 0.0,
+    "confidence": 0.0,
+    "contrastive": 0.0,
+    "failure_type": 0.0,
+    "memory": 0.0,
+    "needs_recovery": 0.0,
+    "outcome": 0.0,
+    "recovery": 1.0,
+    "recovery_outcome": 1.0
+  },
+  "permitted_next_action": "SUPPLEMENT_FORWARD_BACKWARD_SANITY",
+  "root": "/home/aiub/kiyas/webagent_full/data/supplement/web_gold_40k_retry_abort_supplement_v2_kaggle",
+  "schema": "retry-abort-supplement-v2",
+  "source_records_mutated": false,
+  "splits": {
+    "train": {
+      "invalid_rows": [],
+      "missing_images": 0,
+      "recovery_outcome": {
+        "ABORT": {
+          "False": 123,
+          "True": 172
+        },
+        "RETRY": {
+          "False": 145,
+          "True": 168
+        }
+      },
+      "recovery_strategy": {
+        "ABORT": 295,
+        "RETRY": 313
+      },
+      "review_status": {
+        "approved": 608
+      },
+      "rows": 608
+    },
+    "val": {
+      "invalid_rows": [],
+      "missing_images": 0,
+      "recovery_outcome": {
+        "ABORT": {
+          "False": 42,
+          "True": 50
+        },
+        "RETRY": {
+          "False": 51,
+          "True": 51
+        }
+      },
+      "recovery_strategy": {
+        "ABORT": 92,
+        "RETRY": 102
+      },
+      "review_status": {
+        "approved": 194
+      },
+      "rows": 194
+    }
+  },
+  "status": "PASS",
+  "test_rows_read": 0,
+  "train_validation_overlap": {
+    "exact_image_pair": 0,
+    "session_id": 0,
+    "site_group": 0,
+    "task_id": 0,
+    "trajectory_id": 0
+  },
+  "unique_referenced_images": 1604
+}

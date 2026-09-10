@@ -1,5 +1,11 @@
 # Phase 1 — Dataset Verification
 
+> **HISTORICAL TUTORIAL — DO NOT EXECUTE AS THE CURRENT RESEARCH PROTOCOL.**
+> In particular, do not follow its historical test-split examples. Current
+> split/access authority is `docs/AGENT.md`,
+> `docs/DGX_THREE_MODEL_COMPARISON.md`, and
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`.
+
 ## 1. Learning topics
 
 - **Data validation** — checking data is what you think before you train on it.

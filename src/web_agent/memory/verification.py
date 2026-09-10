@@ -1,0 +1,970 @@
+"""Immutable independent-verification evidence for admitted P4 memories.
+
+Declared success booleans are eligibility gates, not scientific evidence.  A
+potentially admitted memory must additionally bind versioned independent
+recovery and final-task verification records.  Their canonical digests are
+carried into the frozen item and closed again at the store-manifest level.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+from web_agent.memory.manifest import canonical_sha256, require_sha256, sha256_file
+
+
+RECOVERY_VERIFICATION_SCHEMA_VERSION = (
+    "table2-memory-recovery-verification-evidence-v1"
+)
+FINAL_TASK_VERIFICATION_SCHEMA_VERSION = (
+    "table2-memory-final-task-verification-evidence-v1"
+)
+VERIFICATION_BUNDLE_SCHEMA_VERSION = "table2-memory-verification-bundle-v1"
+VERIFICATION_MANIFEST_SCHEMA_VERSION = "table2-memory-verification-manifest-v1"
+VERIFICATION_RECORDS_SCHEMA_VERSION = "table2-memory-verification-records-v2"
+VERIFICATION_DIGEST_ALGORITHM = "canonical_json_sha256_v1"
+VERIFICATION_AUTHORITY_TYPES = frozenset({"verifier", "reviewer"})
+P4_LABEL_REVIEW_SCHEMA_VERSION = "table2-memory-p4-label-review-v1"
+
+
+class VerificationEvidenceError(ValueError):
+    """Independent recovery/final-task evidence is absent or inconsistent."""
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedMemoryEvidence:
+    recovery_evidence_sha256: str
+    final_task_evidence_sha256: str
+    bundle_sha256: str
+    recovery_record: Mapping[str, Any]
+    final_task_record: Mapping[str, Any]
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return the exact evidence subset safe to freeze with a memory item."""
+
+        return {
+            "recovery_verification": dict(self.recovery_record),
+            "final_task_verification": dict(self.final_task_record),
+            "verification_evidence_sha256": self.bundle_sha256,
+        }
+
+
+def _nonempty(value: object, *, field: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise VerificationEvidenceError(f"verification evidence requires {field}")
+    return text
+
+
+def _strict_true(value: object, *, field: str) -> None:
+    if value is not True or type(value) is not bool:
+        raise VerificationEvidenceError(f"verification evidence requires {field}=true")
+
+
+def _require_exact_fields(
+    value: object,
+    *,
+    required: frozenset[str],
+    field: str,
+) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise VerificationEvidenceError(f"{field} must be an object")
+    if set(value) != set(required):
+        missing = sorted(required - set(value))
+        extra = sorted(set(value) - required)
+        raise VerificationEvidenceError(
+            f"{field} fields differ from the registered schema: "
+            f"missing={missing}, extra={extra}"
+        )
+    return value
+
+
+def _validate_authority(value: Mapping[str, Any], *, field: str) -> None:
+    authority_type = _nonempty(
+        value.get("authority_type"), field=f"{field}.authority_type"
+    )
+    if authority_type not in VERIFICATION_AUTHORITY_TYPES:
+        raise VerificationEvidenceError(
+            f"{field}.authority_type must be verifier or reviewer"
+        )
+    _nonempty(value.get("authority_id"), field=f"{field}.authority_id")
+    _nonempty(value.get("authority_version"), field=f"{field}.authority_version")
+    _strict_true(
+        value.get("independent_verification"),
+        field=f"{field}.independent_verification",
+    )
+
+
+def _validate_record_digest(value: Mapping[str, Any], *, field: str) -> str:
+    registered = require_sha256(
+        value.get("evidence_sha256"), field=f"{field}.evidence_sha256"
+    )
+    content = {key: item for key, item in value.items() if key != "evidence_sha256"}
+    try:
+        actual = canonical_sha256(content)
+    except (TypeError, ValueError) as error:
+        raise VerificationEvidenceError(
+            f"{field} must contain finite canonical JSON evidence"
+        ) from error
+    if registered != actual:
+        raise VerificationEvidenceError(
+            f"{field}.evidence_sha256 differs from its canonical evidence"
+        )
+    return registered
+
+
+_RECOVERY_FIELDS = frozenset(
+    {
+        "schema_version",
+        "authority_type",
+        "authority_id",
+        "authority_version",
+        "independent_verification",
+        "source_sample_id",
+        "recovery_sample_id",
+        "canonical_task_id",
+        "episode_id",
+        "pre_recovery_state_sha256",
+        "executed_recovery_action_sha256",
+        "post_recovery_state_sha256",
+        "verified_recovery_success",
+        "evidence_sha256",
+    }
+)
+
+_FINAL_TASK_FIELDS = frozenset(
+    {
+        "schema_version",
+        "authority_type",
+        "authority_id",
+        "authority_version",
+        "independent_verification",
+        "source_sample_id",
+        "canonical_task_id",
+        "episode_id",
+        "task_specification_sha256",
+        "terminal_state_sha256",
+        "terminal_verifier_output_sha256",
+        "verified_final_task_success",
+        "evidence_sha256",
+    }
+)
+
+
+def recovery_action_evidence_sha256(transition: Mapping[str, Any]) -> str:
+    """Hash the exact recovery-action projection bound by provenance."""
+
+    return canonical_sha256(
+        {
+            "recovery_sample_id": _nonempty(
+                transition.get("recovery_sample_id"),
+                field="transition.recovery_sample_id",
+            ),
+            "recovery_strategy": _nonempty(
+                transition.get("recovery_strategy"),
+                field="transition.recovery_strategy",
+            ),
+            "executed_recovery_action": _nonempty(
+                transition.get("executed_recovery_action"),
+                field="transition.executed_recovery_action",
+            ),
+            "recovery_action_value": str(
+                transition.get("recovery_action_value") or ""
+            ),
+        }
+    )
+
+
+def recovery_state_evidence_sha256(
+    transition: Mapping[str, Any],
+    *,
+    field: str,
+) -> str:
+    """Hash state artifact bytes when a production data root is available.
+
+    Synthetic fixtures may provide an in-memory JSON state with no data root;
+    production memory construction injects an explicit root and therefore
+    fails closed unless the referenced artifact exists beneath that root.
+    """
+
+    if field not in {"failure_state", "post_recovery_state"}:
+        raise VerificationEvidenceError(f"unsupported recovery-state field: {field}")
+    state = transition.get(field)
+    if state is None or (isinstance(state, str) and not state.strip()):
+        raise VerificationEvidenceError(f"transition.{field} cannot be empty")
+    raw_root = transition.get("_data_root")
+    if raw_root is None:
+        return canonical_sha256(state)
+    root = Path(_nonempty(raw_root, field="transition._data_root")).resolve()
+    if not root.is_dir():
+        raise VerificationEvidenceError(
+            f"transition._data_root is not a directory: {root}"
+        )
+    if not isinstance(state, str):
+        raise VerificationEvidenceError(
+            f"transition.{field} must be an artifact path when _data_root is set"
+        )
+    candidate = Path(state)
+    artifact = (candidate if candidate.is_absolute() else root / candidate).resolve()
+    try:
+        artifact.relative_to(root)
+    except ValueError as error:
+        raise VerificationEvidenceError(
+            f"transition.{field} escapes the registered data root"
+        ) from error
+    if not artifact.is_file():
+        raise VerificationEvidenceError(
+            f"transition.{field} artifact does not exist: {artifact}"
+        )
+    return sha256_file(artifact)
+
+
+_P4_MEMORY_SOURCE_MATERIAL_FIELDS = frozenset(
+    {
+        "source_dataset_role",
+        "source_review_status",
+        "source_sample_id",
+        "recovery_sample_id",
+        "canonical_task_id",
+        "episode_id",
+        "source_step_index",
+        "source_record_sha256",
+        "transition_sha256",
+        "source_transition_kind",
+        "task_description",
+        "website_domain",
+        "observed_failure_basis",
+        "source_outcome_label",
+        "source_failure_type",
+        "source_action_type",
+        "failure_type",
+        "failure_type_available",
+        "failed_action",
+        "failed_action_available",
+        "recovery_strategy",
+        "reflection_text",
+        "pre_recovery_state_sha256",
+        "executed_recovery_action",
+        "recovery_action_value",
+        "executed_recovery_action_sha256",
+        "post_recovery_state_sha256",
+    }
+)
+
+
+def canonical_p4_memory_source_material(
+    value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate the exact source projection consumed by a P4 memory item."""
+
+    material = _require_exact_fields(
+        value,
+        required=_P4_MEMORY_SOURCE_MATERIAL_FIELDS,
+        field="p4_memory_source_material",
+    )
+    for field in (
+        "source_dataset_role",
+        "source_review_status",
+        "source_sample_id",
+        "recovery_sample_id",
+        "canonical_task_id",
+        "episode_id",
+        "source_transition_kind",
+        "task_description",
+        "observed_failure_basis",
+        "source_outcome_label",
+        "source_failure_type",
+        "source_action_type",
+        "failure_type",
+        "failed_action",
+        "recovery_strategy",
+        "executed_recovery_action",
+    ):
+        _nonempty(material.get(field), field=f"p4_memory_source_material.{field}")
+    for field in ("website_domain", "reflection_text", "recovery_action_value"):
+        if not isinstance(material.get(field), str):
+            raise VerificationEvidenceError(
+                f"p4_memory_source_material.{field} must be text"
+            )
+    _strict_step(
+        material.get("source_step_index"),
+        field="p4_memory_source_material.source_step_index",
+    )
+    for field in (
+        "source_record_sha256",
+        "transition_sha256",
+        "pre_recovery_state_sha256",
+        "executed_recovery_action_sha256",
+        "post_recovery_state_sha256",
+    ):
+        require_sha256(
+            material.get(field), field=f"p4_memory_source_material.{field}"
+        )
+    kind = material.get("source_transition_kind")
+    if kind == "adjacent_failure_then_recovery":
+        if (
+            material.get("observed_failure_basis") != "source_outcome_failure"
+            or material.get("source_outcome_label") != "FAILURE"
+            or material.get("source_failure_type") == "NONE"
+            or material.get("failure_type") != material.get("source_failure_type")
+            or material.get("failed_action") != material.get("source_action_type")
+            or material.get("failure_type_available") is not True
+            or material.get("failed_action_available") is not True
+        ):
+            raise VerificationEvidenceError(
+                "adjacent P4 source material does not preserve failure semantics"
+            )
+    elif kind == "direct_recovery_from_observed_failure_state":
+        if (
+            material.get("source_dataset_role")
+            != "retry_abort_supplement_v2"
+            or material.get("observed_failure_basis")
+            != "source_attested_direct_pre_recovery_state"
+            or material.get("failure_type") != "UNAVAILABLE"
+            or material.get("failed_action") != "UNAVAILABLE"
+            or material.get("failure_type_available") is not False
+            or material.get("failed_action_available") is not False
+            or material.get("source_action_type")
+            != material.get("executed_recovery_action")
+        ):
+            raise VerificationEvidenceError(
+                "direct P4 source material aliases or invents prior failure fields"
+            )
+    else:
+        raise VerificationEvidenceError("unknown P4 source transition kind")
+    if material.get("source_review_status") not in {"approved", "pending"}:
+        raise VerificationEvidenceError("P4 source review status is not registered")
+    return dict(material)
+
+
+_P4_LABEL_REVIEW_FIELDS = frozenset(
+    {
+        "schema_version",
+        "authority_type",
+        "authority_id",
+        "authority_version",
+        "independent_verification",
+        "source_sample_id",
+        "source_record_sha256",
+        "memory_item_source_material_sha256",
+        "approved_for_p4_memory",
+        "evidence_sha256",
+    }
+)
+
+
+def validate_p4_label_review_evidence(
+    evidence: Mapping[str, Any],
+    *,
+    source_sample_id: str,
+    source_record_sha256: str,
+    memory_item_source_material_sha256: str,
+) -> str:
+    """Validate independent approval of pending source fields used by P4."""
+
+    record = _require_exact_fields(
+        evidence,
+        required=_P4_LABEL_REVIEW_FIELDS,
+        field=f"{source_sample_id}.p4_label_review",
+    )
+    if record.get("schema_version") != P4_LABEL_REVIEW_SCHEMA_VERSION:
+        raise VerificationEvidenceError("unsupported P4 label-review schema")
+    _validate_authority(record, field=f"{source_sample_id}.p4_label_review")
+    _strict_true(
+        record.get("approved_for_p4_memory"),
+        field=f"{source_sample_id}.p4_label_review.approved_for_p4_memory",
+    )
+    expected = {
+        "source_sample_id": source_sample_id,
+        "source_record_sha256": require_sha256(
+            source_record_sha256, field="expected.source_record_sha256"
+        ),
+        "memory_item_source_material_sha256": require_sha256(
+            memory_item_source_material_sha256,
+            field="expected.memory_item_source_material_sha256",
+        ),
+    }
+    for field, expected_value in expected.items():
+        if record.get(field) != expected_value:
+            raise VerificationEvidenceError(
+                f"{source_sample_id} P4 label review differs at {field}"
+            )
+    return _validate_record_digest(
+        record, field=f"{source_sample_id}.p4_label_review"
+    )
+
+
+def verification_bundle_sha256(
+    *,
+    source_sample_id: str,
+    recovery_sample_id: str,
+    canonical_task_id: str,
+    episode_id: str,
+    recovery_evidence_sha256: str,
+    final_task_evidence_sha256: str,
+) -> str:
+    """Close both independent records into one re-playable item digest."""
+
+    return canonical_sha256(
+        {
+            "schema_version": VERIFICATION_BUNDLE_SCHEMA_VERSION,
+            "source_sample_id": _nonempty(
+                source_sample_id, field="bundle.source_sample_id"
+            ),
+            "recovery_sample_id": _nonempty(
+                recovery_sample_id, field="bundle.recovery_sample_id"
+            ),
+            "canonical_task_id": _nonempty(
+                canonical_task_id, field="bundle.canonical_task_id"
+            ),
+            "episode_id": _nonempty(episode_id, field="bundle.episode_id"),
+            "recovery_verification_evidence_sha256": require_sha256(
+                recovery_evidence_sha256,
+                field="bundle.recovery_verification_evidence_sha256",
+            ),
+            "final_task_verification_evidence_sha256": require_sha256(
+                final_task_evidence_sha256,
+                field="bundle.final_task_verification_evidence_sha256",
+            ),
+        }
+    )
+
+
+def validate_provenance_verification_evidence(
+    evidence: Mapping[str, Any],
+    *,
+    source_sample_id: str,
+    recovery_sample_id: str,
+    canonical_task_id: str,
+    episode_id: str,
+    transition: Mapping[str, Any] | None = None,
+) -> VerifiedMemoryEvidence:
+    """Validate both independent evidence records and their bundle digest."""
+
+    recovery = _require_exact_fields(
+        evidence.get("recovery_verification"),
+        required=_RECOVERY_FIELDS,
+        field=f"{source_sample_id}.recovery_verification",
+    )
+    final_task = _require_exact_fields(
+        evidence.get("final_task_verification"),
+        required=_FINAL_TASK_FIELDS,
+        field=f"{source_sample_id}.final_task_verification",
+    )
+    expected_identity = {
+        "source_sample_id": source_sample_id,
+        "canonical_task_id": canonical_task_id,
+        "episode_id": episode_id,
+    }
+    for field, expected in expected_identity.items():
+        if recovery.get(field) != expected or final_task.get(field) != expected:
+            raise VerificationEvidenceError(
+                f"{source_sample_id} verification evidence differs at {field}"
+            )
+    if recovery.get("recovery_sample_id") != recovery_sample_id:
+        raise VerificationEvidenceError(
+            f"{source_sample_id} recovery verification cites another recovery sample"
+        )
+    if recovery.get("schema_version") != RECOVERY_VERIFICATION_SCHEMA_VERSION:
+        raise VerificationEvidenceError(
+            f"{source_sample_id} uses an unsupported recovery-verification schema"
+        )
+    if final_task.get("schema_version") != FINAL_TASK_VERIFICATION_SCHEMA_VERSION:
+        raise VerificationEvidenceError(
+            f"{source_sample_id} uses an unsupported final-task-verification schema"
+        )
+    _validate_authority(recovery, field=f"{source_sample_id}.recovery_verification")
+    _validate_authority(
+        final_task, field=f"{source_sample_id}.final_task_verification"
+    )
+    _strict_true(
+        recovery.get("verified_recovery_success"),
+        field=f"{source_sample_id}.verified_recovery_success",
+    )
+    _strict_true(
+        final_task.get("verified_final_task_success"),
+        field=f"{source_sample_id}.verified_final_task_success",
+    )
+    for field in (
+        "pre_recovery_state_sha256",
+        "executed_recovery_action_sha256",
+        "post_recovery_state_sha256",
+    ):
+        require_sha256(recovery.get(field), field=f"recovery_verification.{field}")
+    for field in (
+        "task_specification_sha256",
+        "terminal_state_sha256",
+        "terminal_verifier_output_sha256",
+    ):
+        require_sha256(final_task.get(field), field=f"final_task_verification.{field}")
+
+    if transition is not None:
+        expected_transition_hashes = {
+            "pre_recovery_state_sha256": recovery_state_evidence_sha256(
+                transition,
+                field="failure_state",
+            ),
+            "executed_recovery_action_sha256": recovery_action_evidence_sha256(
+                transition
+            ),
+            "post_recovery_state_sha256": recovery_state_evidence_sha256(
+                transition,
+                field="post_recovery_state",
+            ),
+        }
+        for field, expected in expected_transition_hashes.items():
+            if recovery.get(field) != expected:
+                raise VerificationEvidenceError(
+                    f"{source_sample_id} recovery verification differs from "
+                    f"transition at {field}"
+                )
+
+    recovery_digest = _validate_record_digest(
+        recovery, field=f"{source_sample_id}.recovery_verification"
+    )
+    final_digest = _validate_record_digest(
+        final_task, field=f"{source_sample_id}.final_task_verification"
+    )
+    bundle_digest = verification_bundle_sha256(
+        source_sample_id=source_sample_id,
+        recovery_sample_id=recovery_sample_id,
+        canonical_task_id=canonical_task_id,
+        episode_id=episode_id,
+        recovery_evidence_sha256=recovery_digest,
+        final_task_evidence_sha256=final_digest,
+    )
+    registered_bundle = require_sha256(
+        evidence.get("verification_evidence_sha256"),
+        field=f"{source_sample_id}.verification_evidence_sha256",
+    )
+    if registered_bundle != bundle_digest:
+        raise VerificationEvidenceError(
+            f"{source_sample_id} verification evidence bundle digest mismatch"
+        )
+    return VerifiedMemoryEvidence(
+        recovery_evidence_sha256=recovery_digest,
+        final_task_evidence_sha256=final_digest,
+        bundle_sha256=bundle_digest,
+        recovery_record=dict(recovery),
+        final_task_record=dict(final_task),
+    )
+
+
+def validate_frozen_item_verification(item: Mapping[str, Any]) -> str:
+    """Recompute one frozen item's combined evidence digest."""
+
+    expected = verification_bundle_sha256(
+        source_sample_id=str(item.get("source_sample_id") or ""),
+        recovery_sample_id=str(item.get("recovery_sample_id") or ""),
+        canonical_task_id=str(item.get("source_task_id") or ""),
+        episode_id=str(item.get("source_episode_id") or ""),
+        recovery_evidence_sha256=str(
+            item.get("recovery_verification_evidence_sha256") or ""
+        ),
+        final_task_evidence_sha256=str(
+            item.get("final_task_verification_evidence_sha256") or ""
+        ),
+    )
+    registered = require_sha256(
+        item.get("verification_evidence_sha256"),
+        field="item.verification_evidence_sha256",
+    )
+    if registered != expected:
+        raise VerificationEvidenceError(
+            "frozen memory verification evidence bundle digest mismatch"
+        )
+    return expected
+
+
+def verification_manifest_payload(
+    items: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Return the deterministic per-item verification closure for a store."""
+
+    rows: list[dict[str, str]] = []
+    memory_ids: set[str] = set()
+    for item in items:
+        memory_id = _nonempty(item.get("memory_id"), field="item.memory_id")
+        if memory_id in memory_ids:
+            raise VerificationEvidenceError(
+                f"duplicate memory ID in verification closure: {memory_id}"
+            )
+        memory_ids.add(memory_id)
+        validate_frozen_item_verification(item)
+        rows.append(
+            {
+                "memory_id": memory_id,
+                "source_sample_id": _nonempty(
+                    item.get("source_sample_id"), field="item.source_sample_id"
+                ),
+                "recovery_verification_evidence_sha256": require_sha256(
+                    item.get("recovery_verification_evidence_sha256"),
+                    field="item.recovery_verification_evidence_sha256",
+                ),
+                "final_task_verification_evidence_sha256": require_sha256(
+                    item.get("final_task_verification_evidence_sha256"),
+                    field="item.final_task_verification_evidence_sha256",
+                ),
+                "verification_evidence_sha256": require_sha256(
+                    item.get("verification_evidence_sha256"),
+                    field="item.verification_evidence_sha256",
+                ),
+            }
+        )
+    rows.sort(key=lambda row: row["memory_id"])
+    return {
+        "schema_version": VERIFICATION_MANIFEST_SCHEMA_VERSION,
+        "digest_algorithm": VERIFICATION_DIGEST_ALGORITHM,
+        "item_count": len(rows),
+        "items": rows,
+        "items_sha256": canonical_sha256(rows),
+    }
+
+
+_FROZEN_RECORD_FIELDS = frozenset(
+    {
+        "memory_id",
+        "source_sample_id",
+        "recovery_sample_id",
+        "canonical_task_id",
+        "episode_id",
+        "source_step_index",
+        "source_record_sha256",
+        "memory_item_source_material_sha256",
+        "recovery_verification",
+        "final_task_verification",
+        "p4_label_review",
+        "p4_label_review_evidence_sha256",
+        "recovery_verification_evidence_sha256",
+        "final_task_verification_evidence_sha256",
+        "verification_evidence_sha256",
+        "record_sha256",
+    }
+)
+
+
+def _strict_step(value: object, *, field: str) -> int:
+    if type(value) is not int or value < 0:
+        raise VerificationEvidenceError(f"{field} must be a non-negative integer")
+    return value
+
+
+def _frozen_verification_record(
+    item: Mapping[str, Any],
+    evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate and close the full evidence records for one frozen item."""
+
+    memory_id = _nonempty(item.get("memory_id"), field="item.memory_id")
+    source_sample_id = _nonempty(
+        item.get("source_sample_id"), field=f"{memory_id}.source_sample_id"
+    )
+    recovery_sample_id = _nonempty(
+        item.get("recovery_sample_id"), field=f"{memory_id}.recovery_sample_id"
+    )
+    canonical_task_id = _nonempty(
+        item.get("source_task_id"), field=f"{memory_id}.source_task_id"
+    )
+    episode_id = _nonempty(
+        item.get("source_episode_id"), field=f"{memory_id}.source_episode_id"
+    )
+    source_step_index = _strict_step(
+        item.get("step_index"), field=f"{memory_id}.step_index"
+    )
+    source_record_sha256 = require_sha256(
+        item.get("source_record_sha256"),
+        field=f"{memory_id}.source_record_sha256",
+    )
+    source_material_sha256 = require_sha256(
+        item.get("memory_item_source_material_sha256"),
+        field=f"{memory_id}.memory_item_source_material_sha256",
+    )
+    verified = validate_provenance_verification_evidence(
+        evidence,
+        source_sample_id=source_sample_id,
+        recovery_sample_id=recovery_sample_id,
+        canonical_task_id=canonical_task_id,
+        episode_id=episode_id,
+    )
+    expected_digests = {
+        "recovery_verification_evidence_sha256": (
+            verified.recovery_evidence_sha256
+        ),
+        "final_task_verification_evidence_sha256": (
+            verified.final_task_evidence_sha256
+        ),
+        "verification_evidence_sha256": verified.bundle_sha256,
+    }
+    for field, expected in expected_digests.items():
+        if item.get(field) != expected:
+            raise VerificationEvidenceError(
+                f"{memory_id} item/evidence mismatch at {field}"
+            )
+    label_review = evidence.get("p4_label_review")
+    label_review_digest = evidence.get("p4_label_review_evidence_sha256")
+    if item.get("source_review_status") == "pending" or label_review is not None:
+        if not isinstance(label_review, Mapping):
+            raise VerificationEvidenceError(
+                f"{memory_id} lacks its full P4 label-review record"
+            )
+        expected_label_review_digest = validate_p4_label_review_evidence(
+            label_review,
+            source_sample_id=source_sample_id,
+            source_record_sha256=source_record_sha256,
+            memory_item_source_material_sha256=source_material_sha256,
+        )
+        if (
+            label_review_digest != expected_label_review_digest
+            or item.get("p4_label_review_evidence_sha256")
+            != expected_label_review_digest
+        ):
+            raise VerificationEvidenceError(
+                f"{memory_id} P4 label-review record/digest mismatch"
+            )
+        frozen_label_review: dict[str, Any] | None = dict(label_review)
+        frozen_label_review_digest: str | None = expected_label_review_digest
+    else:
+        if label_review_digest is not None or item.get(
+            "p4_label_review_evidence_sha256"
+        ) is not None:
+            raise VerificationEvidenceError(
+                f"{memory_id} has a label-review digest without a record"
+            )
+        frozen_label_review = None
+        frozen_label_review_digest = None
+    row: dict[str, Any] = {
+        "memory_id": memory_id,
+        "source_sample_id": source_sample_id,
+        "recovery_sample_id": recovery_sample_id,
+        "canonical_task_id": canonical_task_id,
+        "episode_id": episode_id,
+        "source_step_index": source_step_index,
+        "source_record_sha256": source_record_sha256,
+        "memory_item_source_material_sha256": source_material_sha256,
+        "recovery_verification": dict(verified.recovery_record),
+        "final_task_verification": dict(verified.final_task_record),
+        "p4_label_review": frozen_label_review,
+        "p4_label_review_evidence_sha256": frozen_label_review_digest,
+        **expected_digests,
+    }
+    row["record_sha256"] = canonical_sha256(row)
+    return row
+
+
+def verification_records_payload(
+    item_evidence_pairs: Sequence[
+        tuple[Mapping[str, Any], Mapping[str, Any]]
+    ],
+) -> dict[str, Any]:
+    """Build the full, reloadable independent-evidence package for a store."""
+
+    records = [
+        _frozen_verification_record(item, evidence)
+        for item, evidence in item_evidence_pairs
+    ]
+    records.sort(key=lambda row: row["memory_id"])
+    memory_ids = [row["memory_id"] for row in records]
+    if len(memory_ids) != len(set(memory_ids)):
+        raise VerificationEvidenceError(
+            "duplicate memory ID in frozen verification records"
+        )
+    return {
+        "schema_version": VERIFICATION_RECORDS_SCHEMA_VERSION,
+        "digest_algorithm": VERIFICATION_DIGEST_ALGORITHM,
+        "record_count": len(records),
+        "records": records,
+        "records_sha256": canonical_sha256(records),
+    }
+
+
+def validate_verification_records_payload(
+    payload: Mapping[str, Any],
+    *,
+    expected_item_count: int,
+    items: Sequence[Mapping[str, Any]] | None = None,
+) -> None:
+    """Replay full evidence schemas/digests and, when present, item bindings."""
+
+    required = {
+        "schema_version",
+        "digest_algorithm",
+        "record_count",
+        "records",
+        "records_sha256",
+    }
+    if not isinstance(payload, Mapping) or set(payload) != required:
+        raise VerificationEvidenceError(
+            "frozen verification-record fields differ from the registered schema"
+        )
+    if payload.get("schema_version") != VERIFICATION_RECORDS_SCHEMA_VERSION:
+        raise VerificationEvidenceError(
+            "unsupported frozen verification-record schema"
+        )
+    if payload.get("digest_algorithm") != VERIFICATION_DIGEST_ALGORITHM:
+        raise VerificationEvidenceError(
+            "unsupported frozen verification-record digest algorithm"
+        )
+    records = payload.get("records")
+    if not isinstance(records, list):
+        raise VerificationEvidenceError("frozen verification records must be an array")
+    if (
+        type(payload.get("record_count")) is not int
+        or payload["record_count"] != len(records)
+        or payload["record_count"] != expected_item_count
+    ):
+        raise VerificationEvidenceError(
+            "frozen verification-record count is inconsistent"
+        )
+    if require_sha256(
+        payload.get("records_sha256"), field="verification_records.records_sha256"
+    ) != canonical_sha256(records):
+        raise VerificationEvidenceError(
+            "frozen verification-record aggregate hash mismatch"
+        )
+
+    items_by_id: dict[str, Mapping[str, Any]] | None = None
+    if items is not None:
+        items_by_id = {}
+        for item in items:
+            memory_id = _nonempty(item.get("memory_id"), field="item.memory_id")
+            if memory_id in items_by_id:
+                raise VerificationEvidenceError(
+                    f"duplicate frozen memory ID: {memory_id}"
+                )
+            items_by_id[memory_id] = item
+        if len(items_by_id) != expected_item_count:
+            raise VerificationEvidenceError(
+                "frozen verification records do not align with memory items"
+            )
+
+    prior_memory_id = ""
+    for index, row in enumerate(records):
+        if not isinstance(row, Mapping) or set(row) != _FROZEN_RECORD_FIELDS:
+            raise VerificationEvidenceError(
+                f"verification_records.records[{index}] fields are invalid"
+            )
+        memory_id = _nonempty(
+            row.get("memory_id"), field=f"verification_records.records[{index}].memory_id"
+        )
+        if memory_id <= prior_memory_id:
+            raise VerificationEvidenceError(
+                "frozen verification records must have unique ascending memory IDs"
+            )
+        prior_memory_id = memory_id
+        registered_record_hash = require_sha256(
+            row.get("record_sha256"),
+            field=f"verification_records.records[{index}].record_sha256",
+        )
+        record_content = {
+            key: value for key, value in row.items() if key != "record_sha256"
+        }
+        if registered_record_hash != canonical_sha256(record_content):
+            raise VerificationEvidenceError(
+                f"verification record {memory_id} hash mismatch"
+            )
+        evidence = {
+            "recovery_verification": row["recovery_verification"],
+            "final_task_verification": row["final_task_verification"],
+            "p4_label_review": row["p4_label_review"],
+            "p4_label_review_evidence_sha256": row[
+                "p4_label_review_evidence_sha256"
+            ],
+            "verification_evidence_sha256": row[
+                "verification_evidence_sha256"
+            ],
+        }
+        verified = validate_provenance_verification_evidence(
+            evidence,
+            source_sample_id=_nonempty(
+                row.get("source_sample_id"), field=f"{memory_id}.source_sample_id"
+            ),
+            recovery_sample_id=_nonempty(
+                row.get("recovery_sample_id"), field=f"{memory_id}.recovery_sample_id"
+            ),
+            canonical_task_id=_nonempty(
+                row.get("canonical_task_id"), field=f"{memory_id}.canonical_task_id"
+            ),
+            episode_id=_nonempty(
+                row.get("episode_id"), field=f"{memory_id}.episode_id"
+            ),
+        )
+        source_record_sha256 = require_sha256(
+            row.get("source_record_sha256"),
+            field=f"{memory_id}.source_record_sha256",
+        )
+        source_material_sha256 = require_sha256(
+            row.get("memory_item_source_material_sha256"),
+            field=f"{memory_id}.memory_item_source_material_sha256",
+        )
+        label_review = row.get("p4_label_review")
+        label_review_digest = row.get("p4_label_review_evidence_sha256")
+        if label_review is not None:
+            if not isinstance(label_review, Mapping):
+                raise VerificationEvidenceError(
+                    f"verification record {memory_id} has invalid P4 label review"
+                )
+            expected_label_review_digest = validate_p4_label_review_evidence(
+                label_review,
+                source_sample_id=str(row["source_sample_id"]),
+                source_record_sha256=source_record_sha256,
+                memory_item_source_material_sha256=source_material_sha256,
+            )
+            if label_review_digest != expected_label_review_digest:
+                raise VerificationEvidenceError(
+                    f"verification record {memory_id} label-review digest mismatch"
+                )
+        elif label_review_digest is not None:
+            raise VerificationEvidenceError(
+                f"verification record {memory_id} has a label-review digest "
+                "without its record"
+            )
+        _strict_step(
+            row.get("source_step_index"), field=f"{memory_id}.source_step_index"
+        )
+        expected_digests = {
+            "recovery_verification_evidence_sha256": (
+                verified.recovery_evidence_sha256
+            ),
+            "final_task_verification_evidence_sha256": (
+                verified.final_task_evidence_sha256
+            ),
+            "verification_evidence_sha256": verified.bundle_sha256,
+        }
+        for field, expected in expected_digests.items():
+            if row.get(field) != expected:
+                raise VerificationEvidenceError(
+                    f"verification record {memory_id} differs at {field}"
+                )
+
+        if items_by_id is not None:
+            item = items_by_id.pop(memory_id, None)
+            if item is None:
+                raise VerificationEvidenceError(
+                    f"verification record has no frozen item: {memory_id}"
+                )
+            expected_item = {
+                "source_sample_id": row["source_sample_id"],
+                "recovery_sample_id": row["recovery_sample_id"],
+                "source_task_id": row["canonical_task_id"],
+                "source_episode_id": row["episode_id"],
+                "step_index": row["source_step_index"],
+                "source_record_sha256": row["source_record_sha256"],
+                "memory_item_source_material_sha256": row[
+                    "memory_item_source_material_sha256"
+                ],
+                "p4_label_review_evidence_sha256": row[
+                    "p4_label_review_evidence_sha256"
+                ],
+                **expected_digests,
+            }
+            for field, expected in expected_item.items():
+                if item.get(field) != expected:
+                    raise VerificationEvidenceError(
+                        f"frozen item {memory_id} differs from verification record at {field}"
+                    )
+    if items_by_id:
+        raise VerificationEvidenceError(
+            "one or more frozen items lack a verification record"
+        )

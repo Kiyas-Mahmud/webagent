@@ -1,0 +1,52 @@
+{
+  "allowed_operations": [
+    "audit-candidates",
+    "validate-preparation"
+  ],
+  "dataset_id": "web-gold-v2.8",
+  "dataset_version": "pc01-train-0522807d-supplement-67ade5e9",
+  "datasets": [
+    {
+      "data_root_layouts": [
+        ".",
+        "final_data_set_40k"
+      ],
+      "kaggle_dataset_version": 1,
+      "mount_layouts": [
+        "web-gold-40k",
+        "datasets/kiyasmahmud/web-gold-40k"
+      ],
+      "role": "original_gold",
+      "slug": "kiyasmahmud/web-gold-40k",
+      "train_json_relative_path": "split_train.json"
+    },
+    {
+      "data_root_layouts": [
+        ".",
+        "web_gold_40k_retry_abort_supplement_v2_kaggle"
+      ],
+      "kaggle_dataset_version": 1,
+      "mount_layouts": [
+        "gold-40k-retry",
+        "datasets/kiyasmahmud/gold-40k-retry"
+      ],
+      "role": "retry_abort_supplement_v2",
+      "slug": "kiyasmahmud/gold-40k-retry",
+      "train_json_relative_path": "data/supplement_train.json"
+    }
+  ],
+  "execution_resource": "CPU_ONLY_NO_MODEL_OR_CHECKPOINT",
+  "max_preparation_output_bytes": 536870912,
+  "mode": "P4_PREPARE_ONLY",
+  "paper_table_status": "N/R",
+  "preparation_output_files": [
+    "candidate_audit.json",
+    "preparation_manifest.json",
+    "preparation_manifest.sha256",
+    "read_ledger.json",
+    "review_queue.jsonl",
+    "source_authority.json"
+  ],
+  "schema_version": "table2-p4-kaggle-prepare-config-v1",
+  "source_authority": "configs/eval/table2/p4_source_authority_v1.json"
+}

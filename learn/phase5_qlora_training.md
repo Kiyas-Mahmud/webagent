@@ -1,5 +1,11 @@
 # Phase 5 — Full QLoRA Training (Qwen2-VL-2B)
 
+> **HISTORICAL TUTORIAL — DO NOT EXECUTE AS THE CURRENT RESEARCH PROTOCOL.**
+> Its Failure-F1 and test-evaluation instructions are retired. The registered
+> Gold v2.8 comparison uses validation-only all-gates-then-outcome-MCC selection;
+> use `docs/DGX_THREE_MODEL_COMPARISON.md` and
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`.
+
 ## 1. Learning topics
 
 - **QLoRA** — 4-bit quantized base + small trainable LoRA adapters (fine-tune a 2B

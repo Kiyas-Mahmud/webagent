@@ -30,9 +30,20 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+table2 = [
+    "browsergym-core==0.14.3",
+    "browsergym-webarena==0.14.3",
+    "cryptography==46.0.5",
+    "gymnasium==1.0.0",
+    "libwebarena==0.0.4",
+    "playwright==1.44.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"web_agent.eval.table2" = ["deployment_authority_registry_v1.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

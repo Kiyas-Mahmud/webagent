@@ -1,10 +1,17 @@
 # Failure-Aware Resilient Autonomous Web Agent
 
 MSc thesis (AIUB). A backbone-agnostic 4-pillar web agent that **detects**,
-**diagnoses**, **recovers from**, and **remembers** web-interaction failures —
-trained on a failure-augmented dataset of 70,965 labeled steps (Mind2Web, 136 sites).
+**diagnoses**, **recovers from**, and **remembers** web-interaction failures.
+The earlier 70,965-step Mind2Web-derived corpus is retained as historical
+project context; current training and evaluation are governed by the reviewed
+Gold v2.8 artifacts and the canonical documents below.
 
-> Read `docs/AGENT.md` first. Full specs in `docs/PROJECT_SPECIFICATION.md`.
+> Read `docs/AGENT.md` first. Full training specs are in
+> `docs/PROJECT_SPECIFICATION.md`. For the post-training browser experiment,
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md` is the canonical
+> authority and supersedes conflicting runtime wording in older design files.
+> Its active model-promotion gate compares exactly PC-01/PC-02/PC-03 at seed 42;
+> the 19-model roadmap below is historical supporting/generalization scope.
 
 ## The idea
 
@@ -19,6 +26,13 @@ UNIFIED VLM  (Y4,Y5,Y6):    VLM(image+text) -> Adapter Linear(D->768)  -> [768] 
 ```
 
 ## Layout
+
+The compact tree below is the historical training-oriented view, not a complete
+inventory. The additive browser experiment also lives under
+`configs/eval/table2/`, `benchmarks/table2/`,
+`src/web_agent/{runtime,benchmarks,memory,eval/table2}/`, `scripts/`, and
+`tests/table2/`; the tracked tree and the canonical Table 2 plan are the current
+authority.
 
 ```
 docs/        design docs (AGENT, SPEC, ARCHITECTURE, TRAINING, IMPLEMENTATION)
@@ -44,6 +58,18 @@ pip install -e .
 python scripts/setup_data.py          # link ../FinalData -> data/, sanity counts
 python -m web_agent.data.verify_dataset
 ```
+
+The browser stack is intentionally separate from the DGX training install.
+Only on the eventual Table 2 campaign host, after the selected-checkpoint and
+WebArena handoff inputs exist, install the declared extra and browser runtime:
+
+```bash
+python3 -m pip install -e '.[table2]'
+python3 -m playwright install chromium
+```
+
+Do not interpret this installation step as permission to open locked tasks;
+the frozen campaign preflight remains the access authority.
 
 ## Run a model (test-first, never skip stages)
 

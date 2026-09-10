@@ -2,6 +2,11 @@
 
 > **Read with `PROJECT_SPECIFICATION.md` (v2).**
 > **Golden rule:** never launch a full training run on unverified code. For EVERY model: run a tiny SMOKE TEST first, confirm the architecture works, then run the FULL training. Only after one model is fully proven do we move to the next.
+>
+> **Current authority correction (2026-09-04):** the seven-model/three-seed
+> roadmap below is historical generalization scope. The active Table 2 model
+> gate is exactly the seed-42 PC-01/PC-02/PC-03 validation-only comparison in
+> `DGX_THREE_MODEL_COMPARISON.md`; no PC-01 seeds 43--44 are added.
 
 ---
 

@@ -1,5 +1,12 @@
 # learn/ — How this project works, phase by phase
 
+> **HISTORICAL TUTORIAL — DO NOT EXECUTE AS THE CURRENT RESEARCH PROTOCOL.**
+> These lessons describe earlier corpus, action-space, routing, and evaluation
+> stages and intentionally preserve that history. They are not authority for
+> training, checkpoint selection, locked-test access, the six-action runtime,
+> or Table 2. Use `docs/AGENT.md`, `docs/DGX_THREE_MODEL_COMPARISON.md`, and
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md` instead.
+
 This folder teaches you the **techniques, code structure, algorithms, and key
 functions** behind every part of the project. One file per phase. Read in order.
 

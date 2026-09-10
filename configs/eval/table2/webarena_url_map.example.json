@@ -1,0 +1,9 @@
+{
+  "WA_GITLAB": "http://gitlab.example.test",
+  "WA_HOMEPAGE": "http://homepage.example.test",
+  "WA_MAP": "http://map.example.test",
+  "WA_REDDIT": "http://reddit.example.test",
+  "WA_SHOPPING": "http://shopping.example.test",
+  "WA_SHOPPING_ADMIN": "http://shopping-admin.example.test",
+  "WA_WIKIPEDIA": "http://wikipedia.example.test"
+}

@@ -1,0 +1,11 @@
+schema_version: "1.0"
+system_id: E2
+display_name: Failure diagnosis and recovery, no memory
+policy_source: selected_checkpoint
+features:
+  trained_pre_action_policy: true
+  post_action_diagnosis: true
+  recovery_controller: true
+  memory_query: false
+  memory_intervention: false
+  evaluation_memory_write: false

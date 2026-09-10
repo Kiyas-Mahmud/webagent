@@ -3,7 +3,25 @@
 **Status:** final evidence plan  
 **Date:** 2026-07-28  
 **Project:** four-pillar failure-aware multimodal web agent  
-**Primary backbone currently under development:** Qwen2-VL-2B with QLoRA  
+**PC-01 provisional candidate currently available:** Qwen2-VL-2B with QLoRA;
+the final primary backbone remains unselected pending the registered
+validation-only PC-01/PC-02/PC-03 comparison
+
+> **TABLE 2 SUPERSESSION NOTICE (2026-09-05):** This document remains useful
+> for broad evaluation motivation and related-work planning, but its hard-coded
+> Qwen E0 descriptions do not govern Table 2. Use
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md` for every E0--E3
+> system definition, model-promotion rule, task boundary, metric denominator,
+> and launch decision. E0 is the unadapted validation-selected backbone; PC-01
+> is provisional only, and Table 2 remains `N/R`.
+
+> **Current-state correction (2026-09-04):** Sections 3.1--3.3 preserve the
+> 2026-07-28 v2.7 mini snapshot and its then-current blockers; they are not the
+> present experiment state. PC-01 has since completed its Gold v2.8 seed-42
+> validation run and is provisional only. Use
+> `docs/QWEN2VL_2B_GOLD_V2_8_DGX_SEED42_FULL_RESULTS.md` for that candidate and
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md` for the controlling
+> E0--E3 protocol. PC-02/PC-03 and final validation-only promotion remain open.
 
 This document defines the experiments, metrics, comparisons, statistical
 tests, artifacts, and reporting rules required before the thesis can claim
@@ -84,11 +102,11 @@ environment, budget, and evaluator?
 
 ---
 
-## 3. Current evidence and its correct interpretation
+## 3. Historical 2026-07-28 evidence snapshot and its correct interpretation
 
 ### 3.1 Controlled 5k mini result
 
-The latest locally preserved v2.7 resume report used:
+The then-latest locally preserved v2.7 resume report used:
 
 - 5,000 training rows;
 - 500 validation rows;
@@ -120,7 +138,7 @@ These values prove that the controlled pipeline runs, learns non-trivial
 signals, saves and reloads a checkpoint, and respects the locked test boundary.
 They do **not** prove final generalization or end-to-end task completion.
 
-### 3.2 Current data blockers
+### 3.2 Historical data blockers at that snapshot
 
 The accepted existing-data audit found:
 
@@ -142,7 +160,7 @@ Therefore:
   v2.7/v14 values until the old selected checkpoint is re-evaluated on the
   exact same review overlay.
 
-### 3.3 Current pillar status
+### 3.3 Historical pillar status at that snapshot
 
 | Pillar | Current mini evidence | Remaining final evidence |
 | --- | --- | --- |
@@ -823,9 +841,10 @@ The project also claims an implemented agent, so report:
 - checkpoint and code commit hashes.
 
 Related systems use much larger models in some comparisons. For example,
-WebCoach's strongest result uses a 38B actor plus an 8B Coach, while our current
-primary backbone is 2B. Model size and cost must remain visible so that a
-smaller but competitive model is evaluated fairly.
+WebCoach's strongest result uses a 38B actor plus an 8B Coach, while the
+provisional PC-01 candidate is 2B. The final primary backbone is not yet
+selected. Model size and cost must remain visible so that a smaller but
+competitive model is evaluated fairly.
 
 ---
 

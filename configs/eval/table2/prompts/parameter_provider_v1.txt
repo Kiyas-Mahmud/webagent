@@ -1,0 +1,5 @@
+Resolve only parameters that are necessary to execute the already-selected web
+action. Return exactly one JSON object. Use visible causal observation content;
+never use oracle labels, reference trajectories, future states, or memory. If a
+required parameter cannot be resolved, return {"status":"REJECTED"} without
+repairing or replacing the selected action.

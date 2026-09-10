@@ -1,0 +1,258 @@
+{
+  "status": "PASS",
+  "test_rows_read": 0,
+  "dataset_rows": 16,
+  "processed_rows": 16,
+  "forward_batch_size": 16,
+  "loss": 1.9871491193771362,
+  "loss_terms": {
+    "outcome": 0.63259357213974,
+    "failtype": 1.4790529012680054,
+    "action": 1.9157538414001465,
+    "recovery": 1.8210245370864868,
+    "needs_recovery": 1.0772051811218262,
+    "bbox": 9.115788459777832,
+    "memory": 0.6491221189498901,
+    "recovery_outcome": 0.6812887191772461,
+    "confidence": 0.1656261831521988,
+    "calibration": 0.09029287099838257,
+    "contrastive": 2.741086959838867,
+    "total": 1.9871491193771362,
+    "bbox_l1": 0.9226894378662109,
+    "bbox_center_l1": 0.5629135370254517,
+    "bbox_log_size_smooth_l1": 0.3597759008407593,
+    "bbox_giou": 1.905778408050537,
+    "bbox_attention_kl": 0.6907848119735718
+  },
+  "class_weights": {
+    "source_rows": 16,
+    "action": [
+      1.3333333730697632,
+      1.3333333730697632,
+      1.3333333730697632,
+      0.6666666865348816,
+      0.6666666865348816,
+      1.3333333730697632
+    ],
+    "failure_type": [
+      0.4444444477558136,
+      1.0,
+      2.0,
+      4.0
+    ],
+    "outcome": [
+      1.0,
+      1.2857143878936768
+    ],
+    "recovery_strategy": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ],
+    "recovery_strategy_scheme": "sqrt_inverse_frequency",
+    "recovery_strategy_cap": 3.0,
+    "recovery_outcome_pos_weight": 1.0,
+    "recovery_outcome_attempted_success": 1,
+    "recovery_outcome_attempted_failure": 1,
+    "needs_recovery_pos_weight": 5.0,
+    "needs_recovery_weight_scheme": "exact_inverse_frequency",
+    "needs_recovery_positive": 2,
+    "needs_recovery_negative": 14,
+    "bbox_log_size_prior": {
+      "source": "valid training bbox rows only",
+      "valid_rows": 4,
+      "excluded_invalid_rows": 2,
+      "log_wh": [
+        -2.093772887963914,
+        -3.1656506126177217
+      ],
+      "geometric_mean_wh": [
+        0.12322135732898198,
+        0.042186685693413696
+      ]
+    }
+  },
+  "train_distribution": {
+    "failure_type": {
+      "ACTION_MISMATCH": 2,
+      "LOOP_DETECTED": 1,
+      "NONE": 9,
+      "PERCEPTION_ERROR": 4
+    },
+    "action_type": {
+      "CLICK": 2,
+      "NAVIGATE": 4,
+      "PRESS_KEY": 2,
+      "SCROLL": 4,
+      "SELECT": 2,
+      "TYPE": 2
+    },
+    "recovery_attempted": {
+      "False": 14,
+      "True": 2
+    },
+    "recovery_strategy": {
+      "ALTERNATIVE_TARGET": 2,
+      "NONE": 14
+    },
+    "recovery_success": {
+      "False": 1,
+      "NOT_ATTEMPTED": 14,
+      "True": 1
+    },
+    "memory_update_flag": {
+      "False": 9,
+      "True": 7
+    },
+    "bbox_available": {
+      "False": 10,
+      "True": 6
+    },
+    "source_dataset": {
+      "original_gold": 16
+    }
+  },
+  "pre_images_processed": 16,
+  "post_images_processed": 32,
+  "parameter_changed": true,
+  "probe_gradient_norms": {
+    "bbox": 0.8265041708946228,
+    "strategy": 0.1479203701019287,
+    "recovery_outcome": 0.1852799355983734,
+    "needs_recovery": 0.06414220482110977,
+    "grounding_adapter": 0.12340959906578064,
+    "coordinate_projection": 0.02762029878795147,
+    "grounding_attention": 0.655900776386261
+  },
+  "probe_update_norms": {
+    "bbox": 0.018275493755936623,
+    "strategy": 0.029596621170639992,
+    "recovery_outcome": 0.01166180893778801,
+    "needs_recovery": 0.014212138950824738,
+    "grounding_adapter": 0.31336984038352966,
+    "coordinate_projection": 0.039181869477033615,
+    "grounding_attention": 1.0857505798339844
+  },
+  "bbox_supervised_rows": 4,
+  "bbox_geometry": {
+    "status": "FAIL",
+    "records": 16,
+    "bbox_rows": 6,
+    "valid_bbox_rows": 4,
+    "invalid_bbox_rows": 2,
+    "maskable_invalid_bbox_rows": 2,
+    "fatal_invalid_bbox_rows": 0,
+    "invalid_reason_counts": {
+      "bottom_boundary_overflow": 2,
+      "y_origin_outside": 2
+    },
+    "invalid_examples": [
+      {
+        "record_id": "gold_v16_40k_003939__step_0000",
+        "state_before": "images/gold_v16_40k_003939/before_0001.png",
+        "image_size": [
+          1280,
+          720
+        ],
+        "bbox": {
+          "x": 663.0,
+          "y": 9866.0,
+          "width": 548.0,
+          "height": 22.0
+        },
+        "reasons": [
+          "bottom_boundary_overflow",
+          "y_origin_outside"
+        ]
+      },
+      {
+        "record_id": "gold_v16_40k_000613__step_0001",
+        "state_before": "images/gold_v16_40k_000613/before_0002.png",
+        "image_size": [
+          1280,
+          720
+        ],
+        "bbox": {
+          "x": 997.0,
+          "y": 11012.609375,
+          "width": 190.0,
+          "height": 42.0
+        },
+        "reasons": [
+          "bottom_boundary_overflow",
+          "y_origin_outside"
+        ]
+      }
+    ],
+    "unique_images_opened": 6,
+    "normalized_valid_distribution": {
+      "x": {
+        "count": 4,
+        "mean": 0.5030548095703125,
+        "std": 0.19834396293697676,
+        "min": 0.34749755859375,
+        "max": 0.83538818359375
+      },
+      "y": {
+        "count": 4,
+        "mean": 0.06267361111111111,
+        "std": 0.038846625720403455,
+        "min": 0.022222222222222223,
+        "max": 0.10555555555555556
+      },
+      "width": {
+        "count": 4,
+        "mean": 0.1673095703125,
+        "std": 0.12060692141503612,
+        "min": 0.04493408203125,
+        "max": 0.3487548828125
+      },
+      "height": {
+        "count": 4,
+        "mean": 0.043402777777777776,
+        "std": 0.009490034978275313,
+        "min": 0.027777777777777776,
+        "max": 0.05277777777777778
+      }
+    },
+    "normalized_valid_log_size_distribution": {
+      "width": {
+        "count": 4,
+        "mean": -2.093772887963914,
+        "std": 0.8112215765492614,
+        "min": -3.1025587068943135,
+        "max": -1.053385945048516
+      },
+      "height": {
+        "count": 4,
+        "mean": -3.1656506126177217,
+        "std": 0.24879404225656343,
+        "min": -3.58351893845611,
+        "max": -2.941665052283715
+      }
+    },
+    "contract": "finite x/y, positive width/height, and the complete box must stay inside the actual state_before image"
+  },
+  "spatial_tokens_per_row": [
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252,
+    252
+  ],
+  "peak_gpu_gb": 8.155831808
+}

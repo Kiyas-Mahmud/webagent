@@ -3,6 +3,15 @@
 > **Read with `PROJECT_SPECIFICATION.md` (v2) and `MODEL_TRAINING_PLAN.md`.**
 > This document shows EXACTLY how the four pillars connect, what flows between them, what each component outputs, and how training and inference differ. Backbone-agnostic: dual-encoder path is the default; the VLM adapter path is in section 8.
 
+> **Table 2 supersession notice:** Sections describing the legacy runtime
+> Decision Combiner are historical architecture context only. For browser-time
+> causal ordering, P4 retrieval timing, recovery limits, executed evidence, and
+> E0-E3 evaluation, the authoritative specification is
+> `TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`. In particular, primary
+> Table 2 never retrieves memory before the failed transition, uses limits of
+> two attempts per incident/four per episode, and cannot substitute offline
+> head or retrieval accuracy for executed browser results.
+
 ---
 
 ## 1. THE WHOLE SYSTEM IN ONE VIEW
@@ -17,7 +26,7 @@
   |  SigLIP -> [B,768]                 RoBERTa -> [B,768]          |
   |          \                               /                    |
   |           \                             /                     |
-  |        CROSS-ATTENTION FUSION (the novelty)                   |
+  |        CROSS-ATTENTION FUSION (Pillar 2 implementation)       |
   |        vision<->text attend, 2 blocks -> fused [B,768]        |
   ================================================================
                               |

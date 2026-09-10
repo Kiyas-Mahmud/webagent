@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "ruleset_id": "table2-recovery-oracle-v1",
+  "sealed": true,
+  "attach_after_execution": true,
+  "runtime_read_access": false,
+  "rules": {
+    "valid_click_executed": {"requires_executor_status": "EXECUTED", "requires_state_change": true},
+    "new_target_executed": {"requires_executor_status": "EXECUTED", "requires_target_change": true},
+    "state_hash_changed": {"requires_state_change": true},
+    "text_entered": {"requires_executor_status": "EXECUTED", "requires_observation_flag": "text_entered"},
+    "option_selected": {"requires_executor_status": "EXECUTED", "requires_observation_flag": "option_selected"},
+    "loop_state_exited": {"requires_state_change": true, "forbids_loop_signature": true},
+    "modal_closed": {"requires_observation_flag": "modal_absent"},
+    "expected_context_restored": {"requires_observation_flag": "expected_context"},
+    "request_completed": {"requires_executor_status": "EXECUTED"},
+    "fresh_state_observed": {"requires_observation_flag": "fresh_state"},
+    "prior_state_restored": {"requires_observation_flag": "prior_state"},
+    "distinct_target_executed": {"requires_executor_status": "EXECUTED", "requires_target_change": true},
+    "safe_abort": {"requires_terminal_reason": "ABORTED", "counts_as_success": false}
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "manifest_id": "table2-deterministic-recovery-15-v1",
+  "evidence_label": "PILOT_ONLY",
+  "required_scenario_count": 15,
+  "deterministic": true,
+  "final_paper_evaluation_eligible": false,
+  "duplicate_audit_manifest": "benchmarks/table2/pilot/duplicate_audit_manifest_page_state_v2.json",
+  "duplicate_audit_scope": "SYNTHETIC_DIAGNOSTIC_ONLY",
+  "scenarios": [
+    {"scenario_id": "R01_rejected_click_bbox", "failure_kind": "REJECTED_ACTION", "expected_strategy": "RETRY", "resolution_event": "valid_click_executed"},
+    {"scenario_id": "R02_stale_element", "failure_kind": "STALE_TARGET", "expected_strategy": "REPLAN", "resolution_event": "new_target_executed"},
+    {"scenario_id": "R03_click_no_change", "failure_kind": "NO_STATE_CHANGE", "expected_strategy": "ALTERNATIVE_TARGET", "resolution_event": "state_hash_changed"},
+    {"scenario_id": "R04_missing_type_target", "failure_kind": "TARGET_MISSING", "expected_strategy": "REPLAN", "resolution_event": "text_entered"},
+    {"scenario_id": "R05_option_value_mismatch", "failure_kind": "INVALID_PARAMETER", "expected_strategy": "RETRY", "resolution_event": "option_selected"},
+    {"scenario_id": "R06_login_redirect_loop", "failure_kind": "NAVIGATION_LOOP", "expected_strategy": "BACKTRACK", "resolution_event": "loop_state_exited"},
+    {"scenario_id": "R07_modal_obstruction", "failure_kind": "OBSTRUCTED_TARGET", "expected_strategy": "ALTERNATIVE_TARGET", "resolution_event": "modal_closed"},
+    {"scenario_id": "R08_wrong_tab_focus", "failure_kind": "CONTEXT_MISMATCH", "expected_strategy": "BACKTRACK", "resolution_event": "expected_context_restored"},
+    {"scenario_id": "R09_transient_timeout", "failure_kind": "TRANSIENT_EXECUTOR_ERROR", "expected_strategy": "RETRY", "resolution_event": "request_completed"},
+    {"scenario_id": "R10_reload_required", "failure_kind": "STALE_PAGE", "expected_strategy": "REPLAN", "resolution_event": "fresh_state_observed"},
+    {"scenario_id": "R11_wrong_navigation", "failure_kind": "OFF_PATH", "expected_strategy": "BACKTRACK", "resolution_event": "prior_state_restored"},
+    {"scenario_id": "R12_duplicate_targets", "failure_kind": "AMBIGUOUS_TARGET", "expected_strategy": "ALTERNATIVE_TARGET", "resolution_event": "distinct_target_executed"},
+    {"scenario_id": "R13_repeated_action_loop", "failure_kind": "ACTION_LOOP", "expected_strategy": "ABORT", "resolution_event": "safe_abort"},
+    {"scenario_id": "R14_episode_recovery_budget", "failure_kind": "RECOVERY_BUDGET_EXHAUSTED", "expected_strategy": "ABORT", "resolution_event": "safe_abort"},
+    {"scenario_id": "R15_terminal_environment_error", "failure_kind": "ENVIRONMENT_FAILURE", "expected_strategy": "ABORT", "resolution_event": "safe_abort"}
+  ]
+}

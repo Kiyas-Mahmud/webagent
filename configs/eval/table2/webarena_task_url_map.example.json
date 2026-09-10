@@ -1,0 +1,7 @@
+{
+  "__GITLAB__": "http://gitlab.example.test",
+  "__MAP__": "http://map.example.test",
+  "__REDDIT__": "http://reddit.example.test",
+  "__SHOPPING__": "http://shopping.example.test",
+  "__SHOPPING_ADMIN__": "http://shopping-admin.example.test"
+}

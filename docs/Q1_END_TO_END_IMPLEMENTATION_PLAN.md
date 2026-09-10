@@ -3,9 +3,22 @@
 **Project:** four-pillar failure-aware multimodal web agent  
 **Plan status:** implementation-ready, no code implemented by this document  
 **Date:** 2026-07-28  
-**Current primary model:** Qwen2-VL-2B with QLoRA  
-**Current controlled evidence:** 5,000 train rows, 500 validation rows, zero test
+**PC-01 provisional pilot candidate:** Qwen2-VL-2B with QLoRA; the final
+backbone remains unselected pending the registered validation-only PC-01/
+PC-02/PC-03 comparison
+**Historical controlled evidence when this document was drafted:** 5,000 train rows, 500 validation rows, zero test
 rows read  
+
+> **TABLE 2 SUPERSESSION NOTICE (2026-09-05):** This is a historical design
+> document, not execution authority. Its inventory, proposed folder tree,
+> hard-coded Qwen E0 wording, and "pure training effect" interpretation are
+> obsolete. Do not use them to configure, launch, or interpret Table 2. The
+> current authority is
+> `docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`: PC-01 is
+> provisional, final backbone selection remains validation-only, E0 uses the
+> unadapted selected backbone, and E0-vs-E1 is contextual unless fully
+> interface-matched. The paper Table 2 remains `N/R` until a validated final
+> campaign package exists.
 
 This is the repository-specific plan for turning the existing offline
 multitask model into a measurable web-agent system and producing Q1-level
@@ -681,9 +694,17 @@ according to a frozen rule applied equally to all systems.
 
 ## 12. Decision Combiner
 
-The Decision Combiner operates after the relevant information exists.
+**Superseded clarification:** the canonical Table 2 protocol is now
+`docs/TABLE2_END_TO_END_RUNTIME_AND_POST_TRAINING_PLAN.md`. Earlier revisions
+called the two workflow headings below “12.1” and “12.2.” Those labels were
+document subsection numbers, never paper-table numbers. They are renamed here
+to Workflow A and Workflow B to prevent confusion. Neither workflow replaces
+the single headline paper **Table 2** or its unnumbered companion diagnostics.
 
-### 12.1 Normal step
+The Decision Combiner operates after the relevant runtime-visible information
+exists. Sealed verifier/oracle labels never enter its decision path.
+
+### Workflow A — Normal step
 
 ```text
 observe current page
@@ -697,15 +718,19 @@ observe current page
 Pillar 1 cannot use `state_after` to cancel an action that has already
 executed. It can only determine the next recovery decision.
 
-### 12.2 Recovery trigger
+### Workflow B — Recovery trigger
 
 Recovery is triggered using a frozen rule based on:
 
 - predicted outcome;
 - needs-recovery prediction;
 - confidence threshold selected on validation;
-- independent verifier evidence;
+- observed executor rejection/error or agent-visible browser result;
 - loop guard.
+
+Independent verifier evidence is attached only after the decision is complete
+and is used for scoring, failure confirmation, and false-trigger/missed-failure
+analysis. It cannot trigger, suppress, select, or modify recovery.
 
 The paper must distinguish:
 
@@ -718,11 +743,11 @@ The paper must distinguish:
 
 Low pre-action confidence may:
 
-- request memory guidance;
 - request parameter-provider reconsideration;
 - choose a safe registered fallback.
 
-It must not access post-action information.
+It must not access post-action information or query P4 memory. In the canonical
+Table 2 protocol, memory retrieval is post-failure only.
 
 ### 12.4 Hard stop
 
@@ -1313,8 +1338,9 @@ Required:
 - early stopping;
 - checkpoint/config/data hashes.
 
-After one successful full seed, run additional primary-model seeds when
-resources permit.
+For the current research-locked Table 2 protocol, retain seed 42 only. Do not
+retrain PC-01 or add seeds 43--44; PC-02 and PC-03 contribute only their
+completed seed-42 validation packages to final model promotion.
 
 ### Stage 6 - Frozen component test
 
@@ -1353,9 +1379,9 @@ ablation.
 
 ### 22.1 Training variation
 
-- target three seeds for the primary full model;
-- report single-seed ablations explicitly;
-- never discard an unfavourable completed seed.
+- use the registered seed-42 checkpoint only for Table 2;
+- report explicitly that model-seed uncertainty is not measured;
+- preserve every completed candidate result, including unfavourable results.
 
 ### 22.2 End-to-end uncertainty
 
@@ -1602,7 +1628,9 @@ following exist:
 - reproducible code/config/commit/checkpoint identifiers;
 - honest statement of unsupported or negative results.
 
-The final success criterion is not a universal 90% number. The required
-evidence is a reproducible, statistically supported improvement of the complete
-agent over controlled same-protocol baselines, combined with strong
-class-balanced component diagnostics and transparent limitations.
+The final success criterion is not a universal 90% number and does not require
+a positive result. The required evidence is a reproducible, preregistered
+estimate of the complete agent against controlled same-protocol baselines,
+with uncertainty, costs, null or negative findings, class-balanced component
+diagnostics, and transparent limitations reported without outcome-driven
+redesign.

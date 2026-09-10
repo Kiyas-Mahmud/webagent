@@ -1,0 +1,203 @@
+schema_version: "1.0"
+protocol_id: table2-final-template-v1
+protocol_status: AWAITING_MODEL_PROMOTION
+evidence_label: FINAL_TEMPLATE_ONLY
+paper_table_status: N/R
+
+paper_claims:
+  registry: configs/eval/table2/paper_claim_registry_v1.json
+  registry_id: table2-research-locked-claims-v1
+  pre_evaluation_status: N/R
+  pilot_resolution_forbidden: true
+
+deployment_assurance:
+  scope: independently_attested_locked_final
+  policy_browser_evaluator_process_isolation_required: true
+  immutable_measured_timeout_bundle_required: true
+  authenticated_broker_envelopes_required: true
+  hash_chained_runtime_artifacts_required: true
+  split_request_response_hash_chain_required: true
+  source_attested_oracle_free_value_origin_evidence_required: true
+  independent_ed25519_required: true
+  global_replay_anchor_required: true
+
+selection:
+  mode: three_candidate_final
+  candidate_ids:
+    - qwen2vl_2b_gold_v2_8_dgx
+    - qwen25vl_7b_gold_v2_8_dgx
+    - internvl35_8b_gold_v2_8_dgx
+  required_candidate_count: 3
+  checkpoint_selection: validation_only
+  locked_task_eligible: false
+
+benchmark:
+  name: webarena
+  adapter: web_agent.benchmarks.webarena.WebArenaAdapter
+  task_manifest: locked_benchmark_mount/table2/final/task_manifest.json
+  locked_mount: locked_benchmark_mount
+  allow_locked_reads: false
+  invalidate_if_successful_after_reset: true
+
+manual_rescue:
+  policy: forbidden
+  evidence_mode: exclusive_controller_input_audit_v1
+
+systems:
+  registered_ids: [E0, E1, E2, E3]
+  overlay_directory: configs/eval/table2/systems
+  allowed_overlay_keys:
+    - system_id
+    - display_name
+    - policy_source
+    - features.trained_pre_action_policy
+    - features.post_action_diagnosis
+    - features.recovery_controller
+    - features.memory_query
+    - features.memory_intervention
+    - features.evaluation_memory_write
+
+causal_boundary:
+  pre_action_inputs: [task_instruction, current_observation, causal_history]
+  post_action_inputs: [pre_action_observation, executed_action, post_action_observation, executor_status]
+  forbidden_runtime_inputs: [oracle_success, oracle_failure, oracle_progress, relevance_label, reference_trajectory]
+  sealed_verifier_returns: opaque_terminal_signal
+
+recovery_trigger:
+  failure_probability_threshold: 0.5
+  needs_recovery_probability_threshold: 0.5
+  probability_comparator: greater_than_or_equal
+  policy_signal_order:
+    - predicted_failure
+    - failure_probability_at_or_above_threshold
+    - needs_recovery
+    - needs_recovery_probability_at_or_above_threshold
+  policy_truth_table:
+    "0000": false
+    "0001": true
+    "0010": true
+    "0011": true
+    "0100": true
+    "0101": true
+    "0110": true
+    "0111": true
+    "1000": true
+    "1001": true
+    "1010": true
+    "1011": true
+    "1100": true
+    "1101": true
+    "1110": true
+    "1111": true
+  executor_status_rule: trigger_when_status_not_executed
+  loop_rule: trigger_when_loop_detected
+
+parameter_provider:
+  mode: deterministic_then_frozen_base_fallback
+  deterministic_first: true
+  fallback_policy_source: selected_backbone_unadapted
+  prompt: configs/eval/table2/prompts/parameter_provider_v1.txt
+  shared_across_systems: true
+  invalid_output_policy: reject_and_consume_executor_step
+  decoding_parameters:
+    do_sample: false
+    temperature: 0.0
+    top_p: 1.0
+    max_new_tokens: 128
+
+budgets:
+  executor_requests_per_episode: 30
+  recovery_attempts_per_incident: 2
+  recovery_attempts_per_episode: 4
+  model_calls_per_episode: 102
+  recovery_at_k: 2
+  task_timeout_seconds: 600
+  pre_browser_setup_timeout_seconds: 120
+  whole_block_infrastructure_reruns: 1
+  infrastructure_invalid_reasons:
+    - BENCHMARK_SERVICE_UNAVAILABLE
+    - BROWSER_CONTROLLER_DISCONNECTED
+    - ENVIRONMENT_RESET_FAILED
+    - FROZEN_DEPENDENCY_UNAVAILABLE
+  abort_counts_as_recovery_attempt: true
+  abort_executor_steps: 0
+
+loop_rule:
+  state_fingerprint_algorithm: canonical_sha256_v1
+  state_fingerprint_fields: [screenshot_sha256, url, title, page_state]
+  action_target_fingerprint_algorithm: canonical_sha256_v1
+  action_target_fingerprint_fields: [action_type, parameters, bbox]
+  perceptual_similarity_metric: exact_hash_match
+  perceptual_similarity_threshold: 1.0
+  rolling_window: 6
+  equivalent_repetition_count: 3
+  detect_abab_cycle: true
+
+execution_order:
+  algorithm: sha256_offset_permutation_cycle_v1
+  key_fields: [campaign_seed, block_number]
+  systems_once_per_block: true
+
+randomness:
+  algorithm: sha256_stage_keyed_v1
+  namespace_fields: [protocol_id, campaign_seed]
+  key_fields: [schema_version, record_type, campaign_id, task_id, repeat_id, matched_seed, stage, decision_index, incident_index, attempt_index, stream]
+  system_id_in_key: false
+  shared_across_systems_before_intervention: true
+
+memory:
+  runtime_mode: immutable_read_only
+  source_split: train
+  embedding_stage: post_action_memory_task_adapter
+  embedding_dimension: 768
+  normalization: l2
+  similarity: cosine
+  top_k: 3
+  tie_break: memory_id_ascending
+  admission_threshold_source: train_only_calibration
+  threshold_calibration:
+    schema_version: table2-memory-threshold-calibration-v2
+    method: observed_cosine_threshold_sweep_v1
+    objective: maximize_binary_f1
+    tie_break: highest_threshold
+    candidate_threshold_policy: unique_observed_similarity_scores
+    admission_rule: similarity_greater_than_or_equal
+    rows_storage: embedded_canonical_json_sha256
+    evidence_schema_version: table2-memory-calibration-evidence-v1
+    pair_policy: leave_one_out_runtime_exclusions_then_cosine_top3_memory_id_tie_break_v1
+    relevance_definition: matching_verified_successful_correction_strategy_v1
+    embedding_hash_algorithm: sha256_float32_little_endian_l2_vector_v1
+  same_task_exclusion: true
+  duplicate_exclusion: true
+  e3_shadow_decision: required_before_retrieval
+  e2_queries: forbidden
+  e3_writes: forbidden
+
+verification:
+  # This names the pinned WebArena scoring rules/configuration, not a claim
+  # that our sealed compatibility-port source is the upstream evaluator.
+  # Production remains blocked until that port passes exact final-byte parity
+  # and independent external review.
+  final_success_source: official_webarena_evaluator
+  recovery_evidence_sources:
+    - verified_normal_task_failure_incidents
+    - preregistered_deterministic_scenarios
+  headline_recovery_partition: normal
+  controlled_recovery_role: pilot_diagnostic_only
+  attach_labels_after_action_completion: true
+  runtime_can_read_full_labels: false
+
+artifacts:
+  root: artifacts/table2
+  paired_block_first: true
+  append_only_jsonl: true
+  hash_algorithm: sha256
+  raw_artifacts_in_git: forbidden
+  result_root: results/table2
+
+statistics:
+  paired_unit: task_id_x_repeat_id_x_matched_seed
+  bootstrap_unit: task_id
+  bootstrap_samples: 10000
+  confidence_level: 0.95
+  seed: 20250831

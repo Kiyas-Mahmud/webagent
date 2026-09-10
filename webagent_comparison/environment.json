@@ -1,0 +1,8 @@
+{
+  "python": "3.12.3",
+  "torch": "2.13.0+cu130",
+  "transformers": "4.57.6",
+  "gpu": "NVIDIA GB10",
+  "gpu_total_memory_gb": 130.662936576,
+  "git_commit": "2fadf0f508cec42ce6f89b8961db7cfd2adef1df"
+}
