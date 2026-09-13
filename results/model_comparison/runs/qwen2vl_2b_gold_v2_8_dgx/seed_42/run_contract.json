@@ -1,0 +1,23 @@
+{
+  "candidate": {
+    "model_id": "qwen2vl_2b_gold_v2_8_dgx",
+    "config": "configs/backbones/qwen2vl_2b_gold_v2_8_dgx.yaml",
+    "label": "Qwen2-VL-2B",
+    "accepted_prior_mini": true,
+    "prior_mini_evidence": "Reviewed v2.8 mini epochs 0-3; epoch 3 passed all eight registered quality gates. Epoch 4 was compute-interrupted."
+  },
+  "git_commit": "628c1fa776142c8169466c53865e694aa01d6b8d",
+  "config_name": "Y_QWEN2VL_2B_GOLD_V2_8_DGX",
+  "model_revision": "895c3a49bc3fa70a340399125c650a463535e71c",
+  "seed": 42,
+  "maximum_full_epochs": 10,
+  "controlled_mini_epochs": 5,
+  "effective_batch_size": 32,
+  "checkpoint_selection": "all_gates_then_outcome_mcc",
+  "checkpoint_selection_source": "original_gold_validation_only",
+  "supplement_validation_selects_checkpoint": false,
+  "train_rows": 24107,
+  "original_validation_rows": 7861,
+  "supplement_validation_rows": 194,
+  "test_rows_read": 0
+}
