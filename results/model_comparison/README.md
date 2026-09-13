@@ -32,12 +32,27 @@ requested max 10 epochs, early-stopped after epochs 0-3, peak GPU 15.69 GB.
 `test_rows_read: 0` in every artifact - the held-out test split was never opened.
 Selected full checkpoint sha256: `35eec6c940836e581abe597006cbf4d9aedbcba06c574ba3d8c2829f667d28cb`.
 
+## Checkpoints (Git LFS)
+
+All 11 `.ckpt` files (~616 MB each, ~6.7 GB total) are committed through Git LFS under
+`runs/internvl35_8b_gold_v2_8_dgx/seed_42/<stage>/checkpoints/`, matching the convention
+already used for the Qwen2-VL-2B run on `Code`. The tracking rule lives in the
+repository-root `.gitattributes`.
+
+To fetch them you need `git-lfs` installed (`git lfs install`, then `git lfs pull`);
+a plain clone without LFS yields ~130-byte pointer files instead of weights.
+
+The LFS object id of each file is its SHA-256. For the gate-selected full checkpoint,
+`best_e0_outcome-mcc0.641.ckpt`, that id is
+`35eec6c940836e581abe597006cbf4d9aedbcba06c574ba3d8c2829f667d28cb` - identical to the
+`selected_checkpoint_sha256` recorded independently in `full/report.json`.
+
+Note that the absolute paths recorded inside `report.json` / `epoch_metrics.csv` still
+point at the original lab-machine location
+(`/home/aiub/kiyas/webagent_comparison/outputs/model_comparison/...`), not at these
+committed copies.
+
 ## Deliberately not committed
 
-- **Model checkpoints** - 11 `.ckpt` files, ~616 MB each (~6.7 GB total), under
-  `<stage>/checkpoints/`. Each one exceeds GitHub's 100 MB per-file limit, and `*.ckpt`
-  is already in `.gitignore`. They remain only on the lab machine at
-  `/home/aiub/kiyas/webagent_comparison/outputs/model_comparison/...`. The absolute
-  paths recorded inside `report.json` / `epoch_metrics.csv` point at those local files.
 - **`hf_cache/`** - 21 GB of downloaded backbone weights, reproducible from the
   `model_revision` pins in each `run_contract.json`.
