@@ -1,4 +1,140 @@
+<!-- MINIWOB_INTERFACE_V2_STATUS_START -->
+# Table 2: completed evaluation; development revision completed
+
+The completed 120-episode result remains unchanged: **E0 6/30, E1 0/30,
+E2 6/30, E3 6/30; audit PASS**. See the
+[authoritative evaluation results](TABLE2_MINIWOB_INTERFACE_V2_RESULTS.md).
+Neither primary contrast met the approved Holm-adjusted 5% criterion.
+
+The authorized [planner and continuation revision](TABLE2_DEVELOPMENT_V3.md)
+is implemented and tested: **140 tests passed; all 16 development episodes ran;
+corrected evidence audit PASS**. Counts: E0 1/4, E1 0/4, E2 2/4, E3 2/4.
+E2/E3 each previously completed 1/4 on these matched development resets.
+
+Remaining limits: both planners still submitted the text form without typing;
+no live observable-effect continuation occurred; sequence clicks failed overlapping
+target-point validation. Memory filtering excluded ten candidate occurrences but
+added no completion. The original audit's redacted-control replay error is fixed,
+with its failure and the separate corrected audit preserved.
+
+- [x] Implement clearer planning, bounded observable-effect continuation and selective memory.
+- [x] Run engineering checks and one matched 16-episode development check.
+- [x] Audit all outcomes, preserve evidence and report failures.
+- [ ] Establish typing-before-submission and actual live multi-step continuation.
+- [ ] Investigate overlapping target geometry without replacing model-selected actions.
+
+Another final evaluation remains premature and is not queued. No retraining or
+embedding regeneration occurred. The checkpoint and all 1,974 embeddings are
+unchanged. Historical sections below do not override this current status.
+<!-- MINIWOB_INTERFACE_V2_STATUS_END -->
+
+---
+
+The following sections are historical records of earlier profiles and runs.
+
 # Table 2 Remaining Execution Checklist
+
+## Requested full-credit evaluation completed — 2026-09-10
+
+- [x] Correct missing generation-rejection feedback and verify matched E2/E3 inputs.
+- [x] Verify visible custom-link support and full raw-reward scoring.
+- [x] Complete the combined matched development check: 16/16, no runtime errors;
+  E2 1/4, E3 2/4, six verified memory contexts. Preserve the E2-regression caveat.
+- [x] Freeze the next 24-episode package and pass its full asset/source/audit preflight.
+- [x] Execute `miniwob-table2-completion-v1/launch.py --run` and report both
+  paired contrasts and all failures. Completed 24/24; all audits PASS;
+  E0/E1 0/6, E2/E3 1/6; 11 verified E3 contexts, zero additional memory completion.
+- [x] Verify frozen source/model/memory integrity after execution and preserve
+  all prior results. No episodes were rerun and no training was performed.
+
+Results: [TABLE2_FULL_CREDIT_RESULTS.md](TABLE2_FULL_CREDIT_RESULTS.md).
+No further evaluation is queued; the new result is reported rather than N/R.
+Earlier entries below describe completed or superseded runs, not new prerequisites.
+
+## Memory follow-up completed — 2026-09-10
+
+- [x] Trace the completed replication's seven abstentions and distinguish
+  memory-update classification from retrieval usefulness.
+- [x] Add a separate, hash-bound training-experience context path without
+  changing weights or regenerating embeddings; 114 targeted tests passed.
+- [x] Run all four existing development families across E0–E3 and audit actual
+  generation exposure. Completed 16/16; five E3 contexts verified; E2/E3 2/4.
+- [ ] Demonstrate added memory completion benefit. **Not achieved:** E3-minus-E2
+  remains zero; text-entry and output-format failures remain. No new final run
+  is queued, and prior Table 2 results remain unchanged.
+
+Details: [memory diagnosis and development results](TABLE2_MEMORY_CONTEXT_DIAGNOSIS.md).
+
+## Active remaining work — BrowserGym + MiniWoB
+
+User-approved benchmark change, 2026-09-09. Follow
+[TABLE2_MINIWOB_ACTIVE_PLAN.md](TABLE2_MINIWOB_ACTIVE_PLAN.md).
+WebArena deployment, maps, website downloads, WebArena task exports and the old
+260-episode schedule are removed from the active work. The local dataset-label
+memory route is authorized; a new independent review is not a prerequisite.
+
+- [x] Finish P4 checkpoint embeddings, training-only calibration and frozen read-only retrieval.
+  Completed: 1,974 × 768-dimensional PC-01 embeddings, finite and L2-normalized.
+  Training-only leave-source-task-out calibration threshold: `0.7371385097503662`.
+  Independent CPU recomputation of all calibration pairs/threshold and artifact,
+  input identity, read-only permission, deterministic retrieval and exclusion checks: PASS.
+  Receipt: `/home/aiub/kiyas/table2-evidence/p4-local-embeddings-v1/verification.json`.
+  E3 adapter code is connected in the development runner; live intervention verification
+  belongs to the next task and is not claimed complete.
+- [x] Complete the full matched E0–E3 MiniWoB development check.
+  Completed 2026-09-10: `miniwob-revised-evaluation-v1/development-v5/`.
+  16 episodes over all four existing development tasks; matched reset screenshots
+  and selected-policy initial outputs, 4 executed recovery actions and assessments,
+  8 E3 queries/interventions, zero runtime errors, unchanged memory store.
+  Evidence audit PASS. Earlier implementation failures are preserved in development,
+  development-v3 and development-v4; they are excluded from final evaluation.
+- [x] Freeze and run the revised MiniWoB evaluation and report both paired contrasts.
+  Completed 2026-09-10: all 24 episodes, no overlap exclusions or runtime errors;
+  matched-reset/source/store/seed/budget/retrieval/outcome audit PASS.
+  E0, E1, E2 and E3 each completed 0/6 tasks. E1→E2 and E2→E3 differences:
+  0 percentage points, exact/Holm p=1. E3 executed 6 recovery actions and made
+  12 memory interventions. No normal policy action executed.
+  Results and limitations: [TABLE2_MINIWOB_EVALUATION_RESULTS.md](TABLE2_MINIWOB_EVALUATION_RESULTS.md).
+
+All three requested tasks are complete. The negative result identifies an action
+execution limitation; it does not establish general ineffectiveness of recovery
+or memory. Historical WebArena paper claims remain N/R. No additional run is
+queued, no retraining or package changes were made, and the frozen P4 store is unchanged.
+
+## Post-evaluation interface work — 2026-09-10
+
+- [x] Fix explicit visible-name grounding and nullable action serialization without retraining.
+- [x] Run and audit eight matched development episodes: E0/E2 button success,
+  E1/E3 button failure; all systems fail text entry. Focused tests: 118 passed.
+- [x] Preserve the original 24-episode evidence and frozen P4 store; archive the
+  revised producing source and raw model outputs.
+- [x] Add and test causal E3 admission/abstention: eight matched development
+  episodes audited; E3 button success, three queries/abstentions and zero
+  interventions. E1 numerical full-forward parity passes on two saved inputs.
+  Focused suite: 128 passed. No claim of added memory benefit.
+- [x] Connect supplied recovery diagnosis/strategy/history to generation; support
+  single fenced JSON and explicit visible role descriptions. Complete all four
+  matched development families: E0 1/4, E1 0/4, E2 2/4, E3 2/4; audits PASS,
+  140 focused tests pass. Text entry and sequencing now expose executed wrong
+  actions; these and E1 failures remain recorded. Five memory queries abstained;
+  no additional memory benefit is claimed.
+- [x] Complete full-path audit and freeze the revised 24-episode replication:
+  241 audit tests, reporting regression and asset/environment/source preflight
+  PASS. No further development test or positive-score requirement.
+- [x] Execute and report all 24 replication episodes: E0/E1 0/6, E2/E3 2/6
+  benchmark-scored successes; seven memory abstentions and zero interventions.
+  Runtime audit PASS; separately amended context audit PASS, with its original
+  failure preserved. No episode reruns or scoring changes. Disclose the checkbox
+  positive-partial-credit caveat and prior task exposure.
+  See [TABLE2_REPLICATION_RESULTS.md](TABLE2_REPLICATION_RESULTS.md).
+
+Details: [TABLE2_CAUSAL_RECOVERY_INTERFACE_REPORT.md](TABLE2_CAUSAL_RECOVERY_INTERFACE_REPORT.md).
+
+## Historical execution log — superseded requirements are not active tasks
+
+The material below preserves earlier evidence, failures and decisions. Its old
+WebArena/provenance blockers and next-step suggestions do not override the active
+MiniWoB plan above.
 
 Last reviewed: 2026-09-08
 
@@ -179,7 +315,8 @@ registered DGX runtime and does not qualify as a Table 2 compatibility PASS.
 
 ### University lab checkpoint prerequisite — measured 2026-09-09
 
-Status: `WAITING_FOR_EXTERNAL_RUNTIME`
+Status: `DONE` — real compatibility PASS at `ca10c72`; earlier failed attempts
+below are retained as history. See the successful outcome in Immediate next action.
 
 These are new lab observations; earlier laptop and synthetic results above do
 not describe this host. No full checkpoint compatibility run or inference has
@@ -378,6 +515,64 @@ unchanged: no eligible store established; paper status `N/R`.
 
 Status: `WAITING_FOR_EXTERNAL_RUNTIME`
 
+Completed artifact architecture/storage review (2026-09-09): bounded reads of
+the four official upstream Google Drive Docker archives, with PAX-aware tar
+header parsing and manifest-to-config binding, confirm Shopping, Shopping Admin,
+Reddit, and GitLab are all **linux/amd64**. They cannot run natively on GB10
+ARM64. Full archive payload hashes and live service behavior remain unverified.
+The canonical S3 map-data endpoint is reachable. The four website archives,
+Wikipedia ZIM, and four map archives total approximately **492.82 GB**.
+Keeping those files plus one unpacked copy of each tar requires approximately
+**890.44 GB** before additional Docker/runtime/reset-copy overhead; this is an
+estimate, not a measured installed footprint. Available disk is about 3.4 TiB.
+The map contains physical database volumes and routing data whose ARM64/server
+version compatibility remains to be tested. Full deployment is blocked on an
+x86-64 website host or a separately validated emulation route, not Docker access.
+
+Evidence and exact byte/config identities:
+`/home/aiub/kiyas/table2-evidence/service-artifact-probe-20260909/REPORT.md`.
+No large archive pull, service launch, package change, or pilot run was made.
+
+Docker-access update, 2026-09-09 (supersedes the denied-access observation below):
+the user repaired access and the agent verified Docker client/server 29.2.1,
+Compose v5.0.2, and native linux/arm64, without sudo. Two stopped hello-world
+containers and the hello-world image are the only current inventory; all were
+preserved. Approximately 3.4 TiB disk remains available.
+
+Registry manifest inspection confirms linux/arm64 variants for
+`mediagis/nominatim:4.2`, `ghcr.io/project-osrm/osrm-backend:v5.27.1`,
+`overv/openstreetmap-tile-server:latest`, and `ghcr.io/kiwix/kiwix-serve:3.3.0`.
+Exact platform digests and raw manifests are saved under
+`/home/aiub/kiyas/table2-evidence/docker-arm64-review-20260909/`.
+This is image-platform availability only, not compatibility of the archived
+database volumes, a pinned tile-server version, live service health, or campaign
+approval. Shopping/Admin/Forum/GitLab archive architectures, map frontend/data
+compatibility, complete storage footprint, and live integration still require
+verification. No service image/data pull, launch, or pilot episode was performed.
+
+Lab follow-up after checkpoint PASS (2026-09-09): direct Docker socket access
+is denied, and `sudo -n` is unavailable under this session's no-new-privileges
+flag. Container/image inventory remains unknown. The intended browser/service
+host has been requested. Upstream map bootstrap includes an x86-64 AWS CLI
+download and cannot be used unchanged on GB10 ARM64; service image architecture,
+immutable identities, and total unpacked/runtime capacity remain unverified.
+Metadata-only archive mirror checks did not resolve sizes (TLS timeouts or no
+matching artifact); no large downloads or services were started.
+
+Concrete source blocker confirmed:
+`browsergym_webarena._load_process_broker_browser_runtime_factory` raises until
+validated deployment inputs are provided. The existing factory/adapter is not
+a registered live bootstrap. The timing collector exists but its live harness,
+approved probes, reset audit, and campaign persistence remain to be completed.
+The next Kaggle job still depends on deployment-bound task URLs and independent
+P4 evidence, not another preparation run.
+
+Detailed host/service/integration sequence and a syntax-checked read-only host
+inventory helper are saved in
+`/home/aiub/kiyas/table2-evidence/live-deployment-review-20260909/`.
+No executable repository source was changed in this review; the compatibility
+receipt remains bound to `ca10c72`, and pilot readiness remains unestablished.
+
 - [x] Confirm Docker CLI installation on the local x86 host: Docker Engine
   Community client `29.8.0`, `linux/amd64`.
 - [x] Verify Docker daemon access from the execution session: client and server
@@ -441,6 +636,239 @@ Status: `NOT_STARTED`
 
 ## Immediate next action
 
+### Alternative feasibility route: BrowserGym + MiniWoB++
+
+**User-directed local dataset route (2026-09-09):** user confirms there is no
+separate review artifact and instructs reuse of the local reviewed dataset.
+Do not request another review for this development route. Located exact original
+and supplement train JSONs; hashes match preparation. Built a read-only
+train-label-backed development memory dataset from the existing candidates,
+verified local transition image bytes, and excluded ABORT/NONE strategies.
+Manifest and material: `/home/aiub/kiyas/table2-evidence/p4-local-label-memory-v1/`.
+This records dataset-label support and preserves pending source metadata; it does
+not manufacture independent verification or final-task success. Embeddings and
+runtime integration remain unfinished. Registered campaign provenance is not
+silently satisfied by this changed development evidence basis.
+
+
+**Current consolidated status, 2026-09-09:** completed the bounded real E1/E2
+v2 diagnostic with visible-target evidence. E2 detects failure and calls the
+planner; both recovery attempts fail registered target validation. No recovery
+browser action, no measured reward, no recovery benefit established. E1 consumes
+30 rejected requests and stops at its budget. Preserve this failure; do not tune
+the prompt or snap predicted coordinates to force success. Source snapshots,
+logs and limitations: `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/v2-controls-20260909T100854Z/REPORT.md`.
+P4 audit confirms all 2,065 candidates still lack required independent review
+and duplicate bindings; eligible items=0. No completed provenance/store was found
+under table2-inputs or table2-evidence. Input request sent to user. No preparation
+rerun, locked-data read or fabricated memory. Full E0–E3 evaluation remains
+incomplete. Consolidated tracker: `/home/aiub/kiyas/table2-evidence/TABLE2_COMPLETION_STATUS.md`.
+
+
+**Recovery planner v2 prompt frozen and tested (2026-09-09):** a separate
+explicit-schema development prompt produced a valid CLICK response on the saved
+failure observation: target `Next button`, normalized bbox `[0.18,0.45,0.26,0.51]`,
+value null. Unchanged strict parser passed. This is format compliance only;
+no browser action or recovery success measured. No weights, decoding, E0 prompt,
+or parser changes. Prompt hash and raw evidence:
+`/home/aiub/kiyas/table2-evidence/miniwob-feasibility/recovery-planner-v2/REPORT.md`.
+Next bind the frozen v2 prompt to the live diagnostic and execute its uncorrected
+prediction. No campaign adoption or paper claim implied. Table 2 N/R.
+
+**Planner raw-output mismatch identified (2026-09-09):** unchanged replay
+produced CLICK with `target: {bbox: [197,375,227,404]}` and value `Next`.
+Top-level `bbox` is missing, target is an object rather than text/null, and the
+coordinates are not normalized. Strict rejection is correct; no grounding or
+recovery success is established. Raw bytes retained at
+`/home/aiub/kiyas/table2-evidence/miniwob-feasibility/planner-raw-capture/response.txt`;
+analysis in `REPORT.md` alongside it. No prompt/parser/model changes performed.
+Proposed next development change: version and freeze an explicit-schema recovery
+planner prompt, keeping E0 baseline and strict parsing unchanged. This requires
+transparent planner-interface revision, not retroactive repair of results.
+
+**Concrete diagnostic recovery planner implemented and exercised (2026-09-09):**
+`frozen_recovery_planner.py` binds the existing frozen unadapted base predictor
+and hybrid parameter provider to RecoveryController. PC-01 still selects the
+recovery strategy. Same-reset E1/E2 diagnostic: initial inputs/predictions match;
+E2 invokes the planner twice, but both outputs fail strict action-schema parsing:
+`E0 action output has missing or additional keys` (confirmed by recorded error
+hash). No recovery action executed; no output repair or parser relaxation.
+Evidence: `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/planned-recovery-20260909T095159Z/REPORT.md`.
+This is a new development binding, not campaign approval. The older missing-
+planner diagnostic below is historical. Next capture the raw planner response
+on the same causal input to identify which keys differ. Table 2 N/R.
+
+**Live full-runner diagnostic completed (2026-09-09):** E1/E2 reached the
+existing EpisodeRunner on matched MiniWoB click-button resets; first policy
+outputs and initial screenshots match. E1 stopped after three rejected requests
+(loop). E2 diagnosed the failure and selected REPLAN, but both recovery attempts
+were rejected because the concrete frozen-provider planner is missing. Zero
+browser recovery actions; no recovery benefit measured. Next implement/bind that
+planner before another diagnostic. Evidence:
+`/home/aiub/kiyas/table2-evidence/miniwob-feasibility/matched-recovery-20260909T094759Z/REPORT.md`.
+This incomplete-planner engineering package is not pilot/paper eligible despite
+the generic runner summary's internal `valid_for_primary` flag. Table 2 N/R.
+
+**Research-direction correction (2026-09-09):** stop the action-only/E0 detour.
+The next work is the full failure → diagnosis → executed recovery → assessment
+chain. Weak pre-action performance does not invalidate the recovery question.
+Source trace completed in
+`/home/aiub/kiyas/table2-evidence/miniwob-feasibility/recovery-pipeline-trace.md`.
+The existing EpisodeRunner can trigger E2 recovery from a parameter rejection;
+the small scripts never reached that path. No new live recovery has run.
+Next connect the minimal live benchmark adapter to the existing EpisodeRunner
+and registered planner, then perform one matched E1/E2 development diagnostic.
+E3 still requires admitted frozen train-only memory. The earlier suggestion to
+run E0 alone is superseded; no benchmark/protocol change is implied.
+
+
+User requested a simple, sequential feasibility check on 2026-09-09. This is
+not approval to replace the registered WebArena Table 2 campaign.
+
+- [x] Check package support on ARM64/Python 3.12.3.
+- [x] Prepare `/home/aiub/kiyas/table2-envs/miniwob-feasibility` separately from
+  the model environment. BrowserGym core/miniwob 0.14.3, Playwright 1.44.0,
+  gymnasium 1.0.0; dependency check passes.
+- [x] Install ARM64 Chromium 125.0.6422.26, build 1117, outside the model
+  environment. Use MiniWoB source commit
+  `7fd85d71a4b60325c6585396ec4f48377d049838` under `table2-inputs/`.
+- [x] Open `miniwob.click-test` headlessly and receive the goal and screenshot.
+- [x] Execute a scripted visible-button click: reward 1.0, terminated true,
+  truncated false, no action error. Repeat twice with seed 42; both pass.
+- [x] Verify same-seed resets: goal, button position, and raw screenshot hash
+  match exactly across both runs. Browser closes after the check.
+- [x] Connect the frozen PC-01 checkpoint to a live MiniWoB screenshot and obtain
+  a model prediction (2026-09-09).
+- [ ] Execute a model-selected action without manual repair.
+  **One-action attempt failed at action mapping:** PC-01 selected `NAVIGATE`
+  (0.329795), ahead of `CLICK` (0.312867) and `SCROLL` (0.298057), for
+  "Click the button." The minimal click-only feasibility adapter cannot execute
+  `NAVIGATE`; prediction parameter hints contain no URL. No action was substituted,
+  no browser step executed, and no task reward was measured. Inference took
+  2039 ms (excluding model loading); this is not timing calibration.
+  Result and exact prediction:
+  `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/pc01-action-20260909T091847Z/result.json`.
+  Screenshot, causal request, and model log are alongside it; runnable scripts
+  `pc01_predict.py` and `pc01_browser_action.py` are in the parent evidence folder.
+  An initial attempt was rejected because the screenshot was writable; the script
+  now saves it read-only and the successful inference retained the integrity check.
+  The next task is to assess the six-action mapping and existing causal parameter
+  resolver before another action attempt. This single prediction establishes no
+  completion rate, recovery benefit, memory benefit, or paired E0–E3 readiness.
+  **Blocked at CUDA preflight on 2026-09-09 after reboot:** current kernel
+  `6.17.0-1032-nvidia` has no NVIDIA GPU module (`modinfo nvidia` fails),
+  `/dev/nvidia*` is absent, and PyTorch reports CUDA unavailable / zero devices.
+  The `6.17.0-1026-nvidia` kernel has an installed NVIDIA module. No model
+  loading or model-selected action occurred. Restore GPU driver availability
+  before retrying; no reboot, package change, or notebook interruption performed.
+  Evidence: `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/pc01-action-preflight.json`.
+  **GPU blocker resolved, 2026-09-09 15:15 local:** matching `1032` module
+  installed, `dpkg --audit` clean, NVIDIA driver 580.173.02 recognizes GB10,
+  and the existing model environment passes a real CUDA tensor calculation.
+  The earlier preflight evidence records the historical failure; the model-selected
+  browser action remains pending.
+- [x] Inspect the existing six-action resolver and browser mapper; run the actual
+  registered hybrid resolver on the saved PC-01 NAVIGATE decision (2026-09-09).
+  Both stages rejected: missing URL hint, then frozen unadapted base rejection.
+  No browser action or reward. Evidence and action requirements:
+  `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/parameter-review.md`
+  and `parameter-result.json` alongside it. Source support for all six actions
+  does not establish live MiniWoB compatibility; SELECT observation evidence
+  remains absent and file navigation is not permitted by the existing contract.
+- [x] Connect the existing hybrid resolver and six-action code mapper to the
+  minimal MiniWoB runner; run one live attempt (2026-09-09).
+  `pc01_live_worker.py` calls the registered selected policy, hybrid parameter
+  provider, `concretize`, and `_action_code` (the last two only on resolution).
+  `pc01_live_attempt.py` keeps the browser open and counts rejection against its
+  one-attempt budget. Actual result: `ACTION_REJECTED`, one attempted/rejected
+  step, zero browser actions, no measured reward. PC-01 again selected NAVIGATE;
+  deterministic and real frozen-base stages both rejected. The passive screenshot
+  after rejection is not pixel-identical to the initial observation; no browser
+  action was issued. Browser closed normally. No substituted click or retry loop.
+  Evidence: `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/pc01-live-20260909T092507Z/result.json`.
+  The rejection path is verified live. Resolved six-action execution remains
+  unverified on MiniWoB; this is a small feasibility runner, not EpisodeRunner
+  integration, calibrated evaluation, or evidence of recovery/memory benefit.
+- [x] Verify the resolved CLICK execution path with an explicitly scripted
+  visible-button target through `DeterministicParameterProvider`, `concretize`,
+  and the existing `_action_code` mapper. Live `miniwob.click-test`, seed 42:
+  reward 1.0, terminated true, truncated false, no action error (2026-09-09).
+  Scope: `SCRIPTED_RESOLVER_MAPPER_INTEGRATION_ONLY`; no model inference or
+  PC-01 success claimed. This validates CLICK plumbing only, not all six actions.
+  Evidence: `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/scripted-mapped-click-20260909T092859Z/result.json`.
+  Runnable scripts `scripted_mapped_click.py` and `scripted_click_resolver.py`
+  are in the parent evidence directory. Browser closed normally; no package or
+  model-setting changes. PC-01's actual NAVIGATE rejection remains unchanged.
+- [x] Predeclare and execute a small unchanged-PC-01 feasibility set:
+  `click-button`, `enter-text`, `click-button-sequence`, environment seed 42,
+  three attempts per task. All nine predictions were NAVIGATE; both parameter
+  stages rejected each one. Zero browser actions, no observed completions,
+  no measured rewards. Repeated unchanged observations are not independent trials.
+  Evidence: `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/small-set-20260909T093153Z/REPORT.md`.
+- [x] Make the initial expansion decision: pause expansion. These probes do not
+  establish task suitability for executed recovery or P4 memory. Next inspect
+  training/runtime input and label alignment without model changes; the cause
+  of the NAVIGATE predictions is not yet established. No benchmark revision or
+  paired campaign is approved or implied by the feasibility scripts.
+- [x] Audit training/runtime input preprocessing and label alignment (2026-09-09).
+  All three saved first-observation prompt strings and input tensors match the
+  Gold training methods exactly, with batch-shape normalization. All five
+  exported training-source hashes match; label source is byte-identical to the
+  recorded training commit. No input/label discrepancy found in these checks.
+  No dataset rows read or model settings changed. Empty file-URL domain and
+  498x321 screenshots are observations, not established causes of model behavior.
+  Evidence: `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/input-alignment-review.md`
+  and `input-alignment.json`. Next inspect existing selected-epoch aggregate
+  action metrics/support before deciding further feasibility work.
+- [x] Inspect selected epoch-6 aggregate validation action metrics. Report hash
+  matches the v3 export; selected metrics match history epoch 6. Action accuracy
+  42.17%, macro-F1 0.3267; bbox mean IoU 0.1010 and IoU50 recall 8.09%.
+  NAVIGATE has 4,770 training / 1,499 validation examples; the no-data code comment
+  is stale. These are Gold validation aggregates, not browser completion rates.
+  Evidence: `/home/aiub/kiyas/table2-evidence/miniwob-feasibility/epoch6-action-review.md`
+  and `epoch6-action-review.json`. No new dataset reads, model changes, or training.
+  Pause PC-01 task expansion; next useful feasibility comparison is frozen E0 on
+  the same fixed tasks/budget, without changing the selected E1–E3 policy.
+- [ ] Assess six-action compatibility, meaningful recovery tasks, and eligible
+  P4 memory relevance before designing any paired E0–E3 evaluation.
+- [ ] Review and explicitly approve any benchmark/protocol revision.
+
+Result: `SCRIPTED_BROWSER_FEASIBILITY_ONLY`, no model used, no recovery or
+memory benefit measured. Default MiniWoB rendering produced 498x321 screenshots;
+its scaling must be accounted for when mapping model coordinates. This is not
+the registered WebArena viewport and no protocol settings were silently changed.
+Evidence, screenshots, short runnable script, log, and package inventory:
+`/home/aiub/kiyas/table2-evidence/miniwob-feasibility/`.
+`browser-result.json` reports PASS. Existing model environment versions remain
+unchanged. No model retraining, locked data, Gold transfer, or website image
+deployment was involved. The checkpoint receipt below remains bound to `ca10c72`.
+
+**Real PC-01 checkpoint-backed compatibility gate: PASS, 2026-09-09.**
+
+- Execution commit: `ca10c72aad52bf60a5e2c5e8b6c8f9e5a9dd1e1e`, clean during
+  execution. The runtime fix and earlier host identity correction are committed
+  locally; neither has been pushed.
+- Read-only canonical receipt:
+  `/home/aiub/kiyas/table2-evidence/pc01-compatibility-ca10c72.json`.
+  SHA-256: `119257744a22c7b3391a63e1bb0681147657f12dad45d5b691ea57f5cf71aef1`.
+  Full log: `/home/aiub/kiyas/table2-evidence/pc01-compatibility-ca10c72.log`.
+- All artifact/environment/source checks, seven restored roles, E0 adaptation
+  absence, direct/runtime/repeat inference, P4 `[1,768]` tensor, and complete
+  state immutability pass. Before and after selected-state SHA-256 both equal
+  `eb5daaa74e15a1e4c626a061ab9d58fe324e0f00bda4d5a9790a81879957a75d`.
+- All 16 cross-run raw/semantic/repeat/P4 comparisons also match the prior
+  unmodified-runtime diagnostic exactly on the registered fixture. Evidence:
+  `/home/aiub/kiyas/table2-evidence/immutable-bias-full-model-equivalence.json`.
+- Notebook and VS Code settings restored byte-for-byte after execution;
+  external backup and safety stash retained. Existing kernels were preserved.
+- Scope remains `PROVISIONAL_ENGINEERING_PILOT_COMPATIBILITY_ONLY`, paper
+  Table 2 `N/R`. No live WebArena episode or P4 store is established by this PASS.
+
+Use the exact receipt bytes and execution commit for downstream bindings.
+This result update is uncommitted so HEAD remains the attested execution commit;
+restored local edits mean the current worktree is no longer clean. Do not bind
+this receipt to another commit or claim current clean-source readiness.
+
 Approved bias-mutation remedy implemented on 2026-09-09 in the evaluation
 runtime only: preserve the pinned CUDA arithmetic using a temporary bias cast,
 with an exact installed bitsandbytes version/forward-source guard. Both selected
@@ -451,12 +879,10 @@ outputs, and complete layer-state immutability. A new source-bound full gate
 receipt is still required; record its measured outcome after the run.
 
 At the lab, the transferred inputs and complete pinned snapshot are now verified.
-The approved runtime identity correction and temporary clean-source procedure
-allowed real checkpoint-backed inference at commit `8879dbb`. The final state
-failure is now traced to 214 bitsandbytes bias dtype mutations, with every change
-verified against the pinned base snapshot. Review a non-mutating bias-cast remedy
-that preserves compute arithmetic and all checks, then validate it before
-rerunning the gate. No compatibility PASS is available.
+The successful `ca10c72` gate supersedes the earlier `8879dbb` failure. Continue
+with live BrowserGym/sealed-evaluator integration, approved timing probes and
+calibration harness, service hosting including Map, and P4 evidence/store work.
+The 260-episode pilot remains blocked on those independent prerequisites.
 The earlier Docker daemon access and container inventory were laptop results;
 lab daemon access is denied in this session. Service hosting, including Map,
 needs a concrete compatible deployment and verified URLs before task binding.

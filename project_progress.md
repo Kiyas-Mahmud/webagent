@@ -1,5 +1,21 @@
 # Project Progress Tracker
 
+## 2026-09-13 — Table 2 lab pause and home-session archive
+
+- Prepared `docs/TABLE2_HOME_SESSION_HANDOFF.md` and branch
+  `table2/lab-handoff-20260913` for the user's requested GitHub handoff.
+- Included current Table 2 implementation, experiments, tests and reports plus
+  byte-identical copies of four compact diagnostic summaries with SHA-256/source
+  bindings. Full model/data/browser archives remain on the lab machine.
+- Recorded the partially completed train-only replay/export investigation:
+  sampled replay actions retain text/option/scroll/key arguments absent from
+  training exports. All-row coverage and exporter provenance remain unverified.
+- Recorded that epoch-0 policy testing is only a proposed development experiment;
+  no checkpoint switch, new inference, memory enrichment or retraining occurred.
+- Training notebook execution outputs and local editor settings are preserved
+  outside the Table 2 commit. No new browser/model processes were found during
+  handoff inspection. Historical results and readiness limitations remain intact.
+
 > **READ THIS FIRST** before planning or writing any code. Update it after every task.
 > Companion to `docs/` (the specs) — this file is the live build log.
 
@@ -18,6 +34,139 @@ Historical source corpus: Kaggle `thesisdata` →
 `/kaggle/input/datasets/kiyasmahmud/thesisdata/FinalData` (70,965 labeled
 steps; train 38,875 / val 16,070 / test 16,020). Current experiment row/split
 authority comes only from each reviewed Gold v2.8 run manifest.
+
+## 2026-09-12 (later) — E1 diagnosed: grounding transfer failure, not action class
+
+- **Correction:** an earlier claim in this session that NAVIGATE has no training
+  data was **wrong**. It quoted the historical 70,965-row synthetic corpus. The
+  registered Gold v2.8 run has NAVIGATE as the *largest* action class — train
+  4,770 / validation 1,499, with near-uniform class weights 0.88-1.10. NAVIGATE
+  was therefore **not** removed; removing it would have been a method chosen by
+  its own outcome.
+- Ruled out a runtime defect. Training used QLoRA `load_in_4bit: true`/fp16 and
+  the runtime loads the identical 4-bit path, so quantization is matched. The
+  action head's bias does not favour NAVIGATE (SELECT 0.116 is largest, NAVIGATE
+  0.045), and on a zero embedding the head is near-uniform (0.143-0.182).
+- The action head is working and confidently half-right. On MiniWoB it pushes
+  TYPE/SELECT/PRESS_KEY from ~17% down to ~2% and splits the rest across
+  CLICK 0.310 / SCROLL 0.297 / NAVIGATE 0.328; on `enter-text` TYPE rises
+  0.021 to 0.078. In-domain it scores action accuracy 0.422 against a 0.191
+  majority baseline (macro-F1 0.327, MCC 0.341). It simply cannot separate the
+  three pointer-type classes, and NAVIGATE wins by ~1.5 points.
+- Declared and froze `executable_action_selection` (profile
+  `miniwob-development-v7`): the trained policy selects among the action classes
+  registered executable for the exact current observation, using the same
+  oracle-blind evidence the generated interfaces already receive as per-control
+  `supported_actions`. The learned distribution is unmodified and still fully
+  logged; only the argmax domain narrows. Rationale was a fairness gap — the
+  policy was the only system allowed to choose an action the environment cannot
+  perform — decided a priori, not from any outcome.
+- **The intervention failed on its own terms and is left disabled.** E1 did
+  propose CLICK instead of NAVIGATE on all four tasks, and still scored 0/4,
+  rejected at the identical stage. The real bottleneck is grounding: the
+  predicted box has **zero IoU with every control on every task**, and its centre
+  lands on no control. The model predicts y 0.073-0.196 while controls start at
+  y 0.243-0.336 — it is pointing at MiniWoB's yellow instruction banner, not the
+  page.
+- It also degraded E2/E3, via a mechanism worth recording: the failed action's
+  type is part of the recovery planner's causal context, so changing it from
+  NAVIGATE to CLICK changed that context and the frozen base generator answered
+  with PRESS_KEY instead of CLICK. `click-button` E2 went from one recovery CLICK
+  scoring reward 1.0 to two PRESS_KEY actions scoring 0.0. Development-v7:
+  E0 1/4, E1 0/4, **E2 1/4, E3 1/4** versus v6's 2/4 and 2/4.
+- Decision: `executable_action_selection` stays off; `miniwob-development-v6`
+  remains the recommended profile. v7 is retained as recorded evidence of a
+  declared hypothesis that was tested and rejected. The code default is off, so
+  v6 behaviour is unchanged.
+- **Thesis consequence, must be stated explicitly:** E1's failure is a P3
+  grounding-transfer failure, not an action-class failure. E2-E1 therefore does
+  not measure "recovery versus a working trained policy"; it measures recovery
+  through an observed-control interface versus a policy whose visual grounding
+  does not transfer to this benchmark. Options and their costs are in
+  `docs/TABLE2_E1_DIAGNOSIS.md`.
+- Verification: 216 focused regression tests pass, including 3 new cases pinning
+  the executable-action evidence, the preserved probabilities and the off-by-
+  default behaviour. Full Table 2 suite 1,506 passed / 65 failed, with all 65
+  still the known process-broker environment condition. No completed package was
+  rerun, overwritten or modified.
+
+## 2026-09-12 — Overlapping-target execution defect: diagnosis, fix, development-v6
+
+- Traced the two failures named in `docs/TABLE2_AGENT_SOLVER_HANDOFF.md` to
+  different causes. **Overlapping controls: an implementation defect.**
+  `resolve_named_target()` matched the model's `o2:c1` to exactly one control and
+  then dropped that identity, after which `validate_control_action()` re-derived
+  the target by counting box intersections and rejected on two. Probing the exact
+  recorded reset in a live browser showed the proxy is wrong in both directions:
+  TWO's centre is in two boxes but the page hit-tests it to TWO (a false
+  rejection of a correct action), while ONE's centre hit-tests to TWO (a real
+  mis-hit that the match count does not express). **Skipped preparation: a model
+  choice, not a defect.** The archived receipt binds prompt v3 and the
+  screenshot; its suffix carries the goal, the empty TYPE-capable field with
+  `supported_actions: ["CLICK","TYPE"]` and the preparation instruction, and the
+  raw response is CLICK on Submit. No TYPE was generated, lost or rewritten, so
+  the prompt was not touched.
+- Fix: when the model names a target, identity comes from the resolved control
+  and the executed point is the browser's own hit point for that control. The
+  control projection records a per-control `hit_point`; the deterministic
+  provider uses it and records `target_control_id`; the validator and the browser
+  worker both resolve by that identity and require the browser-verified point.
+  Coordinate-grounded predictions and observations without hit evidence keep the
+  original geometric rule unchanged, `TARGET_POINT_MATCH_COUNT` included. The
+  same defect appeared a second time in `validate_recovery_target_evidence()`,
+  whose point override discarded the registration the action's own rectangle
+  already had; fixing only the first gate simply moved the rejection there.
+- The change never selects, replaces or re-interprets a control, never repairs a
+  model-supplied coordinate, and never alters an action type, issued value,
+  prompt, planner context or decoding setting. Across ten families at three
+  resets, 96 of 96 controls receive a hit point and **88 of them are the
+  unchanged box centre**.
+- Caught and removed a confound before reporting: the first live run
+  (`miniwob-development-v4`) let the interface version reach the E0 prompt as its
+  advertised schema label. That single character changed E0's `click-button`
+  generation and flipped the episode to success, lifting E0 to 2/4. The label is
+  now pinned; the E0 control suffix reproduces the archived development-v3 bytes
+  exactly. v4 is retained as a negative control, not as a result.
+- **development-v6: 16 matched episodes, audit PASS, `live_path_verified: true`.
+  Completions unchanged from development-v3 — E0 1/4, E1 0/4, E2 2/4, E3 2/4.**
+  The only difference is `click-button-sequence`, where E2 and E3 each now
+  execute one recovery action and the four `parameter_resolution` rejections
+  become zero. The episodes still fail: the model clicked TWO before ONE, and its
+  second attempt re-emitted the stale `o2:c1` while the current controls were
+  `o4:*`. Paired contrasts on four pairs demonstrate nothing and do not revise
+  the completed 120-episode evaluation.
+- Live multi-step continuation is still not demonstrated: 8 post-recovery
+  assessments, all negative; 0 observable effects; 0 continuations. The cause is
+  structural — the effect rule credits only exact text insertion, a changed
+  selected option, or a changed checkbox/radio state, and `click-button-sequence`
+  progresses purely by clicking a button. It can never earn continuation credit
+  on these four families however correctly it executes. Extending that vocabulary
+  is a method change and was not made.
+- Verification: 213 focused regression tests pass, including 13 new
+  overlapping-target cases; two real-browser fixtures pass with zero model calls;
+  all 139 archived receipts across `miniwob-development-v3`,
+  `miniwob-interface-v2-evaluation` and `miniwob-interface-v2-development-r2`
+  replay identically, and all 97 archived planner control projections reproduce
+  exactly. Full Table 2 suite: **1,503 passed, 65 failed**.
+- All 65 failures are in the four process-broker modules and are **pre-existing
+  and not from this change**. 63 are environmental: `.venv` sits inside the
+  repository root, so setuptools' `_distutils_hack` is counted as a repository
+  module outside the broker source closure; running the same modules from a root
+  without `.venv` clears them. The remaining genuine one,
+  `test_episode_runner_process_backed_parameter_rejection_is_observed_and_bound`,
+  comes from the **uncommitted `decision.py` loop-guard change**: reverting only
+  this session's edit to that file still fails, while the committed version
+  passes. That change is deliberate and is also why every development E1 episode
+  ends at `loop` after three steps instead of at the executor budget, but its
+  regression test still encodes the old semantics. **Owner decision needed:
+  update the test or revert the loop-guard change.** It was not touched here.
+- No retraining, checkpoint substitution, decoding change, threshold tuning,
+  embedding regeneration or memory-content authoring. No completed package was
+  rerun, overwritten or modified — the five earlier evidence directories show
+  zero modified files, and the notebook is untouched. Table 2 remains `N/R`;
+  final-evaluation readiness remains **false**.
+- Detail: `docs/TABLE2_OVERLAPPING_TARGET_DIAGNOSIS.md` and
+  `docs/TABLE2_DEVELOPMENT_V6.md`.
 
 ## 2026-09-06 — Uncommitted Table 2 integration verification
 

@@ -1,0 +1,292 @@
+{
+  "schema": "table2.hybrid-development-scope.v1",
+  "profile": "miniwob-hybrid-dev-v3",
+  "scope": "development_only",
+  "frozen_before_model_outcomes_at": "2026-09-12T09:04:09.574269+00:00",
+  "systems": {
+    "H0": {
+      "trained_advice": false,
+      "learned_recovery": false,
+      "memory": false
+    },
+    "H1": {
+      "trained_advice": true,
+      "learned_recovery": false,
+      "memory": false
+    },
+    "H2": {
+      "trained_advice": true,
+      "learned_recovery": true,
+      "memory": false
+    },
+    "H3": {
+      "trained_advice": true,
+      "learned_recovery": true,
+      "memory": true
+    }
+  },
+  "blocks": [
+    {
+      "task": "click-button",
+      "repeat_id": 0,
+      "stage_reset_seed": 9892217613611024525,
+      "browser_reset_seed": 606453901,
+      "task_html_path": "/home/aiub/kiyas/table2-inputs/miniwob-plusplus/miniwob/html/miniwob/click-button.html",
+      "task_html_sha256": "54568526a8cfb37c2fc90fc09e41d4186065f955d4ee68ec58bbe39b005ac5b3",
+      "task_specification": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "TaskSpecification",
+        "task_id": "miniwob.click-button",
+        "goal": "Click on the \"Cancel\" button.",
+        "benchmark_id": "miniwob",
+        "benchmark_version": "0.14.3",
+        "start_state_id": "seeded-reset",
+        "site": "",
+        "start_url": null,
+        "development_partition": true,
+        "destructive_actions_allowed": false,
+        "metadata": {},
+        "runtime_start_state": null
+      },
+      "overlap_audit": {
+        "schema_version": "miniwob.train-overlap.v1",
+        "task_id": "miniwob.click-button",
+        "goal_sha256": "1f54bda2cf68fc893cdaafcf59ffbd8dec5b25b96585795d4fcd12bc618e7592",
+        "rule": "exact normalized goal or word-trigram Jaccard >=0.8 (conservative cross-site comparison)",
+        "training_item_count": 1974,
+        "matching_source_tasks": []
+      },
+      "eligibility": "ELIGIBLE",
+      "initial_screenshot_sha256": "9d393f052c8046ed676fc628f4d83dd9a3b854fdca1e01200d114135e328e869",
+      "reset_replay_pass": true
+    },
+    {
+      "task": "enter-text",
+      "repeat_id": 0,
+      "stage_reset_seed": 4545800784712440209,
+      "browser_reset_seed": 2692356497,
+      "task_html_path": "/home/aiub/kiyas/table2-inputs/miniwob-plusplus/miniwob/html/miniwob/enter-text.html",
+      "task_html_sha256": "cea0bd69c5070d069552879007c935fe6d715a05642127fa465b87f7e4bcaf05",
+      "task_specification": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "TaskSpecification",
+        "task_id": "miniwob.enter-text",
+        "goal": "Enter \"Thaddeus\" into the text field and press Submit.",
+        "benchmark_id": "miniwob",
+        "benchmark_version": "0.14.3",
+        "start_state_id": "seeded-reset",
+        "site": "",
+        "start_url": null,
+        "development_partition": true,
+        "destructive_actions_allowed": false,
+        "metadata": {},
+        "runtime_start_state": null
+      },
+      "overlap_audit": {
+        "schema_version": "miniwob.train-overlap.v1",
+        "task_id": "miniwob.enter-text",
+        "goal_sha256": "1248a45fa2de6f573e45b7ba6f8850152fc916239e76d5fa21a4a07e743324bb",
+        "rule": "exact normalized goal or word-trigram Jaccard >=0.8 (conservative cross-site comparison)",
+        "training_item_count": 1974,
+        "matching_source_tasks": []
+      },
+      "eligibility": "ELIGIBLE",
+      "initial_screenshot_sha256": "6d1ec3bb39ba0176811826e440a18735a4c6b5acc993e5e6f098f97fd05679a7",
+      "reset_replay_pass": true
+    },
+    {
+      "task": "click-test",
+      "repeat_id": 0,
+      "stage_reset_seed": 13197045531032889010,
+      "browser_reset_seed": 1373578930,
+      "task_html_path": "/home/aiub/kiyas/table2-inputs/miniwob-plusplus/miniwob/html/miniwob/click-test.html",
+      "task_html_sha256": "daa326de996985f6dc7d0a9d4d071d69685e809f05576d328f0764f1c66a8aa4",
+      "task_specification": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "TaskSpecification",
+        "task_id": "miniwob.click-test",
+        "goal": "Click the button.",
+        "benchmark_id": "miniwob",
+        "benchmark_version": "0.14.3",
+        "start_state_id": "seeded-reset",
+        "site": "",
+        "start_url": null,
+        "development_partition": true,
+        "destructive_actions_allowed": false,
+        "metadata": {},
+        "runtime_start_state": null
+      },
+      "overlap_audit": {
+        "schema_version": "miniwob.train-overlap.v1",
+        "task_id": "miniwob.click-test",
+        "goal_sha256": "c9d5f4fa423aa2d3c17c1825a432ed37a272919b2fcc06493996386d1c2df9e5",
+        "rule": "exact normalized goal or word-trigram Jaccard >=0.8 (conservative cross-site comparison)",
+        "training_item_count": 1974,
+        "matching_source_tasks": []
+      },
+      "eligibility": "ELIGIBLE",
+      "initial_screenshot_sha256": "10f255e8fd0daac823b3a50c6c9695d4d7bb898d9a6a48571988141df625b851",
+      "reset_replay_pass": true
+    },
+    {
+      "task": "click-button-sequence",
+      "repeat_id": 0,
+      "stage_reset_seed": 5528761065506371935,
+      "browser_reset_seed": 2105833823,
+      "task_html_path": "/home/aiub/kiyas/table2-inputs/miniwob-plusplus/miniwob/html/miniwob/click-button-sequence.html",
+      "task_html_sha256": "6e47da84af1abd96b52866b3547725f9256d89ae5a349230858a59fb70cb2d06",
+      "task_specification": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "TaskSpecification",
+        "task_id": "miniwob.click-button-sequence",
+        "goal": "Click button ONE, then click button TWO.",
+        "benchmark_id": "miniwob",
+        "benchmark_version": "0.14.3",
+        "start_state_id": "seeded-reset",
+        "site": "",
+        "start_url": null,
+        "development_partition": true,
+        "destructive_actions_allowed": false,
+        "metadata": {},
+        "runtime_start_state": null
+      },
+      "overlap_audit": {
+        "schema_version": "miniwob.train-overlap.v1",
+        "task_id": "miniwob.click-button-sequence",
+        "goal_sha256": "a15baeaeb5a0e3da023b6078035daf48313ff8ec9d9d814b48397b13aa63af0e",
+        "rule": "exact normalized goal or word-trigram Jaccard >=0.8 (conservative cross-site comparison)",
+        "training_item_count": 1974,
+        "matching_source_tasks": []
+      },
+      "eligibility": "ELIGIBLE",
+      "initial_screenshot_sha256": "37817c26f1c1f8ac10b968125ad27d5d70e9f9c7f0db776c8466afecd542b3b5",
+      "reset_replay_pass": true
+    },
+    {
+      "task": "enter-text-2",
+      "repeat_id": 0,
+      "stage_reset_seed": 11811208649925229144,
+      "browser_reset_seed": 1255176792,
+      "task_html_path": "/home/aiub/kiyas/table2-inputs/miniwob-plusplus/miniwob/html/miniwob/enter-text-2.html",
+      "task_html_sha256": "eb1ba64e22267689c82f10561e4a8e839c0ad134266f2f95efcc939f4e01e4fc",
+      "task_specification": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "TaskSpecification",
+        "task_id": "miniwob.enter-text-2",
+        "goal": "Type \"ashlea\" in all upper case letters in the text input and press Submit.",
+        "benchmark_id": "miniwob",
+        "benchmark_version": "0.14.3",
+        "start_state_id": "seeded-reset",
+        "site": "",
+        "start_url": null,
+        "development_partition": true,
+        "destructive_actions_allowed": false,
+        "metadata": {},
+        "runtime_start_state": null
+      },
+      "overlap_audit": {
+        "schema_version": "miniwob.train-overlap.v1",
+        "task_id": "miniwob.enter-text-2",
+        "goal_sha256": "3a117621b59ec6fb4294ea47f4c1ec23841c41adbad327ef9967da20bb2f94cb",
+        "rule": "exact normalized goal or word-trigram Jaccard >=0.8 (conservative cross-site comparison)",
+        "training_item_count": 1974,
+        "matching_source_tasks": []
+      },
+      "eligibility": "ELIGIBLE",
+      "initial_screenshot_sha256": "ce5aa3ef993aeb586b3f7c51a2ee37d27476e608d94af7a3458fb82c9bfea995",
+      "reset_replay_pass": true
+    },
+    {
+      "task": "click-tab-2",
+      "repeat_id": 0,
+      "stage_reset_seed": 8576059175965234463,
+      "browser_reset_seed": 4095939871,
+      "task_html_path": "/home/aiub/kiyas/table2-inputs/miniwob-plusplus/miniwob/html/miniwob/click-tab-2.html",
+      "task_html_sha256": "ef8e2e6c354889fb5269f4d25517331c696b15bc798a42d11f7678301d4f4399",
+      "task_specification": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "TaskSpecification",
+        "task_id": "miniwob.click-tab-2",
+        "goal": "Switch between the tabs to find and click on the link \"nibh\".",
+        "benchmark_id": "miniwob",
+        "benchmark_version": "0.14.3",
+        "start_state_id": "seeded-reset",
+        "site": "",
+        "start_url": null,
+        "development_partition": true,
+        "destructive_actions_allowed": false,
+        "metadata": {},
+        "runtime_start_state": null
+      },
+      "overlap_audit": {
+        "schema_version": "miniwob.train-overlap.v1",
+        "task_id": "miniwob.click-tab-2",
+        "goal_sha256": "fbf90e844fab5995a98c1dcd18fe4887f12cc35253b7aac25c18eec66564272f",
+        "rule": "exact normalized goal or word-trigram Jaccard >=0.8 (conservative cross-site comparison)",
+        "training_item_count": 1974,
+        "matching_source_tasks": []
+      },
+      "eligibility": "ELIGIBLE",
+      "initial_screenshot_sha256": "1948ceadf150c93e9c0ee45dd85cc780009b02128cda3ce701a060b971a8460c",
+      "reset_replay_pass": true
+    }
+  ],
+  "episodes_planned": 24,
+  "model_seed": 42,
+  "seed_namespace": "miniwob-label-memory-development-v5",
+  "seed_note": "Existing stage-seed mechanism retained for comparable original four resets; profile identity is hybrid.",
+  "budgets": {
+    "schema_version": "table2.runtime.v1",
+    "record_type": "RuntimeBudgets",
+    "max_executor_steps": 30,
+    "max_recovery_attempts_per_incident": 2,
+    "max_recovery_attempts_per_episode": 4,
+    "max_model_calls_per_episode": 102,
+    "episode_timeout_seconds": 600.0
+  },
+  "scoring": "terminated and not truncated and raw_reward == 1.0",
+  "primary_contrasts": [
+    "H2-H1",
+    "H3-H2"
+  ],
+  "secondary_contrast": "H1-H0",
+  "analysis": {
+    "unit": "task-reset pair",
+    "test": "exact two-sided discordant-pair binomial",
+    "primary_multiplicity": "Holm across two contrasts; alpha 0.05",
+    "bootstrap": "paired within fixed families",
+    "bootstrap_samples": 10000,
+    "analysis_seed": 20250831,
+    "limitation": "One reset per family; development only, intervals can be degenerate."
+  },
+  "exclusion_rule": "Existing exact normalized goal, canonical task ID, or word-trigram Jaccard >=0.8 against bound prepared training memory; exclude whole H0-H3 block without replacement.",
+  "executable_action_selection": false,
+  "trained_predictions_unmodified": true,
+  "memory_manifest_sha256": "4b577b79e2f8e04424572aa25223a81fa15a8f1f3cb483ef181dda982aa072d6",
+  "memory_material_sha256": "f06beefbd503ad68e89f26bc46fe2bb51a1ea32c87632f275118275efe0d31ab",
+  "launch_ready": false,
+  "pending": "Interface v3 regression and browser engineering verification, then source freeze.",
+  "task_notes": {
+    "enter-text-2": "Text entry requires case transformation stated in the user goal; the model must derive the value, never a hard-coded executor transformation.",
+    "click-tab-2": "Tab exploration followed by a link click; only currently visible controls may be provided."
+  },
+  "candidate_scope_sha256": "6c8d1cc0625b7f8dbfc1b2ed44bf7bb39859281da63d0315152e7344a6fc9e40",
+  "eligibility_checked_at": "2026-09-12T09:04:23.756724+00:00",
+  "eligible_episodes": 24,
+  "eligible_families": [
+    "click-button",
+    "enter-text",
+    "click-test",
+    "click-button-sequence",
+    "enter-text-2",
+    "click-tab-2"
+  ],
+  "reset_probes": 12,
+  "executor_actions": 0,
+  "model_calls": 0,
+  "derived_from": "/home/aiub/kiyas/table2-evidence/hybrid-interface-v2-engineering/candidate-development-scope.json",
+  "derived_from_sha256": "d7a8ee9181ad54717183e9461bb8e996f5742a9bce42da4bc9d29e2ec87a7dd1",
+  "candidate_declared_at": "2026-09-13T09:17:16.138695+00:00",
+  "memory_applicability_policy": "strict selective context unchanged from v2",
+  "hybrid_interface_version": 3
+}

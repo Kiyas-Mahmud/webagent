@@ -195,6 +195,9 @@ class CallableActionParameterProvider(ActionParameterProvider):
                 "frozen parameter provider output must be a JSON object"
             )
         values = dict(raw_values)
+        from web_agent.benchmarks.miniwob_controls import uses_stable_targets
+        if uses_stable_targets(observation.current_page_state):
+            _retain_stable_target_identity(values, observation, named_control(observation, decision))
         assert_oracle_blind_mapping(values, location="provider_output")
         validate_observation_bound_action_parameters(
             decision.action_type,
@@ -263,9 +266,10 @@ class DeterministicParameterProvider(ActionParameterProvider):
             raise ParameterResolutionError("provider decision cites another observation")
         safe_provider_context(observation, decision.parameter_hints)
         hints = dict(decision.parameter_hints)
+        control = named_control(observation, decision)
         values: dict[str, JsonValue]
         if decision.action_type is ActionType.CLICK:
-            values = _target_values(decision)
+            values = _target_values(decision, control)
             button = hints.get("button", "left")
             if isinstance(button, str):
                 button = button.lower()
@@ -279,7 +283,7 @@ class DeterministicParameterProvider(ActionParameterProvider):
             text = hints.get("text")
             if not isinstance(text, str) or not text:
                 raise ParameterResolutionError("TYPE requires a non-empty policy text hint")
-            values = {**_target_values(decision), "text": text}
+            values = {**_target_values(decision, control), "text": text}
         elif decision.action_type is ActionType.SELECT:
             option = hints.get("option")
             candidate_options = hints.get("candidate_options")
@@ -288,7 +292,7 @@ class DeterministicParameterProvider(ActionParameterProvider):
                     "SELECT requires explicit observable candidate_options evidence"
                 )
             values = {
-                **_target_values(decision),
+                **_target_values(decision, control),
                 "option": option,
                 "candidate_options": list(candidate_options),
             }
@@ -313,6 +317,7 @@ class DeterministicParameterProvider(ActionParameterProvider):
             values = {"key": key}
         else:  # pragma: no cover - exhaustive enum guard
             raise ParameterResolutionError(f"unsupported action: {decision.action_type}")
+        _retain_stable_target_identity(values, observation, control)
         assert_oracle_blind_mapping(values, location="provider_output")
         validate_observation_bound_action_parameters(
             decision.action_type,
@@ -586,17 +591,122 @@ def build_registered_hybrid_parameter_provider(
     )
 
 
-def _target_values(decision: PreActionDecision) -> dict[str, JsonValue]:
+GROUNDED_ACTION_TYPES = (ActionType.CLICK, ActionType.TYPE, ActionType.SELECT)
+TARGET_CONTROL_FIELD = "target_control_id"
+
+
+def _retain_stable_target_identity(values, observation, control) -> None:
+    from web_agent.benchmarks.miniwob_controls import (
+        STABLE_TARGET_FIELD, stable_target_receipt, uses_stable_targets,
+    )
+    if not uses_stable_targets(observation.current_page_state):
+        return
+    # Receipts are constructed from the runtime's selected control, never from
+    # a generator's asserted identity or an old capture-specific target ID.
+    if STABLE_TARGET_FIELD in values:
+        raise ParameterResolutionError('STABLE_TARGET_RECEIPT_IS_RUNTIME_OWNED')
+    if control is None or values.get(TARGET_CONTROL_FIELD) != control['control_id']:
+        return
+    receipt = stable_target_receipt(control, observation)
+    if receipt is not None:
+        values[STABLE_TARGET_FIELD] = receipt
+
+
+def named_control(
+    observation: PolicyObservation,
+    decision: PreActionDecision,
+) -> Mapping[str, JsonValue] | None:
+    """The exact current control the model's named target resolved to.
+
+    When the policy names a target, the target resolver replaces the decision
+    bbox with that one observation-bound control's box, so an exact box match
+    recovers which control was selected. Keeping that identity is what lets
+    overlapping controls be told apart; a point re-derived from the box centre
+    cannot. Nothing here re-interprets the model's target string, and nothing
+    selects a control the resolver did not already choose.
+
+    Returns ``None``, leaving the original geometric path in place, for a
+    coordinate-only decision, for an observation without browser hit evidence,
+    and whenever the box does not identify exactly one hit-testable control.
+    Hybrid v3 instead preserves the resolver's explicit current control ID and
+    rejects a named control without current identity, capability or hit evidence.
+    """
+
+    if decision.action_type not in GROUNDED_ACTION_TYPES or decision.bbox is None:
+        return None
+    # Only a decision that actually named a target carries a resolver-set box.
+    target = decision.parameter_hints.get("target")
+    if not isinstance(target, str) or not target:
+        return None
+    from web_agent.benchmarks.miniwob_controls import (
+        aliases, hit_point, is_observable_controls, supported_actions, uses_stable_targets,
+    )
+
+    state = observation.current_page_state
+    if not is_observable_controls(state):
+        return None
+    controls = state.get("visible_controls", ())
+    if not isinstance(controls, (list, tuple)):
+        return None
+    box = [float(value) for value in decision.bbox]
+    if uses_stable_targets(state):
+        resolved_id = decision.parameter_hints.get('resolved_control_id')
+        normalized_target = ' '.join(target.casefold().split())
+        matches = [c for c in controls if isinstance(c, Mapping)
+                   and c.get('observation_id') == observation.observation_id
+                   and ((resolved_id is not None and c.get('control_id') == resolved_id)
+                        or (resolved_id is None and (
+                            normalized_target == c.get('control_id', '').casefold()
+                            or normalized_target in aliases(c))))]
+        if len(matches) != 1:
+            raise ParameterResolutionError('TARGET_CONTROL_NOT_UNIQUELY_CURRENT')
+        control = matches[0]
+        if [float(v) for v in control.get('target_bbox', ())] != box:
+            raise ParameterResolutionError('TARGET_CONTROL_GEOMETRY_MISMATCH')
+        if decision.action_type.value not in supported_actions(control):
+            raise ParameterResolutionError('ACTION_TARGET_INCOMPATIBLE')
+        if hit_point(control) is None:
+            raise ParameterResolutionError('TARGET_CONTROL_NOT_HIT_TESTABLE')
+        return control
+    matches = [
+        control
+        for control in controls
+        if isinstance(control, Mapping)
+        and control.get("observation_id") == observation.observation_id
+        and [float(value) for value in control.get("target_bbox", ())] == box
+        and hit_point(control) is not None
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _target_values(
+    decision: PreActionDecision,
+    control: Mapping[str, JsonValue] | None = None,
+) -> dict[str, JsonValue]:
     if decision.bbox is None:
         raise ParameterResolutionError(f"{decision.action_type.value} requires a grounded bbox")
     x, y, width, height = _validated_bbox(
         decision.bbox,
         name=f"{decision.action_type.value} decision bbox",
     )
+    if control is None:
+        return {
+            "target_x": x + width / 2.0,
+            "target_y": y + height / 2.0,
+            "target_bbox": [x, y, width, height],
+        }
+    from web_agent.benchmarks.miniwob_controls import action_point
+
+    if [float(value) for value in control["target_bbox"]] != [x, y, width, height]:
+        raise ParameterResolutionError(
+            "named control geometry differs from the policy-grounded bbox"
+        )
+    point_x, point_y = action_point(control)
     return {
-        "target_x": x + width / 2.0,
-        "target_y": y + height / 2.0,
+        "target_x": point_x,
+        "target_y": point_y,
         "target_bbox": [x, y, width, height],
+        TARGET_CONTROL_FIELD: control["control_id"],
     }
 
 
@@ -604,6 +714,8 @@ def validate_action_parameters(
     action_type: ActionType,
     values: Mapping[str, JsonValue],
     bbox: tuple[float, float, float, float] | None,
+    *,
+    stable_target_identity: bool = False,
 ) -> None:
     if not isinstance(values, Mapping):
         raise ParameterResolutionError(
@@ -630,9 +742,17 @@ def validate_action_parameters(
         ActionType.PRESS_KEY: {"key"},
     }[action_type]
     actual = set(values)
-    if actual != required:
+    optional = (
+        {TARGET_CONTROL_FIELD} if action_type in GROUNDED_ACTION_TYPES else set()
+    )
+    from web_agent.benchmarks.miniwob_controls import (
+        STABLE_TARGET_FIELD, validate_stable_target_receipt,
+    )
+    if stable_target_identity and action_type in GROUNDED_ACTION_TYPES:
+        optional.add(STABLE_TARGET_FIELD)
+    if actual - optional != required:
         missing = required - actual
-        unexpected = actual - required
+        unexpected = actual - required - optional
         details: list[str] = []
         if missing:
             details.append(f"missing={sorted(missing)}")
@@ -645,8 +765,20 @@ def validate_action_parameters(
             + ", ".join(details)
         )
 
-    if action_type in {ActionType.CLICK, ActionType.TYPE, ActionType.SELECT}:
+    if action_type in GROUNDED_ACTION_TYPES:
         _validate_grounded_target(action_type, values, bbox)
+        control_id = values.get(TARGET_CONTROL_FIELD)
+        if control_id is not None and (not isinstance(control_id, str) or not control_id):
+            raise ParameterResolutionError(
+                f"{action_type.value} {TARGET_CONTROL_FIELD} must be a non-empty control ID"
+            )
+        if STABLE_TARGET_FIELD in values:
+            try:
+                validate_stable_target_receipt(values[STABLE_TARGET_FIELD])
+            except ValueError as exc:
+                raise ParameterResolutionError(str(exc)) from exc
+            if values[STABLE_TARGET_FIELD]['control_id'] != control_id:
+                raise ParameterResolutionError('STABLE_TARGET_CONTROL_BINDING_MISMATCH')
 
     if action_type is ActionType.CLICK:
         button = values["button"]
@@ -729,7 +861,25 @@ def validate_observation_bound_action_parameters(
     provider output cannot serve as its own evidence.
     """
 
-    validate_action_parameters(action_type, values, bbox)
+    from web_agent.benchmarks.miniwob_controls import (
+        STABLE_TARGET_FIELD, stable_target_receipt, uses_stable_targets, validate_control_action,
+    )
+    validate_action_parameters(action_type, values, bbox,
+                               stable_target_identity=uses_stable_targets(observation.current_page_state))
+    try:
+        control = validate_control_action(
+            action_type.value,
+            values,
+            bbox,
+            observation,
+            control_id=values.get(TARGET_CONTROL_FIELD),
+        )
+        if STABLE_TARGET_FIELD in values and (
+            control is None or values[STABLE_TARGET_FIELD] != stable_target_receipt(control, observation)
+        ):
+            raise ValueError('STABLE_TARGET_OBSERVATION_BINDING_MISMATCH')
+    except ValueError as exc:
+        raise ParameterResolutionError(str(exc)) from exc
     if action_type is not ActionType.SELECT:
         return
     if not isinstance(observation, PolicyObservation):

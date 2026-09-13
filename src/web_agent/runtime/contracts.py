@@ -449,6 +449,14 @@ class SystemID(str, Enum):
     E3 = "E3"
 
 
+class HybridSystemID(str, Enum):
+    """Separate identities; historical SystemID iteration remains E0–E3."""
+    H0 = "H0"
+    H1 = "H1"
+    H2 = "H2"
+    H3 = "H3"
+
+
 class ObservationStage(str, Enum):
     RESET = "reset"
     PRE_ACTION = "pre_action"
@@ -1391,6 +1399,77 @@ class VerifierReceiptBinding(VersionedRecord):
 
 
 @dataclass(frozen=True, slots=True)
+class RetrievedRecoveryExperience(VersionedRecord):
+    """Historical train-label evidence, never an instruction or verified outcome."""
+
+    memory_id: str
+    source_task_id: str
+    failure_type: str
+    failed_action: ActionType | None
+    recovery_action: ActionType
+    recorded_strategy: RecoveryStrategy
+    recovery_action_value: str | None = None
+    reflection: str | None = None
+    evidence_basis: str = "training_dataset_labels"
+    material_version: str = "train-experience-v1"
+    source_task_description: str | None = None
+    source_domain: str | None = None
+    availability: Mapping[str, bool] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for name in ("memory_id", "source_task_id", "failure_type"):
+            _require_text(name, getattr(self, name))
+        if self.evidence_basis != "training_dataset_labels":
+            raise ValueError("retrieved experience must disclose its training-label basis")
+        if self.material_version not in {'train-experience-v1', 'train-experience-v2'}:
+            raise ValueError('unknown memory material projection')
+        for value in (self.source_task_description, self.source_domain):
+            if value is not None and type(value) is not str:
+                raise ValueError('memory source context must be text or null')
+        if self.material_version == 'train-experience-v2':
+            expected={'failed_action':self.failed_action is not None,
+                'recovery_action_value':bool(self.recovery_action_value),'reflection':bool(self.reflection),
+                'source_task_description':bool(self.source_task_description),'source_domain':bool(self.source_domain)}
+            if dict(self.availability)!=expected or any(type(v) is not bool for v in self.availability.values()):
+                raise ValueError('memory availability must match actual source material')
+        elif self.availability or self.source_task_description is not None or self.source_domain is not None:
+            raise ValueError('source context requires memory projection v2')
+
+    def to_dict(self):
+        result = VersionedRecord.to_dict(self)
+        if self.material_version == 'train-experience-v1':
+            for key in ('material_version','source_task_description','source_domain','availability'):
+                result.pop(key)
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryPlannerContext(VersionedRecord):
+    """Agent-issued history and completed-attempt feedback, never evaluator data."""
+    schema_version: ClassVar[str] = 'table2.recovery-planner-context.v1'
+    task_id: str
+    episode_id: str
+    incident_id: str
+    observation_id: str
+    completed_actions: tuple[Mapping[str, JsonValue], ...]
+    previous_attempt: Mapping[str, JsonValue] | None = None
+
+    def __post_init__(self):
+        for name in ('task_id','episode_id','incident_id','observation_id'):
+            _require_text(name, getattr(self,name))
+        from web_agent.runtime.observation import assert_oracle_blind_mapping
+        assert_oracle_blind_mapping({'completed_actions':list(self.completed_actions),
+                                    'previous_attempt':self.previous_attempt}, location='planner_context')
+        for action in self.completed_actions:
+            if set(action) != {'action_id','action_type','bbox','parameters','execution_status','state_changed','environment_error'}:
+                raise ValueError('planner history fields changed')
+            ActionType(action['action_type'])
+            ExecutionStatus(action['execution_status'])
+        if self.previous_attempt is not None and set(self.previous_attempt) != {'attempt_id','stage','code','detail'}:
+            raise ValueError('planner feedback fields changed')
+
+
+@dataclass(frozen=True, slots=True)
 class RecoveryDecision(VersionedRecord):
     decision_id: str
     incident_id: str
@@ -1398,6 +1477,7 @@ class RecoveryDecision(VersionedRecord):
     trigger_sources: tuple[str, ...]
     diagnosis: str
     planned_action: ConcreteAction | None = None
+    memory_experiences: tuple[RetrievedRecoveryExperience, ...] = ()
 
     def __post_init__(self) -> None:
         _require_text("decision_id", self.decision_id)
@@ -1598,6 +1678,15 @@ class MemoryQueryResult(VersionedRecord):
     processed_batch_sha256: str | None = None
     normalized_query_embedding: tuple[float, ...] | None = None
     normalized_query_embedding_sha256: str | None = None
+    changed_recovery_context: bool = False
+    context_candidate_ids: tuple[str, ...] = ()
+    memory_material_sha256: str | None = None
+
+    @property
+    def intervened(self) -> bool:
+        """Context exposure is distinct from a changed strategy/action or success."""
+        return (self.changed_strategy or self.changed_target_or_parameters
+                or self.changed_recovery_context)
 
     def __post_init__(self) -> None:
         _require_text("query_id", self.query_id)
@@ -1615,6 +1704,15 @@ class MemoryQueryResult(VersionedRecord):
             self.admitted_candidate_id not in self.candidate_ids
         ):
             raise ValueError("admitted memory is absent from returned candidates")
+        if self.changed_recovery_context != bool(self.context_candidate_ids):
+            raise ValueError("memory context flag and candidate IDs disagree")
+        if self.context_candidate_ids:
+            if (not self.admitted or self.admitted_candidate_id != self.context_candidate_ids[0]
+                    or len(set(self.context_candidate_ids)) != len(self.context_candidate_ids)
+                    or any(mid not in self.candidate_ids or mid in self.exclusion_reasons
+                           for mid in self.context_candidate_ids)):
+                raise ValueError("memory context must cite distinct admitted candidates")
+            _require_lowercase_sha256("memory_material_sha256", self.memory_material_sha256 or "")
         if self.query_embedding_sha256 is not None:
             _require_lowercase_sha256(
                 "query_embedding_sha256", self.query_embedding_sha256
@@ -1699,7 +1797,7 @@ class MemoryQueryResult(VersionedRecord):
 class EpisodeSummary(VersionedRecord):
     episode_id: str
     protocol_id: str
-    system_id: SystemID
+    system_id: SystemID | HybridSystemID
     task_id: str
     repeat_id: int
     model_seed: int
@@ -1765,6 +1863,7 @@ class EpisodeContractBundle(VersionedRecord):
     memory_results: tuple[MemoryQueryResult, ...]
     parse_rejections: tuple[PreActionParseRejection, ...]
     summary: EpisodeSummary
+    memory_transition_inputs: tuple[TransitionInput, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -2044,8 +2143,22 @@ def validate_episode_foreign_keys(
                 f"{context} causal history differs from completed canonical events"
             )
 
+    # Recovery-action P4 inputs are causal transitions, but do not invent a
+    # second normal-action diagnosis assessment for the recovery action.
+    action_position_map = {action_id: i for i, action_id in enumerate(action_order)}
+    for item in bundle.memory_transition_inputs:
+        if item.executed_action.recovery_attempt_id is None:
+            raise ValueError("memory-only transition must cite a recovery action")
+    for stream in (bundle.transition_inputs, bundle.memory_transition_inputs):
+        positions = [action_position_map.get(item.executed_action.action_id, -1) for item in stream]
+        if positions != sorted(positions):
+            raise ValueError("transition inputs are not in canonical action order")
+    all_transition_inputs = tuple(sorted(
+        bundle.transition_inputs + bundle.memory_transition_inputs,
+        key=lambda item: action_position_map.get(item.executed_action.action_id, -1),
+    ))
     transition_action_order: list[str] = []
-    for transition in bundle.transition_inputs:
+    for transition in all_transition_inputs:
         if transition.task_id != bundle.summary.task_id:
             raise ValueError("transition belongs to another task")
         require_policy_observation(
@@ -2231,7 +2344,7 @@ def validate_episode_foreign_keys(
             transition.executed_action.action_id,
             transition.post_observation.observation_id,
         ): transition
-        for transition in bundle.transition_inputs
+        for transition in all_transition_inputs
     }
     for query in bundle.memory_queries:
         if query.episode_id != bundle.episode_id:
@@ -2281,7 +2394,7 @@ def validate_episode_foreign_keys(
     if len(bundle.memory_queries) != bundle.summary.memory_queries:
         raise ValueError("memory-query count disagrees with runtime summary")
     interventions = sum(
-        result.changed_strategy or result.changed_target_or_parameters
+        result.intervened
         for result in bundle.memory_results
     )
     if interventions != bundle.summary.memory_interventions:

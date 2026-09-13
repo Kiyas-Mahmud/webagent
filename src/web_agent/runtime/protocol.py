@@ -11,7 +11,7 @@ from typing import Any, Mapping
 
 from web_agent.runtime.contracts import (
     JsonValue,
-    SystemID,
+    SystemID, HybridSystemID,
     VersionedRecord,
     canonical_json,
 )
@@ -659,7 +659,7 @@ def validate_frozen_protocol_mapping(mapping: Mapping[str, Any]) -> None:
 
 @dataclass(frozen=True, slots=True)
 class SystemSwitches(VersionedRecord):
-    system_id: SystemID
+    system_id: SystemID | HybridSystemID
     trained_pre_action_policy: bool
     post_action_diagnosis: bool
     recovery_controller: bool
@@ -668,7 +668,7 @@ class SystemSwitches(VersionedRecord):
     evaluation_memory_write: bool = False
 
     def __post_init__(self) -> None:
-        expected = SYSTEM_SWITCH_MATRIX.get(self.system_id)
+        expected = {**SYSTEM_SWITCH_MATRIX, **HYBRID_SYSTEM_SWITCH_MATRIX}.get(self.system_id)
         if expected is None:
             raise ValueError(f"unregistered Table 2 system: {self.system_id}")
         actual = (
@@ -694,9 +694,17 @@ SYSTEM_SWITCH_MATRIX: dict[SystemID, tuple[bool, bool, bool, bool, bool, bool]] 
 }
 
 
-def switches_for(system_id: SystemID | str) -> SystemSwitches:
-    resolved_id = SystemID(system_id)
-    values = SYSTEM_SWITCH_MATRIX[resolved_id]
+HYBRID_SYSTEM_SWITCH_MATRIX = {
+    HybridSystemID.H0: (False, False, False, False, False, False),
+    HybridSystemID.H1: (True, False, False, False, False, False),
+    HybridSystemID.H2: (True, True, True, False, False, False),
+    HybridSystemID.H3: (True, True, True, True, True, False),
+}
+
+
+def switches_for(system_id: SystemID | HybridSystemID | str) -> SystemSwitches:
+    resolved_id = HybridSystemID(system_id) if system_id in HybridSystemID._value2member_map_ else SystemID(system_id)
+    values = {**SYSTEM_SWITCH_MATRIX, **HYBRID_SYSTEM_SWITCH_MATRIX}[resolved_id]
     return SystemSwitches(
         system_id=resolved_id,
         trained_pre_action_policy=values[0],
@@ -894,8 +902,13 @@ class RuntimeProtocol(VersionedRecord):
         return switches_for(system_id)
 
     def rng_factory(self) -> "StageRNGFactory":
+        seed_protocol = self.metadata.get('seed_protocol_id', self.protocol_id)
+        if seed_protocol != self.protocol_id and not (
+                self.protocol_id == 'table2-miniwob-hybrid-v1'
+                and seed_protocol == 'table2-miniwob-label-memory-v2'):
+            raise ValueError('unregistered seed protocol namespace')
         return StageRNGFactory(
-            protocol_id=self.protocol_id,
+            protocol_id=seed_protocol,
             campaign_id=self.campaign_id,
             campaign_seed=self.campaign_seed,
         )

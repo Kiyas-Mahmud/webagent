@@ -1,0 +1,244 @@
+{
+  "status": "COMPLETE",
+  "generations": 6,
+  "browser_actions": 0,
+  "memory_queries": 0,
+  "rows": [
+    {
+      "case": "CLICK",
+      "raw_response": "{\n  \"operation\": \"CLICK\",\n  \"control\": \"button ONE\",\n  \"argument\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 24,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "translated": {
+        "action_type": "CLICK",
+        "target": "button ONE",
+        "value": null,
+        "bbox": null
+      },
+      "proposal": {
+        "target": "button ONE",
+        "bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.379518,
+        "target_y": 0.420561,
+        "target_bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "target_control_id": "o3:c0",
+        "button": "left",
+        "click_count": 1,
+        "target_stable_identity": {
+          "schema_version": "miniwob-stable-target-v1",
+          "task_id": "miniwob.click-button-sequence",
+          "goal_sha256": "f454e87e4196a009fb86f2220b07c75f4f826147198b1c3728c9f921c1cca8ec",
+          "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3",
+          "control_id": "o3:c0",
+          "source_id": "12",
+          "semantic_sha256": "4a8b5c61673ad11b951147a9147e159a6f0e8b2a3d46355b26fbd61c05c8d663"
+        }
+      }
+    },
+    {
+      "case": "TYPE",
+      "raw_response": "{\n  \"operation\": \"CLICK\",\n  \"control\": \"o3:c1\",\n  \"argument\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 26,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "translated": {
+        "action_type": "CLICK",
+        "target": "o3:c1",
+        "value": null,
+        "bbox": null
+      },
+      "proposal": {
+        "target": "o3:c1",
+        "bbox": [
+          0.03012,
+          0.425234,
+          0.287604,
+          0.14486
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.173922,
+        "target_y": 0.497664,
+        "target_bbox": [
+          0.03012,
+          0.425234,
+          0.287604,
+          0.14486
+        ],
+        "target_control_id": "o3:c1",
+        "button": "left",
+        "click_count": 1,
+        "target_stable_identity": {
+          "schema_version": "miniwob-stable-target-v1",
+          "task_id": "miniwob.enter-text-2",
+          "goal_sha256": "7bd7dd036ff14d4ead45565ee0d9bb5d184b26ed173538f0b46b6bd936cb8dc2",
+          "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3",
+          "control_id": "o3:c1",
+          "source_id": "15",
+          "semantic_sha256": "b6cdcec7f8a0aaac72a73a402872b43e2cd74d16844c82f3077d78145693a2ba"
+        }
+      }
+    },
+    {
+      "case": "SELECT",
+      "raw_response": "```json\n{\n  \"operation\": \"NAVIGATE\",\n  \"control\": \"o4:c3\",\n  \"argument\": \"Finish\"\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 33,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "translated": {
+        "action_type": "NAVIGATE",
+        "target": "o4:c3",
+        "value": "Finish",
+        "bbox": null
+      },
+      "proposal": {
+        "target": "o4:c3",
+        "bbox": null,
+        "value": "Finish",
+        "action_type": "NAVIGATE"
+      },
+      "status": "REJECTED",
+      "error_type": "ParameterResolutionError",
+      "error": "NAVIGATE scheme is not permitted: ''"
+    },
+    {
+      "case": "SCROLL",
+      "raw_response": "```json\n{\n  \"operation\": \"SCROLL\",\n  \"control\": null,\n  \"argument\": \"2\"\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 28,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "translated": {
+        "action_type": "SCROLL",
+        "target": null,
+        "value": "2",
+        "bbox": null
+      },
+      "proposal": {
+        "target": null,
+        "bbox": null,
+        "value": "2",
+        "action_type": "SCROLL"
+      },
+      "status": "REJECTED",
+      "error_type": "ParameterResolutionError",
+      "error": "SCROLL direction must be one of ['up', 'down', 'left', 'right']"
+    },
+    {
+      "case": "NAVIGATE",
+      "raw_response": "```json\n{\n  \"operation\": \"NAVIGATE\",\n  \"control\": \"o4:c3\",\n  \"argument\": \"Finish\"\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 33,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "translated": {
+        "action_type": "NAVIGATE",
+        "target": "o4:c3",
+        "value": "Finish",
+        "bbox": null
+      },
+      "proposal": {
+        "target": "o4:c3",
+        "bbox": null,
+        "value": "Finish",
+        "action_type": "NAVIGATE"
+      },
+      "status": "REJECTED",
+      "error_type": "ParameterResolutionError",
+      "error": "NAVIGATE scheme is not permitted: ''"
+    },
+    {
+      "case": "PRESS_KEY",
+      "raw_response": "```json\n{\n  \"operation\": \"NAVIGATE\",\n  \"control\": \"o4:c2\",\n  \"argument\": \"two\"\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 33,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "translated": {
+        "action_type": "NAVIGATE",
+        "target": "o4:c2",
+        "value": "two",
+        "bbox": null
+      },
+      "proposal": {
+        "target": "o4:c2",
+        "bbox": null,
+        "value": "two",
+        "action_type": "NAVIGATE"
+      },
+      "status": "REJECTED",
+      "error_type": "ParameterResolutionError",
+      "error": "NAVIGATE scheme is not permitted: ''"
+    }
+  ]
+}

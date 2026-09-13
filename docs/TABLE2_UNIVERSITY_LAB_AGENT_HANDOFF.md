@@ -1,5 +1,8 @@
 # Table 2 university lab agent handoff
 
+> **Superseded benchmark direction — 2026-09-09.** The user has replaced WebArena with BrowserGym + MiniWoB. Follow the active plan below for remaining work. WebArena deployment, maps, task exports and the old pilot schedule in this historical handoff are superseded. Checkpoint/source evidence remains historical evidence with its original identity.
+> Active authority: [Table 2 MiniWoB plan](TABLE2_MINIWOB_ACTIVE_PLAN.md).
+
 Prepared: 2026-09-08; expanded and source-checked 2026-09-09. This is a state snapshot and operational handoff, not a
 claim that the live pilot is complete. Read this before making changes.
 

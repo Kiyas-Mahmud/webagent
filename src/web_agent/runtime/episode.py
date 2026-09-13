@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from copy import deepcopy
 import random
 from collections.abc import Callable
 from typing import Any, Mapping
@@ -16,6 +17,7 @@ from web_agent.runtime.action_parameters import (
 )
 from web_agent.runtime.contracts import (
     ActionParameters,
+    ActionType,
     CausalHistoryEntry,
     ConcreteAction,
     EPISODE_FOREIGN_KEY_RECEIPT_VERSION,
@@ -33,9 +35,10 @@ from web_agent.runtime.contracts import (
     RecoveryAssessment,
     RecoveryAttempt,
     RecoveryDecision,
+    RecoveryStrategy,
     RecoveryTransitionInput,
     RuntimeTaskView,
-    SystemID,
+    SystemID, HybridSystemID,
     TaskSpecification,
     TerminalReason,
     TransitionAssessment,
@@ -43,6 +46,7 @@ from web_agent.runtime.contracts import (
     VerifierReceiptBinding,
     canonical_sha256,
     completed_causal_history_entry,
+    RecoveryPlannerContext,
     detached_record_copy,
     runtime_task_view,
     validate_episode_foreign_keys,
@@ -112,6 +116,7 @@ class _EpisodeContracts:
     executions: list[ExecutionResult] = field(default_factory=list)
     transition_inputs: list[TransitionInput] = field(default_factory=list)
     transition_assessments: list[TransitionAssessment] = field(default_factory=list)
+    memory_transition_inputs: list[TransitionInput] = field(default_factory=list)
     recovery_decisions: list[RecoveryDecision] = field(default_factory=list)
     recovery_attempts: list[RecoveryAttempt] = field(default_factory=list)
     recovery_transitions: list[RecoveryTransitionInput] = field(default_factory=list)
@@ -147,6 +152,7 @@ class _EpisodeContracts:
             executions=tuple(self.executions),
             transition_inputs=tuple(self.transition_inputs),
             transition_assessments=tuple(self.transition_assessments),
+            memory_transition_inputs=tuple(self.memory_transition_inputs),
             recovery_decisions=tuple(self.recovery_decisions),
             recovery_attempts=tuple(self.recovery_attempts),
             recovery_transitions=tuple(self.recovery_transitions),
@@ -176,6 +182,10 @@ class EpisodeRunner:
         event_logs: EpisodeEventLogs | None = None,
         before_environment_reset: Callable[[], PreBrowserSetupEvidence] | None = None,
         defer_contract_validation_receipt: bool = False,
+        observable_progress_continuation: bool = False,
+        hybrid_continuation: bool = False,
+        hybrid_proposal_repair: bool = False,
+        stable_retry_targets: bool = False,
     ) -> None:
         self.protocol = protocol
         self.system_policy = system_policy
@@ -189,6 +199,29 @@ class EpisodeRunner:
         self.duplicate_audit_registry = duplicate_audit_registry
         self.event_logs = event_logs
         self.before_environment_reset = before_environment_reset
+        if type(observable_progress_continuation) is not bool:
+            raise TypeError('observable progress mode must be bool')
+        self.observable_progress_continuation = observable_progress_continuation
+        if type(hybrid_continuation) is not bool:
+            raise TypeError('hybrid continuation mode must be bool')
+        self.hybrid_continuation = hybrid_continuation
+        if type(hybrid_proposal_repair) is not bool or type(stable_retry_targets) is not bool:
+            raise TypeError('hybrid proposal repair and stable target flags must be bool')
+        self.hybrid_proposal_repair = hybrid_proposal_repair
+        self.stable_retry_targets = stable_retry_targets
+        self._hybrid_proposal_rejections: dict[str, list[str]] = {}
+        self._hybrid_pending_format_repairs: set[str] = set()
+        self._hybrid_incidents: dict[str, str] = {}
+        self._hybrid_last_rejection = None
+        self._hybrid_actor = isinstance(self.switches.system_id, HybridSystemID)
+        if self._hybrid_actor:
+            from web_agent.runtime.hybrid_action_policy import HybridActionPolicy
+            if (not hybrid_continuation or not isinstance(self.system_policy.adapter, HybridActionPolicy)
+                    or self.system_policy.adapter.system != self.switches.system_id.value):
+                raise ValueError("H systems require their matching hybrid adapter and continuation")
+        if hybrid_proposal_repair and not self._hybrid_actor:
+            raise ValueError('hybrid proposal repair requires an H system')
+        self._observable_progress_seen = set()
         if type(defer_contract_validation_receipt) is not bool:
             raise TypeError("receipt deferral flag must be an exact boolean")
         self.defer_contract_validation_receipt = defer_contract_validation_receipt
@@ -197,7 +230,7 @@ class EpisodeRunner:
             self.switches,
             protocol.recovery_trigger,
         )
-        self.loop_guard = LoopGuard(protocol.loop_rule)
+        self.loop_guard = LoopGuard(protocol.loop_rule, stable_target_identity=stable_retry_targets)
         if executor.budgets != protocol.budgets:
             raise ValueError("executor and protocol budgets differ")
         if protocol.evaluation_mode:
@@ -381,6 +414,11 @@ class EpisodeRunner:
         final_signal: OpaqueTerminalSignal | None = None
         current: Observation | None = None
         self.loop_guard.reset()
+        self._observable_progress_seen.clear()
+        self._hybrid_incidents.clear()
+        self._hybrid_last_rejection = None
+        self._hybrid_proposal_rejections.clear()
+        self._hybrid_pending_format_repairs.clear()
         if self.recovery_controller:
             self.recovery_controller.reset()
         try:
@@ -491,6 +529,8 @@ class EpisodeRunner:
             decision_index = 0
             while terminal_reason is TerminalReason.CLOSED:
                 self.executor.require_time_remaining()
+                if self.hybrid_continuation and self.executor.steps_used >= self.protocol.budgets.max_executor_steps:
+                    raise ExecutorBudgetExceeded('hybrid normal acting exhausted executor requests')
                 if current is None:  # pragma: no cover - construction invariant
                     raise RuntimeError("episode has no current observation")
                 decision_index += 1
@@ -508,60 +548,93 @@ class EpisodeRunner:
                     stage=RuntimeStage.PRE_ACTION,
                     decision_index=decision_index,
                 )
+                def normal_prediction():
+                    if self._hybrid_actor:
+                        from web_agent.runtime.hybrid_action_policy import HybridActionContext
+                        records = {a.action_id: a for a in contracts.actions}
+                        context = HybridActionContext(episode_id, pre_policy.observation_id,
+                            tuple(records[h.action_id] for h in prior_history), self._hybrid_last_rejection)
+                        return self.system_policy.adapter.predict_action(callback_task, pre_policy,
+                            rng=pre_action_rng, context=context)
+                    return self.system_policy.predict_action(callback_task, pre_policy, rng=pre_action_rng)
+                proposal_rejection: ActionParseError | None = None
+                proposal_stop: TerminalReason | None = None
                 try:
                     decision = self.executor.run_blocking(
                         "pre-action policy inference",
-                        lambda: self.system_policy.predict_action(
-                            callback_task,
-                            pre_policy,
-                            rng=pre_action_rng,
-                        ),
+                        normal_prediction,
                     )
+                    if self.hybrid_proposal_repair:
+                        self._record_hybrid_format_repaired(current, decision_index)
                 except ActionParseError as exc:
-                    # This catch is intentionally scoped to pre-action
-                    # inference.  Post-action/recovery PolicyError instances
-                    # must never be mistaken for charged parser requests.
-                    if self.switches.system_id is not SystemID.E0:
-                        raise PolicyError(
-                            "pre-action parse rejection is registered only for E0"
-                        ) from exc
-                    request_id = (
-                        f"{episode_id}:pre-action-parse-request:{decision_index}"
-                    )
-                    rejection = PreActionParseRejection(
-                        request_id=request_id,
-                        observation_id=pre_policy.observation_id,
-                        policy_id=self.system_policy.adapter.policy_id,
-                        policy_version=self.system_policy.adapter.policy_version,
-                        decision_index=decision_index,
-                        error_kind=exc.error_kind,
-                        error_sha256=exc.error_sha256,
-                    )
-                    execution = self.executor.reject_pre_action_parse_request(
-                        request_id=request_id,
-                    )
-                    contracts.parse_rejections.append(rejection)
-                    contracts.executions.append(execution)
-                    counters.normal_actions += 1
-                    self._log(
-                        "actions",
-                        "pre_action_parse_rejection",
-                        {
-                            "rejection": rejection.to_dict(),
-                            "decision": None,
-                            "parameters": None,
-                            "action": None,
-                            "action_sha256": None,
-                            "execution": execution.to_dict(),
-                        },
-                    )
-                    terminal_reason = TerminalReason.POLICY_ERROR
-                    break
+                    # A validated action with a rejected target is still an
+                    # issued request. Pure syntax failures have no action at all.
+                    from web_agent.runtime.hybrid_interface import TargetProposalResolutionError
+                    if self.hybrid_proposal_repair and isinstance(exc, TargetProposalResolutionError):
+                        proposal_rejection = exc
+                        decision = self._rejected_proposal_decision(exc, pre_policy, decision_index)
+                        self._record_hybrid_format_repaired(current, decision_index)
+                        proposal_stop = self._record_hybrid_proposal_rejection(
+                            current, exc, decision_index=decision_index, format_failure=False)
+                    else:
+                        if self.switches.system_id is not SystemID.E0 and not self._hybrid_actor:
+                            raise PolicyError(
+                                "pre-action parse rejection is registered only for E0"
+                            ) from exc
+                        request_id = (
+                            f"{episode_id}:pre-action-parse-request:{decision_index}"
+                        )
+                        rejection = PreActionParseRejection(
+                            request_id=request_id,
+                            observation_id=pre_policy.observation_id,
+                            policy_id=self.system_policy.adapter.policy_id,
+                            policy_version=self.system_policy.adapter.policy_version,
+                            decision_index=decision_index,
+                            error_kind=exc.error_kind,
+                            error_sha256=exc.error_sha256,
+                        )
+                        execution = self.executor.reject_pre_action_parse_request(
+                            request_id=request_id,
+                        )
+                        contracts.parse_rejections.append(rejection)
+                        contracts.executions.append(execution)
+                        counters.normal_actions += 1
+                        self._log(
+                            "actions",
+                            "pre_action_parse_rejection",
+                            {
+                                "rejection": rejection.to_dict(),
+                                "decision": None,
+                                "parameters": None,
+                                "action": None,
+                                "action_sha256": None,
+                                "execution": execution.to_dict(),
+                            },
+                        )
+                        if self._hybrid_actor:
+                            self._hybrid_last_rejection = {
+                                'observation_id': pre_policy.observation_id,
+                                'stage': getattr(exc, 'failure_stage', 'parsing'),
+                                'code': str(getattr(exc, 'diagnostic_code', None) or exc.error_kind),
+                                'detail': str(exc)}
+                            if self.hybrid_proposal_repair:
+                                proposal_stop = self._record_hybrid_proposal_rejection(
+                                    current, exc, decision_index=decision_index, format_failure=True)
+                                if proposal_stop is not None:
+                                    terminal_reason = proposal_stop
+                                    break
+                            continue
+                        terminal_reason = TerminalReason.POLICY_ERROR
+                        break
                 action_id = f"{episode_id}:normal-action:{decision_index}"
                 parameter_error: ParameterResolutionError | None = None
                 resolution_attempts: tuple[Mapping[str, Any], ...] = ()
                 parameter_resolution: Mapping[str, Any] | None = None
                 try:
+                    if proposal_rejection is not None:
+                        # No provider fallback or browser command may silently
+                        # substitute another target for this rejected proposal.
+                        raise ParameterResolutionError(str(proposal_rejection))
                     parameter_rng = self._stage_random(
                         rng_factory,
                         task_id=task.task_id,
@@ -659,7 +732,7 @@ class EpisodeRunner:
                         action_id=action_id,
                         source_decision_id=decision.decision_id,
                         action_type=decision.action_type,
-                        parameters={},
+                        parameters=(dict(decision.parameter_hints) if proposal_rejection else {}),
                         bbox=decision.bbox,
                     )
                     parameters = None
@@ -679,6 +752,7 @@ class EpisodeRunner:
                             execution=registration_error.execution_result,
                             counters=counters,
                             contracts=contracts,
+                            proposal_rejection=proposal_rejection,
                         )
                         raise
                 contracts.decisions.append(decision)
@@ -697,6 +771,8 @@ class EpisodeRunner:
                         "action": action.to_dict(),
                         "action_sha256": action.record_sha256,
                         "execution": execution.to_dict(),
+                        **({'proposal_rejection': self._proposal_rejection_record(proposal_rejection)}
+                           if proposal_rejection is not None else {}),
                     },
                 )
                 post = self.executor.observe_after(action)
@@ -710,6 +786,16 @@ class EpisodeRunner:
                         post_observation=post,
                     )
                 )
+                if self._hybrid_actor:
+                    self._hybrid_last_rejection = None if execution.status is ExecutionStatus.EXECUTED else {
+                        'observation_id': post.observation_id,
+                        'stage': 'parameter_resolution' if parameter_error else 'browser_execution',
+                        'code': execution.error_kind or 'BROWSER_ACTION_NOT_EXECUTED',
+                        'detail': str(parameter_error) if parameter_error else 'Browser request did not execute successfully.'}
+                    if proposal_rejection is not None:
+                        self._hybrid_last_rejection.update(
+                            stage='target_resolution', code=proposal_rejection.diagnostic_code,
+                            detail=str(proposal_rejection))
                 loop_detected = self.loop_guard.record(post, action)
 
                 assessment = None
@@ -770,7 +856,11 @@ class EpisodeRunner:
                     terminal_reason = TerminalReason.OPAQUE_VERIFIER_TERMINAL
                     current = post
                     break
-                if loop_detected and not self.switches.recovery_controller:
+                if proposal_stop is not None:
+                    terminal_reason = proposal_stop
+                    current = post
+                    break
+                if loop_detected and (self.hybrid_continuation or not self.switches.recovery_controller):
                     terminal_reason = TerminalReason.LOOP
                     current = post
                     break
@@ -778,8 +868,20 @@ class EpisodeRunner:
                     current = post
                     continue
 
-                counters.failure_incidents += 1
-                incident_id = f"{episode_id}:incident:{counters.failure_incidents}"
+                failure_key = self._hybrid_failure_key(action, current) if self.hybrid_continuation else None
+                incident_id = self._hybrid_incidents.get(failure_key) if failure_key else None
+                if incident_id is None:
+                    counters.failure_incidents += 1
+                    incident_id = f"{episode_id}:incident:{counters.failure_incidents}"
+                    if failure_key:
+                        self._hybrid_incidents[failure_key] = incident_id
+                if self.hybrid_continuation:
+                    self._log('recoveries', 'hybrid_incident_binding', {
+                        'incident_id': incident_id, 'failed_action_id': action.action_id,
+                        'pre_observation_id': current.observation_id,
+                        'post_observation_id': post.observation_id, 'failure_key': failure_key,
+                        'spent_attempts': self.recovery_controller.incident_attempts(incident_id),
+                    })
                 terminal_reason, current, signal = self._run_recovery_incident(
                     task=task,
                     callback_task=callback_task,
@@ -918,6 +1020,135 @@ class EpisodeRunner:
             )
         return summary
 
+    @staticmethod
+    def _proposal_state_key(observation: Observation) -> str:
+        """Bind correction credit to visible state, never refreshed capture IDs."""
+        page_state = deepcopy(dict(observation.page_state))
+        for key in ('recovery_target_evidence', 'visible_point_targets'):
+            if isinstance(page_state.get(key), Mapping):
+                page_state[key].pop('observation_id', None)
+        if isinstance(page_state.get('visible_controls'), (list, tuple)):
+            page_state['visible_controls'] = [
+                {k: v for k, v in control.items() if k not in {'control_id', 'observation_id'}}
+                for control in page_state['visible_controls']]
+        return canonical_sha256({'screenshot_sha256': observation.screenshot_sha256,
+            'url': observation.url, 'title': observation.title, 'page_state': page_state})
+
+    def _record_hybrid_proposal_rejection(self, observation, error, *, decision_index, format_failure):
+        """One correction per unchanged page; changing error text cannot buy more."""
+        state_key = self._proposal_state_key(observation)
+        failures = self._hybrid_proposal_rejections.setdefault(state_key, [])
+        diagnostic = getattr(error, 'diagnostic', {})
+        failure_key = (canonical_sha256({'raw_response': diagnostic['raw_response'],
+            'stage': getattr(error, 'failure_stage', 'parsing'),
+            'code': getattr(error, 'diagnostic_code', None)})
+            if 'raw_response' in diagnostic else error.error_sha256)
+        repeated = failure_key in failures
+        failures.append(failure_key)
+        if format_failure:
+            self._hybrid_pending_format_repairs.add(state_key)
+        exhausted = len(failures) >= 2
+        reason = (TerminalReason.LOOP if repeated else TerminalReason.POLICY_ERROR) if exhausted else None
+        self._log('actions', 'hybrid_proposal_repair', {
+            'schema': 'table2.hybrid-proposal-repair.v3',
+            'observation_id': observation.observation_id, 'decision_index': decision_index,
+            'proposal_state_sha256': state_key, 'rejection_index': len(failures),
+            'correction_request_allowed': not exhausted,
+            'outcome': 'unresolved' if exhausted else 'correction_pending',
+            'format_failure': format_failure,
+            'failure_stage': getattr(error, 'failure_stage', 'parsing'),
+            'diagnostic_code': getattr(error, 'diagnostic_code', None) or error.error_kind,
+            'error_sha256': error.error_sha256, 'repeated_identical_failure': repeated,
+            'proposal_failure_sha256': failure_key,
+            'terminal_reason': reason.value if reason else None,
+        })
+        return reason
+
+    def _record_hybrid_format_repaired(self, observation, decision_index):
+        state_key = self._proposal_state_key(observation)
+        if state_key not in self._hybrid_pending_format_repairs:
+            return
+        self._hybrid_pending_format_repairs.remove(state_key)
+        self._log('actions', 'hybrid_proposal_repair', {
+            'schema': 'table2.hybrid-proposal-repair.v3',
+            'observation_id': observation.observation_id, 'decision_index': decision_index,
+            'proposal_state_sha256': state_key, 'outcome': 'corrected',
+            'format_failure': False, 'correction_request_allowed': False,
+        })
+
+    @staticmethod
+    def _proposal_rejection_record(error):
+        return {'schema': 'table2.known-action-proposal-rejection.v3',
+            'failure_stage': error.failure_stage, 'diagnostic_code': error.diagnostic_code,
+            'proposed_action': deepcopy(error.proposed_action),
+            'diagnostic': deepcopy(error.diagnostic), 'error_sha256': error.error_sha256}
+
+    def _rejected_proposal_decision(self, error, observation, decision_index):
+        """Retain only the validated issued fields; no target or type is guessed."""
+        proposal = deepcopy(error.proposed_action)
+        action_type = ActionType(proposal['action_type'])
+        hints = {'target': proposal['target'], 'value': proposal['value']}
+        value_key = {ActionType.TYPE: 'text', ActionType.SELECT: 'option',
+            ActionType.SCROLL: 'direction', ActionType.NAVIGATE: 'url',
+            ActionType.PRESS_KEY: 'key'}.get(action_type)
+        if value_key is not None and proposal['value'] is not None:
+            hints[value_key] = proposal['value']
+        return PreActionDecision(
+            decision_id=f'{observation.observation_id}:rejected-proposal:{decision_index}',
+            observation_id=observation.observation_id, action_type=action_type,
+            action_probabilities={a.value: float(a is action_type) for a in ActionType},
+            bbox=tuple(proposal['bbox']) if proposal['bbox'] is not None else None,
+            grounding_confidence=0., confidence_before=0.,
+            input_observation_ids=(observation.observation_id,),
+            policy_id=self.system_policy.adapter.policy_id,
+            policy_version=self.system_policy.adapter.policy_version,
+            parameter_hints=hints)
+
+    @staticmethod
+    def _hybrid_failure_key(action: ConcreteAction, observation: Observation) -> str:
+        """Do not turn refreshed control/capture IDs into fresh retry credit.
+
+        A different issued action, value, stable control or URL defines a new
+        failed transition. Repeating an unresolved request retains its incident.
+        This is conservative when a page changes around the same request.
+        """
+        parameters = dict(action.parameters)
+        control_id = parameters.pop('target_control_id', None)
+        if control_id is not None:
+            controls = observation.page_state.get('visible_controls', ())
+            matches = [c for c in controls if c.get('control_id') == control_id]
+            parameters['stable_control'] = (
+                {k: matches[0].get(k) for k in ('source_id', 'tag', 'input_type', 'role', 'target_bbox')}
+                if len(matches) == 1 else {'unresolved_current_control': True}
+            )
+        return canonical_sha256({'action_type': action.action_type.value,
+            'parameters': parameters, 'bbox': action.bbox, 'url': observation.url})
+
+    def _remember_hybrid_rejection(self, observation, feedback):
+        if self._hybrid_actor:
+            self._hybrid_last_rejection = {'observation_id': observation.observation_id,
+                'stage': 'parsing' if feedback['stage']=='model_parse' else feedback['stage'], 'code': str(feedback['code']),
+                'detail': str(feedback['detail'])}
+
+    def _hybrid_exhausted(self, incident_id: str, observation: Observation):
+        """Exhaustion permits normal acting, never a false recovery-success claim."""
+        self.executor.require_time_remaining()
+        stop = self.executor.steps_used >= self.protocol.budgets.max_executor_steps
+        incident_exhausted = (self.recovery_controller.incident_attempts(incident_id)
+            >= self.protocol.budgets.max_recovery_attempts_per_incident)
+        self._log('recoveries', 'hybrid_continuation', {
+            'incident_id': incident_id, 'observation_id': observation.observation_id,
+            'incident_status': 'exhausted_unresolved' if incident_exhausted else 'unresolved_episode_allowance_exhausted',
+            'reason': ('episode_recovery_allowance_exhausted'
+                if self.recovery_controller.episode_attempts >= self.protocol.budgets.max_recovery_attempts_per_episode
+                else 'incident_attempts_exhausted'),
+            'next': 'stop_action_budget' if stop else 'normal',
+            'incident_attempts': self.recovery_controller.incident_attempts(incident_id),
+            'episode_attempts': self.recovery_controller.episode_attempts,
+        })
+        return (TerminalReason.ACTION_BUDGET_EXHAUSTED if stop else TerminalReason.CLOSED,
+                observation, None)
+
     def _run_recovery_incident(
         self,
         *,
@@ -939,10 +1170,25 @@ class EpisodeRunner:
     ) -> tuple[TerminalReason, Observation, OpaqueTerminalSignal | None]:
         assert self.recovery_controller is not None
         rng_factory = self.protocol.rng_factory()
+        previous_attempt = None
         while True:
             # Check both recovery caps before computing/logging a shadow or
             # performing an E3 query for an attempt that cannot be invoked.
-            self.recovery_controller.require_attempt_available(incident_id)
+            try:
+                self.recovery_controller.require_attempt_available(incident_id)
+            except RecoveryBudgetExceeded:
+                if self.hybrid_continuation:
+                    if assessment is not None and assessment.recovery_strategy is RecoveryStrategy.ABORT:
+                        self._log('recoveries', 'hybrid_continuation', {
+                            'incident_id': incident_id, 'observation_id': post_failure.observation_id,
+                            'incident_status': 'aborted_unresolved', 'reason': 'learned_abort',
+                            'next': 'stop_abort',
+                            'incident_attempts': self.recovery_controller.incident_attempts(incident_id),
+                            'episode_attempts': self.recovery_controller.episode_attempts,
+                        })
+                        return TerminalReason.ABORT, post_failure, None
+                    return self._hybrid_exhausted(incident_id, post_failure)
+                raise
             attempt_index = self.recovery_controller.incident_attempts(incident_id) + 1
             shadow = self.decision.no_memory_shadow(
                 trigger=trigger,
@@ -950,7 +1196,7 @@ class EpisodeRunner:
                 incident_id=incident_id,
             )
             final_decision = shadow
-            if self.switches.system_id is SystemID.E3:
+            if self.switches.memory_query:
                 assert self.memory_adapter is not None
                 if not duplicate_cluster_ids or any(
                     not item for item in duplicate_cluster_ids
@@ -991,7 +1237,9 @@ class EpisodeRunner:
                     ),
                 )
                 embedding_request = None
-                if self.memory_adapter.evaluation_mode:
+                if self.memory_adapter.evaluation_mode or getattr(
+                    self.memory_adapter, "requires_causal_embedding_request", False
+                ):
                     if post_failure_transition is None:
                         raise MemoryBoundaryError(
                             "E3 embedding requires the exact post-action TransitionInput"
@@ -1029,7 +1277,7 @@ class EpisodeRunner:
                     matched_seed=model_seed,
                     stage=RuntimeStage.MEMORY_QUERY,
                     decision_index=decision_index,
-                    incident_index=counters.failure_incidents,
+                    incident_index=int(incident_id.rsplit(":", 1)[1]),
                     attempt_index=attempt_index,
                 )
                 memory_decision = self.executor.run_blocking(
@@ -1044,9 +1292,7 @@ class EpisodeRunner:
                 contracts.memory_queries.append(query)
                 contracts.memory_results.append(memory_decision.query_result)
                 counters.memory_queries += 1
-                if memory_decision.query_result.changed_strategy or (
-                    memory_decision.query_result.changed_target_or_parameters
-                ):
+                if memory_decision.query_result.intervened:
                     counters.memory_interventions += 1
                 final_decision = memory_decision.final_decision
                 self._log(
@@ -1069,7 +1315,7 @@ class EpisodeRunner:
                 matched_seed=model_seed,
                 stage=RuntimeStage.RECOVERY_RESOLUTION,
                 decision_index=decision_index,
-                incident_index=counters.failure_incidents,
+                incident_index=int(incident_id.rsplit(":", 1)[1]),
                 attempt_index=attempt_index,
             )
             recovery_observation = self.observation_builder.pre_action(
@@ -1077,6 +1323,27 @@ class EpisodeRunner:
                 post_failure,
                 causal_history=tuple(causal_history),
             )
+            planner_context = None
+            if getattr(self.recovery_controller.action_planner, 'accepts_context', False):
+                action_records = {a.action_id:a for a in contracts.actions}
+                history_projection = []
+                for entry in causal_history:
+                    action_record = action_records[entry.action_id]
+                    history_projection.append({
+                        'action_id': entry.action_id,
+                        'action_type': action_record.action_type.value,
+                        'bbox': list(action_record.bbox) if action_record.bbox is not None else None,
+                        'parameters': dict(action_record.parameters),
+                        'execution_status': entry.execution_status.value,
+                        'state_changed': entry.state_changed,
+                        'environment_error': entry.environment_error,
+                    })
+                planner_context = RecoveryPlannerContext(
+                    task_id=task.task_id, episode_id=post_failure.episode_id,
+                    incident_id=incident_id, observation_id=recovery_observation.observation_id,
+                    completed_actions=tuple(history_projection), previous_attempt=previous_attempt)
+                self._log('recoveries', 'planner_context', {'context':planner_context.to_dict(),
+                    'context_sha256':planner_context.record_sha256})
             self.executor.require_time_remaining(
                 operation="recovery action planning"
             )
@@ -1087,6 +1354,7 @@ class EpisodeRunner:
                     task=callback_task,
                     post_failure_observation=recovery_observation,
                     rng=recovery_resolution_rng,
+                    planner_context=planner_context,
                 )
                 contracts.register_recovery_decision(final_decision)
             except Exception as exc:
@@ -1137,6 +1405,11 @@ class EpisodeRunner:
                 self._log("recoveries", "recovery_attempt", attempt)
                 return TerminalReason.ABORT, post_failure, None
             if plan.resolution_status == "REJECTED":
+                previous_attempt = {'attempt_id':plan.attempt_id,
+                    'stage':plan.rejection_stage or 'strategy_validation',
+                    'code':plan.rejection_code or 'RECOVERY_PLAN_REJECTED',
+                    'detail':plan.rejection_reason}
+                self._remember_hybrid_rejection(post_failure, previous_attempt)
                 attempt = self.recovery_controller.finish_attempt(plan)
                 contracts.recovery_attempts.append(attempt)
                 self._log("recoveries", "recovery_attempt", attempt)
@@ -1144,6 +1417,8 @@ class EpisodeRunner:
                     self.recovery_controller.incident_attempts(incident_id)
                     >= self.protocol.budgets.max_recovery_attempts_per_incident
                 ):
+                    if self.hybrid_continuation:
+                        return self._hybrid_exhausted(incident_id, post_failure)
                     return (
                         TerminalReason.RECOVERY_BUDGET_EXHAUSTED,
                         post_failure,
@@ -1157,7 +1432,11 @@ class EpisodeRunner:
             executed_recovery_actions: list[ConcreteAction] = []
             recovery_post = post_failure
             recovery_terminal_signal: OpaqueTerminalSignal | None = None
+            recovery_loop_detected = False
             for recovery_action in plan.actions:
+                action_pre = self.observation_builder.pre_action(
+                    task, recovery_post, causal_history=tuple(causal_history)
+                )
                 try:
                     result = self.executor.execute(recovery_action)
                 except Exception as exc:
@@ -1223,6 +1502,8 @@ class EpisodeRunner:
                         recovery=True,
                     )
                     contracts.observations.append(recovery_post)
+                    if self.hybrid_continuation:
+                        recovery_loop_detected = self.loop_guard.record(recovery_post, recovery_action)
                     self._log_observation(
                         "post_recovery_observation",
                         recovery_post,
@@ -1235,6 +1516,19 @@ class EpisodeRunner:
                             post_observation=recovery_post,
                         )
                     )
+                    post_failure_transition = TransitionInput(
+                        task_id=task.task_id,
+                        pre_observation=action_pre,
+                        executed_action=recovery_action,
+                        execution_result=result,
+                        post_observation=self.observation_builder.post_action(
+                            task, recovery_post, recovery_action,
+                            causal_history=tuple(causal_history),
+                        ),
+                    )
+                    if self.memory_adapter is not None:
+                        contracts.memory_transition_inputs.append(post_failure_transition)
+                        self._log("transitions", "memory_recovery_transition", post_failure_transition)
                     receipt_binding = self._receipt_binding(
                         "after_recovery_action",
                         observation=recovery_post,
@@ -1255,7 +1549,7 @@ class EpisodeRunner:
                         contracts=contracts,
                     )
                     raise
-                if recovery_terminal_signal.terminate:
+                if recovery_terminal_signal.terminate or recovery_loop_detected:
                     # The whole plan is fixed before its first browser request;
                     # the opaque stop bit may terminate execution but cannot
                     # alter recovery selection or already-bound parameters.
@@ -1265,6 +1559,10 @@ class EpisodeRunner:
                 result.status is not ExecutionStatus.EXECUTED
                 for result in recovery_results
             ):
+                previous_attempt = {'attempt_id':plan.attempt_id, 'stage':'browser_execution',
+                    'code':next((r.error_kind for r in recovery_results if r.status is not ExecutionStatus.EXECUTED), None) or 'BROWSER_ACTION_NOT_EXECUTED',
+                    'detail':'The preceding browser request did not execute successfully.'}
+                self._remember_hybrid_rejection(recovery_post, previous_attempt)
                 attempt = self.recovery_controller.finish_attempt(plan)
                 contracts.recovery_attempts.append(attempt)
                 self._log("recoveries", "recovery_attempt", attempt)
@@ -1281,6 +1579,10 @@ class EpisodeRunner:
                     self.recovery_controller.incident_attempts(incident_id)
                     >= self.protocol.budgets.max_recovery_attempts_per_incident
                 ):
+                    if self.hybrid_continuation:
+                        if recovery_loop_detected:
+                            return TerminalReason.LOOP, recovery_post, None
+                        return self._hybrid_exhausted(incident_id, recovery_post)
                     return (
                         TerminalReason.RECOVERY_BUDGET_EXHAUSTED,
                         recovery_post,
@@ -1288,6 +1590,8 @@ class EpisodeRunner:
                     )
                 failed_action = plan.actions[-1] if plan.actions else failed_action
                 post_failure = recovery_post
+                if recovery_loop_detected:
+                    return TerminalReason.LOOP, recovery_post, None
                 continue
 
             try:
@@ -1315,7 +1619,7 @@ class EpisodeRunner:
                     matched_seed=model_seed,
                     stage=RuntimeStage.RECOVERY_ASSESSMENT,
                     decision_index=decision_index,
-                    incident_index=counters.failure_incidents,
+                    incident_index=int(incident_id.rsplit(":", 1)[1]),
                     attempt_index=attempt_index,
                 )
                 recovery_assessment = self.executor.run_blocking(
@@ -1353,6 +1657,23 @@ class EpisodeRunner:
             # Opaque evaluation occurs only after trigger, shadow, memory, plan,
             # and concrete actions are fixed/executed.  Each action receipt was
             # already written immediately after its causal observation.
+            step_progress = False
+            if self._hybrid_actor:
+                self._hybrid_last_rejection = None
+            if self.observable_progress_continuation or self.hybrid_continuation:
+                from web_agent.runtime.observable_progress import observable_step_effect, register_novel_effect
+                effect = register_novel_effect(observable_step_effect(
+                    executed_recovery_actions[-1],
+                    recovery_transition.pre_recovery_observation,
+                    recovery_transition.post_recovery_observation,
+                ), self._observable_progress_seen)
+                step_progress = effect['novel_effect']
+                self._log('recoveries', 'observable_step_progress', {
+                    **effect, 'attempt_id': plan.attempt_id,
+                    'learned_assessment_id': recovery_assessment.assessment_id,
+                    'continuation_allowed': not self.hybrid_continuation and step_progress and not (
+                        recovery_terminal_signal is not None and recovery_terminal_signal.terminate),
+                })
             if (
                 recovery_terminal_signal is not None
                 and recovery_terminal_signal.terminate
@@ -1362,15 +1683,35 @@ class EpisodeRunner:
                     recovery_post,
                     recovery_terminal_signal,
                 )
+            if recovery_loop_detected:
+                return TerminalReason.LOOP, recovery_post, None
+            if self.hybrid_continuation:
+                learned_resolved = recovery_assessment.predicted_failure_resolved
+                learned_progress = recovery_assessment.predicted_progress
+                self._log('recoveries', 'hybrid_continuation', {
+                    'incident_id': incident_id, 'observation_id': recovery_post.observation_id,
+                    'attempt_id': plan.attempt_id, 'assessment_id': recovery_assessment.assessment_id,
+                    'incident_status': 'predicted_resolved' if learned_resolved else 'unresolved',
+                    'reason': 'learned_resolution' if learned_resolved else (
+                        'learned_progress' if learned_progress else 'negative_learned_assessment'),
+                    'next': 'normal' if learned_resolved or learned_progress else 'check_retry_budget',
+                    'incident_attempts': self.recovery_controller.incident_attempts(incident_id),
+                    'episode_attempts': self.recovery_controller.episode_attempts,
+                })
+                if learned_resolved:
+                    self._hybrid_incidents = {k:v for k,v in self._hybrid_incidents.items() if v != incident_id}
             if (
                 recovery_assessment.predicted_failure_resolved
                 or recovery_assessment.predicted_progress
+                or (step_progress and not self.hybrid_continuation)
             ):
                 return TerminalReason.CLOSED, recovery_post, None
             if (
                 self.recovery_controller.incident_attempts(incident_id)
                 >= self.protocol.budgets.max_recovery_attempts_per_incident
             ):
+                if self.hybrid_continuation:
+                    return self._hybrid_exhausted(incident_id, recovery_post)
                 return (
                     TerminalReason.RECOVERY_BUDGET_EXHAUSTED,
                     recovery_post,
@@ -1378,6 +1719,9 @@ class EpisodeRunner:
                 )
             failed_action = plan.actions[-1]
             post_failure = recovery_post
+            previous_attempt = {'attempt_id':plan.attempt_id, 'stage':'recovery_assessment',
+                'code':'PREDICTED_RECOVERY_NOT_RESOLVED',
+                'detail':'The browser action executed; the learned assessment did not predict recovery or progress.'}
 
     def _resolve_parameters_isolated(
         self,
@@ -1452,6 +1796,7 @@ class EpisodeRunner:
         execution: ExecutionResult,
         counters: _Counters,
         contracts: _EpisodeContracts,
+        proposal_rejection: ActionParseError | None = None,
     ) -> None:
         """Commit one charged normal request before its fault propagates."""
 
@@ -1474,6 +1819,8 @@ class EpisodeRunner:
                 "action_sha256": action.record_sha256,
                 "execution": execution.to_dict(),
                 "interrupted": True,
+                **({'proposal_rejection': self._proposal_rejection_record(proposal_rejection)}
+                   if proposal_rejection is not None else {}),
             },
         )
 
@@ -1484,6 +1831,19 @@ class EpisodeRunner:
         payload: Any,
     ) -> None:
         if self.event_logs is not None:
+            if self._hybrid_actor and event_type in {'normal_action','recovery_action'}:
+                # Preserve exact issued parameters separately from redacted logs.
+                # The event hash binds the raw receipt used by independent replay.
+                import json
+                import hashlib
+                root = self.event_logs.logs['actions'].path.parent.parent / 'hybrid-action-records'
+                root.mkdir(exist_ok=True)
+                path = root / f"action-{payload['execution']['executor_step']:04d}.json"
+                data = (json.dumps(payload, sort_keys=True, allow_nan=False) + '\n').encode()
+                with path.open('xb') as handle:
+                    handle.write(data)
+                path.chmod(0o444)
+                payload = {**payload, 'raw_evidence_sha256': hashlib.sha256(data).hexdigest()}
             self.event_logs.append(stream, event_type, payload)
 
     def _log_observation(

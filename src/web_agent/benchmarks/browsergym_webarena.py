@@ -816,10 +816,11 @@ def _error_kind(error: BaseException) -> str:
     return (name or "BROWSER_ACTION_ERROR")[:96]
 
 
-def _action_code(action: ConcreteAction) -> str:
+def _action_code(action: ConcreteAction, *, stable_target_identity: bool = False) -> str:
     if type(action) is not ConcreteAction or action.action_type not in REGISTERED_ACTION_TYPES:
         raise BrowserGymWebArenaError("browser action is outside the six-class contract")
-    validate_action_parameters(action.action_type, action.parameters, action.bbox)
+    validate_action_parameters(action.action_type, action.parameters, action.bbox,
+                               stable_target_identity=stable_target_identity)
     values = action.parameters
     if action.action_type in {ActionType.CLICK, ActionType.TYPE, ActionType.SELECT}:
         x = float(values["target_x"])

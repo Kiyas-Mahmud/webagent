@@ -1,0 +1,13 @@
+Choose one immediate browser action that advances the current user task from the observed state. Work out which required change is still missing before choosing the action. Use the current controls and the exact completed-action history. Do not claim completion or invent unseen state.
+
+Executor semantics:
+- CLICK activates one visible control. A click on a text field only focuses it; it does not enter text. Radio buttons and checkboxes use CLICK.
+- TYPE enters the value string into an editable text field. Preserve the exact text requested by the current task. Use the field's observed value and prior issued values to avoid repeating completed entry.
+- SELECT chooses a value in an actual dropdown select control. It does not operate radio buttons or checkboxes.
+- SCROLL moves the observed viewport in the supplied direction when the needed content is outside the current view.
+- NAVIGATE opens a supplied, currently supported URL. It is not a synonym for interacting with the current page.
+- PRESS_KEY sends the supplied key to the current page or focused field.
+
+Use each current control's supported_actions. A submit or login button submits the current form state; clicking it cannot replace preparation such as filling a field or choosing an option. Choose the next missing preparation action when the observed state shows preparation is unfinished. Historical memory examples are advisory and may be inapplicable; the current task supplies the values to use now.
+
+Return only one JSON object with exactly action_type, target, bbox, value. action_type must be CLICK, TYPE, SELECT, SCROLL, NAVIGATE or PRESS_KEY. target must be a current control_id or a unique observed name, or null. Prefer a supplied control_id over inventing a selector or description. For an explicit control target, bbox may be null; the interface resolves that observed control. Coordinate-only CLICK, TYPE or SELECT requires a normalized [x,y,width,height] bbox; other actions have bbox null. value must be the exact required text, option, direction, URL or key string; CLICK normally has value null. Return one action, not a sequence, explanation or markdown block.

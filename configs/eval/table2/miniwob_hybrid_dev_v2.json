@@ -1,0 +1,181 @@
+{
+  "asset_paths": {
+    "checkpoint": "/home/aiub/kiyas/webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/full/checkpoints/Y_QWEN2VL_2B_GOLD_V2_8_DGX_FULL_SEED42/best_e6_outcome-mcc0.624.ckpt",
+    "export": "/home/aiub/kiyas/table2-inputs/pc01-epoch6-seed42-full-v3",
+    "base_snapshot": "/home/aiub/kiyas/table2-inputs/Qwen2-VL-2B-Instruct/snapshots/895c3a49bc3fa70a340399125c650a463535e71c",
+    "memory": "/home/aiub/kiyas/table2-evidence/p4-local-embeddings-v1"
+  },
+  "checkpoint_and_base_bindings": {
+    "base_snapshot_copied_into_export": false,
+    "base_snapshot_directory_payload_sha256": "e002f8290faa3e9f44bf3099eac85a2445e17de738c5bb0cc10d342da837c46c",
+    "base_snapshot_file_count": 14,
+    "base_snapshot_manifest_sha256": "8c8cc1c714850bc1f58a375fdd95c2006cd7a248e385c48764c4febc1445e43e",
+    "checkpoint_sha256": "9eaab6d24719b7bce8d0dd2ccf9169c3ddf83e0a800714a84531679c0c94895a",
+    "checkpoint_size_bytes": 291071781,
+    "config_name": "Y_QWEN2VL_2B_GOLD_V2_8_DGX",
+    "files": {
+      "base_snapshot_manifest.json": {
+        "sha256": "8c8cc1c714850bc1f58a375fdd95c2006cd7a248e385c48764c4febc1445e43e",
+        "size_bytes": 2049
+      },
+      "e0_processor_contract.json": {
+        "sha256": "b3c9f629a3c4ce6ab7bb71b27c7e0b560e3e21c51a19d1235fd4a507ba437797",
+        "size_bytes": 762
+      },
+      "e0_resolved_config.json": {
+        "sha256": "d55678e525015b68f054bede7ee33b7e5338bdd05539a7e751449dfbad6ca825",
+        "size_bytes": 594
+      },
+      "processor_artifact_manifest.json": {
+        "sha256": "f3abf4f2dc8ecd848d620dc09e0a2530b881f07fcb1e7864cb6561142ce544d6",
+        "size_bytes": 2248
+      },
+      "processor_contract.json": {
+        "sha256": "b3c9f629a3c4ce6ab7bb71b27c7e0b560e3e21c51a19d1235fd4a507ba437797",
+        "size_bytes": 762
+      },
+      "processor_parity_receipt.json": {
+        "sha256": "210fd36449b643c60df7a9517478001981654b6b15872f40ae6b257a4f73f4ec",
+        "size_bytes": 19137
+      },
+      "resolved_config.json": {
+        "sha256": "d014050287ae2142e1c2111cff8b00de214dc3f416fedb49504edde8bd61007f",
+        "size_bytes": 3729
+      },
+      "training_action_value_evidence.json": {
+        "sha256": "c32691ef921bb5716ea9bba99ef64db53bc697d5f98ab9c06d99049f5a3b821c",
+        "size_bytes": 1125
+      },
+      "training_environment.json": {
+        "sha256": "473e648c5b5f684e323b6cd956eb7d3347e4d1b4d00beca73f05186117f87bbb",
+        "size_bytes": 178
+      },
+      "training_source_manifest.json": {
+        "sha256": "bd43ff97b7a6da1fd37fa882a311b096d836d123e1239ffe6db0161b8337e646",
+        "size_bytes": 750
+      }
+    },
+    "locked_test_rows_read": 0,
+    "model_id": "qwen2vl_2b_gold_v2_8_dgx",
+    "model_revision": "895c3a49bc3fa70a340399125c650a463535e71c",
+    "model_seed": 42,
+    "network_access_used": false,
+    "processor_artifact_manifest_sha256": "f3abf4f2dc8ecd848d620dc09e0a2530b881f07fcb1e7864cb6561142ce544d6",
+    "processor_contract_sha256": "b3c9f629a3c4ce6ab7bb71b27c7e0b560e3e21c51a19d1235fd4a507ba437797",
+    "processor_parity_receipt_sha256": "210fd36449b643c60df7a9517478001981654b6b15872f40ae6b257a4f73f4ec",
+    "processor_parity_verified": true,
+    "report_sha256": "4d8990ecf4ed642a17c5be54af3a897a7785e76458343170d4edc098fbdcdcc8",
+    "resolved_config_payload_sha256": "d014050287ae2142e1c2111cff8b00de214dc3f416fedb49504edde8bd61007f",
+    "resolved_config_record_sha256": "d014050287ae2142e1c2111cff8b00de214dc3f416fedb49504edde8bd61007f",
+    "run_contract_sha256": "7ed17a7c68ff02a4cd693908aeb85710cee7ef0190339a52eb277cabd083a930",
+    "runtime_processor_implementation": {
+      "image_processor_class": "transformers.models.qwen2_vl.image_processing_qwen2_vl_fast.Qwen2VLImageProcessorFast",
+      "processor_class": "transformers.models.qwen2_vl.processing_qwen2_vl.Qwen2VLProcessor",
+      "transformers_version": "4.57.6",
+      "use_fast": true
+    },
+    "runtime_ready": false,
+    "schema_version": "table2.pc01-export.v3",
+    "selection_scope": "validation_only",
+    "test_rows_read": 0,
+    "training_action_value_evidence_sha256": "c32691ef921bb5716ea9bba99ef64db53bc697d5f98ab9c06d99049f5a3b821c",
+    "training_environment_record_sha256": "473e648c5b5f684e323b6cd956eb7d3347e4d1b4d00beca73f05186117f87bbb",
+    "training_environment_source_sha256": "d72c7e12c8bdf23098b81626186bce54d892113cc66a018dd3a1b89cb69d75d5",
+    "training_source_manifest_sha256": "bd43ff97b7a6da1fd37fa882a311b096d836d123e1239ffe6db0161b8337e646",
+    "training_transformers_version": "4.57.6",
+    "weight_updates_performed": false
+  },
+  "package_versions": {
+    "torch": "2.13.0+cu130",
+    "transformers": "4.57.6",
+    "peft": "0.20.0",
+    "bitsandbytes": "0.50.0"
+  },
+  "browser_package_versions": {
+    "browsergym-core": "0.14.3",
+    "browsergym-miniwob": "0.14.3",
+    "playwright": "1.44.0",
+    "gymnasium": "1.0.0"
+  },
+  "store_manifest_sha256": "4b577b79e2f8e04424572aa25223a81fa15a8f1f3cb483ef181dda982aa072d6",
+  "memory_material_sha256": "f06beefbd503ad68e89f26bc46fe2bb51a1ea32c87632f275118275efe0d31ab",
+  "source_commit": "7fd85d71a4b60325c6585396ec4f48377d049838",
+  "profile": "miniwob-hybrid-dev-v2",
+  "development_tasks": [
+    "click-button",
+    "enter-text",
+    "click-test",
+    "click-button-sequence",
+    "enter-text-2",
+    "click-tab-2"
+  ],
+  "evaluation_tasks": [],
+  "systems": [
+    "H0",
+    "H1",
+    "H2",
+    "H3"
+  ],
+  "model_seed": 42,
+  "campaign_seed": 20250831,
+  "analysis_seed": 20250831,
+  "bootstrap_samples": 10000,
+  "browser_python": "/home/aiub/kiyas/table2-envs/miniwob-feasibility/bin/python",
+  "browser_binaries": "/home/aiub/kiyas/table2-inputs/miniwob-browsers",
+  "miniwob_source": "/home/aiub/kiyas/table2-inputs/miniwob-plusplus",
+  "memory_material": "/home/aiub/kiyas/table2-evidence/p4-local-label-memory-v1/memory-items.jsonl",
+  "full_run_directory": "/home/aiub/kiyas/webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/full",
+  "development_campaign_id": "miniwob-label-memory-development-v5",
+  "final_campaign_id": "FORBIDDEN_DEVELOPMENT_ONLY",
+  "run_contract": "/home/aiub/kiyas/webagent_comparison/outputs/model_comparison/qwen2vl_2b_gold_v2_8_dgx/seed_42/run_contract.json",
+  "development_only": true,
+  "development_revision": {
+    "hybrid_continuation": true,
+    "observable_progress_continuation": false,
+    "selective_memory_context": true,
+    "browser_hit_target_resolution": true,
+    "executable_action_selection": false
+  },
+  "hybrid_profile": true,
+  "development_scope": "/home/aiub/kiyas/table2-evidence/hybrid-interface-v2-engineering/candidate-development-scope.json",
+  "development_scope_sha256": "d7a8ee9181ad54717183e9461bb8e996f5742a9bce42da4bc9d29e2ec87a7dd1",
+  "system_definitions": {
+    "H0": {
+      "trained_advice": false,
+      "learned_recovery": false,
+      "memory": false
+    },
+    "H1": {
+      "trained_advice": true,
+      "learned_recovery": false,
+      "memory": false
+    },
+    "H2": {
+      "trained_advice": true,
+      "learned_recovery": true,
+      "memory": false
+    },
+    "H3": {
+      "trained_advice": true,
+      "learned_recovery": true,
+      "memory": true
+    }
+  },
+  "primary_contrasts": [
+    [
+      "H1",
+      "H2"
+    ],
+    [
+      "H2",
+      "H3"
+    ]
+  ],
+  "secondary_contrasts": [
+    [
+      "H0",
+      "H1"
+    ]
+  ],
+  "hybrid_interface_version": 2
+}

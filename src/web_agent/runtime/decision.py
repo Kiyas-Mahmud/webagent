@@ -40,8 +40,9 @@ class RecoveryTrigger(VersionedRecord):
 class LoopGuard:
     """Deterministic loop detector over agent-observable states/actions only."""
 
-    def __init__(self, rule: LoopRule) -> None:
+    def __init__(self, rule: LoopRule, *, stable_target_identity: bool = False) -> None:
         self.rule = rule
+        self.stable_target_identity = stable_target_identity
         self._states: deque[str] = deque(maxlen=rule.rolling_window)
         self._pairs: deque[str] = deque(maxlen=rule.rolling_window)
 
@@ -50,15 +51,29 @@ class LoopGuard:
         self._pairs.clear()
 
     def record(self, observation: Observation, action: ConcreteAction) -> bool:
+        # Provenance IDs identify a capture, not a change in the visible page.
+        page_state = dict(observation.page_state)
+        for key in ("recovery_target_evidence", "visible_point_targets"):
+            evidence = page_state.get(key)
+            if isinstance(evidence, dict):
+                page_state[key] = {k: v for k, v in evidence.items() if k != "observation_id"}
+        from web_agent.benchmarks.miniwob_controls import is_observable_controls
+        if is_observable_controls(page_state):
+            page_state['visible_controls'] = [
+                {k:v for k,v in c.items() if k not in {'control_id','observation_id'}}
+                for c in page_state.get('visible_controls',())]
         state_values = {
             "screenshot_sha256": observation.screenshot_sha256,
             "url": observation.url,
             "title": observation.title,
-            "page_state": observation.page_state,
+            "page_state": page_state,
         }
+        parameters = action.parameters
+        if self.stable_target_identity:
+            parameters = _stable_action_parameters(observation, action)
         action_values = {
             "action_type": action.action_type.value,
-            "parameters": action.parameters,
+            "parameters": parameters,
             "bbox": action.bbox,
         }
         state_fingerprint = canonical_sha256(
@@ -84,6 +99,33 @@ class LoopGuard:
             if a == c and b == d and a != b:
                 return True
         return False
+
+
+def _stable_action_parameters(observation: Observation, action: ConcreteAction):
+    """Normalize only a currently verified receipt; retain all issued values."""
+    from web_agent.benchmarks.miniwob_controls import (
+        STABLE_TARGET_FIELD, stable_control_identity, uses_stable_targets,
+        validate_stable_target_receipt,
+    )
+    parameters = action.parameters
+    if not uses_stable_targets(observation.page_state):
+        return parameters
+    receipt = parameters.get(STABLE_TARGET_FIELD)
+    try:
+        identity = validate_stable_target_receipt(receipt)
+    except ValueError:
+        return parameters
+    if (receipt['observation_id'] != observation.observation_id
+            or receipt['control_id'] != parameters.get('target_control_id')):
+        return parameters
+    candidates = [c for c in observation.page_state.get('visible_controls', ())
+                  if c.get('source_id') == identity['source_id']]
+    if (len(candidates) != 1 or stable_control_identity(candidates[0]) != identity
+            or candidates[0].get('control_id') != receipt['control_id']
+            or candidates[0].get('observation_id') != observation.observation_id):
+        return parameters
+    return {**{k: v for k, v in parameters.items() if k != STABLE_TARGET_FIELD},
+            'target_control_id': identity}
 
 
 class DecisionCombiner:

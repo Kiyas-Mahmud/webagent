@@ -1,0 +1,1399 @@
+{
+  "status": "COMPLETE",
+  "trained_forwards": 6,
+  "generations": 18,
+  "browser_actions": 0,
+  "memory_queries": 0,
+  "live_episodes": 0,
+  "rows": [
+    {
+      "case": "CLICK",
+      "origin": "SAVED_LIVE_DEVELOPMENT",
+      "variant": "controls",
+      "raw_response": "```json\n{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o3:c0\",\n  \"bbox\": [0.271084, 0.327103, 0.120482, 0.186916],\n  \"value\": null\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 75,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o3:c0",
+        "bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-9c01ee7a8163a22e1519b0bd",
+        "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o3:c0",
+          "resolved_control_id": "o3:c0"
+        },
+        "latency_ms": 0.3647209996415768
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.379518,
+        "target_y": 0.420561,
+        "target_bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "target_control_id": "o3:c0",
+        "button": "left",
+        "click_count": 1,
+        "target_stable_identity": {
+          "schema_version": "miniwob-stable-target-v1",
+          "task_id": "miniwob.click-button-sequence",
+          "goal_sha256": "f454e87e4196a009fb86f2220b07c75f4f826147198b1c3728c9f921c1cca8ec",
+          "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3",
+          "control_id": "o3:c0",
+          "source_id": "12",
+          "semantic_sha256": "4a8b5c61673ad11b951147a9147e159a6f0e8b2a3d46355b26fbd61c05c8d663"
+        }
+      }
+    },
+    {
+      "case": "CLICK",
+      "origin": "SAVED_LIVE_DEVELOPMENT",
+      "variant": "controls_advice",
+      "raw_response": "```json\n{\n  \"action_type\": \"CLICK\",\n  \"target\": \"button ONE\",\n  \"bbox\": [0.2378186285495758, 0.23727189004421234, 0.11190223693847656, 0.04181303083896637],\n  \"value\": null\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 116,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "button ONE",
+        "bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-a37cd6d3b58fb34f6e3a9328",
+        "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "button ONE",
+          "resolved_control_id": "o3:c0"
+        },
+        "latency_ms": 0.28073700013919733
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.379518,
+        "target_y": 0.420561,
+        "target_bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "target_control_id": "o3:c0",
+        "button": "left",
+        "click_count": 1,
+        "target_stable_identity": {
+          "schema_version": "miniwob-stable-target-v1",
+          "task_id": "miniwob.click-button-sequence",
+          "goal_sha256": "f454e87e4196a009fb86f2220b07c75f4f826147198b1c3728c9f921c1cca8ec",
+          "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3",
+          "control_id": "o3:c0",
+          "source_id": "12",
+          "semantic_sha256": "4a8b5c61673ad11b951147a9147e159a6f0e8b2a3d46355b26fbd61c05c8d663"
+        }
+      }
+    },
+    {
+      "case": "CLICK",
+      "origin": "SAVED_LIVE_DEVELOPMENT",
+      "variant": "controls_advice_history",
+      "raw_response": "```json\n{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o3:c1\",\n  \"bbox\": [0.253012, 0.280374, 0.120482, 0.186916],\n  \"value\": null\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 75,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "matches_historical_raw": true,
+      "proposal": {
+        "target": "o3:c1",
+        "bbox": [
+          0.253012,
+          0.280374,
+          0.120482,
+          0.186916
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-c10d8754811714c5a3011f37",
+        "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.253012,
+          0.280374,
+          0.120482,
+          0.186916
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o3:c1",
+          "resolved_control_id": "o3:c1"
+        },
+        "latency_ms": 0.19692900241352618
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.313253,
+        "target_y": 0.373832,
+        "target_bbox": [
+          0.253012,
+          0.280374,
+          0.120482,
+          0.186916
+        ],
+        "target_control_id": "o3:c1",
+        "button": "left",
+        "click_count": 1,
+        "target_stable_identity": {
+          "schema_version": "miniwob-stable-target-v1",
+          "task_id": "miniwob.click-button-sequence",
+          "goal_sha256": "f454e87e4196a009fb86f2220b07c75f4f826147198b1c3728c9f921c1cca8ec",
+          "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.click-button-sequence:repeat-0:seed-42:obs:3",
+          "control_id": "o3:c1",
+          "source_id": "13",
+          "semantic_sha256": "db4846bdee0a08ba086f290895d095d74c3f575e009aae966cee432dc94a8ff7"
+        }
+      }
+    },
+    {
+      "case": "TYPE",
+      "origin": "SAVED_LIVE_DEVELOPMENT",
+      "variant": "controls",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o3:c0\",\n  \"bbox\": [0.03012, 0.32243, 0.385542, 0.098131],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 69,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o3:c0",
+        "bbox": [
+          0.03012,
+          0.32243,
+          0.385542,
+          0.098131
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-649085ab6585135ebf127ec4",
+        "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.03012,
+          0.32243,
+          0.385542,
+          0.098131
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o3:c0",
+          "resolved_control_id": "o3:c0"
+        },
+        "latency_ms": 0.18899199858424254
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.222892,
+        "target_y": 0.371495,
+        "target_bbox": [
+          0.03012,
+          0.32243,
+          0.385542,
+          0.098131
+        ],
+        "target_control_id": "o3:c0",
+        "button": "left",
+        "click_count": 1,
+        "target_stable_identity": {
+          "schema_version": "miniwob-stable-target-v1",
+          "task_id": "miniwob.enter-text-2",
+          "goal_sha256": "7bd7dd036ff14d4ead45565ee0d9bb5d184b26ed173538f0b46b6bd936cb8dc2",
+          "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3",
+          "control_id": "o3:c0",
+          "source_id": "14",
+          "semantic_sha256": "7e8c776111ef0b35efd596a9aa49e19413b696ffd9aaeeacb90b76e12de33d8b"
+        }
+      }
+    },
+    {
+      "case": "TYPE",
+      "origin": "SAVED_LIVE_DEVELOPMENT",
+      "variant": "controls_advice",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o3:c1\",\n  \"bbox\": [0.17587339878082275, 0.07760658115148544, 0.14148107171058655, 0.0417964905500412],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 114,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o3:c1",
+        "bbox": [
+          0.03012,
+          0.425234,
+          0.287604,
+          0.14486
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-2d0300b2099c51a738c4606f",
+        "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.03012,
+          0.425234,
+          0.287604,
+          0.14486
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o3:c1",
+          "resolved_control_id": "o3:c1"
+        },
+        "latency_ms": 0.2085129999613855
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.173922,
+        "target_y": 0.497664,
+        "target_bbox": [
+          0.03012,
+          0.425234,
+          0.287604,
+          0.14486
+        ],
+        "target_control_id": "o3:c1",
+        "button": "left",
+        "click_count": 1,
+        "target_stable_identity": {
+          "schema_version": "miniwob-stable-target-v1",
+          "task_id": "miniwob.enter-text-2",
+          "goal_sha256": "7bd7dd036ff14d4ead45565ee0d9bb5d184b26ed173538f0b46b6bd936cb8dc2",
+          "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3",
+          "control_id": "o3:c1",
+          "source_id": "15",
+          "semantic_sha256": "b6cdcec7f8a0aaac72a73a402872b43e2cd74d16844c82f3077d78145693a2ba"
+        }
+      }
+    },
+    {
+      "case": "TYPE",
+      "origin": "SAVED_LIVE_DEVELOPMENT",
+      "variant": "controls_advice_history",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o3:c1\",\n  \"bbox\": [0.03012, 0.425234, 0.287604, 0.14486],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 69,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "matches_historical_raw": true,
+      "proposal": {
+        "target": "o3:c1",
+        "bbox": [
+          0.03012,
+          0.425234,
+          0.287604,
+          0.14486
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-b8105c1ef28055bc78f7ed8c",
+        "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.03012,
+          0.425234,
+          0.287604,
+          0.14486
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o3:c1",
+          "resolved_control_id": "o3:c1"
+        },
+        "latency_ms": 0.20347300232970156
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.173922,
+        "target_y": 0.497664,
+        "target_bbox": [
+          0.03012,
+          0.425234,
+          0.287604,
+          0.14486
+        ],
+        "target_control_id": "o3:c1",
+        "button": "left",
+        "click_count": 1,
+        "target_stable_identity": {
+          "schema_version": "miniwob-stable-target-v1",
+          "task_id": "miniwob.enter-text-2",
+          "goal_sha256": "7bd7dd036ff14d4ead45565ee0d9bb5d184b26ed173538f0b46b6bd936cb8dc2",
+          "observation_id": "miniwob-label-memory-development-v5:H1:miniwob.enter-text-2:repeat-0:seed-42:obs:3",
+          "control_id": "o3:c1",
+          "source_id": "15",
+          "semantic_sha256": "b6cdcec7f8a0aaac72a73a402872b43e2cd74d16844c82f3077d78145693a2ba"
+        }
+      }
+    },
+    {
+      "case": "SELECT",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls",
+      "raw_response": "```json\n{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c1\",\n  \"bbox\": [0.282363, 0.025, 0.05625, 0.0475],\n  \"value\": \"two\"\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 70,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c1",
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "value": "two",
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-21de77fb14771200476fbe3a",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c1",
+          "value": "two",
+          "resolved_control_id": "o4:c1"
+        },
+        "latency_ms": 0.1891370011435356
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.310488,
+        "target_y": 0.04875,
+        "target_bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "target_control_id": "o4:c1",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "SELECT",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls_advice",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c1\",\n  \"bbox\": [0.282363, 0.025, 0.05625, 0.0475],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 65,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c1",
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-e271f594c636251d7e81be71",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c1",
+          "resolved_control_id": "o4:c1"
+        },
+        "latency_ms": 0.1918399975693319
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.310488,
+        "target_y": 0.04875,
+        "target_bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "target_control_id": "o4:c1",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "SELECT",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls_advice_history",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c2\",\n  \"bbox\": [0.343613, 0.0275, 0.01625, 0.0325],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 66,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c2",
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-fda9b7f9404aaebb4ce8f2ee",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c2",
+          "resolved_control_id": "o4:c2"
+        },
+        "latency_ms": 0.21595200087176636
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.351738,
+        "target_y": 0.04375,
+        "target_bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "target_control_id": "o4:c2",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "SCROLL",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls",
+      "raw_response": "```json\n{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c1\",\n  \"bbox\": [0.282363, 0.025, 0.05625, 0.0475],\n  \"value\": \"two\"\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 70,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c1",
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "value": "two",
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-21de77fb14771200476fbe3a",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c1",
+          "value": "two",
+          "resolved_control_id": "o4:c1"
+        },
+        "latency_ms": 0.19659200188471004
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.310488,
+        "target_y": 0.04875,
+        "target_bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "target_control_id": "o4:c1",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "SCROLL",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls_advice",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c1\",\n  \"bbox\": [0.282363, 0.025, 0.05625, 0.0475],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 65,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c1",
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-eb8dbe99a58cdbfcc9a25fbf",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c1",
+          "resolved_control_id": "o4:c1"
+        },
+        "latency_ms": 0.20051300089107826
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.310488,
+        "target_y": 0.04875,
+        "target_bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "target_control_id": "o4:c1",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "SCROLL",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls_advice_history",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c2\",\n  \"bbox\": [0.282363, 0.025, 0.05625, 0.0475],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 65,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c2",
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-ae64e9ca68261a51fcc5e02d",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c2",
+          "resolved_control_id": "o4:c2"
+        },
+        "latency_ms": 0.22880100004840642
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.351738,
+        "target_y": 0.04375,
+        "target_bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "target_control_id": "o4:c2",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "NAVIGATE",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c2\",\n  \"bbox\": [0.343613, 0.0275, 0.01625, 0.0325],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 66,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c2",
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-7add447c7f105dd4fe01482c",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c2",
+          "resolved_control_id": "o4:c2"
+        },
+        "latency_ms": 0.2091209971695207
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.351738,
+        "target_y": 0.04375,
+        "target_bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "target_control_id": "o4:c2",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "NAVIGATE",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls_advice",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c1\",\n  \"bbox\": [0.282363, 0.025, 0.05625, 0.0475],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 65,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c1",
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-a1a5e8a203cb881bedf81b48",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c1",
+          "resolved_control_id": "o4:c1"
+        },
+        "latency_ms": 0.19086400061496533
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.310488,
+        "target_y": 0.04875,
+        "target_bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "target_control_id": "o4:c1",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "NAVIGATE",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls_advice_history",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o3:c2\",\n  \"bbox\": [0.343613, 0.0275, 0.01625, 0.0325],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 66,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "REJECTED",
+      "error_type": "TargetProposalResolutionError",
+      "error": "{\"accepted_target_syntax\": \"current control_id; observed_tag#current_control_id with both parts verified; unique observed name/role; or null with a normalized bbox for coordinate-only CLICK/TYPE/SELECT\", \"code\": \"CURRENT_CONTROL_ID_NOT_UNIQUE\", \"current_control_ids\": [\"o4:c0\", \"o4:c1\", \"o4:c2\", \"o4:c3\"], \"detail\": \"CURRENT_CONTROL_ID_NOT_UNIQUE: action=CLICK; target='o3:c2'; current ID matches=0\", \"expected_types\": {\"action_type\": \"one registered action string: CLICK, TYPE, SELECT, SCROLL, NAVIGATE, PRESS_KEY\", \"bbox\": \"null or four finite JSON numbers [x,y,width,height], normalized to [0,1] with positive width/height\", \"target\": \"string or null\", \"value\": \"string or null; preserve the exact issued text\"}, \"raw_response\": \"{\\n  \\\"action_type\\\": \\\"CLICK\\\",\\n  \\\"target\\\": \\\"o3:c2\\\",\\n  \\\"bbox\\\": [0.343613, 0.0275, 0.01625, 0.0325],\\n  \\\"value\\\": null\\n}\", \"rejected_proposal\": {\"action_type\": \"CLICK\", \"bbox\": [0.343613, 0.0275, 0.01625, 0.0325], \"target\": \"o3:c2\", \"value\": null}, \"required_fields\": [\"action_type\", \"target\", \"bbox\", \"value\"], \"schema\": \"hybrid-proposal-diagnostic-v3\"}",
+      "receipt": {
+        "input_suffix": "\nhybrid_action_context: {\"causal_history\": [{\"issued_arguments\": {\"target_bbox\": [0.051113, 0.0225, 0.23125, 0.0525], \"target_control_id\": \"o1:c0\", \"target_x\": 0.166738, \"target_y\": 0.04875, \"text\": \" Exact  Case! \"}, \"issued_box\": [0.051113, 0.0225, 0.23125, 0.0525], \"issued_kind\": \"TYPE\", \"observed_result\": {\"execution_status\": \"executed\", \"state_changed\": true}}, {\"issued_arguments\": {\"candidate_options\": [\"one\", \"two\"], \"option\": \"two\", \"target_bbox\": [0.282363, 0.025, 0.05625, 0.0475], \"target_control_id\": \"o2:c1\", \"target_x\": 0.310488, \"target_y\": 0.04875}, \"issued_box\": [0.282363, 0.025, 0.05625, 0.0475], \"issued_kind\": \"SELECT\", \"observed_result\": {\"execution_status\": \"executed\", \"state_changed\": true}}, {\"issued_arguments\": {\"button\": \"left\", \"click_count\": 1, \"target_bbox\": [0.343613, 0.0275, 0.01625, 0.0325], \"target_control_id\": \"o3:c2\", \"target_x\": 0.351738, \"target_y\": 0.04375}, \"issued_box\": [0.343613, 0.0275, 0.01625, 0.0325], \"issued_kind\": \"CLICK\", \"observed_result\": {\"execution_status\": \"executed\", \"state_changed\": true}}], \"current_controls\": [{\"accessible_names\": [{\"source\": \"associated_label\", \"value\": \"Field\"}], \"candidate_options\": [], \"checked\": null, \"clickable\": true, \"contenteditable\": false, \"control_id\": \"o4:c0\", \"destination\": \"\", \"disabled\": false, \"focused\": false, \"input_type\": \"\", \"link_like\": false, \"name\": \"\", \"readonly\": false, \"role\": \"\", \"selected\": [], \"supported_actions\": [\"CLICK\", \"TYPE\"], \"tag\": \"input\", \"target_bbox\": [0.051113, 0.0225, 0.23125, 0.0525], \"text\": \"\", \"value\": \" Exact  Case! \", \"value_present\": true}, {\"accessible_names\": [], \"candidate_options\": [\"one\", \"two\"], \"checked\": null, \"clickable\": true, \"contenteditable\": false, \"control_id\": \"o4:c1\", \"destination\": \"\", \"disabled\": false, \"focused\": false, \"input_type\": \"\", \"link_like\": false, \"name\": \"\", \"readonly\": false, \"role\": \"\", \"selected\": [\"two\"], \"supported_actions\": [\"CLICK\", \"SELECT\"], \"tag\": \"select\", \"target_bbox\": [0.282363, 0.025, 0.05625, 0.0475], \"text\": \"\", \"value\": null, \"value_present\": false}, {\"accessible_names\": [{\"source\": \"associated_label\", \"value\": \"Choice\"}], \"candidate_options\": [], \"checked\": true, \"clickable\": true, \"contenteditable\": false, \"control_id\": \"o4:c2\", \"destination\": \"\", \"disabled\": false, \"focused\": true, \"input_type\": \"checkbox\", \"link_like\": false, \"name\": \"\", \"readonly\": false, \"role\": \"\", \"selected\": [], \"supported_actions\": [\"CLICK\"], \"tag\": \"input\", \"target_bbox\": [0.343613, 0.0275, 0.01625, 0.0325], \"text\": \"\", \"value\": null, \"value_present\": true}, {\"accessible_names\": [], \"candidate_options\": [], \"checked\": null, \"clickable\": true, \"contenteditable\": false, \"control_id\": \"o4:c3\", \"destination\": \"http://hybrid.fixture.local/finish\", \"disabled\": false, \"focused\": false, \"input_type\": \"\", \"link_like\": true, \"name\": \"\", \"readonly\": false, \"role\": \"\", \"selected\": [], \"supported_actions\": [\"CLICK\"], \"tag\": \"a\", \"target_bbox\": [0.420273, 0.025, 0.05002, 0.0425], \"text\": \"Finish\", \"value\": null, \"value_present\": false}], \"proposal_feedback\": null, \"schema\": \"hybrid-semantic-action-v3\", \"title\": \"\", \"trained_advice\": {\"action_class_confidence\": 0.33102306723594666, \"action_probabilities\": {\"CLICK\": 0.31457775831222534, \"NAVIGATE\": 0.33102306723594666, \"PRESS_KEY\": 0.01953434757888317, \"SCROLL\": 0.29878461360931396, \"SELECT\": 0.017985394224524498, \"TYPE\": 0.018094761297106743}, \"advisory_only\": true, \"argmax\": \"NAVIGATE\", \"bbox\": [0.19044047594070435, 0.06740526109933853, 0.09514528512954712, 0.04382483661174774], \"confidence_before\": 0.18680676817893982}, \"url\": \"http://hybrid.fixture.local/start\"}",
+        "input_suffix_sha256": "228457dd54f37d82cf2a7b02fef90fc9f932969a882e682f1227c72f064825f8",
+        "generation_metadata": {
+          "available": true,
+          "generated_token_count": 66,
+          "eos_token_ids": [
+            151645,
+            151643
+          ],
+          "eos_observed": true,
+          "token_cap_reached": false,
+          "max_new_tokens": 128,
+          "stop_reason": "eos"
+        },
+        "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o3:c2\",\n  \"bbox\": [0.343613, 0.0275, 0.01625, 0.0325],\n  \"value\": null\n}",
+        "stage": "parsing"
+      }
+    },
+    {
+      "case": "PRESS_KEY",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c2\",\n  \"bbox\": [0.343613, 0.0275, 0.01625, 0.0325],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 66,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c2",
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-7add447c7f105dd4fe01482c",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c2",
+          "resolved_control_id": "o4:c2"
+        },
+        "latency_ms": 0.21947300047031604
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.351738,
+        "target_y": 0.04375,
+        "target_bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "target_control_id": "o4:c2",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "PRESS_KEY",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls_advice",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c1\",\n  \"bbox\": [0.2716640532016754, 0.061312392354011536, 0.13673478364944458, 0.05739757418632507],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 115,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c1",
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-6a639f7cffd70f6119a0bbac",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c1",
+          "resolved_control_id": "o4:c1"
+        },
+        "latency_ms": 0.21932900199317373
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.310488,
+        "target_y": 0.04875,
+        "target_bbox": [
+          0.282363,
+          0.025,
+          0.05625,
+          0.0475
+        ],
+        "target_control_id": "o4:c1",
+        "button": "left",
+        "click_count": 1
+      }
+    },
+    {
+      "case": "PRESS_KEY",
+      "origin": "SAVED_ENGINEERING_STATE_WITH_NEW_DIAGNOSTIC_GOAL",
+      "variant": "controls_advice_history",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o4:c2\",\n  \"bbox\": [0.343613, 0.0275, 0.01625, 0.0325],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 66,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "proposal": {
+        "target": "o4:c2",
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "diagnostic-186755eca8f0db55b52e6111",
+        "observation_id": "fixture:obs:4",
+        "action_type": "CLICK",
+        "action_probabilities": {
+          "CLICK": 1.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c2",
+          "resolved_control_id": "o4:c2"
+        },
+        "latency_ms": 0.22784099928685464
+      },
+      "status": "PARAMETERS_VALID",
+      "parameters": {
+        "target_x": 0.351738,
+        "target_y": 0.04375,
+        "target_bbox": [
+          0.343613,
+          0.0275,
+          0.01625,
+          0.0325
+        ],
+        "target_control_id": "o4:c2",
+        "button": "left",
+        "click_count": 1
+      }
+    }
+  ]
+}

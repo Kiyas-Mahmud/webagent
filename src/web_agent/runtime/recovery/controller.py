@@ -16,6 +16,7 @@ from web_agent.runtime.contracts import (
     PolicyObservation,
     RecoveryAttempt,
     RecoveryDecision,
+    RecoveryPlannerContext,
     RecoveryStrategy,
     RuntimeTaskView,
     TaskSpecification,
@@ -28,6 +29,7 @@ from web_agent.runtime.observation import (
     assert_policy_screenshot_integrity,
 )
 from web_agent.runtime.model_calls import record_model_call
+from web_agent.runtime.policy import ActionParseError
 from web_agent.runtime.protocol import RuntimeBudgets
 from web_agent.runtime.recovery.strategies import (
     RecoveryPlan,
@@ -78,6 +80,7 @@ class CallableRecoveryActionPlanner(RecoveryActionPlanner):
     planner_version: str
     callback: RecoveryPlannerCallable
     frozen: bool = True
+    accepts_context: bool = False
 
     def __post_init__(self) -> None:
         if not self.planner_id.strip() or not self.planner_version.strip():
@@ -93,6 +96,7 @@ class CallableRecoveryActionPlanner(RecoveryActionPlanner):
         failed_action: ConcreteAction,
         *,
         rng: random.Random,
+        planner_context: RecoveryPlannerContext | None = None,
     ) -> ConcreteAction:
         task_view = runtime_task_view(task)
         if decision.strategy not in {
@@ -117,6 +121,12 @@ class CallableRecoveryActionPlanner(RecoveryActionPlanner):
             decision,
             failed_action,
         )
+        if planner_context is not None:
+            if (planner_context.task_id != task_view.task_id or
+                planner_context.observation_id != post_failure_observation.observation_id or
+                planner_context.incident_id != decision.incident_id):
+                raise ValueError('planner context binding mismatch')
+            protected += (planner_context,)
         protected_hashes = tuple(item.record_sha256 for item in protected)
         callback_inputs = tuple(detached_record_copy(item) for item in protected)
         callback_hashes = tuple(item.record_sha256 for item in callback_inputs)
@@ -129,6 +139,7 @@ class CallableRecoveryActionPlanner(RecoveryActionPlanner):
                 callback_inputs[2],  # type: ignore[arg-type]
                 callback_inputs[3],  # type: ignore[arg-type]
                 rng,
+                **({'planner_context': callback_inputs[4]} if self.accepts_context and planner_context is not None else {}),
             )
         except BaseException as exc:
             callback_error = exc
@@ -169,7 +180,7 @@ class CallableRecoveryActionPlanner(RecoveryActionPlanner):
             observation=post_failure_observation,
         )
         if decision.strategy is RecoveryStrategy.ALTERNATIVE_TARGET:
-            same_target = actions_share_semantic_target(failed_action, result)
+            same_target = actions_share_semantic_target(failed_action, result, observation=post_failure_observation)
             if same_target is True:
                 raise ValueError(
                     "alternative-target planner returned the failed semantic target"
@@ -187,8 +198,12 @@ class RecoveryController:
         budgets: RuntimeBudgets,
         *,
         action_planner: RecoveryActionPlanner | None = None,
+        stable_target_identity: bool = False,
     ) -> None:
         self.budgets = budgets
+        if type(stable_target_identity) is not bool:
+            raise TypeError('stable target identity flag must be bool')
+        self.stable_target_identity = stable_target_identity
         if action_planner is not None and not action_planner.frozen:
             raise ValueError("evaluation recovery planner must be frozen")
         self.action_planner = action_planner
@@ -253,6 +268,7 @@ class RecoveryController:
         task: TaskSpecification | RuntimeTaskView | None = None,
         post_failure_observation: PolicyObservation | None = None,
         rng: random.Random | None = None,
+        planner_context: RecoveryPlannerContext | None = None,
     ) -> RecoveryPlan:
         self.require_attempt_available(decision.incident_id)
         # The high-level invocation itself is the attempt.  Invalid planner
@@ -284,9 +300,10 @@ class RecoveryController:
                         decision,
                         failed_action,
                         rng=rng,
+                        planner_context=planner_context,
                     ),
                 )
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, ActionParseError) as exc:
             return RecoveryPlan(
                 attempt_id=attempt_id,
                 incident_id=decision.incident_id,
@@ -295,7 +312,11 @@ class RecoveryController:
                 episode_attempt_index=episode_index,
                 actions=(),
                 resolution_status="REJECTED",
-                rejection_reason=f"recovery planner rejected: {exc}",
+                rejection_reason=f"recovery planner rejected: {getattr(exc, 'feedback_detail', str(exc))}",
+                rejection_stage=getattr(exc, 'failure_stage',
+                    'model_parse' if type(exc).__name__ == 'ActionParseError' else
+                    'parameter_resolution' if 'Parameter' in type(exc).__name__ else 'strategy_validation'),
+                rejection_code=getattr(exc, 'diagnostic_code', type(exc).__name__),
             )
         except Exception as exc:
             # The invocation has already consumed its registered attempt.  An
@@ -321,6 +342,8 @@ class RecoveryController:
                     "recovery planner failed: "
                     f"{type(exc).__name__}; error_sha256={error_sha256}"
                 ),
+                rejection_stage='planner_runtime',
+                rejection_code=type(exc).__name__,
             )
         return resolve_strategy(
             resolved_decision,
@@ -330,6 +353,7 @@ class RecoveryController:
             episode_attempt_index=episode_index,
             task=task,
             post_failure_observation=post_failure_observation,
+            stable_target_identity=self.stable_target_identity,
         )
 
     def _plan_action_isolated(
@@ -340,11 +364,14 @@ class RecoveryController:
         failed_action: ConcreteAction,
         *,
         rng: random.Random,
+        planner_context: RecoveryPlannerContext | None = None,
     ) -> ConcreteAction:
         """Protect controller-owned recovery decisions from custom planners."""
 
         assert self.action_planner is not None
         protected = (task, observation, decision, failed_action)
+        if planner_context is not None:
+            protected += (planner_context,)
         protected_hashes = tuple(item.record_sha256 for item in protected)
         callback_inputs = tuple(detached_record_copy(item) for item in protected)
         callback_hashes = tuple(item.record_sha256 for item in callback_inputs)
@@ -357,6 +384,7 @@ class RecoveryController:
                 callback_inputs[2],  # type: ignore[arg-type]
                 callback_inputs[3],  # type: ignore[arg-type]
                 rng=rng,
+                **({'planner_context': callback_inputs[4]} if planner_context is not None and getattr(self.action_planner, 'accepts_context', False) else {}),
             )
         except BaseException as exc:
             callback_error = exc

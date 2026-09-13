@@ -1,5 +1,8 @@
 # Table 2 End-to-End Runtime and Post-Training Implementation Plan
 
+> **Superseded benchmark direction — 2026-09-09.** BrowserGym + MiniWoB is now the approved benchmark. The active plan below supersedes WebArena-specific requirements in this earlier architecture plan. Preserve the four pillars and paired E0–E3 design; do not launch the old WebArena campaign.
+> Active authority: [Table 2 MiniWoB plan](TABLE2_MINIWOB_ACTIVE_PLAN.md).
+
 **Project:** Four-pillar failure-aware multimodal web agent
 
 **Document purpose:** Implement and evaluate the corrected Table 2 experiment

@@ -1,0 +1,242 @@
+{
+  "status": "COMPLETE",
+  "generations": 4,
+  "ledger_count": 4,
+  "browser_actions": 0,
+  "memory_queries": 0,
+  "rows": [
+    {
+      "case": "SELECT",
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "atomic-diagnostic-5b65900fe865a7d84130b4b1",
+        "observation_id": "fixture:obs:4",
+        "action_type": "NAVIGATE",
+        "action_probabilities": {
+          "CLICK": 0.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 1.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": null,
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "atomic-diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c3",
+          "value": "Finish",
+          "url": "Finish"
+        },
+        "latency_ms": 0.19692999921971932
+      },
+      "original_rejection": "NAVIGATE scheme is not permitted: ''",
+      "status": "REJECTED",
+      "error_type": "HybridParameterResolutionError",
+      "error": "both registered parameter-provider stages rejected; no repair allowed",
+      "fallback_generation": {
+        "raw_response": "{\"status\": \"REJECTED\"}",
+        "generation_metadata": {
+          "available": true,
+          "generated_token_count": 8,
+          "eos_token_ids": [
+            151645,
+            151643
+          ],
+          "eos_observed": true,
+          "token_cap_reached": false,
+          "max_new_tokens": 128,
+          "stop_reason": "eos"
+        }
+      }
+    },
+    {
+      "case": "SCROLL",
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "atomic-diagnostic-61eddd36a148746ad5b66af3",
+        "observation_id": "fixture:obs:4",
+        "action_type": "SCROLL",
+        "action_probabilities": {
+          "CLICK": 0.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 1.0,
+          "NAVIGATE": 0.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": null,
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "atomic-diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "value": "2",
+          "direction": "2"
+        },
+        "latency_ms": 0.07227300011436455
+      },
+      "original_rejection": "SCROLL direction must be one of ['up', 'down', 'left', 'right']",
+      "status": "REJECTED",
+      "error_type": "HybridParameterResolutionError",
+      "error": "both registered parameter-provider stages rejected; no repair allowed",
+      "fallback_generation": {
+        "raw_response": "{\"status\":\"REJECTED\"}",
+        "generation_metadata": {
+          "available": true,
+          "generated_token_count": 7,
+          "eos_token_ids": [
+            151645,
+            151643
+          ],
+          "eos_observed": true,
+          "token_cap_reached": false,
+          "max_new_tokens": 128,
+          "stop_reason": "eos"
+        }
+      }
+    },
+    {
+      "case": "NAVIGATE",
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "atomic-diagnostic-5b65900fe865a7d84130b4b1",
+        "observation_id": "fixture:obs:4",
+        "action_type": "NAVIGATE",
+        "action_probabilities": {
+          "CLICK": 0.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 1.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": null,
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "atomic-diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c3",
+          "value": "Finish",
+          "url": "Finish"
+        },
+        "latency_ms": 0.0695690032443963
+      },
+      "original_rejection": "NAVIGATE scheme is not permitted: ''",
+      "status": "REJECTED",
+      "error_type": "HybridParameterResolutionError",
+      "error": "both registered parameter-provider stages rejected; no repair allowed",
+      "fallback_generation": {
+        "raw_response": "{\"status\": \"REJECTED\"}",
+        "generation_metadata": {
+          "available": true,
+          "generated_token_count": 8,
+          "eos_token_ids": [
+            151645,
+            151643
+          ],
+          "eos_observed": true,
+          "token_cap_reached": false,
+          "max_new_tokens": 128,
+          "stop_reason": "eos"
+        }
+      }
+    },
+    {
+      "case": "PRESS_KEY",
+      "decision": {
+        "schema_version": "table2.runtime.v1",
+        "record_type": "PreActionDecision",
+        "decision_id": "atomic-diagnostic-3b8c1b9a283bf242e263183f",
+        "observation_id": "fixture:obs:4",
+        "action_type": "NAVIGATE",
+        "action_probabilities": {
+          "CLICK": 0.0,
+          "TYPE": 0.0,
+          "SELECT": 0.0,
+          "SCROLL": 0.0,
+          "NAVIGATE": 1.0,
+          "PRESS_KEY": 0.0
+        },
+        "bbox": null,
+        "grounding_confidence": 0.0,
+        "confidence_before": 0.0,
+        "input_observation_ids": [
+          "fixture:obs:4"
+        ],
+        "policy_id": "atomic-diagnostic",
+        "policy_version": "hybrid-normal-action-v3",
+        "parameter_hints": {
+          "target": "o4:c2",
+          "value": "two",
+          "url": "two"
+        },
+        "latency_ms": 0.07873699723859318
+      },
+      "original_rejection": "NAVIGATE scheme is not permitted: ''",
+      "status": "REJECTED",
+      "error_type": "HybridParameterResolutionError",
+      "error": "both registered parameter-provider stages rejected; no repair allowed",
+      "fallback_generation": {
+        "raw_response": "{\"status\": \"REJECTED\"}",
+        "generation_metadata": {
+          "available": true,
+          "generated_token_count": 8,
+          "eos_token_ids": [
+            151645,
+            151643
+          ],
+          "eos_observed": true,
+          "token_cap_reached": false,
+          "max_new_tokens": 128,
+          "stop_reason": "eos"
+        }
+      }
+    }
+  ],
+  "model_call_events": [
+    {
+      "episode_id": "atomic-parameter-diagnostic",
+      "model_call_index": 1,
+      "stage": "action_parameter_fallback",
+      "component_id": "pc01-unadapted-base-parameters@v1",
+      "maximum_model_calls": 102
+    },
+    {
+      "episode_id": "atomic-parameter-diagnostic",
+      "model_call_index": 2,
+      "stage": "action_parameter_fallback",
+      "component_id": "pc01-unadapted-base-parameters@v1",
+      "maximum_model_calls": 102
+    },
+    {
+      "episode_id": "atomic-parameter-diagnostic",
+      "model_call_index": 3,
+      "stage": "action_parameter_fallback",
+      "component_id": "pc01-unadapted-base-parameters@v1",
+      "maximum_model_calls": 102
+    },
+    {
+      "episode_id": "atomic-parameter-diagnostic",
+      "model_call_index": 4,
+      "stage": "action_parameter_fallback",
+      "component_id": "pc01-unadapted-base-parameters@v1",
+      "maximum_model_calls": 102
+    }
+  ]
+}

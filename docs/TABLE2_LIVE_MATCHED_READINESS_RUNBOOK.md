@@ -1,5 +1,8 @@
 # Table 2 Live Matched E0–E3 Readiness Gate
 
+> **Superseded benchmark direction — 2026-09-09.** This runbook describes the historical WebArena gate. It is not a deployment prerequisite for the approved BrowserGym + MiniWoB experiment. The revised experiment still requires its own matched runtime, outcome and timing checks under the active plan below.
+> Active authority: [Table 2 MiniWoB plan](TABLE2_MINIWOB_ACTIVE_PLAN.md).
+
 ## Purpose and scientific boundary
 
 The provisional PC-01 `PILOT_ONLY` campaign must not begin its registered

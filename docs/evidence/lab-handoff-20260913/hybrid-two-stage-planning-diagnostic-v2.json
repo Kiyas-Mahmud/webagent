@@ -1,0 +1,379 @@
+{
+  "status": "COMPLETE",
+  "actual_generations": 9,
+  "browser_actions": 0,
+  "live_episodes": 0,
+  "memory_queries": 0,
+  "rows": [
+    {
+      "task": "enter-text",
+      "stage": "baseline_action",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o1:c1\",\n  \"bbox\": [0.18990406394004822, 0.07283972203731537, 0.1545344591140747, 0.044149816036224365],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 115,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "RESOLVED",
+      "proposal": {
+        "target": "o1:c1",
+        "bbox": [
+          0.051205,
+          0.448598,
+          0.287604,
+          0.14486
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "resolution": {
+        "interface": "visible-control-action-interface-v6",
+        "output_envelope": "bare_json",
+        "resolution": "unique_current_control_id",
+        "name_source": "target",
+        "normalized_name": "o1:c1",
+        "defaulted_nullable_fields": [],
+        "resolved_control_id": "o1:c1",
+        "original_bbox": [
+          0.18990406394004822,
+          0.07283972203731537,
+          0.1545344591140747,
+          0.044149816036224365
+        ],
+        "resolved_bbox": [
+          0.051205,
+          0.448598,
+          0.287604,
+          0.14486
+        ],
+        "action_type_preserved": true,
+        "hybrid_interface_version": 3
+      },
+      "matches_historical_raw": true
+    },
+    {
+      "task": "enter-text",
+      "stage": "tentative_plan",
+      "raw_response": "1. Enter \"Thaddeus\" into the text field.\n2. Press the enter key.",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 22,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "UNEXECUTED_PLAN_TEXT"
+    },
+    {
+      "task": "enter-text",
+      "stage": "action_with_plan",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o1:c0\",\n  \"bbox\": [0.18990406394004822, 0.07283972203731537, 0.1545344591140747, 0.044149816036224365],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 115,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "RESOLVED",
+      "proposal": {
+        "target": "o1:c0",
+        "bbox": [
+          0.051205,
+          0.299065,
+          0.385542,
+          0.098131
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "resolution": {
+        "interface": "visible-control-action-interface-v6",
+        "output_envelope": "bare_json",
+        "resolution": "unique_current_control_id",
+        "name_source": "target",
+        "normalized_name": "o1:c0",
+        "defaulted_nullable_fields": [],
+        "resolved_control_id": "o1:c0",
+        "original_bbox": [
+          0.18990406394004822,
+          0.07283972203731537,
+          0.1545344591140747,
+          0.044149816036224365
+        ],
+        "resolved_bbox": [
+          0.051205,
+          0.299065,
+          0.385542,
+          0.098131
+        ],
+        "action_type_preserved": true,
+        "hybrid_interface_version": 3
+      }
+    },
+    {
+      "task": "enter-text-2",
+      "stage": "baseline_action",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o1:c0\",\n  \"bbox\": [0.03012, 0.32243, 0.385542, 0.098131],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 69,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "RESOLVED",
+      "proposal": {
+        "target": "o1:c0",
+        "bbox": [
+          0.03012,
+          0.32243,
+          0.385542,
+          0.098131
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "resolution": {
+        "interface": "visible-control-action-interface-v6",
+        "output_envelope": "bare_json",
+        "resolution": "unique_current_control_id",
+        "name_source": "target",
+        "normalized_name": "o1:c0",
+        "defaulted_nullable_fields": [],
+        "resolved_control_id": "o1:c0",
+        "original_bbox": [
+          0.03012,
+          0.32243,
+          0.385542,
+          0.098131
+        ],
+        "resolved_bbox": [
+          0.03012,
+          0.32243,
+          0.385542,
+          0.098131
+        ],
+        "action_type_preserved": true,
+        "hybrid_interface_version": 3
+      },
+      "matches_historical_raw": true
+    },
+    {
+      "task": "enter-text-2",
+      "stage": "tentative_plan",
+      "raw_response": "1. Type \"Ashlea\" in the text input.\n2. Press the Enter key on the keyboard.",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 23,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "UNEXECUTED_PLAN_TEXT"
+    },
+    {
+      "task": "enter-text-2",
+      "stage": "action_with_plan",
+      "raw_response": "{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o1:c0\",\n  \"bbox\": [0.03012, 0.32243, 0.385542, 0.098131],\n  \"value\": null\n}",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 69,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "RESOLVED",
+      "proposal": {
+        "target": "o1:c0",
+        "bbox": [
+          0.03012,
+          0.32243,
+          0.385542,
+          0.098131
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "resolution": {
+        "interface": "visible-control-action-interface-v6",
+        "output_envelope": "bare_json",
+        "resolution": "unique_current_control_id",
+        "name_source": "target",
+        "normalized_name": "o1:c0",
+        "defaulted_nullable_fields": [],
+        "resolved_control_id": "o1:c0",
+        "original_bbox": [
+          0.03012,
+          0.32243,
+          0.385542,
+          0.098131
+        ],
+        "resolved_bbox": [
+          0.03012,
+          0.32243,
+          0.385542,
+          0.098131
+        ],
+        "action_type_preserved": true,
+        "hybrid_interface_version": 3
+      }
+    },
+    {
+      "task": "click-button-sequence",
+      "stage": "baseline_action",
+      "raw_response": "```json\n{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o1:c1\",\n  \"bbox\": [0.253012, 0.280374, 0.120482, 0.186916],\n  \"value\": null\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 75,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "RESOLVED",
+      "proposal": {
+        "target": "o1:c1",
+        "bbox": [
+          0.253012,
+          0.280374,
+          0.120482,
+          0.186916
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "resolution": {
+        "interface": "visible-control-action-interface-v6",
+        "output_envelope": "single_json_fence",
+        "resolution": "unique_current_control_id",
+        "name_source": "target",
+        "normalized_name": "o1:c1",
+        "defaulted_nullable_fields": [],
+        "resolved_control_id": "o1:c1",
+        "original_bbox": [
+          0.253012,
+          0.280374,
+          0.120482,
+          0.186916
+        ],
+        "resolved_bbox": [
+          0.253012,
+          0.280374,
+          0.120482,
+          0.186916
+        ],
+        "action_type_preserved": true,
+        "hybrid_interface_version": 3
+      },
+      "matches_historical_raw": true
+    },
+    {
+      "task": "click-button-sequence",
+      "stage": "tentative_plan",
+      "raw_response": "1. Click button ONE\n2. Click button TWO",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 12,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "UNEXECUTED_PLAN_TEXT"
+    },
+    {
+      "task": "click-button-sequence",
+      "stage": "action_with_plan",
+      "raw_response": "```json\n{\n  \"action_type\": \"CLICK\",\n  \"target\": \"o1:c0\",\n  \"bbox\": [0.271084, 0.327103, 0.120482, 0.186916],\n  \"value\": null\n}\n```",
+      "generation_metadata": {
+        "available": true,
+        "generated_token_count": 75,
+        "eos_token_ids": [
+          151645,
+          151643
+        ],
+        "eos_observed": true,
+        "token_cap_reached": false,
+        "max_new_tokens": 128,
+        "stop_reason": "eos"
+      },
+      "status": "RESOLVED",
+      "proposal": {
+        "target": "o1:c0",
+        "bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "value": null,
+        "action_type": "CLICK"
+      },
+      "resolution": {
+        "interface": "visible-control-action-interface-v6",
+        "output_envelope": "single_json_fence",
+        "resolution": "unique_current_control_id",
+        "name_source": "target",
+        "normalized_name": "o1:c0",
+        "defaulted_nullable_fields": [],
+        "resolved_control_id": "o1:c0",
+        "original_bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "resolved_bbox": [
+          0.271084,
+          0.327103,
+          0.120482,
+          0.186916
+        ],
+        "action_type_preserved": true,
+        "hybrid_interface_version": 3
+      }
+    }
+  ],
+  "claim": "Saved-state planning diagnostic only; valid proposals and plans do not establish execution or completion."
+}

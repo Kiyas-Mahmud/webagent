@@ -1,5 +1,8 @@
 # Table 2 Pilot Task-Interface Decision
 
+> **Superseded benchmark direction — 2026-09-09.** The earlier WebArena task-interface decision below is historical. The user now selects BrowserGym + MiniWoB; follow the active plan below. The revised task manifest remains to be frozen.
+> Active authority: [Table 2 MiniWoB plan](TABLE2_MINIWOB_ACTIVE_PLAN.md).
+
 Status: `OPTION_A_APPROVED_AND_REGISTERED`
 
 Evidence role: `ACTIVE_PILOT_REGISTRY_DECISION`

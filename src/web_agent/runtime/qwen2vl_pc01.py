@@ -766,10 +766,40 @@ class _SelectedCheckpointRuntime:
             torch=torch,
         )
         self.lock = Lock()
+        # Off by default: existing callers and every completed package keep the
+        # unrestricted argmax they were produced with.
+        self.restrict_to_executable_actions = False
 
     def _assert_eval(self) -> None:
         if self.model.training:
             raise PC01RuntimeError("PC-01 model left evaluation mode")
+
+    def executable_action_types(
+        self,
+        task: RuntimeTaskView,
+        observation: PolicyObservation,
+    ) -> Any:
+        """Registered executable action classes for this exact observation.
+
+        ``None`` means unrestricted. The evidence is the observation's own
+        registered visible-target record, so this adds no new input to the
+        policy and never consults the task text, the verifier or any reward.
+        """
+
+        if not self.restrict_to_executable_actions:
+            return None
+        from web_agent.runtime.recovery.strategies import (
+            registered_executable_action_types,
+        )
+        try:
+            return registered_executable_action_types(
+                task_view=task,
+                observation=observation,
+            )
+        except Exception as exc:  # noqa: BLE001 - unrestricted is the safe default
+            raise PC01RuntimeError(
+                "executable action evidence is unreadable for this observation"
+            ) from exc
 
     def predict_action(
         self,
@@ -822,7 +852,19 @@ class _SelectedCheckpointRuntime:
         probabilities = _tensor_probabilities(
             self.torch, predictions["action_type"]
         )
-        action_index = max(range(len(probabilities)), key=probabilities.__getitem__)
+        # The learned distribution is never modified. Selection is restricted to
+        # the action classes this exact page can execute, using the same
+        # registered oracle-blind evidence the generated interfaces already
+        # receive as per-control `supported_actions`. Without it the policy is
+        # the only system allowed to choose an action the environment cannot
+        # perform, which is a fairness gap rather than a prediction.
+        executable = self.executable_action_types(task, observation)
+        selectable = [
+            index
+            for index in range(len(probabilities))
+            if executable is None or ActionType(ACTION_TYPE_INV[index]) in executable
+        ] or list(range(len(probabilities)))
+        action_index = max(selectable, key=probabilities.__getitem__)
         action_label = ACTION_TYPE_INV[action_index]
         bbox = _bounded_bbox(
             predictions["bbox"][0].detach().float().cpu().tolist()
@@ -832,6 +874,9 @@ class _SelectedCheckpointRuntime:
             "task_id": task.task_id,
             "observation_id": observation.observation_id,
             "action_probabilities": probabilities,
+            "selectable_action_types": sorted(
+                ACTION_TYPE_INV[index] for index in selectable
+            ),
             "bbox": bbox,
             "checkpoint_sha256": self.checkpoint_sha256,
         }
@@ -1067,6 +1112,21 @@ class _UnadaptedBaseRuntime:
         observation: PolicyObservation,
         suffix: str,
     ) -> str:
+        return self._generate_response(prompt=prompt, task=task, observation=observation,
+                                       suffix=suffix, include_metadata=False)
+
+    def _generate_with_metadata(
+        self, *, prompt: str, task: RuntimeTaskView,
+        observation: PolicyObservation, suffix: str,
+    ) -> tuple[str, dict]:
+        """Opt-in generation evidence; preserve the exact decoded text/settings."""
+        return self._generate_response(prompt=prompt, task=task, observation=observation,
+                                       suffix=suffix, include_metadata=True)
+
+    def _generate_response(
+        self, *, prompt: str, task: RuntimeTaskView,
+        observation: PolicyObservation, suffix: str, include_metadata: bool,
+    ):
         image = _load_image(observation)
         text = (
             f"{prompt}current_task: {task.goal} | domain: {_domain(observation)}"
@@ -1111,6 +1171,25 @@ class _UnadaptedBaseRuntime:
             raise PC01RuntimeError("unadapted E0 generation failed") from exc
         if len(decoded) != 1 or not isinstance(decoded[0], str):
             raise PC01RuntimeError("unadapted E0 model returned an invalid batch")
+        if include_metadata:
+            tokens = generated_suffix[0].tolist()
+            config = getattr(self.model, 'generation_config', None)
+            eos_ids = getattr(config, 'eos_token_id', None)
+            if eos_ids is None:
+                eos_ids = getattr(getattr(self.model, 'config', None), 'eos_token_id', None)
+            if eos_ids is None:
+                eos_ids = getattr(getattr(self.processor, 'tokenizer', None), 'eos_token_id', None)
+            eos_ids = ([int(eos_ids)] if isinstance(eos_ids, int) else
+                       [int(i) for i in eos_ids] if eos_ids is not None else [])
+            eos_observed = any(int(token) in eos_ids for token in tokens)
+            cap = int(REGISTERED_GENERATION_KWARGS['max_new_tokens'])
+            capped = len(tokens) >= cap
+            return decoded[0], {
+                'available': True, 'generated_token_count': len(tokens),
+                'eos_token_ids': eos_ids, 'eos_observed': eos_observed,
+                'token_cap_reached': capped, 'max_new_tokens': cap,
+                'stop_reason': 'eos' if eos_observed else 'max_new_tokens' if capped else 'other',
+            }
         return decoded[0]
 
     def predict_action(
@@ -1201,6 +1280,8 @@ class _UnadaptedBaseRuntime:
             f" | visible_parameter_hints: "
             f"{canonical_json_bytes(dict(decision.parameter_hints)).decode('utf-8')}"
         )
+        from web_agent.benchmarks.miniwob_controls import control_suffix
+        suffix += control_suffix(observation)
         raw = self._generate(
             prompt=PARAMETER_PROVIDER_PROMPT,
             task=task,

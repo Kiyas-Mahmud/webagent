@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import math
 from typing import Any, Mapping, Sequence
 
 from web_agent.runtime.action_parameters import (
@@ -142,6 +143,7 @@ def semantic_target_fingerprint(action: ConcreteAction) -> str | None:
 def actions_share_semantic_target(
     failed_action: ConcreteAction,
     candidate_action: ConcreteAction,
+    *, observation: PolicyObservation | None = None,
 ) -> bool | None:
     """Compare target identity independently of non-target action parameters.
 
@@ -150,6 +152,11 @@ def actions_share_semantic_target(
     alternative target is genuinely different.
     """
 
+    if observation is not None and POINT_TARGET_EVIDENCE_KEY in observation.current_page_state:
+        if failed_action.action_type in _GROUNDED_TARGET_ACTIONS and candidate_action.action_type in _GROUNDED_TARGET_ACTIONS:
+            first = _visible_point_target(failed_action, observation)
+            second = _visible_point_target(candidate_action, observation)
+            return first == second if first is not None and second is not None else None
     failed = _semantic_target_evidence(failed_action)
     candidate = _semantic_target_evidence(candidate_action)
     comparable = set(failed).intersection(candidate)
@@ -284,6 +291,32 @@ def _registered_visible_targets(
     return registrations
 
 
+def registered_executable_action_types(
+    *,
+    task_view: RuntimeTaskView,
+    observation: PolicyObservation,
+) -> frozenset[ActionType] | None:
+    """Action classes the current page can actually execute.
+
+    This is the union of the already-registered per-target compatible action
+    types for this exact observation — the same oracle-blind evidence recovery
+    validation uses, derived only from the observed DOM. It carries no task
+    knowledge and expresses no preference between classes.
+
+    Returns ``None`` when the observation registers no such evidence, so callers
+    keep their existing unrestricted behaviour.
+    """
+
+    if RECOVERY_TARGET_EVIDENCE_KEY not in observation.current_page_state:
+        return None
+    registrations = _registered_visible_targets(
+        task_view=task_view,
+        observation=observation,
+    )
+    executable = frozenset().union(*registrations.values()) if registrations else frozenset()
+    return executable or None
+
+
 def validate_recovery_target_evidence(
     action: ConcreteAction,
     *,
@@ -333,6 +366,16 @@ def validate_recovery_target_evidence(
         observation=post_failure_observation,
     )
     compatible_types = registrations.get(fingerprint)
+    if POINT_TARGET_EVIDENCE_KEY in post_failure_observation.current_page_state and action.action_type in _GROUNDED_TARGET_ACTIONS:
+        matched = _visible_point_target(action, post_failure_observation)
+        if matched is not None:
+            compatible_types = registrations.get(matched)
+        elif fingerprint not in registrations:
+            # The point identified nothing and the action is not grounded on a
+            # registered rectangle either, so no visible target is established.
+            # When it is so grounded, that registration stands: overlapping
+            # geometry leaves the point ambiguous but not the resolved target.
+            compatible_types = None
     if compatible_types is None:
         raise RecoveryResolutionError(
             "recovery action target is not visibly present in the current observation"
@@ -438,6 +481,54 @@ def _validate_retry_action(
         )
 
 
+def _rebind_stable_retry_target(
+    failed_action: ConcreteAction,
+    observation: PolicyObservation | None,
+) -> ConcreteAction:
+    """Rebind a runtime-issued receipt only; keep the issued action and values.
+
+    Geometry and the hit point are part of the identity evidence, so this does
+    not relocate an action. A changed, absent or ambiguous control fails closed.
+    """
+    from web_agent.benchmarks.miniwob_controls import (
+        STABLE_TARGET_FIELD, stable_control_identity, stable_target_receipt,
+        uses_stable_targets, validate_stable_target_receipt,
+    )
+    if observation is None or not uses_stable_targets(observation.current_page_state):
+        return failed_action
+    if failed_action.action_type not in _GROUNDED_TARGET_ACTIONS:
+        return failed_action
+    old_id = failed_action.parameters.get('target_control_id')
+    if old_id is None:
+        return failed_action
+    receipt = failed_action.parameters.get(STABLE_TARGET_FIELD)
+    try:
+        identity = validate_stable_target_receipt(receipt)
+    except ValueError as exc:
+        raise RecoveryResolutionError('RETRY lacks verified stable target evidence') from exc
+    if (receipt['control_id'] != old_id or receipt['task_id'] != observation.task_id
+            or receipt['goal_sha256'] != canonical_sha256(observation.goal)):
+        raise RecoveryResolutionError('RETRY stable target evidence binding mismatch')
+    controls = observation.current_page_state.get('visible_controls', ())
+    candidates = [c for c in controls if isinstance(c, Mapping)
+                  and c.get('source_id') == identity['source_id']]
+    if len(candidates) != 1:
+        raise RecoveryResolutionError('RETRY stable control is absent or ambiguous')
+    control = candidates[0]
+    if stable_control_identity(control) != identity:
+        raise RecoveryResolutionError('RETRY stable control has changed or been replaced')
+    try:
+        current_receipt = stable_target_receipt(control, observation)
+    except ValueError as exc:
+        raise RecoveryResolutionError(f'RETRY current control is invalid: {exc}') from exc
+    if current_receipt is None:
+        raise RecoveryResolutionError('RETRY current control lacks unique stable identity')
+    parameters = dict(failed_action.parameters)
+    parameters['target_control_id'] = control['control_id']
+    parameters[STABLE_TARGET_FIELD] = current_receipt
+    return replace(failed_action, parameters=parameters)
+
+
 def _validate_resolved_recovery_action(
     action: ConcreteAction,
     *,
@@ -491,6 +582,8 @@ class RecoveryPlan(VersionedRecord):
     actions: tuple[ConcreteAction, ...]
     resolution_status: str
     rejection_reason: str = ""
+    rejection_stage: str | None = None
+    rejection_code: str | None = None
 
     def __post_init__(self) -> None:
         if self.incident_attempt_index <= 0 or self.episode_attempt_index <= 0:
@@ -510,6 +603,7 @@ def resolve_strategy(
     episode_attempt_index: int,
     task: TaskSpecification | RuntimeTaskView | None = None,
     post_failure_observation: PolicyObservation | None = None,
+    stable_target_identity: bool = False,
 ) -> RecoveryPlan:
     """Resolve exactly one high-level strategy without executing or verifying it."""
     strategy = decision.strategy
@@ -525,13 +619,17 @@ def resolve_strategy(
         )
     try:
         if strategy is RecoveryStrategy.RETRY:
+            retry_action = (
+                _rebind_stable_retry_target(failed_action, post_failure_observation)
+                if stable_target_identity else failed_action
+            )
             _validate_retry_action(
-                failed_action,
+                retry_action,
                 task=task,
                 post_failure_observation=post_failure_observation,
             )
             action = replace(
-                failed_action,
+                retry_action,
                 action_id=f"{attempt_id}:action:1",
                 source_decision_id=decision.decision_id,
                 recovery_attempt_id=attempt_id,
@@ -559,7 +657,7 @@ def resolve_strategy(
                 recovery_attempt_id=attempt_id,
             )
             if strategy is RecoveryStrategy.ALTERNATIVE_TARGET:
-                same_target = actions_share_semantic_target(failed_action, action)
+                same_target = actions_share_semantic_target(failed_action, action, observation=post_failure_observation)
                 if same_target is True:
                     raise RecoveryResolutionError(
                         "ALTERNATIVE_TARGET reused the failed semantic target"
@@ -588,6 +686,8 @@ def resolve_strategy(
             actions=(),
             resolution_status="REJECTED",
             rejection_reason=str(exc),
+            rejection_stage='strategy_validation',
+            rejection_code=type(exc).__name__,
         )
     return RecoveryPlan(
         attempt_id=attempt_id,
@@ -598,3 +698,60 @@ def resolve_strategy(
         actions=(action,),
         resolution_status="READY",
     )
+
+
+POINT_TARGET_EVIDENCE_KEY = "visible_point_targets"
+
+
+def build_point_target_evidence(*, task, observation_id, compatible_actions):
+    """Opt-in geometry for predicted points; never move or replace a target."""
+    task = runtime_task_view(task)
+    rows = {}
+    for action in compatible_actions:
+        if action.action_type not in _GROUNDED_TARGET_ACTIONS or action.bbox is None:
+            continue
+        fingerprint = semantic_target_fingerprint(action)
+        rows[fingerprint] = {"fingerprint": fingerprint, "bbox": list(action.bbox)}
+    return {"schema_version": "visible-point-targets-v1", "task_id": task.task_id,
+            "observation_id": observation_id,
+            "task_goal_sha256": canonical_sha256({"task_id": task.task_id, "goal": task.goal}),
+            "targets": [rows[key] for key in sorted(rows)]}
+
+
+def _visible_point_target(action, observation):
+    raw = observation.current_page_state.get(POINT_TARGET_EVIDENCE_KEY)
+    task = RuntimeTaskView(task_id=observation.task_id, goal=observation.goal)
+    registrations = _registered_visible_targets(task_view=task, observation=observation)
+    if not isinstance(raw, Mapping) or set(raw) != {"schema_version", "task_id", "observation_id", "task_goal_sha256", "targets"}:
+        raise RecoveryResolutionError("invalid point-target evidence")
+    if (raw["schema_version"] != "visible-point-targets-v1" or raw["task_id"] != task.task_id
+            or raw["observation_id"] != observation.observation_id
+            or raw["task_goal_sha256"] != canonical_sha256({"task_id": task.task_id, "goal": task.goal})):
+        raise RecoveryResolutionError("point-target evidence binding mismatch")
+    if not isinstance(raw["targets"], (list, tuple)):
+        raise RecoveryResolutionError("point targets must be an array")
+    x, y = action.parameters.get("target_x"), action.parameters.get("target_y")
+    if any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in (x, y)):
+        return None
+    matches = set()
+    for row in raw["targets"]:
+        if not isinstance(row, Mapping) or set(row) != {"fingerprint", "bbox"}:
+            raise RecoveryResolutionError("invalid point-target row")
+        bbox = _normalised_bbox(row["bbox"])
+        if bbox is None or not all(math.isfinite(v) for v in bbox):
+            raise RecoveryResolutionError("invalid point-target rectangle")
+        left, top, width, height = bbox
+        if min(left, top) < 0 or min(width, height) <= 0 or left + width > 1.000001 or top + height > 1.000001:
+            raise RecoveryResolutionError("point-target rectangle outside viewport")
+        reference = ConcreteAction(action_id="geometry-check", source_decision_id="geometry-check", action_type=ActionType.CLICK, parameters={}, bbox=bbox)
+        fingerprint = semantic_target_fingerprint(reference)
+        if fingerprint != row["fingerprint"] or fingerprint not in registrations:
+            raise RecoveryResolutionError("point-target geometry differs from registered target")
+        # Right/bottom are exclusive, as for a browser viewport hit region.
+        if left <= x < left + width and top <= y < top + height:
+            matches.add(fingerprint)
+    # Overlapping different controls are ambiguous; never guess a target.
+    if len(matches) != 1:
+        return None
+    target = next(iter(matches))
+    return target if action.action_type in registrations[target] else None
