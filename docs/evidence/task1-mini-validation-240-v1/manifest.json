@@ -1,0 +1,164 @@
+{
+  "available_strata": {
+    "CLICK/loop_no_recovery": 39,
+    "CLICK/mismatch_no_recovery": 199,
+    "CLICK/perception_no_recovery": 396,
+    "CLICK/recovered": 45,
+    "CLICK/recovery_failed": 231,
+    "CLICK/success_no_recovery": 377,
+    "NAVIGATE/loop_no_recovery": 34,
+    "NAVIGATE/mismatch_no_recovery": 229,
+    "NAVIGATE/perception_no_recovery": 77,
+    "NAVIGATE/recovered": 240,
+    "NAVIGATE/recovery_failed": 237,
+    "NAVIGATE/success_no_recovery": 682,
+    "PRESS_KEY/loop_no_recovery": 44,
+    "PRESS_KEY/mismatch_no_recovery": 61,
+    "PRESS_KEY/perception_no_recovery": 282,
+    "PRESS_KEY/recovered": 91,
+    "PRESS_KEY/recovery_failed": 187,
+    "PRESS_KEY/success_no_recovery": 529,
+    "SCROLL/loop_no_recovery": 49,
+    "SCROLL/mismatch_no_recovery": 244,
+    "SCROLL/perception_no_recovery": 102,
+    "SCROLL/recovered": 93,
+    "SCROLL/recovery_failed": 183,
+    "SCROLL/success_no_recovery": 622,
+    "SELECT/loop_no_recovery": 31,
+    "SELECT/mismatch_no_recovery": 271,
+    "SELECT/perception_no_recovery": 236,
+    "SELECT/recovered": 66,
+    "SELECT/recovery_failed": 209,
+    "SELECT/success_no_recovery": 479,
+    "TYPE/loop_no_recovery": 43,
+    "TYPE/mismatch_no_recovery": 195,
+    "TYPE/perception_no_recovery": 199,
+    "TYPE/recovered": 85,
+    "TYPE/recovery_failed": 191,
+    "TYPE/success_no_recovery": 583
+  },
+  "image_availability_verified": false,
+  "images_opened": 0,
+  "input_rule": "Never pass this manifest, strata or scoring labels to an agent; construct phase-specific views.",
+  "locked_test_rows_read": 0,
+  "model_calls": 0,
+  "per_action_quotas": {
+    "loop_no_recovery": 2,
+    "mismatch_no_recovery": 4,
+    "perception_no_recovery": 4,
+    "recovered": 10,
+    "recovery_failed": 10,
+    "success_no_recovery": 10
+  },
+  "preparer_sha256": "8321014f69c7c662f71f63c7cbb8c246e4cb469b59e5915ea7796c807ae0aae1",
+  "purpose": "balanced diagnostic pilot, not final-test or full-split performance",
+  "recovery_assessment_rows": 120,
+  "recovery_builder_sha256": "e0145a9b81eb9d23a61d2560454d7e4b33d884ac0ee5188d259e0fe7198182db",
+  "recovery_rule": "Build transitions from original validation split before selecting; dependency rows are not additional scored cases.",
+  "references_sha256": "d3d492b00b96f589a679163f6bbd462eb21ba18bb609fdb8bf8a273c9e5f43c2",
+  "required_input_metadata_missing": {
+    "state_after": 0,
+    "state_before": 0,
+    "task_description": 0,
+    "website_domain": 0
+  },
+  "schema": "task1.mini-validation-pilot.v1",
+  "scoring_labels_sha256": "2e4f508a8cbe90f918a30dd3ab31722c8053cb4298276c83ba896f113568b815",
+  "selected_distributions": {
+    "action_type": {
+      "CLICK": 40,
+      "NAVIGATE": 40,
+      "PRESS_KEY": 40,
+      "SCROLL": 40,
+      "SELECT": 40,
+      "TYPE": 40
+    },
+    "failure_type_4": {
+      "ACTION_MISMATCH": 97,
+      "LOOP_DETECTED": 12,
+      "NONE": 60,
+      "PERCEPTION_ERROR": 71
+    },
+    "memory_update_flag": {
+      "False": 57,
+      "True": 183
+    },
+    "outcome_label": {
+      "FAILURE": 180,
+      "SUCCESS": 60
+    },
+    "recovery_strategy": {
+      "ALTERNATIVE_TARGET": 68,
+      "BACKTRACK": 19,
+      "NONE": 120,
+      "REPLAN": 33
+    },
+    "recovery_success": {
+      "False": 60,
+      "None": 120,
+      "True": 60
+    }
+  },
+  "selected_domains": 83,
+  "selected_rows": 240,
+  "selection_method": "SHA256(seed:sample_id) ranked within fixed strata",
+  "selection_seed": 20260914,
+  "source": "/home/aiub/kiyas/webagent_full/data/original/final_data_set_40k/split_val.json",
+  "source_action_value_keys": 0,
+  "source_distributions": {
+    "action_type": {
+      "CLICK": 1287,
+      "NAVIGATE": 1499,
+      "PRESS_KEY": 1194,
+      "SCROLL": 1293,
+      "SELECT": 1292,
+      "TYPE": 1296
+    },
+    "failure_type_4": {
+      "ACTION_MISMATCH": 2187,
+      "LOOP_DETECTED": 240,
+      "NONE": 3272,
+      "PERCEPTION_ERROR": 2162
+    },
+    "memory_update_flag": {
+      "False": 2988,
+      "True": 4873
+    },
+    "outcome_label": {
+      "FAILURE": 4589,
+      "SUCCESS": 3272
+    },
+    "recovery_strategy": {
+      "ALTERNATIVE_TARGET": 1000,
+      "BACKTRACK": 200,
+      "NONE": 6003,
+      "REPLAN": 658
+    },
+    "recovery_success": {
+      "False": 1238,
+      "None": 6003,
+      "True": 620
+    }
+  },
+  "source_recovery_audit": {
+    "adjacent_transitions": 1858,
+    "ambiguous_next_sample_ids": [],
+    "ambiguous_next_step": 0,
+    "attempted_recoveries": 1858,
+    "coverage": 1.0,
+    "direct_transitions": 0,
+    "invalid_attempted_label_contract": 0,
+    "invalid_attempted_sample_ids": [],
+    "missing_next_sample_ids": [],
+    "missing_next_step": 0,
+    "nonconsecutive_next_sample_ids": [],
+    "nonconsecutive_next_step": 0,
+    "proper_transitions": 1858,
+    "rows": 7861,
+    "tasks": 6003
+  },
+  "source_rows": 7861,
+  "source_sha256": "42df34295f2b0f81e48a29e4acae1b8b16c862ed2a140c19d2a63c4c950d435c",
+  "status": "selected_not_evaluated",
+  "unique_selected_tasks": 235
+}

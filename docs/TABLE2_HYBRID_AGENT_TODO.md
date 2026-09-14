@@ -1,5 +1,18 @@
 # Hybrid-agent TODO — execute in order
 
+**Immediate Task 1 pilot:** [240-example mini dataset and checklist](TASK1_MINI_DATASET_PILOT.md).
+Metadata analysed and six-action selection prepared; no agent inference run.
+Selected candidates: Browser Use, Agent S2 and WebVoyager assessment components.
+See the [architecture and data examples](TASK1_AGENT_COMPARISON_ARCHITECTURE.md).
+Next: pin system identities and implement the shared input builder and first adapter.
+
+**New evaluation direction, 2026-09-14:** follow
+[NEXT_EVALUATION_PLAN.md](NEXT_EVALUATION_PLAN.md). First complete the two-dataset
+comparison using the same frozen assessment models; afterward evaluate an
+existing agent with diagnosis/recovery and then memory. The checklists below
+remain historical. The new plan does not launch inference or authorise access
+to locked-test data.
+
 **Lab pause / home handoff, 2026-09-13:** resume from
 [TABLE2_HOME_SESSION_HANDOFF.md](TABLE2_HOME_SESSION_HANDOFF.md) on branch
 `table2/lab-handoff-20260913`. Table 2 work is archived for continuation; no

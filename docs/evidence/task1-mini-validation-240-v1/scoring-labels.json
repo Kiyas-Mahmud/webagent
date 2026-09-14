@@ -1,0 +1,4524 @@
+[
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 20.0,
+        "width": 54.765625,
+        "x": 631.09375,
+        "y": 79.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_000063__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 56.0,
+        "width": 534.5,
+        "x": 283.0,
+        "y": 2500.15625
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_000068__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": [
+        32.0,
+        96.0
+      ],
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_000095__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_000110__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_000120__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_000233__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_000238__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_000250__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_000265__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_000378__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_000405__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_000410__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_000479__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 200.0,
+        "x": 1056.0,
+        "y": 8.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_000518__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_000538__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_000566__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 27.765625,
+        "width": 107.546875,
+        "x": 268.8125,
+        "y": 666.109375
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_000813__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_000909__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 42.0,
+        "width": 85.609375,
+        "x": 308.078125,
+        "y": 7.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_000963__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_001000__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 22.0,
+        "width": 76.0,
+        "x": 1028.0,
+        "y": 31.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_001059__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_001128__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": [
+        32.0,
+        96.0
+      ],
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_001145__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": [
+        32.0,
+        96.0
+      ],
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_001145__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_001155__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_001278__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_001283__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_001305__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_001470__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 56.0,
+        "width": 534.5,
+        "x": 283.0,
+        "y": 2500.15625
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_001568__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_001620__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_001674__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_001738__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_001905__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 30.0,
+        "width": 105.21875,
+        "x": 236.984375,
+        "y": 20.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_002041__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_002050__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_002055__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_002183__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_002215__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_002220__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_002350__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_002366__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_002510__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 192.578125,
+        "width": 534.40625,
+        "x": 50.0,
+        "y": 611.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_002613__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_002628__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_002656__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 95.859375,
+        "x": 319.21875,
+        "y": 14.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_002763__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_002815__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 64.1875,
+        "width": 200.0,
+        "x": 0.0,
+        "y": 243.203125
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_002913__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": [
+        32.0,
+        96.0
+      ],
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_002945__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_003228__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003255__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 24.0,
+        "width": 109.53125,
+        "x": 473.390625,
+        "y": 53.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_003363__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 176.0,
+        "x": 1028.0,
+        "y": 5.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_003368__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_003383__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_003388__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003400__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_003410__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 25.0,
+        "width": 67.46875,
+        "x": 1305.0,
+        "y": 83.71875
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_003452__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003459__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003469__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003474__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003550__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003555__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 30.0,
+        "width": 64.015625,
+        "x": 134.6875,
+        "y": 27.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003663__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": [
+        32.0,
+        96.0
+      ],
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003695__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003705__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_003769__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 52.390625,
+        "width": 499.1875,
+        "x": 716.8125,
+        "y": 96.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_003968__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 35.0,
+        "width": 315.0,
+        "x": 376.421875,
+        "y": 10.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_003973__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_003988__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_004010__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 90.0,
+        "y": 208.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_004441__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 48.0,
+        "width": 240.0,
+        "x": 1028.359375,
+        "y": 0.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_004509__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 44.0,
+        "width": 159.0,
+        "x": 1086.828125,
+        "y": 0.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_004573__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_004610__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_004755__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 40.0,
+        "width": 160.0,
+        "x": 832.234375,
+        "y": 48.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_004873__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_004883__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_004910__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": [
+        32.0,
+        96.0
+      ],
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_005045__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_005050__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_005055__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_005114__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_005220__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_005365__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 40.0,
+        "width": 82.046875,
+        "x": 809.65625,
+        "y": 8.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_005404__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_005424__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_005515__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_005579__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 27.765625,
+        "width": 107.546875,
+        "x": 268.8125,
+        "y": 666.109375
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_005613__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_005729__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 42.0,
+        "width": 85.609375,
+        "x": 308.078125,
+        "y": 7.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_005763__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 72.0,
+        "width": 600.0,
+        "x": 370.0,
+        "y": 0.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_005768__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_005879__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_005913__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 40.0,
+        "width": 160.0,
+        "x": 832.234375,
+        "y": 48.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_005923__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_005928__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006009__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 56.0,
+        "width": 534.5,
+        "x": 283.0,
+        "y": 679.15625
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006068__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_006078__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006179__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 23.0,
+        "width": 144.0,
+        "x": 539.609375,
+        "y": 26.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006218__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_006228__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006238__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006250__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_006260__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_006319__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006319__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_006329__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006405__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_006528__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 36.0,
+        "width": 312.0,
+        "x": 173.0,
+        "y": 8.5
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_006668__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006711__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006779__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006919__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_006922__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_006963__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "LOOP_DETECTED",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_007015__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_007074__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 25.0,
+        "width": 77.078125,
+        "x": 1305.0,
+        "y": 317.3125
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_007113__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": [
+        320.0,
+        96.0
+      ],
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_007145__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": [
+        320.0,
+        96.0
+      ],
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_007145__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 48.0,
+        "width": 240.0,
+        "x": 1028.359375,
+        "y": 0.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_007509__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 95.859375,
+        "x": 319.21875,
+        "y": 14.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_007563__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_007563__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_007583__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_007733__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_007738__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_008065__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_008124__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 36.0,
+        "width": 312.0,
+        "x": 173.0,
+        "y": 8.5
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_008168__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_008215__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "REPLAN",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_008215__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_008328__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 52.390625,
+        "width": 499.1875,
+        "x": 716.8125,
+        "y": 96.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_008489__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 90.0,
+        "x": 172.671875,
+        "y": 10214.359375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_008493__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 60.59375,
+        "width": 173.140625,
+        "x": 1062.859375,
+        "y": 9769.859375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_008613__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_008845__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 35.0,
+        "width": 312.0,
+        "x": 329.421875,
+        "y": 10.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_008947__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_008955__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 35.0,
+        "width": 312.0,
+        "x": 329.421875,
+        "y": 10.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_008973__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_008977__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_008982__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 38.0,
+        "width": 288.296875,
+        "x": 189.0,
+        "y": 9.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_008992__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_009085__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_009102__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 23.0,
+        "width": 87.0,
+        "x": 1003.0,
+        "y": 85.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_009142__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 40.0,
+        "width": 160.0,
+        "x": 832.234375,
+        "y": 48.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_009213__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 14.0,
+        "width": 59.703125,
+        "x": 170.0,
+        "y": 205.359375
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_009254__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 100.0,
+        "x": 1104.0,
+        "y": 5.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_009303__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_009360__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 51.0,
+        "width": 90.875,
+        "x": 774.109375,
+        "y": 1.5
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_009445__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_009626__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_010167__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_010257__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 90.0,
+        "x": 172.671875,
+        "y": 10214.359375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_010353__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_010413__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_010416__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_010469__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_010506__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_010536__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_010649__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_010686__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 35.0,
+        "width": 312.0,
+        "x": 329.421875,
+        "y": 10.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_010713__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_010773__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 40.0,
+        "width": 138.390625,
+        "x": 911.15625,
+        "y": 32.026039123535156
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_010890__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": [
+        32.0,
+        96.0
+      ],
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.05,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_011067__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_011136__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": false
+    },
+    "sample_id": "gold_v16_40k_011427__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_011436__step_0001"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 40.0,
+        "width": 160.0,
+        "x": 832.234375,
+        "y": 48.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_011467__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 52.390625,
+        "width": 499.1875,
+        "x": 716.8125,
+        "y": 96.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_011483__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_011583__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_011796__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 40.0,
+        "width": 200.0,
+        "x": 931.21875,
+        "y": 8.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_011843__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 131.0,
+        "width": 519.734375,
+        "x": 50.0,
+        "y": 192.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_012147__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 99.1875,
+        "width": 200.0,
+        "x": 0.0,
+        "y": 243.203125
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_012417__step_0002"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 17.0,
+        "width": 118.140625,
+        "x": 230.75,
+        "y": 24.5
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "BACKTRACK",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_012507__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 28.0,
+        "width": 171.203125,
+        "x": 525.21875,
+        "y": 13.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_012510__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 90.0,
+        "x": 172.671875,
+        "y": 10214.359375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_012566__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 35.0,
+        "width": 312.0,
+        "x": 329.421875,
+        "y": 10.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_012603__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_012629__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": true,
+      "recovery_strategy": "ALTERNATIVE_TARGET",
+      "recovery_success": true
+    },
+    "sample_id": "gold_v16_40k_012663__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_012708__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 18.0,
+        "width": 93.078125,
+        "x": 662.46875,
+        "y": 192.59375
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_012824__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 48.0,
+        "width": 940.0,
+        "x": 152.0,
+        "y": 60.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_012826__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_014093__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_014153__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_014270__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_014584__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.2,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_015486__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_016131__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 60.59375,
+        "width": 173.140625,
+        "x": 1062.859375,
+        "y": 9769.859375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_016307__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 60.59375,
+        "width": 173.140625,
+        "x": 1062.859375,
+        "y": 9769.859375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_016428__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 16.0,
+        "width": 87.140625,
+        "x": 622.875,
+        "y": 280.96002197265625
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_016711__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_016731__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_016971__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 28.0,
+        "width": 171.203125,
+        "x": 591.546875,
+        "y": 13.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_017086__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 23.0,
+        "width": 87.0,
+        "x": 1003.0,
+        "y": 85.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_017267__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_017390__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 90.0,
+        "x": 172.671875,
+        "y": 10214.359375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_017568__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 36.0,
+        "width": 416.671875,
+        "x": 431.65625,
+        "y": 14.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_017613__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 54.0,
+        "width": 570.0,
+        "x": 195.0,
+        "y": -50.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_018106__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 48.0,
+        "width": 940.0,
+        "x": 152.0,
+        "y": 60.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_018226__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_018588__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_019008__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_019129__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 90.0,
+        "x": 172.671875,
+        "y": 10214.359375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_019547__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_020573__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 90.0,
+        "x": 172.671875,
+        "y": 10214.359375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_020807__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 80.0,
+        "width": 57.609375,
+        "x": 711.96875,
+        "y": 0.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_021224__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_021830__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "ACTION_MISMATCH",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_022550__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 19.0,
+        "width": 41.4375,
+        "x": 219.0,
+        "y": 228.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_022719__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_023359__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_023689__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_023929__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 17.0,
+        "width": 133.328125,
+        "x": 461.796875,
+        "y": 691.484375
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_024009__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_024048__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 44.0,
+        "width": 159.0,
+        "x": 1086.828125,
+        "y": 0.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_024437__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 35.0,
+        "width": 312.0,
+        "x": 329.421875,
+        "y": 10.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_024497__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 44.0,
+        "width": 159.0,
+        "x": 1086.828125,
+        "y": 0.0
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_024647__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_024889__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_025369__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 23.0,
+        "width": 36.0,
+        "x": 539.609375,
+        "y": 26.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_025390__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "PRESS_KEY",
+      "agent_confidence_before": 0.15492957746478875,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_025459__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_025608__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 19.0,
+        "width": 41.4375,
+        "x": 219.0,
+        "y": 228.0
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_025629__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 54.0,
+        "width": 570.0,
+        "x": 195.0,
+        "y": -50.0
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_025750__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 39.0,
+        "width": 504.0,
+        "x": 232.0,
+        "y": 74.390625
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_026680__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 44.0,
+        "width": 268.0,
+        "x": -802.0,
+        "y": 348.5
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": true,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_026769__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_027440__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 32.0,
+        "width": 90.0,
+        "x": 172.671875,
+        "y": 10214.359375
+      },
+      "action_type": "SELECT",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_028037__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_028098__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 40.0,
+        "width": 138.390625,
+        "x": 911.15625,
+        "y": 32.026039123535156
+      },
+      "action_type": "TYPE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_028150__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "NAVIGATE",
+      "agent_confidence_before": 0.17808219178082194,
+      "failure_type_4": "NONE",
+      "memory_update_flag": false,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_028280__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": {
+        "height": 102.0,
+        "width": 290.15625,
+        "x": 26.921875,
+        "y": 1750.390625
+      },
+      "action_type": "CLICK",
+      "agent_confidence_before": 0.22077922077922077,
+      "failure_type_4": "NONE",
+      "memory_update_flag": true,
+      "outcome_label": "SUCCESS",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_028929__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_029088__step_0000"
+  },
+  {
+    "action_type_eval_mask": true,
+    "failure_type_4_eval_mask": true,
+    "labels": {
+      "action_coordinates": null,
+      "action_target_bbox": null,
+      "action_type": "SCROLL",
+      "agent_confidence_before": 0.13043478260869565,
+      "failure_type_4": "PERCEPTION_ERROR",
+      "memory_update_flag": false,
+      "outcome_label": "FAILURE",
+      "recovery_attempted": false,
+      "recovery_strategy": "NONE",
+      "recovery_success": null
+    },
+    "sample_id": "gold_v16_40k_029388__step_0000"
+  }
+]

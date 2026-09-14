@@ -1,0 +1,1922 @@
+[
+  {
+    "recovery_sample_id": "gold_v16_40k_000063__step_0001",
+    "recovery_val_index": 19,
+    "sample_id": "gold_v16_40k_000063__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_000063",
+    "val_index": 18
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000068__step_0001",
+    "recovery_val_index": 22,
+    "sample_id": "gold_v16_40k_000068__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_000068",
+    "val_index": 21
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000095__step_0002",
+    "recovery_val_index": 35,
+    "sample_id": "gold_v16_40k_000095__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_000095",
+    "val_index": 34
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000110__step_0002",
+    "recovery_val_index": 47,
+    "sample_id": "gold_v16_40k_000110__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_000110",
+    "val_index": 46
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_000120__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_000120",
+    "val_index": 55
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000233__step_0001",
+    "recovery_val_index": 84,
+    "sample_id": "gold_v16_40k_000233__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_000233",
+    "val_index": 83
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000238__step_0001",
+    "recovery_val_index": 86,
+    "sample_id": "gold_v16_40k_000238__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_000238",
+    "val_index": 85
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_000250__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_000250",
+    "val_index": 95
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_000265__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_000265",
+    "val_index": 107
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000378__step_0001",
+    "recovery_val_index": 138,
+    "sample_id": "gold_v16_40k_000378__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_000378",
+    "val_index": 137
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000405__step_0001",
+    "recovery_val_index": 154,
+    "sample_id": "gold_v16_40k_000405__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_000405",
+    "val_index": 153
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000410__step_0002",
+    "recovery_val_index": 159,
+    "sample_id": "gold_v16_40k_000410__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_000410",
+    "val_index": 158
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_000479__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_000479",
+    "val_index": 185
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000518__step_0001",
+    "recovery_val_index": 190,
+    "sample_id": "gold_v16_40k_000518__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_000518",
+    "val_index": 189
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000538__step_0001",
+    "recovery_val_index": 198,
+    "sample_id": "gold_v16_40k_000538__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_000538",
+    "val_index": 197
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_000566__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_000566",
+    "val_index": 220
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000813__step_0001",
+    "recovery_val_index": 299,
+    "sample_id": "gold_v16_40k_000813__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_000813",
+    "val_index": 298
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_000909__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_000909",
+    "val_index": 341
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_000963__step_0001",
+    "recovery_val_index": 355,
+    "sample_id": "gold_v16_40k_000963__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_000963",
+    "val_index": 354
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001000__step_0001",
+    "recovery_val_index": 374,
+    "sample_id": "gold_v16_40k_001000__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_001000",
+    "val_index": 373
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001059__step_0001",
+    "recovery_val_index": 397,
+    "sample_id": "gold_v16_40k_001059__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_001059",
+    "val_index": 396
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_001128__step_0001",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_001128",
+    "val_index": 418
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001145__step_0001",
+    "recovery_val_index": 426,
+    "sample_id": "gold_v16_40k_001145__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_001145",
+    "val_index": 425
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_001145__step_0002",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_001145",
+    "val_index": 427
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_001155__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_001155",
+    "val_index": 435
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001278__step_0001",
+    "recovery_val_index": 474,
+    "sample_id": "gold_v16_40k_001278__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_001278",
+    "val_index": 473
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001283__step_0001",
+    "recovery_val_index": 476,
+    "sample_id": "gold_v16_40k_001283__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_001283",
+    "val_index": 475
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001305__step_0002",
+    "recovery_val_index": 491,
+    "sample_id": "gold_v16_40k_001305__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_001305",
+    "val_index": 490
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001470__step_0002",
+    "recovery_val_index": 559,
+    "sample_id": "gold_v16_40k_001470__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_001470",
+    "val_index": 558
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001568__step_0001",
+    "recovery_val_index": 582,
+    "sample_id": "gold_v16_40k_001568__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_001568",
+    "val_index": 581
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_001620__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_001620",
+    "val_index": 615
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001674__step_0001",
+    "recovery_val_index": 630,
+    "sample_id": "gold_v16_40k_001674__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_001674",
+    "val_index": 629
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001738__step_0001",
+    "recovery_val_index": 646,
+    "sample_id": "gold_v16_40k_001738__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_001738",
+    "val_index": 645
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_001905__step_0002",
+    "recovery_val_index": 715,
+    "sample_id": "gold_v16_40k_001905__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_001905",
+    "val_index": 714
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_002041__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_002041",
+    "val_index": 760
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002050__step_0002",
+    "recovery_val_index": 767,
+    "sample_id": "gold_v16_40k_002050__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_002050",
+    "val_index": 766
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_002055__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_002055",
+    "val_index": 771
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002183__step_0001",
+    "recovery_val_index": 812,
+    "sample_id": "gold_v16_40k_002183__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_002183",
+    "val_index": 811
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002215__step_0002",
+    "recovery_val_index": 835,
+    "sample_id": "gold_v16_40k_002215__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_002215",
+    "val_index": 834
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002220__step_0002",
+    "recovery_val_index": 839,
+    "sample_id": "gold_v16_40k_002220__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_002220",
+    "val_index": 838
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002350__step_0002",
+    "recovery_val_index": 879,
+    "sample_id": "gold_v16_40k_002350__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_002350",
+    "val_index": 878
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_002366__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_002366",
+    "val_index": 892
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002510__step_0002",
+    "recovery_val_index": 943,
+    "sample_id": "gold_v16_40k_002510__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_002510",
+    "val_index": 942
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002613__step_0001",
+    "recovery_val_index": 971,
+    "sample_id": "gold_v16_40k_002613__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_002613",
+    "val_index": 970
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002628__step_0001",
+    "recovery_val_index": 978,
+    "sample_id": "gold_v16_40k_002628__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_002628",
+    "val_index": 977
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_002656__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_002656",
+    "val_index": 996
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002763__step_0001",
+    "recovery_val_index": 1027,
+    "sample_id": "gold_v16_40k_002763__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_002763",
+    "val_index": 1026
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_002815__step_0002",
+    "recovery_val_index": 1059,
+    "sample_id": "gold_v16_40k_002815__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_002815",
+    "val_index": 1058
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_002913__step_0002",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_002913",
+    "val_index": 1084
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_002945__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_002945",
+    "val_index": 1099
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_003228__step_0001",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_003228",
+    "val_index": 1202
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003255__step_0002",
+    "recovery_val_index": 1219,
+    "sample_id": "gold_v16_40k_003255__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003255",
+    "val_index": 1218
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_003363__step_0002",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_003363",
+    "val_index": 1252
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_003368__step_0001",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_003368",
+    "val_index": 1254
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003383__step_0001",
+    "recovery_val_index": 1260,
+    "sample_id": "gold_v16_40k_003383__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_003383",
+    "val_index": 1259
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003388__step_0001",
+    "recovery_val_index": 1262,
+    "sample_id": "gold_v16_40k_003388__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_003388",
+    "val_index": 1261
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003400__step_0001",
+    "recovery_val_index": 1270,
+    "sample_id": "gold_v16_40k_003400__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003400",
+    "val_index": 1269
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_003410__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_003410",
+    "val_index": 1279
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_003452__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_003452",
+    "val_index": 1288
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003459__step_0001",
+    "recovery_val_index": 1293,
+    "sample_id": "gold_v16_40k_003459__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003459",
+    "val_index": 1292
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003469__step_0001",
+    "recovery_val_index": 1299,
+    "sample_id": "gold_v16_40k_003469__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003469",
+    "val_index": 1298
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003474__step_0001",
+    "recovery_val_index": 1302,
+    "sample_id": "gold_v16_40k_003474__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003474",
+    "val_index": 1301
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003550__step_0001",
+    "recovery_val_index": 1326,
+    "sample_id": "gold_v16_40k_003550__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003550",
+    "val_index": 1325
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003555__step_0002",
+    "recovery_val_index": 1331,
+    "sample_id": "gold_v16_40k_003555__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003555",
+    "val_index": 1330
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003663__step_0001",
+    "recovery_val_index": 1363,
+    "sample_id": "gold_v16_40k_003663__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003663",
+    "val_index": 1362
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003695__step_0001",
+    "recovery_val_index": 1378,
+    "sample_id": "gold_v16_40k_003695__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003695",
+    "val_index": 1377
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003705__step_0001",
+    "recovery_val_index": 1386,
+    "sample_id": "gold_v16_40k_003705__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003705",
+    "val_index": 1385
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003769__step_0001",
+    "recovery_val_index": 1411,
+    "sample_id": "gold_v16_40k_003769__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_003769",
+    "val_index": 1410
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003968__step_0001",
+    "recovery_val_index": 1478,
+    "sample_id": "gold_v16_40k_003968__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_003968",
+    "val_index": 1477
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003973__step_0001",
+    "recovery_val_index": 1480,
+    "sample_id": "gold_v16_40k_003973__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_003973",
+    "val_index": 1479
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_003988__step_0002",
+    "recovery_val_index": 1487,
+    "sample_id": "gold_v16_40k_003988__step_0001",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_003988",
+    "val_index": 1486
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_004010__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_004010",
+    "val_index": 1503
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_004441__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_004441",
+    "val_index": 1656
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_004509__step_0001",
+    "recovery_val_index": 1685,
+    "sample_id": "gold_v16_40k_004509__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_004509",
+    "val_index": 1684
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_004573__step_0001",
+    "recovery_val_index": 1704,
+    "sample_id": "gold_v16_40k_004573__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_004573",
+    "val_index": 1703
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_004610__step_0001",
+    "recovery_val_index": 1726,
+    "sample_id": "gold_v16_40k_004610__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_004610",
+    "val_index": 1725
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_004755__step_0002",
+    "recovery_val_index": 1779,
+    "sample_id": "gold_v16_40k_004755__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_004755",
+    "val_index": 1778
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_004873__step_0001",
+    "recovery_val_index": 1816,
+    "sample_id": "gold_v16_40k_004873__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_004873",
+    "val_index": 1815
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_004883__step_0001",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_004883",
+    "val_index": 1820
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_004910__step_0002",
+    "recovery_val_index": 1839,
+    "sample_id": "gold_v16_40k_004910__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_004910",
+    "val_index": 1838
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_005045__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_005045",
+    "val_index": 1883
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005050__step_0001",
+    "recovery_val_index": 1886,
+    "sample_id": "gold_v16_40k_005050__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_005050",
+    "val_index": 1885
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005055__step_0002",
+    "recovery_val_index": 1891,
+    "sample_id": "gold_v16_40k_005055__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_005055",
+    "val_index": 1890
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005114__step_0001",
+    "recovery_val_index": 1912,
+    "sample_id": "gold_v16_40k_005114__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_005114",
+    "val_index": 1911
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005220__step_0001",
+    "recovery_val_index": 1958,
+    "sample_id": "gold_v16_40k_005220__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_005220",
+    "val_index": 1957
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_005365__step_0002",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_005365",
+    "val_index": 2009
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005404__step_0001",
+    "recovery_val_index": 2016,
+    "sample_id": "gold_v16_40k_005404__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_005404",
+    "val_index": 2015
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_005424__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_005424",
+    "val_index": 2028
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005515__step_0002",
+    "recovery_val_index": 2065,
+    "sample_id": "gold_v16_40k_005515__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_005515",
+    "val_index": 2064
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005579__step_0001",
+    "recovery_val_index": 2087,
+    "sample_id": "gold_v16_40k_005579__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_005579",
+    "val_index": 2086
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005613__step_0001",
+    "recovery_val_index": 2089,
+    "sample_id": "gold_v16_40k_005613__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_005613",
+    "val_index": 2088
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005729__step_0001",
+    "recovery_val_index": 2143,
+    "sample_id": "gold_v16_40k_005729__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_005729",
+    "val_index": 2142
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005763__step_0001",
+    "recovery_val_index": 2145,
+    "sample_id": "gold_v16_40k_005763__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_005763",
+    "val_index": 2144
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005768__step_0001",
+    "recovery_val_index": 2148,
+    "sample_id": "gold_v16_40k_005768__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_005768",
+    "val_index": 2147
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_005879__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_005879",
+    "val_index": 2199
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005913__step_0002",
+    "recovery_val_index": 2202,
+    "sample_id": "gold_v16_40k_005913__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_005913",
+    "val_index": 2201
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_005923__step_0001",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_005923",
+    "val_index": 2206
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_005928__step_0001",
+    "recovery_val_index": 2208,
+    "sample_id": "gold_v16_40k_005928__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_005928",
+    "val_index": 2207
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006009__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_006009",
+    "val_index": 2243
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006068__step_0001",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_006068",
+    "val_index": 2260
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_006078__step_0001",
+    "recovery_val_index": 2264,
+    "sample_id": "gold_v16_40k_006078__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_006078",
+    "val_index": 2263
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006179__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_006179",
+    "val_index": 2309
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006218__step_0001",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_006218",
+    "val_index": 2314
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_006228__step_0001",
+    "recovery_val_index": 2318,
+    "sample_id": "gold_v16_40k_006228__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_006228",
+    "val_index": 2317
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006238__step_0002",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_006238",
+    "val_index": 2323
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006250__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_006250",
+    "val_index": 2331
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_006260__step_0001",
+    "recovery_val_index": 2338,
+    "sample_id": "gold_v16_40k_006260__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_006260",
+    "val_index": 2337
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_006319__step_0001",
+    "recovery_val_index": 2359,
+    "sample_id": "gold_v16_40k_006319__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_006319",
+    "val_index": 2358
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006319__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_006319",
+    "val_index": 2359
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_006329__step_0001",
+    "recovery_val_index": 2365,
+    "sample_id": "gold_v16_40k_006329__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_006329",
+    "val_index": 2364
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006405__step_0002",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_006405",
+    "val_index": 2391
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_006528__step_0001",
+    "recovery_val_index": 2430,
+    "sample_id": "gold_v16_40k_006528__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_006528",
+    "val_index": 2429
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_006668__step_0001",
+    "recovery_val_index": 2482,
+    "sample_id": "gold_v16_40k_006668__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_006668",
+    "val_index": 2481
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006711__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_006711",
+    "val_index": 2508
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006779__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_006779",
+    "val_index": 2533
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006919__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_006919",
+    "val_index": 2583
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_006922__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_006922",
+    "val_index": 2584
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_006963__step_0002",
+    "recovery_val_index": 2592,
+    "sample_id": "gold_v16_40k_006963__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_006963",
+    "val_index": 2591
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_007015__step_0002",
+    "stratum": "loop_no_recovery",
+    "task_id": "gold_v16_40k_007015",
+    "val_index": 2623
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_007074__step_0001",
+    "recovery_val_index": 2642,
+    "sample_id": "gold_v16_40k_007074__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_007074",
+    "val_index": 2641
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_007113__step_0001",
+    "recovery_val_index": 2647,
+    "sample_id": "gold_v16_40k_007113__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_007113",
+    "val_index": 2646
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_007145__step_0002",
+    "recovery_val_index": 2663,
+    "sample_id": "gold_v16_40k_007145__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_007145",
+    "val_index": 2662
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_007145__step_0002",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_007145",
+    "val_index": 2663
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_007509__step_0001",
+    "recovery_val_index": 2801,
+    "sample_id": "gold_v16_40k_007509__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_007509",
+    "val_index": 2800
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_007563__step_0001",
+    "recovery_val_index": 2815,
+    "sample_id": "gold_v16_40k_007563__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_007563",
+    "val_index": 2814
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_007563__step_0002",
+    "recovery_val_index": 2816,
+    "sample_id": "gold_v16_40k_007563__step_0001",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_007563",
+    "val_index": 2815
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_007583__step_0001",
+    "recovery_val_index": 2824,
+    "sample_id": "gold_v16_40k_007583__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_007583",
+    "val_index": 2823
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_007733__step_0001",
+    "recovery_val_index": 2880,
+    "sample_id": "gold_v16_40k_007733__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_007733",
+    "val_index": 2879
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_007738__step_0002",
+    "recovery_val_index": 2883,
+    "sample_id": "gold_v16_40k_007738__step_0001",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_007738",
+    "val_index": 2882
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008065__step_0002",
+    "recovery_val_index": 3015,
+    "sample_id": "gold_v16_40k_008065__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_008065",
+    "val_index": 3014
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_008124__step_0001",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_008124",
+    "val_index": 3034
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008168__step_0001",
+    "recovery_val_index": 3042,
+    "sample_id": "gold_v16_40k_008168__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_008168",
+    "val_index": 3041
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008215__step_0001",
+    "recovery_val_index": 3070,
+    "sample_id": "gold_v16_40k_008215__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_008215",
+    "val_index": 3069
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008215__step_0002",
+    "recovery_val_index": 3071,
+    "sample_id": "gold_v16_40k_008215__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_008215",
+    "val_index": 3070
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008328__step_0001",
+    "recovery_val_index": 3102,
+    "sample_id": "gold_v16_40k_008328__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_008328",
+    "val_index": 3101
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008489__step_0001",
+    "recovery_val_index": 3156,
+    "sample_id": "gold_v16_40k_008489__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_008489",
+    "val_index": 3155
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008493__step_0001",
+    "recovery_val_index": 3158,
+    "sample_id": "gold_v16_40k_008493__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_008493",
+    "val_index": 3157
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008613__step_0001",
+    "recovery_val_index": 3196,
+    "sample_id": "gold_v16_40k_008613__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_008613",
+    "val_index": 3195
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008845__step_0002",
+    "recovery_val_index": 3268,
+    "sample_id": "gold_v16_40k_008845__step_0001",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_008845",
+    "val_index": 3267
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_008947__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_008947",
+    "val_index": 3300
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_008955__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_008955",
+    "val_index": 3302
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008973__step_0001",
+    "recovery_val_index": 3310,
+    "sample_id": "gold_v16_40k_008973__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_008973",
+    "val_index": 3309
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008977__step_0001",
+    "recovery_val_index": 3312,
+    "sample_id": "gold_v16_40k_008977__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_008977",
+    "val_index": 3311
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_008982__step_0001",
+    "recovery_val_index": 3314,
+    "sample_id": "gold_v16_40k_008982__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_008982",
+    "val_index": 3313
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_008992__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_008992",
+    "val_index": 3318
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_009085__step_0002",
+    "recovery_val_index": 3344,
+    "sample_id": "gold_v16_40k_009085__step_0001",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_009085",
+    "val_index": 3343
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_009102__step_0001",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_009102",
+    "val_index": 3352
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_009142__step_0001",
+    "recovery_val_index": 3366,
+    "sample_id": "gold_v16_40k_009142__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_009142",
+    "val_index": 3365
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_009213__step_0001",
+    "recovery_val_index": 3386,
+    "sample_id": "gold_v16_40k_009213__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_009213",
+    "val_index": 3385
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_009254__step_0001",
+    "recovery_val_index": 3400,
+    "sample_id": "gold_v16_40k_009254__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_009254",
+    "val_index": 3399
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_009303__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_009303",
+    "val_index": 3413
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_009360__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_009360",
+    "val_index": 3434
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_009445__step_0001",
+    "recovery_val_index": 3457,
+    "sample_id": "gold_v16_40k_009445__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_009445",
+    "val_index": 3456
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_009626__step_0001",
+    "recovery_val_index": 3520,
+    "sample_id": "gold_v16_40k_009626__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_009626",
+    "val_index": 3519
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_010167__step_0001",
+    "recovery_val_index": 3670,
+    "sample_id": "gold_v16_40k_010167__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_010167",
+    "val_index": 3669
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_010257__step_0002",
+    "recovery_val_index": 3697,
+    "sample_id": "gold_v16_40k_010257__step_0001",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_010257",
+    "val_index": 3696
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_010353__step_0001",
+    "recovery_val_index": 3726,
+    "sample_id": "gold_v16_40k_010353__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_010353",
+    "val_index": 3725
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_010413__step_0001",
+    "recovery_val_index": 3742,
+    "sample_id": "gold_v16_40k_010413__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_010413",
+    "val_index": 3741
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_010416__step_0002",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_010416",
+    "val_index": 3745
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_010469__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_010469",
+    "val_index": 3758
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_010506__step_0002",
+    "recovery_val_index": 3771,
+    "sample_id": "gold_v16_40k_010506__step_0001",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_010506",
+    "val_index": 3770
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_010536__step_0001",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_010536",
+    "val_index": 3780
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_010649__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_010649",
+    "val_index": 3810
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_010686__step_0002",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_010686",
+    "val_index": 3823
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_010713__step_0001",
+    "recovery_val_index": 3830,
+    "sample_id": "gold_v16_40k_010713__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_010713",
+    "val_index": 3829
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_010773__step_0001",
+    "recovery_val_index": 3846,
+    "sample_id": "gold_v16_40k_010773__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_010773",
+    "val_index": 3845
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_010890__step_0001",
+    "recovery_val_index": 3880,
+    "sample_id": "gold_v16_40k_010890__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_010890",
+    "val_index": 3879
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_011067__step_0002",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_011067",
+    "val_index": 3929
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_011136__step_0001",
+    "recovery_val_index": 3951,
+    "sample_id": "gold_v16_40k_011136__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_011136",
+    "val_index": 3950
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_011427__step_0001",
+    "recovery_val_index": 4030,
+    "sample_id": "gold_v16_40k_011427__step_0000",
+    "stratum": "recovery_failed",
+    "task_id": "gold_v16_40k_011427",
+    "val_index": 4029
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_011436__step_0001",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_011436",
+    "val_index": 4037
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_011467__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_011467",
+    "val_index": 4042
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_011483__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_011483",
+    "val_index": 4047
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_011583__step_0001",
+    "recovery_val_index": 4077,
+    "sample_id": "gold_v16_40k_011583__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_011583",
+    "val_index": 4076
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_011796__step_0001",
+    "recovery_val_index": 4141,
+    "sample_id": "gold_v16_40k_011796__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_011796",
+    "val_index": 4140
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_011843__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_011843",
+    "val_index": 4151
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_012147__step_0002",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_012147",
+    "val_index": 4236
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_012417__step_0002",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_012417",
+    "val_index": 4314
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_012507__step_0001",
+    "recovery_val_index": 4339,
+    "sample_id": "gold_v16_40k_012507__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_012507",
+    "val_index": 4338
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_012510__step_0001",
+    "recovery_val_index": 4342,
+    "sample_id": "gold_v16_40k_012510__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_012510",
+    "val_index": 4341
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_012566__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_012566",
+    "val_index": 4357
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_012603__step_0001",
+    "recovery_val_index": 4370,
+    "sample_id": "gold_v16_40k_012603__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_012603",
+    "val_index": 4369
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_012629__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_012629",
+    "val_index": 4376
+  },
+  {
+    "recovery_sample_id": "gold_v16_40k_012663__step_0001",
+    "recovery_val_index": 4386,
+    "sample_id": "gold_v16_40k_012663__step_0000",
+    "stratum": "recovered",
+    "task_id": "gold_v16_40k_012663",
+    "val_index": 4385
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_012708__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_012708",
+    "val_index": 4395
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_012824__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_012824",
+    "val_index": 4416
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_012826__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_012826",
+    "val_index": 4417
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_014093__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_014093",
+    "val_index": 4672
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_014153__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_014153",
+    "val_index": 4684
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_014270__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_014270",
+    "val_index": 4705
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_014584__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_014584",
+    "val_index": 4768
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_015486__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_015486",
+    "val_index": 4949
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_016131__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_016131",
+    "val_index": 5077
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_016307__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_016307",
+    "val_index": 5107
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_016428__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_016428",
+    "val_index": 5132
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_016711__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_016711",
+    "val_index": 5187
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_016731__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_016731",
+    "val_index": 5195
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_016971__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_016971",
+    "val_index": 5242
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_017086__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_017086",
+    "val_index": 5260
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_017267__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_017267",
+    "val_index": 5297
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_017390__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_017390",
+    "val_index": 5323
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_017568__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_017568",
+    "val_index": 5357
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_017613__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_017613",
+    "val_index": 5365
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_018106__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_018106",
+    "val_index": 5461
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_018226__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_018226",
+    "val_index": 5485
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_018588__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_018588",
+    "val_index": 5559
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_019008__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_019008",
+    "val_index": 5643
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_019129__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_019129",
+    "val_index": 5667
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_019547__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_019547",
+    "val_index": 5749
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_020573__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_020573",
+    "val_index": 5956
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_020807__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_020807",
+    "val_index": 5999
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_021224__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_021224",
+    "val_index": 6080
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_021830__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_021830",
+    "val_index": 6204
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_022550__step_0000",
+    "stratum": "mismatch_no_recovery",
+    "task_id": "gold_v16_40k_022550",
+    "val_index": 6348
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_022719__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_022719",
+    "val_index": 6379
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_023359__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_023359",
+    "val_index": 6508
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_023689__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_023689",
+    "val_index": 6574
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_023929__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_023929",
+    "val_index": 6622
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_024009__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_024009",
+    "val_index": 6636
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_024048__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_024048",
+    "val_index": 6645
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_024437__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_024437",
+    "val_index": 6722
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_024497__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_024497",
+    "val_index": 6734
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_024647__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_024647",
+    "val_index": 6764
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_024889__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_024889",
+    "val_index": 6812
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_025369__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_025369",
+    "val_index": 6908
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_025390__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_025390",
+    "val_index": 6911
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_025459__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_025459",
+    "val_index": 6926
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_025608__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_025608",
+    "val_index": 6955
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_025629__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_025629",
+    "val_index": 6958
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_025750__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_025750",
+    "val_index": 6983
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_026680__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_026680",
+    "val_index": 7168
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_026769__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_026769",
+    "val_index": 7185
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_027440__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_027440",
+    "val_index": 7322
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_028037__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_028037",
+    "val_index": 7424
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_028098__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_028098",
+    "val_index": 7435
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_028150__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_028150",
+    "val_index": 7443
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_028280__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_028280",
+    "val_index": 7466
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_028929__step_0000",
+    "stratum": "success_no_recovery",
+    "task_id": "gold_v16_40k_028929",
+    "val_index": 7571
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_029088__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_029088",
+    "val_index": 7599
+  },
+  {
+    "recovery_sample_id": null,
+    "recovery_val_index": null,
+    "sample_id": "gold_v16_40k_029388__step_0000",
+    "stratum": "perception_no_recovery",
+    "task_id": "gold_v16_40k_029388",
+    "val_index": 7649
+  }
+]
