@@ -1,0 +1,38 @@
+{
+  "schema": "task1.coverage-audit.receipt.v1",
+  "date": "2026-09-16",
+  "scope": "Saved evidence only; no new inference or changes to completed predictions and scores.",
+  "original_manifest": ".task1-assets/runs/task1-internvl-dual-v2/final-evidence-manifest-20260916.json",
+  "original_manifest_sha256": "ae5a1d0c2a38b1a2472f0ac86852bca5912b71f1340a3007f7870b1644c60e9a",
+  "original_files_verified_unchanged": 5069,
+  "csv_record_counts": {
+    "input_audit.csv": 360,
+    "response_audit.csv": 2160,
+    "parse_errors.csv": 40,
+    "coverage_by_phase.csv": 14,
+    "coverage_by_action.csv": 84,
+    "coverage_by_pixel_change.csv": 28
+  },
+  "tests": {
+    "command": "PYTHONPATH=src .venv/bin/python -m pytest -q tests/analysis/test_task1_coverage_audit.py",
+    "exit_code": 0,
+    "passed": 6,
+    "output": "regression-tests.txt"
+  },
+  "model_calls": 0,
+  "files": {
+    "results/task1_internvl_dual_v2_coverage_audit/README.md": "05ede292103e42cbcd61cc2830803b27ee180dcde690948d55cd2105b2826db5",
+    "results/task1_internvl_dual_v2_coverage_audit/abstention_reasons.csv": "ec56ed2cb2da8d179f0cd196748953273a594908016a340708e8f81567470951",
+    "results/task1_internvl_dual_v2_coverage_audit/coverage_by_action.csv": "0521c1f6ae2bad4fc3bdd7e2a8f398150fc1780e79b06d86a82baba40f62bac7",
+    "results/task1_internvl_dual_v2_coverage_audit/coverage_by_phase.csv": "77c4a9f8cb1ae79b00fc1a6f8598c52ad26be0674ca2cdec1d3b65bfc52376fe",
+    "results/task1_internvl_dual_v2_coverage_audit/coverage_by_pixel_change.csv": "ea194c3728ed71856394673fc5cf5f78d8a36b49d959c78831ac0c94b5eedf2a",
+    "results/task1_internvl_dual_v2_coverage_audit/input_audit.csv": "0644dcfb2f7ae9971688cfb4a0f7ffc2d5a5d274ae07dfa824ce5ca18cfc287d",
+    "results/task1_internvl_dual_v2_coverage_audit/parse_errors.csv": "0052d1a7a30d117ceecb877ca18a4f6a647114b347cdb7bbfb20daa99b084bda",
+    "results/task1_internvl_dual_v2_coverage_audit/regression-tests.txt": "3ab69c44c0781c70d7a226d92c2a74efdd9fbb158b6a5cd1669d62cace44568c",
+    "results/task1_internvl_dual_v2_coverage_audit/response_audit.csv": "cffe8d1af8cea908da40fb7e110caa5c8e4ad14acc13d08a500b67245b166b6b",
+    "results/task1_internvl_dual_v2_coverage_audit/summary.json": "faccea5d3bb2fe14acf10bf5d23878db0ff079b340b511f5a0df485e87b594e2",
+    "scripts/analysis/task1_coverage_audit.py": "4118ddcbb048c77e20d3f3c52298731c9e4d1760dd11eb1dc8c8a85093fa85a7",
+    "tests/analysis/test_task1_coverage_audit.py": "92bb8b63efb57280fe4955b6dfa7a7f4b32ba88d27496fbf34ae3691c802054d",
+    "docs/TASK1_INTERNVL_COVERAGE_ERROR_ANALYSIS.md": "57d1ffd3f84566cf4a80df587a3d74e936cce3bb6ee93508d41f20fe6875d01d"
+  }
+}

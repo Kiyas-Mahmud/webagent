@@ -1,6 +1,16 @@
 # Next evaluation plan: model comparison first, agent integration second
 
+> **Current status, 2026-09-16:** the [Task 1 InternVL mini comparison](TASK1_INTERNVL_DUAL_V2_RESULTS.md) is complete. [Task 2 agent integration](TASK2_AGENT_INTEGRATION.md) is the authoritative checklist. Its engineering checks and 12-episode development audit passed (A/B/C each 4/4; no observed completion increment). The separately frozen 90-episode Task 2 evaluation is running. The user approved the original PC-01 encoder for memory queries only. InternVL remains actor and assessor. The public-benchmark extension below has not run; older pending statuses and PC-01-only choices are historical.
+
 Date: 2026-09-14
+
+**Implementation update, 2026-09-15:** use the
+[Task 1 implementation and runbook](TASK1_IMPLEMENTATION_AND_RUNBOOK.md).
+The user selected PC-03 full epoch 0 for this comparison and shared frozen Qwen
+for three adapted external components. The original PC-01-only constraint below
+remains historical for older experiments. Local harness tests pass; actual
+external development has started on the local lab PC; InternVL parity and
+comparative inference remain pending.
 
 **Latest Task 1 design:** [agent-component architecture and data examples](TASK1_AGENT_COMPARISON_ARCHITECTURE.md).
 Browser Use, Agent S2 and WebVoyager assessment components are the three selected

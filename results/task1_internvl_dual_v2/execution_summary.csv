@@ -1,0 +1,8 @@
+﻿row_id,selected_requests,retained_prior_predictions,new_saved_predictions,valid_outputs,abstentions,parse_errors,valid_coverage,saved_infrastructure_errors,preserved_prior_interrupted_attempts,authorized_retries,unique_attempts_including_prior_interruption,known_model_calls,unknown_call_cost_attempts,known_inference_latency_seconds,unknown_latency_attempts
+browser_use_base,360,360,0,4,356,0,0.011111111111111112,0,0,0,360,360,0,1082.762801932994,0
+agent_s2_base,360,360,0,38,321,1,0.10555555555555556,0,0,0,360,360,0,1243.4416067629963,0
+webvoyager_base,360,360,0,36,321,3,0.1,0,0,0,360,360,0,1805.7754493859939,0
+browser_use_trained,360,360,0,72,258,30,0.2,0,0,0,360,360,0,1275.0368385460015,0
+agent_s2_trained,360,184,176,52,308,0,0.14444444444444443,0,1,1,361,360,1,1507.5644599550021,1
+webvoyager_trained,360,0,360,117,237,6,0.325,0,0,0,360,360,0,1800.5094464129988,0
+internvl_heads,360,0,360,360,0,0,1.0,0,0,0,360,360,0,611.6345146819999,0

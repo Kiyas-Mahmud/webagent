@@ -1,0 +1,15 @@
+﻿row_id,phase,eligible,valid,abstention,parse_error,coverage
+agent_s2_base,interaction_assessment,240,26,213,1,0.10833333333333334
+agent_s2_base,recovery_assessment,120,12,108,0,0.1
+agent_s2_trained,interaction_assessment,240,35,205,0,0.14583333333333334
+agent_s2_trained,recovery_assessment,120,17,103,0,0.14166666666666666
+browser_use_base,interaction_assessment,240,2,238,0,0.008333333333333333
+browser_use_base,recovery_assessment,120,2,118,0,0.016666666666666666
+browser_use_trained,interaction_assessment,240,51,159,30,0.2125
+browser_use_trained,recovery_assessment,120,21,99,0,0.175
+internvl_heads,interaction_assessment,240,240,0,0,1.0
+internvl_heads,recovery_assessment,120,120,0,0,1.0
+webvoyager_base,interaction_assessment,240,27,210,3,0.1125
+webvoyager_base,recovery_assessment,120,9,111,0,0.075
+webvoyager_trained,interaction_assessment,240,68,168,4,0.2833333333333333
+webvoyager_trained,recovery_assessment,120,49,69,2,0.4083333333333333

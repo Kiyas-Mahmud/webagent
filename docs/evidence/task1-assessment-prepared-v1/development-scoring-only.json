@@ -1,0 +1,68 @@
+{
+  "07ee39b00c0ebcb605f2aa0e5b37f7b0f595ebb35b21c3212140ff4454eeccbf": {
+    "outcome_label": "FAILURE"
+  },
+  "1494435343c598babe7c708d326869333c0b68f5bb2ea5b77708367988ad4b9f": {
+    "failure_type_4": "NONE",
+    "outcome_label": "SUCCESS"
+  },
+  "2131c6a2e824ec14a6aa2bc97a10ebdd9da51c6d1fe6cf8e010cc3b40cae48f0": {
+    "failure_type_4": "NONE",
+    "outcome_label": "SUCCESS"
+  },
+  "7ecd11422f751294150ce5aa7f670b8d7eca13d4bd21a0fb045027db2065f9f0": {
+    "failure_type_4": "NONE",
+    "outcome_label": "SUCCESS"
+  },
+  "7f4feb9583801a4ee44bbc00df7d87fcf72c12e1e286aeae08a03f3e12560451": {
+    "outcome_label": "FAILURE"
+  },
+  "828f779621145c2d20ee29d5dc359b97f4f046e4485165718161ad2246d382ac": {
+    "failure_type_4": "ACTION_MISMATCH",
+    "outcome_label": "FAILURE"
+  },
+  "8618c37d9ee6cf57983e56e484377373d9f732d22b5b3a3b79a91f271394efa2": {
+    "outcome_label": "FAILURE"
+  },
+  "9e18b6744955b44281ed358431167a17e1ce7ce74572fccaef64a5ff2af481b5": {
+    "outcome_label": "FAILURE"
+  },
+  "a16d6be296747414b9cbf1a667dabb1b699498695081db87b0ff5e4874aca2bd": {
+    "failure_type_4": "PERCEPTION_ERROR",
+    "outcome_label": "FAILURE"
+  },
+  "baabf6161c3fb7bca04a486ddc68a64bc54d0589359dd0772caaa0bd2de744fd": {
+    "failure_type_4": "ACTION_MISMATCH",
+    "outcome_label": "FAILURE"
+  },
+  "baf464e4eba05124c511c639617c5ee95f4f70ab61d7a3fa923747f08da69c09": {
+    "failure_type_4": "ACTION_MISMATCH",
+    "outcome_label": "FAILURE"
+  },
+  "bce8c730eb03692e6e5a4646ef185b084a746bb8ee9a42d37f7fe6b7f52b88d5": {
+    "failure_type_4": "NONE",
+    "outcome_label": "SUCCESS"
+  },
+  "bd0c0cded3110f067ef5baee2ea5b804d7087d9d2c7fc5c082ddea0a99add350": {
+    "failure_type_4": "NONE",
+    "outcome_label": "SUCCESS"
+  },
+  "c625766639ba64396aba101ef3c1797a00b29b013d28d5907fa77a188a95be44": {
+    "outcome_label": "FAILURE"
+  },
+  "c75fe0eb37ad584194be5fc46c2a5101bd128cd402ff81727179fc046351bd93": {
+    "failure_type_4": "NONE",
+    "outcome_label": "SUCCESS"
+  },
+  "de348425d8d0bb089ec1fd17d50bfb42d540fff115e3fe438bbfd8557af093b1": {
+    "failure_type_4": "ACTION_MISMATCH",
+    "outcome_label": "FAILURE"
+  },
+  "f152cf0a7c68819c988c8c2a33529afbdb4d0c5600e9a11667a1a7e29a07fb75": {
+    "failure_type_4": "ACTION_MISMATCH",
+    "outcome_label": "FAILURE"
+  },
+  "fe04e477e6a33244ea3bb15062cc3f3f0a55ca21146f36167a75478001856938": {
+    "outcome_label": "FAILURE"
+  }
+}

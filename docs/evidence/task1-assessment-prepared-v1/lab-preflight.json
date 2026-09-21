@@ -1,0 +1,35 @@
+{
+  "assets": {},
+  "environment": {
+    "Pillow": "12.2.0",
+    "accelerate": "1.14.0",
+    "architecture": "aarch64",
+    "bitsandbytes": "0.50.0",
+    "numpy": "2.4.4",
+    "peft": "0.20.0",
+    "python": "3.12.3",
+    "scikit-learn": "1.9.0",
+    "torch": "2.13.0+cu130",
+    "transformers": "4.57.6"
+  },
+  "issues": [
+    {
+      "reason": "Kaggle host unavailable; images not opened",
+      "stage": "execution_host"
+    },
+    {
+      "path": "/kaggle/input/task1-models/best_e0_outcome-mcc0.641.ckpt",
+      "reason": "Selected checkpoint file unavailable",
+      "stage": "pc02_checkpoint"
+    },
+    {
+      "reason": "/kaggle/input/task1-models/Qwen2-VL-2B-Instruct/snapshots/895c3a49bc3fa70a340399125c650a463535e71c",
+      "stage": "qwen_base"
+    },
+    {
+      "reason": "/kaggle/input/task1-models/InternVL3_5-8B-HF/snapshots/3974c115d44f0e13eae8b654f680b1e561c71ae9",
+      "stage": "internvl_base"
+    }
+  ],
+  "status": "BLOCKED"
+}

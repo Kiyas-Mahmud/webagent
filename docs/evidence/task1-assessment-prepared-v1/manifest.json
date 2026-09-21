@@ -1,0 +1,17 @@
+{
+  "development_cases": 12,
+  "development_requests": 18,
+  "files": {
+    "development-inputs.json": "de579a66f96fb5a9cb8327184c4a87551faedb877b806b24121dc5ede4f3fca6",
+    "development-scoring-only.json": "b05adc0b2bb078d06e7c846dfce282085ca83a06100d485b018a993b85d93909",
+    "inputs.json": "900c97fd2764055888a305ddab24b68894630209a00d819a5353ddde496e3b26",
+    "scoring-only.json": "c5f829428628670e9594641f12a2c60450cce663c2c1f80dedb429a2154b0b5f"
+  },
+  "images_opened": 0,
+  "model_calls": 0,
+  "pilot_cases": 240,
+  "pilot_requests": 360,
+  "schema": "task1.prepared.v1",
+  "selection_sha256": "6bb337c47aec52e5b4f3d71fd6a32b4512e81ba6cd9ad521e79bca5c2bd57106",
+  "source_sha256": "42df34295f2b0f81e48a29e4acae1b8b16c862ed2a140c19d2a63c4c950d435c"
+}

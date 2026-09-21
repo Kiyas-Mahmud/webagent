@@ -1,0 +1,8 @@
+﻿row_id,method,backend,weight_variant,output_mode,seed,phase,mcc,balanced_accuracy,macro_f1,accuracy,all_case_accuracy,valid_outputs,eligible_cases,parse_error,abstention,infrastructure_error,interrupted,missing,model_calls_known,model_calls_unknown_records,latency_seconds_total,token_limit_hits
+browser_use_base,browser_use,InternVL3.5-8B-HF,base,generation,42,recovery_assessment,0.0,0.5,0.3333333333333333,0.5,0.008333333333333333,2,120,0,118,0,0,0,120,0,304.8885494999972,0
+agent_s2_base,agent_s2,InternVL3.5-8B-HF,base,generation,42,recovery_assessment,0.5291502622129182,0.7,0.6974789915966386,0.75,0.075,12,120,0,108,0,0,0,120,0,349.7013658619999,0
+webvoyager_base,webvoyager,InternVL3.5-8B-HF,base,generation,42,recovery_assessment,0.0,0.5,0.18181818181818182,0.2222222222222222,0.016666666666666666,9,120,0,111,0,0,0,120,0,583.4996709459965,0
+browser_use_trained,browser_use,InternVL3.5-8B-HF,trained,generation,42,recovery_assessment,0.22360679774997896,0.6166666666666667,0.6100795755968169,0.6666666666666666,0.11666666666666667,21,120,0,99,0,0,0,120,0,380.09915437899963,0
+agent_s2_trained,agent_s2,InternVL3.5-8B-HF,trained,generation,42,recovery_assessment,0.09128709291752769,0.55,0.5142857142857142,0.5294117647058824,0.075,17,120,0,103,0,0,0,120,0,428.1048273060036,0
+webvoyager_trained,webvoyager,InternVL3.5-8B-HF,trained,generation,42,recovery_assessment,0.0,0.5,0.3287671232876712,0.4897959183673469,0.2,49,120,2,69,0,0,0,120,0,578.9408316820002,0
+internvl_heads,trained_heads,InternVL3.5-8B-HF,trained,heads,42,recovery_assessment,0.8844395746351074,0.9416666666666667,0.9416301855326246,0.9416666666666667,0.9416666666666667,120,120,0,0,0,0,0,120,0,274.86715122199985,0

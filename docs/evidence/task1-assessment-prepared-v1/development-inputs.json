@@ -1,0 +1,236 @@
+[
+  {
+    "after_image": "images/gold_v16_40k_000004/after_0001.png",
+    "before_image": "images/gold_v16_40k_000004/before_0001.png",
+    "case_id": "gold_v16_40k_000004__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000004",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000004/after_0002.png",
+    "before_image": "images/gold_v16_40k_000004/after_0001.png",
+    "case_id": "gold_v16_40k_000004__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000004",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000002/after_0001.png",
+    "before_image": "images/gold_v16_40k_000002/before_0001.png",
+    "case_id": "gold_v16_40k_000002__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000002",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000009/after_0001.png",
+    "before_image": "images/gold_v16_40k_000009/before_0001.png",
+    "case_id": "gold_v16_40k_000009__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000009",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000009/after_0002.png",
+    "before_image": "images/gold_v16_40k_000009/after_0001.png",
+    "case_id": "gold_v16_40k_000009__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000009",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000007/after_0001.png",
+    "before_image": "images/gold_v16_40k_000007/before_0001.png",
+    "case_id": "gold_v16_40k_000007__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000007",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000014/after_0001.png",
+    "before_image": "images/gold_v16_40k_000014/before_0001.png",
+    "case_id": "gold_v16_40k_000014__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000014",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000014/after_0002.png",
+    "before_image": "images/gold_v16_40k_000014/after_0001.png",
+    "case_id": "gold_v16_40k_000014__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000014",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000012/after_0001.png",
+    "before_image": "images/gold_v16_40k_000012/before_0001.png",
+    "case_id": "gold_v16_40k_000012__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000012",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000019/after_0001.png",
+    "before_image": "images/gold_v16_40k_000019/before_0001.png",
+    "case_id": "gold_v16_40k_000019__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000019",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000019/after_0002.png",
+    "before_image": "images/gold_v16_40k_000019/after_0001.png",
+    "case_id": "gold_v16_40k_000019__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000019",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000017/after_0001.png",
+    "before_image": "images/gold_v16_40k_000017/before_0001.png",
+    "case_id": "gold_v16_40k_000017__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000017",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000029/after_0001.png",
+    "before_image": "images/gold_v16_40k_000029/before_0001.png",
+    "case_id": "gold_v16_40k_000029__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000029",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000029/after_0002.png",
+    "before_image": "images/gold_v16_40k_000029/after_0001.png",
+    "case_id": "gold_v16_40k_000029__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000029",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000027/after_0001.png",
+    "before_image": "images/gold_v16_40k_000027/before_0001.png",
+    "case_id": "gold_v16_40k_000027__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000027",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000024/after_0001.png",
+    "before_image": "images/gold_v16_40k_000024/before_0001.png",
+    "case_id": "gold_v16_40k_000024__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000024",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000024/after_0002.png",
+    "before_image": "images/gold_v16_40k_000024/after_0001.png",
+    "case_id": "gold_v16_40k_000024__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000024",
+    "website_domain": "apple.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000022/after_0001.png",
+    "before_image": "images/gold_v16_40k_000022/before_0001.png",
+    "case_id": "gold_v16_40k_000022__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000022",
+    "website_domain": "apple.com"
+  }
+]

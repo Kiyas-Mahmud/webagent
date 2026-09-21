@@ -1,0 +1,32 @@
+{
+  "schema": "task2.engineering-start.receipt.v1",
+  "date": "2026-09-16",
+  "test_command": "PYTHONPATH=src .venv/bin/python -m pytest -q tests/task2/test_assessment.py",
+  "test_result": "23 passed in 0.70s",
+  "test_exit_code": 0,
+  "test_type": "CPU tensor/image fixtures; no real model inference",
+  "dependency_check_command": ".task2-assets/browser-use-env/bin/python -m pip check",
+  "dependency_check_result": "No broken requirements found.",
+  "native_import_receipt": "native-agent-import.json",
+  "live_ready": false,
+  "model_calls": 0,
+  "browser_episodes": 0,
+  "files": {
+    "configs/eval/task2/development_candidate_v1.json": "14fb28a14c129a5fc188b38f463bb439bcd2f0e88be97f95d9d81f99a523eae1",
+    "docs/TASK2_AGENT_INTEGRATION.md": "6d0cdbbfff32e0c9c444684bfd9129beef3477a956ba20a649cc7655a9996316",
+    "docs/evidence/task2-start-v1/README.md": "a3242c82d6ef4b7e6592ea685f0dd44315a7c183bf5c800223f072a5c56612bf",
+    "docs/evidence/task2-start-v1/constraints.txt": "da2085ce818ccd0e121966506627273b05a4e9ed6dfb3be12328fc699c62b04c",
+    "docs/evidence/task2-start-v1/dependency-lock.json": "259aeec35052a20caf667f5b89b23eba0b5f889eb6e878dc371a4720dcaec886",
+    "docs/evidence/task2-start-v1/dependency-resolution.log": "e859c40c2fe0e4255ebd61e02d18c7029d6e89a6f1b28bc441ce28643765f919",
+    "docs/evidence/task2-start-v1/installation.log": "9bf1b1c758a204c772a355ec51d9f8ec76187b04cbb1ef38845187e5dda54e31",
+    "docs/evidence/task2-start-v1/native-agent-import.json": "eeef6007ae31d1e96ed913dd2779b44a9790e67cc5dd42121ba90e4ee48b5035",
+    "docs/evidence/task2-start-v1/preflight-after-install.json": "637f37f5d730caa3286f8a3a8959054418a90ecd6cb63f14dad59eb885c00c26",
+    "docs/evidence/task2-start-v1/preflight.json": "cfc30f4b0a3d80b399b665c33faaf2a768521030c1f871c52bcb90de11ea501a",
+    "docs/evidence/task2-start-v1/upstream-source.json": "8523965d269c3f8dfbba949c59c067f0f60e47c777cd0766bf376110befd9e00",
+    "scripts/external_agents/task2_preflight.py": "17a33d932c81c6c13d1a70289144f8bbfda11c478023e7229fd4113f21b8c381",
+    "src/web_agent/eval/task2/__init__.py": "f734348b8caaaeb5ceb0c86f18f5e656e79b09fff982942246cae0bde33f5fe3",
+    "src/web_agent/eval/task2/assessment.py": "6ef3b363c2b2aae7bd3ad71259d8569af4514ccc95f0ec318f24ec28c688e284",
+    "src/web_agent/eval/task2/memory_contract.py": "21885665257115e46e2bb7a444d0fdf74be8f0334fa2fa642a9243748f1637de",
+    "tests/task2/test_assessment.py": "573087d41335cf3305b653b5ae74b66d32bf06f25bde27cc1dab4ec17df2fc91"
+  }
+}

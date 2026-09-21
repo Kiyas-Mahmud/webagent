@@ -1,5 +1,52 @@
 # Hybrid-agent TODO — execute in order
 
+Current work and authoritative checklist: [Task 2 agent integration](TASK2_AGENT_INTEGRATION.md). [Task 1 InternVL comparison](TASK1_INTERNVL_DUAL_V2.md) is complete. The entries below remain historical.
+
+## Historical Qwen comparison and earlier work
+
+> **Completed, 2026-09-15:** All 1,440 comparison records are saved and scored.
+> Independent raw-output/logit and metric verification passed. InternVL outcome
+> MCC = 0.5583; recovery MCC = 0.8844. All three adapted Qwen configurations
+> predicted SUCCESS for every valid outcome response (MCC = 0).
+> See [completed results and limitations](TASK1_LOCAL_ASSESSMENT_RESULTS.md).
+> This completion notice supersedes the earlier running/pending statuses below.
+
+> **Local evaluation update, 2026-09-15:** The existing dataset was verified
+> (matching validation hash; all 626 required images decoded). The exact InternVL
+> epoch-0 checkpoint was fetched from Git LFS and hash-verified; its pinned base
+> snapshot is now local. NVIDIA GB10 CUDA/BF16 checks passed.
+> All 72 development records are saved (71 valid, one parsing failure retained).
+> InternVL processor/logit parity passed. The configuration is frozen and the
+> 1,440-record comparison has been launched serially.
+> Monitor `.task1-assets/runs/task1-local-v1/status.json` and `execution.log`.
+> Completed comparison scores remain pending until the run and scoring finish.
+> This update supersedes earlier host/download/development statuses below.
+
+**Task 1 implementation status, 2026-09-15:** follow the
+[implementation, result tables and runbook](TASK1_IMPLEMENTATION_AND_RUNBOOK.md).
+The three adapters, PC-03 inference path, phase-specific inputs, runner and scorer
+are implemented. The frozen pilot has 360 requests per system; 12 separate
+development cases provide 18 requests per system. All 54 external-component development requests are saved (53 valid outputs,
+one parsing failure). InternVL development/parity and pilot inference are pending.
+
+- [x] Select PC-03 full-trained epoch 0 and shared frozen Qwen backend.
+- [x] Preserve three upstream assessment sources and historical PC-03 metrics.
+- [x] Prepare inputs, adapters, persistence/resume, scorer and parity check.
+- [x] Run local engineering regression checks (not live/model efficacy results).
+- [x] Verify local dataset source hash and presence of all 626 required images.
+- [x] Verify GB10 CUDA/BF16 support outside the sandbox.
+- [x] Download and verify the pinned InternVL base snapshot.
+- [x] Fetch and SHA-256 verify the exact trained InternVL checkpoint (645,434,661 bytes).
+- [x] Execute all 54 external-component development requests and retain raw outputs.
+- [ ] Pass actual artifact/CUDA preflight and development inference/parity.
+- [ ] Freeze the verified configuration and run all four systems.
+- [ ] Audit 1,440 records and fill the actual mini comparison tables.
+
+**Current stage: complete InternVL development and parity checks.** The user authorized
+the existing local dataset. The Kaggle-only restriction has been removed; the
+local paths are recorded in `configs/eval/task1/lab_paths.json`.
+The entries below record prior planning and historical browser work.
+
 **Immediate Task 1 pilot:** [240-example mini dataset and checklist](TASK1_MINI_DATASET_PILOT.md).
 Metadata analysed and six-action selection prepared; no agent inference run.
 Selected candidates: Browser Use, Agent S2 and WebVoyager assessment components.

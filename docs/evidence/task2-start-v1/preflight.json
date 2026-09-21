@@ -1,0 +1,51 @@
+{
+  "browser_environment": {
+    "browsergym-miniwob": "0.14.3",
+    "gymnasium": "1.0.0",
+    "playwright": "1.44.0"
+  },
+  "browser_episodes": 0,
+  "checkpoint_sha256": "35eec6c940836e581abe597006cbf4d9aedbcba06c574ba3d8c2829f667d28cb",
+  "final_evaluation_ready": false,
+  "host_running_jobs_verified": false,
+  "internvl_direct_query_rejection": "MEMORY_EMBEDDING_SPACE_MISMATCH: use the original store encoder; equal dimensions are insufficient",
+  "live_ready": false,
+  "memory_manifest_sha256": "4b577b79e2f8e04424572aa25223a81fa15a8f1f3cb483ef181dda982aa072d6",
+  "model_calls": 0,
+  "model_environment": {
+    "browser-use": null,
+    "peft": "0.20.0",
+    "playwright": null,
+    "torch": "2.13.0+cu130",
+    "transformers": "4.57.6"
+  },
+  "original_query_asset_check": {
+    "admission_threshold": 0.7371385097503662,
+    "checkpoint_sha256": "9eaab6d24719b7bce8d0dd2ccf9169c3ddf83e0a800714a84531679c0c94895a",
+    "count": 1974,
+    "dimension": 768,
+    "live_query_parity_verified": false,
+    "status": "ASSET_IDENTITY_PASS",
+    "write_enabled": false
+  },
+  "pending": [
+    "Browser Use isolated environment and pinned source",
+    "Local InternVL actor adapter and atomic action execution",
+    "Live head parity including strategy and recovery transitions",
+    "Incident, budget and continuation controller",
+    "Memory query route decision and live query parity",
+    "Matched development protocol and host job/GPU check"
+  ],
+  "schema": "task2.preflight.v1",
+  "source_hashes": {
+    "/home/aiub/kiyas/webagent/scripts/external_agents/task2_preflight.py": "b1a0df87c624e2f94cc6ccac44dcf5c972f20c4fadb48cc0b3a6f5c422607c00",
+    "configs/eval/task2/development_candidate_v1.json": "7ebf23c116b56c3644941c18df7dccf039672ca89979df72ac7d85f6547ed1d0",
+    "src/web_agent/eval/task2/__init__.py": "f734348b8caaaeb5ceb0c86f18f5e656e79b09fff982942246cae0bde33f5fe3",
+    "src/web_agent/eval/task2/assessment.py": "6ef3b363c2b2aae7bd3ad71259d8569af4514ccc95f0ec318f24ec28c688e284",
+    "src/web_agent/eval/task2/memory_contract.py": "21885665257115e46e2bb7a444d0fdf74be8f0334fa2fa642a9243748f1637de",
+    "tests/task2/test_assessment.py": "573087d41335cf3305b653b5ae74b66d32bf06f25bde27cc1dab4ec17df2fc91"
+  },
+  "status": "ENGINEERING_START_ONLY",
+  "task1_files_verified_unchanged": 5069,
+  "task1_final_manifest_sha256": "ae5a1d0c2a38b1a2472f0ac86852bca5912b71f1340a3007f7870b1644c60e9a"
+}

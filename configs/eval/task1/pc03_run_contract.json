@@ -1,0 +1,23 @@
+{
+  "candidate": {
+    "model_id": "internvl35_8b_gold_v2_8_dgx",
+    "config": "configs/backbones/internvl35_8b_gold_v2_8_dgx.yaml",
+    "label": "InternVL3.5-8B-HF",
+    "accepted_prior_mini": false,
+    "prior_mini_evidence": "none; this backbone must pass its own mini"
+  },
+  "git_commit": "628c1fa776142c8169466c53865e694aa01d6b8d",
+  "config_name": "Y_INTERNVL35_8B_GOLD_V2_8_DGX",
+  "model_revision": "3974c115d44f0e13eae8b654f680b1e561c71ae9",
+  "seed": 42,
+  "maximum_full_epochs": 10,
+  "controlled_mini_epochs": 5,
+  "effective_batch_size": 32,
+  "checkpoint_selection": "all_gates_then_outcome_mcc",
+  "checkpoint_selection_source": "original_gold_validation_only",
+  "supplement_validation_selects_checkpoint": false,
+  "train_rows": 24107,
+  "original_validation_rows": 7861,
+  "supplement_validation_rows": 194,
+  "test_rows_read": 0
+}

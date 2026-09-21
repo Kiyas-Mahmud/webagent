@@ -1,0 +1,4682 @@
+[
+  {
+    "after_image": "images/gold_v16_40k_000063/after_0001.png",
+    "before_image": "images/gold_v16_40k_000063/before_0001.png",
+    "case_id": "gold_v16_40k_000063__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000063",
+    "website_domain": "dzen.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000063/after_0002.png",
+    "before_image": "images/gold_v16_40k_000063/after_0001.png",
+    "case_id": "gold_v16_40k_000063__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested site information for the current task.",
+    "task_id": "gold_v16_40k_000063",
+    "website_domain": "dzen.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000068/after_0001.png",
+    "before_image": "images/gold_v16_40k_000068/before_0001.png",
+    "case_id": "gold_v16_40k_000068__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000068",
+    "website_domain": "afternic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000068/after_0002.png",
+    "before_image": "images/gold_v16_40k_000068/after_0001.png",
+    "case_id": "gold_v16_40k_000068__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page value for the current task.",
+    "task_id": "gold_v16_40k_000068",
+    "website_domain": "afternic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000095/after_0002.png",
+    "before_image": "images/gold_v16_40k_000095/before_0002.png",
+    "case_id": "gold_v16_40k_000095__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for the current task.",
+    "task_id": "gold_v16_40k_000095",
+    "website_domain": "cloud.microsoft"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000095/after_0003.png",
+    "before_image": "images/gold_v16_40k_000095/after_0002.png",
+    "case_id": "gold_v16_40k_000095__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant page content for the current task.",
+    "task_id": "gold_v16_40k_000095",
+    "website_domain": "cloud.microsoft"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000110/after_0002.png",
+    "before_image": "images/gold_v16_40k_000110/before_0002.png",
+    "case_id": "gold_v16_40k_000110__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for the current task.",
+    "task_id": "gold_v16_40k_000110",
+    "website_domain": "cloud.microsoft"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000110/after_0003.png",
+    "before_image": "images/gold_v16_40k_000110/after_0002.png",
+    "case_id": "gold_v16_40k_000110__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant page content for the current task.",
+    "task_id": "gold_v16_40k_000110",
+    "website_domain": "cloud.microsoft"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000120/after_0003.png",
+    "before_image": "images/gold_v16_40k_000120/before_0003.png",
+    "case_id": "gold_v16_40k_000120__step_0002",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for the current task.",
+    "task_id": "gold_v16_40k_000120",
+    "website_domain": "cloud.microsoft"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000233/after_0001.png",
+    "before_image": "images/gold_v16_40k_000233/before_0001.png",
+    "case_id": "gold_v16_40k_000233__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target page state for the current task.",
+    "task_id": "gold_v16_40k_000233",
+    "website_domain": "mts.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000233/after_0002.png",
+    "before_image": "images/gold_v16_40k_000233/after_0001.png",
+    "case_id": "gold_v16_40k_000233__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target page state for the current task.",
+    "task_id": "gold_v16_40k_000233",
+    "website_domain": "mts.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000238/after_0001.png",
+    "before_image": "images/gold_v16_40k_000238/before_0001.png",
+    "case_id": "gold_v16_40k_000238__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target web resource for the current task.",
+    "task_id": "gold_v16_40k_000238",
+    "website_domain": "mts.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000238/after_0002.png",
+    "before_image": "images/gold_v16_40k_000238/after_0001.png",
+    "case_id": "gold_v16_40k_000238__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target web resource for the current task.",
+    "task_id": "gold_v16_40k_000238",
+    "website_domain": "mts.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000250/after_0003.png",
+    "before_image": "images/gold_v16_40k_000250/before_0003.png",
+    "case_id": "gold_v16_40k_000250__step_0002",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target page state for the current task.",
+    "task_id": "gold_v16_40k_000250",
+    "website_domain": "360.cn"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000265/after_0003.png",
+    "before_image": "images/gold_v16_40k_000265/before_0003.png",
+    "case_id": "gold_v16_40k_000265__step_0002",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target page state for the current task.",
+    "task_id": "gold_v16_40k_000265",
+    "website_domain": "taboola.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000378/after_0001.png",
+    "before_image": "images/gold_v16_40k_000378/before_0001.png",
+    "case_id": "gold_v16_40k_000378__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed reference material for the current task.",
+    "task_id": "gold_v16_40k_000378",
+    "website_domain": "telegram.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000378/after_0002.png",
+    "before_image": "images/gold_v16_40k_000378/after_0001.png",
+    "case_id": "gold_v16_40k_000378__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed reference material for the current task.",
+    "task_id": "gold_v16_40k_000378",
+    "website_domain": "telegram.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000405/after_0001.png",
+    "before_image": "images/gold_v16_40k_000405/before_0001.png",
+    "case_id": "gold_v16_40k_000405__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed page setting for the current task.",
+    "task_id": "gold_v16_40k_000405",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000405/after_0002.png",
+    "before_image": "images/gold_v16_40k_000405/after_0001.png",
+    "case_id": "gold_v16_40k_000405__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed page setting for the current task.",
+    "task_id": "gold_v16_40k_000405",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000410/after_0002.png",
+    "before_image": "images/gold_v16_40k_000410/before_0002.png",
+    "case_id": "gold_v16_40k_000410__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page section for the current task.",
+    "task_id": "gold_v16_40k_000410",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000410/after_0003.png",
+    "before_image": "images/gold_v16_40k_000410/after_0002.png",
+    "case_id": "gold_v16_40k_000410__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested page section for the current task.",
+    "task_id": "gold_v16_40k_000410",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000479/after_0002.png",
+    "before_image": "images/gold_v16_40k_000479/before_0002.png",
+    "case_id": "gold_v16_40k_000479__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page section for the current task.",
+    "task_id": "gold_v16_40k_000479",
+    "website_domain": "afternic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000518/after_0001.png",
+    "before_image": "images/gold_v16_40k_000518/before_0001.png",
+    "case_id": "gold_v16_40k_000518__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target form state for the current task.",
+    "task_id": "gold_v16_40k_000518",
+    "website_domain": "verisign.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000518/after_0002.png",
+    "before_image": "images/gold_v16_40k_000518/after_0001.png",
+    "case_id": "gold_v16_40k_000518__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target form state for the current task.",
+    "task_id": "gold_v16_40k_000518",
+    "website_domain": "verisign.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000538/after_0001.png",
+    "before_image": "images/gold_v16_40k_000538/before_0001.png",
+    "case_id": "gold_v16_40k_000538__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant project details for the current task.",
+    "task_id": "gold_v16_40k_000538",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000538/after_0002.png",
+    "before_image": "images/gold_v16_40k_000538/after_0001.png",
+    "case_id": "gold_v16_40k_000538__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant project details for the current task.",
+    "task_id": "gold_v16_40k_000538",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000566/after_0001.png",
+    "before_image": "images/gold_v16_40k_000566/before_0001.png",
+    "case_id": "gold_v16_40k_000566__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed reference material for the current task.",
+    "task_id": "gold_v16_40k_000566",
+    "website_domain": "telegram.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000813/after_0001.png",
+    "before_image": "images/gold_v16_40k_000813/before_0001.png",
+    "case_id": "gold_v16_40k_000813__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested reference content for the current task.",
+    "task_id": "gold_v16_40k_000813",
+    "website_domain": "duolingo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000813/after_0002.png",
+    "before_image": "images/gold_v16_40k_000813/after_0001.png",
+    "case_id": "gold_v16_40k_000813__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested reference content for the current task.",
+    "task_id": "gold_v16_40k_000813",
+    "website_domain": "duolingo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000909/after_0002.png",
+    "before_image": "images/gold_v16_40k_000909/before_0002.png",
+    "case_id": "gold_v16_40k_000909__step_0001",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested interaction state for the current task.",
+    "task_id": "gold_v16_40k_000909",
+    "website_domain": "repubblica.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000963/after_0001.png",
+    "before_image": "images/gold_v16_40k_000963/before_0001.png",
+    "case_id": "gold_v16_40k_000963__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant information page for the current task.",
+    "task_id": "gold_v16_40k_000963",
+    "website_domain": "wired.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_000963/after_0002.png",
+    "before_image": "images/gold_v16_40k_000963/after_0001.png",
+    "case_id": "gold_v16_40k_000963__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant information page for the current task.",
+    "task_id": "gold_v16_40k_000963",
+    "website_domain": "wired.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001000/after_0001.png",
+    "before_image": "images/gold_v16_40k_001000/before_0001.png",
+    "case_id": "gold_v16_40k_001000__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for the requested result.",
+    "task_id": "gold_v16_40k_001000",
+    "website_domain": "rambler.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001000/after_0002.png",
+    "before_image": "images/gold_v16_40k_001000/after_0001.png",
+    "case_id": "gold_v16_40k_001000__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested page value for the requested result.",
+    "task_id": "gold_v16_40k_001000",
+    "website_domain": "rambler.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001059/after_0001.png",
+    "before_image": "images/gold_v16_40k_001059/before_0001.png",
+    "case_id": "gold_v16_40k_001059__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the requested result.",
+    "task_id": "gold_v16_40k_001059",
+    "website_domain": "netgear.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001059/after_0002.png",
+    "before_image": "images/gold_v16_40k_001059/after_0001.png",
+    "case_id": "gold_v16_40k_001059__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page value for the requested result.",
+    "task_id": "gold_v16_40k_001059",
+    "website_domain": "netgear.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001128/after_0002.png",
+    "before_image": "images/gold_v16_40k_001128/before_0002.png",
+    "case_id": "gold_v16_40k_001128__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for the requested result.",
+    "task_id": "gold_v16_40k_001128",
+    "website_domain": "patreon.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001145/after_0001.png",
+    "before_image": "images/gold_v16_40k_001145/before_0001.png",
+    "case_id": "gold_v16_40k_001145__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant page content for the requested result.",
+    "task_id": "gold_v16_40k_001145",
+    "website_domain": "patreon.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001145/after_0002.png",
+    "before_image": "images/gold_v16_40k_001145/after_0001.png",
+    "case_id": "gold_v16_40k_001145__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant page content for the requested result.",
+    "task_id": "gold_v16_40k_001145",
+    "website_domain": "patreon.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001145/after_0003.png",
+    "before_image": "images/gold_v16_40k_001145/before_0003.png",
+    "case_id": "gold_v16_40k_001145__step_0002",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant page content for the requested result.",
+    "task_id": "gold_v16_40k_001145",
+    "website_domain": "patreon.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001155/after_0003.png",
+    "before_image": "images/gold_v16_40k_001155/before_0003.png",
+    "case_id": "gold_v16_40k_001155__step_0002",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the required page preference for the requested result.",
+    "task_id": "gold_v16_40k_001155",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001278/after_0001.png",
+    "before_image": "images/gold_v16_40k_001278/before_0001.png",
+    "case_id": "gold_v16_40k_001278__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target web resource for the requested result.",
+    "task_id": "gold_v16_40k_001278",
+    "website_domain": "wix.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001278/after_0002.png",
+    "before_image": "images/gold_v16_40k_001278/after_0001.png",
+    "case_id": "gold_v16_40k_001278__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target web resource for the requested result.",
+    "task_id": "gold_v16_40k_001278",
+    "website_domain": "wix.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001283/after_0001.png",
+    "before_image": "images/gold_v16_40k_001283/before_0001.png",
+    "case_id": "gold_v16_40k_001283__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target page state for the requested result.",
+    "task_id": "gold_v16_40k_001283",
+    "website_domain": "wix.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001283/after_0002.png",
+    "before_image": "images/gold_v16_40k_001283/after_0001.png",
+    "case_id": "gold_v16_40k_001283__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target page state for the requested result.",
+    "task_id": "gold_v16_40k_001283",
+    "website_domain": "wix.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001305/after_0002.png",
+    "before_image": "images/gold_v16_40k_001305/before_0002.png",
+    "case_id": "gold_v16_40k_001305__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested lookup value for the requested result.",
+    "task_id": "gold_v16_40k_001305",
+    "website_domain": "fc2.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001305/after_0003.png",
+    "before_image": "images/gold_v16_40k_001305/after_0002.png",
+    "case_id": "gold_v16_40k_001305__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested lookup value for the requested result.",
+    "task_id": "gold_v16_40k_001305",
+    "website_domain": "fc2.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001470/after_0002.png",
+    "before_image": "images/gold_v16_40k_001470/before_0002.png",
+    "case_id": "gold_v16_40k_001470__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page section for the requested result.",
+    "task_id": "gold_v16_40k_001470",
+    "website_domain": "hotjar.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001470/after_0003.png",
+    "before_image": "images/gold_v16_40k_001470/after_0002.png",
+    "case_id": "gold_v16_40k_001470__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page section for the requested result.",
+    "task_id": "gold_v16_40k_001470",
+    "website_domain": "hotjar.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001568/after_0001.png",
+    "before_image": "images/gold_v16_40k_001568/before_0001.png",
+    "case_id": "gold_v16_40k_001568__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target form state for the requested result.",
+    "task_id": "gold_v16_40k_001568",
+    "website_domain": "afternic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001568/after_0002.png",
+    "before_image": "images/gold_v16_40k_001568/after_0001.png",
+    "case_id": "gold_v16_40k_001568__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target form state for the requested result.",
+    "task_id": "gold_v16_40k_001568",
+    "website_domain": "afternic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001620/after_0003.png",
+    "before_image": "images/gold_v16_40k_001620/before_0003.png",
+    "case_id": "gold_v16_40k_001620__step_0002",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target information area for the requested result.",
+    "task_id": "gold_v16_40k_001620",
+    "website_domain": "dreamhost.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001674/after_0001.png",
+    "before_image": "images/gold_v16_40k_001674/before_0001.png",
+    "case_id": "gold_v16_40k_001674__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested search state for the requested result.",
+    "task_id": "gold_v16_40k_001674",
+    "website_domain": "imgur.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001674/after_0002.png",
+    "before_image": "images/gold_v16_40k_001674/after_0001.png",
+    "case_id": "gold_v16_40k_001674__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested search state for the requested result.",
+    "task_id": "gold_v16_40k_001674",
+    "website_domain": "imgur.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001738/after_0001.png",
+    "before_image": "images/gold_v16_40k_001738/before_0001.png",
+    "case_id": "gold_v16_40k_001738__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed site resource for the requested result.",
+    "task_id": "gold_v16_40k_001738",
+    "website_domain": "independent.co.uk"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001738/after_0002.png",
+    "before_image": "images/gold_v16_40k_001738/after_0001.png",
+    "case_id": "gold_v16_40k_001738__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed site resource for the requested result.",
+    "task_id": "gold_v16_40k_001738",
+    "website_domain": "independent.co.uk"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001905/after_0002.png",
+    "before_image": "images/gold_v16_40k_001905/before_0002.png",
+    "case_id": "gold_v16_40k_001905__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested interaction state for the requested result.",
+    "task_id": "gold_v16_40k_001905",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_001905/after_0003.png",
+    "before_image": "images/gold_v16_40k_001905/after_0002.png",
+    "case_id": "gold_v16_40k_001905__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested interaction state for the requested result.",
+    "task_id": "gold_v16_40k_001905",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002041/after_0001.png",
+    "before_image": "images/gold_v16_40k_002041/before_0001.png",
+    "case_id": "gold_v16_40k_002041__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed reference material for the requested result.",
+    "task_id": "gold_v16_40k_002041",
+    "website_domain": "eset.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002050/after_0002.png",
+    "before_image": "images/gold_v16_40k_002050/before_0002.png",
+    "case_id": "gold_v16_40k_002050__step_0001",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for this page goal.",
+    "task_id": "gold_v16_40k_002050",
+    "website_domain": "itch.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002050/after_0003.png",
+    "before_image": "images/gold_v16_40k_002050/after_0002.png",
+    "case_id": "gold_v16_40k_002050__step_0001",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page value for this page goal.",
+    "task_id": "gold_v16_40k_002050",
+    "website_domain": "itch.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002055/after_0003.png",
+    "before_image": "images/gold_v16_40k_002055/before_0003.png",
+    "case_id": "gold_v16_40k_002055__step_0002",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for this page goal.",
+    "task_id": "gold_v16_40k_002055",
+    "website_domain": "ebay.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002183/after_0001.png",
+    "before_image": "images/gold_v16_40k_002183/before_0001.png",
+    "case_id": "gold_v16_40k_002183__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the required page preference for this page goal.",
+    "task_id": "gold_v16_40k_002183",
+    "website_domain": "hbr.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002183/after_0002.png",
+    "before_image": "images/gold_v16_40k_002183/after_0001.png",
+    "case_id": "gold_v16_40k_002183__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the required page preference for this page goal.",
+    "task_id": "gold_v16_40k_002183",
+    "website_domain": "hbr.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002215/after_0002.png",
+    "before_image": "images/gold_v16_40k_002215/before_0002.png",
+    "case_id": "gold_v16_40k_002215__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target page state for this page goal.",
+    "task_id": "gold_v16_40k_002215",
+    "website_domain": "gumgum.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002215/after_0003.png",
+    "before_image": "images/gold_v16_40k_002215/after_0002.png",
+    "case_id": "gold_v16_40k_002215__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target page state for this page goal.",
+    "task_id": "gold_v16_40k_002215",
+    "website_domain": "gumgum.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002220/after_0002.png",
+    "before_image": "images/gold_v16_40k_002220/before_0002.png",
+    "case_id": "gold_v16_40k_002220__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target web resource for this page goal.",
+    "task_id": "gold_v16_40k_002220",
+    "website_domain": "hbr.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002220/after_0003.png",
+    "before_image": "images/gold_v16_40k_002220/after_0002.png",
+    "case_id": "gold_v16_40k_002220__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target web resource for this page goal.",
+    "task_id": "gold_v16_40k_002220",
+    "website_domain": "hbr.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002350/after_0002.png",
+    "before_image": "images/gold_v16_40k_002350/before_0002.png",
+    "case_id": "gold_v16_40k_002350__step_0001",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for this page goal.",
+    "task_id": "gold_v16_40k_002350",
+    "website_domain": "biblegateway.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002350/after_0003.png",
+    "before_image": "images/gold_v16_40k_002350/after_0002.png",
+    "case_id": "gold_v16_40k_002350__step_0001",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested lookup value for this page goal.",
+    "task_id": "gold_v16_40k_002350",
+    "website_domain": "biblegateway.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002366/after_0001.png",
+    "before_image": "images/gold_v16_40k_002366/before_0001.png",
+    "case_id": "gold_v16_40k_002366__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant project details for the requested result.",
+    "task_id": "gold_v16_40k_002366",
+    "website_domain": "threads.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002510/after_0002.png",
+    "before_image": "images/gold_v16_40k_002510/before_0002.png",
+    "case_id": "gold_v16_40k_002510__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant project details for this page goal.",
+    "task_id": "gold_v16_40k_002510",
+    "website_domain": "xbox.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002510/after_0003.png",
+    "before_image": "images/gold_v16_40k_002510/after_0002.png",
+    "case_id": "gold_v16_40k_002510__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant project details for this page goal.",
+    "task_id": "gold_v16_40k_002510",
+    "website_domain": "xbox.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002613/after_0001.png",
+    "before_image": "images/gold_v16_40k_002613/before_0001.png",
+    "case_id": "gold_v16_40k_002613__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target information area for this page goal.",
+    "task_id": "gold_v16_40k_002613",
+    "website_domain": "princeton.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002613/after_0002.png",
+    "before_image": "images/gold_v16_40k_002613/after_0001.png",
+    "case_id": "gold_v16_40k_002613__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target information area for this page goal.",
+    "task_id": "gold_v16_40k_002613",
+    "website_domain": "princeton.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002628/after_0001.png",
+    "before_image": "images/gold_v16_40k_002628/before_0001.png",
+    "case_id": "gold_v16_40k_002628__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target information area for this page goal.",
+    "task_id": "gold_v16_40k_002628",
+    "website_domain": "hostgator.com.br"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002628/after_0002.png",
+    "before_image": "images/gold_v16_40k_002628/after_0001.png",
+    "case_id": "gold_v16_40k_002628__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target information area for this page goal.",
+    "task_id": "gold_v16_40k_002628",
+    "website_domain": "hostgator.com.br"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002656/after_0001.png",
+    "before_image": "images/gold_v16_40k_002656/before_0001.png",
+    "case_id": "gold_v16_40k_002656__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed site resource for the requested result.",
+    "task_id": "gold_v16_40k_002656",
+    "website_domain": "yieldmo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002763/after_0001.png",
+    "before_image": "images/gold_v16_40k_002763/before_0001.png",
+    "case_id": "gold_v16_40k_002763__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed site resource for this page goal.",
+    "task_id": "gold_v16_40k_002763",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002763/after_0002.png",
+    "before_image": "images/gold_v16_40k_002763/after_0001.png",
+    "case_id": "gold_v16_40k_002763__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed site resource for this page goal.",
+    "task_id": "gold_v16_40k_002763",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002815/after_0002.png",
+    "before_image": "images/gold_v16_40k_002815/before_0002.png",
+    "case_id": "gold_v16_40k_002815__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed form setting for this page goal.",
+    "task_id": "gold_v16_40k_002815",
+    "website_domain": "bankofamerica.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002815/after_0003.png",
+    "before_image": "images/gold_v16_40k_002815/after_0002.png",
+    "case_id": "gold_v16_40k_002815__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed form setting for this page goal.",
+    "task_id": "gold_v16_40k_002815",
+    "website_domain": "bankofamerica.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002913/after_0003.png",
+    "before_image": "images/gold_v16_40k_002913/before_0003.png",
+    "case_id": "gold_v16_40k_002913__step_0002",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant information page for this page goal.",
+    "task_id": "gold_v16_40k_002913",
+    "website_domain": "biblegateway.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_002945/after_0003.png",
+    "before_image": "images/gold_v16_40k_002945/before_0003.png",
+    "case_id": "gold_v16_40k_002945__step_0002",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant information page for this page goal.",
+    "task_id": "gold_v16_40k_002945",
+    "website_domain": "healthline.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003228/after_0002.png",
+    "before_image": "images/gold_v16_40k_003228/before_0002.png",
+    "case_id": "gold_v16_40k_003228__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target web resource for the next task step.",
+    "task_id": "gold_v16_40k_003228",
+    "website_domain": "theatlantic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003255/after_0002.png",
+    "before_image": "images/gold_v16_40k_003255/before_0002.png",
+    "case_id": "gold_v16_40k_003255__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target page state for the next task step.",
+    "task_id": "gold_v16_40k_003255",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003255/after_0003.png",
+    "before_image": "images/gold_v16_40k_003255/after_0002.png",
+    "case_id": "gold_v16_40k_003255__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target page state for the next task step.",
+    "task_id": "gold_v16_40k_003255",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003363/after_0003.png",
+    "before_image": "images/gold_v16_40k_003363/before_0003.png",
+    "case_id": "gold_v16_40k_003363__step_0002",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed reference material for the next task step.",
+    "task_id": "gold_v16_40k_003363",
+    "website_domain": "letsencrypt.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003368/after_0002.png",
+    "before_image": "images/gold_v16_40k_003368/before_0002.png",
+    "case_id": "gold_v16_40k_003368__step_0001",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for the next task step.",
+    "task_id": "gold_v16_40k_003368",
+    "website_domain": "cornell.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003383/after_0001.png",
+    "before_image": "images/gold_v16_40k_003383/before_0001.png",
+    "case_id": "gold_v16_40k_003383__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for the next task step.",
+    "task_id": "gold_v16_40k_003383",
+    "website_domain": "rackspace.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003383/after_0002.png",
+    "before_image": "images/gold_v16_40k_003383/after_0001.png",
+    "case_id": "gold_v16_40k_003383__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested lookup value for the next task step.",
+    "task_id": "gold_v16_40k_003383",
+    "website_domain": "rackspace.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003388/after_0001.png",
+    "before_image": "images/gold_v16_40k_003388/before_0001.png",
+    "case_id": "gold_v16_40k_003388__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed reference material for the next task step.",
+    "task_id": "gold_v16_40k_003388",
+    "website_domain": "letsencrypt.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003388/after_0002.png",
+    "before_image": "images/gold_v16_40k_003388/after_0001.png",
+    "case_id": "gold_v16_40k_003388__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed reference material for the next task step.",
+    "task_id": "gold_v16_40k_003388",
+    "website_domain": "letsencrypt.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003400/after_0001.png",
+    "before_image": "images/gold_v16_40k_003400/before_0001.png",
+    "case_id": "gold_v16_40k_003400__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_003400",
+    "website_domain": "ikea.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003400/after_0002.png",
+    "before_image": "images/gold_v16_40k_003400/after_0001.png",
+    "case_id": "gold_v16_40k_003400__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_003400",
+    "website_domain": "ikea.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003410/after_0003.png",
+    "before_image": "images/gold_v16_40k_003410/before_0003.png",
+    "case_id": "gold_v16_40k_003410__step_0002",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page section for the next task step.",
+    "task_id": "gold_v16_40k_003410",
+    "website_domain": "pbs.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003452/after_0001.png",
+    "before_image": "images/gold_v16_40k_003452/before_0001.png",
+    "case_id": "gold_v16_40k_003452__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed reference material for this page goal.",
+    "task_id": "gold_v16_40k_003452",
+    "website_domain": "washington.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003459/after_0001.png",
+    "before_image": "images/gold_v16_40k_003459/before_0001.png",
+    "case_id": "gold_v16_40k_003459__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_003459",
+    "website_domain": "imgur.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003459/after_0002.png",
+    "before_image": "images/gold_v16_40k_003459/after_0001.png",
+    "case_id": "gold_v16_40k_003459__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_003459",
+    "website_domain": "imgur.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003469/after_0001.png",
+    "before_image": "images/gold_v16_40k_003469/before_0001.png",
+    "case_id": "gold_v16_40k_003469__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page section for the next task step.",
+    "task_id": "gold_v16_40k_003469",
+    "website_domain": "rambler.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003469/after_0002.png",
+    "before_image": "images/gold_v16_40k_003469/after_0001.png",
+    "case_id": "gold_v16_40k_003469__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page section for the next task step.",
+    "task_id": "gold_v16_40k_003469",
+    "website_domain": "rambler.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003474/after_0001.png",
+    "before_image": "images/gold_v16_40k_003474/before_0001.png",
+    "case_id": "gold_v16_40k_003474__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_003474",
+    "website_domain": "rambler.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003474/after_0002.png",
+    "before_image": "images/gold_v16_40k_003474/after_0001.png",
+    "case_id": "gold_v16_40k_003474__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_003474",
+    "website_domain": "rambler.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003550/after_0001.png",
+    "before_image": "images/gold_v16_40k_003550/before_0001.png",
+    "case_id": "gold_v16_40k_003550__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target form state for the next task step.",
+    "task_id": "gold_v16_40k_003550",
+    "website_domain": "itch.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003550/after_0002.png",
+    "before_image": "images/gold_v16_40k_003550/after_0001.png",
+    "case_id": "gold_v16_40k_003550__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target form state for the next task step.",
+    "task_id": "gold_v16_40k_003550",
+    "website_domain": "itch.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003555/after_0002.png",
+    "before_image": "images/gold_v16_40k_003555/before_0002.png",
+    "case_id": "gold_v16_40k_003555__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target form state for the next task step.",
+    "task_id": "gold_v16_40k_003555",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003555/after_0003.png",
+    "before_image": "images/gold_v16_40k_003555/after_0002.png",
+    "case_id": "gold_v16_40k_003555__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target form state for the next task step.",
+    "task_id": "gold_v16_40k_003555",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003663/after_0001.png",
+    "before_image": "images/gold_v16_40k_003663/before_0001.png",
+    "case_id": "gold_v16_40k_003663__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target information area for the next task step.",
+    "task_id": "gold_v16_40k_003663",
+    "website_domain": "netgear.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003663/after_0002.png",
+    "before_image": "images/gold_v16_40k_003663/after_0001.png",
+    "case_id": "gold_v16_40k_003663__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target information area for the next task step.",
+    "task_id": "gold_v16_40k_003663",
+    "website_domain": "netgear.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003695/after_0001.png",
+    "before_image": "images/gold_v16_40k_003695/before_0001.png",
+    "case_id": "gold_v16_40k_003695__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed site resource for the next task step.",
+    "task_id": "gold_v16_40k_003695",
+    "website_domain": "as.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003695/after_0002.png",
+    "before_image": "images/gold_v16_40k_003695/after_0001.png",
+    "case_id": "gold_v16_40k_003695__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed site resource for the next task step.",
+    "task_id": "gold_v16_40k_003695",
+    "website_domain": "as.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003705/after_0001.png",
+    "before_image": "images/gold_v16_40k_003705/before_0001.png",
+    "case_id": "gold_v16_40k_003705__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page value for the next task step.",
+    "task_id": "gold_v16_40k_003705",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003705/after_0002.png",
+    "before_image": "images/gold_v16_40k_003705/after_0001.png",
+    "case_id": "gold_v16_40k_003705__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant page value for the next task step.",
+    "task_id": "gold_v16_40k_003705",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003769/after_0001.png",
+    "before_image": "images/gold_v16_40k_003769/before_0001.png",
+    "case_id": "gold_v16_40k_003769__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed site resource for the next task step.",
+    "task_id": "gold_v16_40k_003769",
+    "website_domain": "gofundme.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003769/after_0002.png",
+    "before_image": "images/gold_v16_40k_003769/after_0001.png",
+    "case_id": "gold_v16_40k_003769__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed site resource for the next task step.",
+    "task_id": "gold_v16_40k_003769",
+    "website_domain": "gofundme.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003968/after_0001.png",
+    "before_image": "images/gold_v16_40k_003968/before_0001.png",
+    "case_id": "gold_v16_40k_003968__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested interaction state for the next task step.",
+    "task_id": "gold_v16_40k_003968",
+    "website_domain": "pbs.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003968/after_0002.png",
+    "before_image": "images/gold_v16_40k_003968/after_0001.png",
+    "case_id": "gold_v16_40k_003968__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested interaction state for the next task step.",
+    "task_id": "gold_v16_40k_003968",
+    "website_domain": "pbs.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003973/after_0001.png",
+    "before_image": "images/gold_v16_40k_003973/before_0001.png",
+    "case_id": "gold_v16_40k_003973__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested interaction state for the next task step.",
+    "task_id": "gold_v16_40k_003973",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003973/after_0002.png",
+    "before_image": "images/gold_v16_40k_003973/after_0001.png",
+    "case_id": "gold_v16_40k_003973__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested interaction state for the next task step.",
+    "task_id": "gold_v16_40k_003973",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003988/after_0002.png",
+    "before_image": "images/gold_v16_40k_003988/before_0002.png",
+    "case_id": "gold_v16_40k_003988__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant information page for the next task step.",
+    "task_id": "gold_v16_40k_003988",
+    "website_domain": "dribbble.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_003988/after_0003.png",
+    "before_image": "images/gold_v16_40k_003988/after_0002.png",
+    "case_id": "gold_v16_40k_003988__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant information page for the next task step.",
+    "task_id": "gold_v16_40k_003988",
+    "website_domain": "dribbble.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004010/after_0003.png",
+    "before_image": "images/gold_v16_40k_004010/before_0003.png",
+    "case_id": "gold_v16_40k_004010__step_0002",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the current page objective.",
+    "task_id": "gold_v16_40k_004010",
+    "website_domain": "clarin.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004441/after_0001.png",
+    "before_image": "images/gold_v16_40k_004441/before_0001.png",
+    "case_id": "gold_v16_40k_004441__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant information page for this page goal.",
+    "task_id": "gold_v16_40k_004441",
+    "website_domain": "healthline.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004509/after_0001.png",
+    "before_image": "images/gold_v16_40k_004509/before_0001.png",
+    "case_id": "gold_v16_40k_004509__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target form state for the current page objective.",
+    "task_id": "gold_v16_40k_004509",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004509/after_0002.png",
+    "before_image": "images/gold_v16_40k_004509/after_0001.png",
+    "case_id": "gold_v16_40k_004509__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target form state for the current page objective.",
+    "task_id": "gold_v16_40k_004509",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004573/after_0001.png",
+    "before_image": "images/gold_v16_40k_004573/before_0001.png",
+    "case_id": "gold_v16_40k_004573__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target form state for the current page objective.",
+    "task_id": "gold_v16_40k_004573",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004573/after_0002.png",
+    "before_image": "images/gold_v16_40k_004573/after_0001.png",
+    "case_id": "gold_v16_40k_004573__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target form state for the current page objective.",
+    "task_id": "gold_v16_40k_004573",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004610/after_0001.png",
+    "before_image": "images/gold_v16_40k_004610/before_0001.png",
+    "case_id": "gold_v16_40k_004610__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target information area for the current page objective.",
+    "task_id": "gold_v16_40k_004610",
+    "website_domain": "haberler.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004610/after_0002.png",
+    "before_image": "images/gold_v16_40k_004610/after_0001.png",
+    "case_id": "gold_v16_40k_004610__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target information area for the current page objective.",
+    "task_id": "gold_v16_40k_004610",
+    "website_domain": "haberler.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004755/after_0002.png",
+    "before_image": "images/gold_v16_40k_004755/before_0002.png",
+    "case_id": "gold_v16_40k_004755__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant page value for the current page objective.",
+    "task_id": "gold_v16_40k_004755",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004755/after_0003.png",
+    "before_image": "images/gold_v16_40k_004755/after_0002.png",
+    "case_id": "gold_v16_40k_004755__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant page value for the current page objective.",
+    "task_id": "gold_v16_40k_004755",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004873/after_0001.png",
+    "before_image": "images/gold_v16_40k_004873/before_0001.png",
+    "case_id": "gold_v16_40k_004873__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed form setting for the current page objective.",
+    "task_id": "gold_v16_40k_004873",
+    "website_domain": "ebay.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004873/after_0002.png",
+    "before_image": "images/gold_v16_40k_004873/after_0001.png",
+    "case_id": "gold_v16_40k_004873__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed form setting for the current page objective.",
+    "task_id": "gold_v16_40k_004873",
+    "website_domain": "ebay.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004883/after_0002.png",
+    "before_image": "images/gold_v16_40k_004883/before_0002.png",
+    "case_id": "gold_v16_40k_004883__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed form setting for the current page objective.",
+    "task_id": "gold_v16_40k_004883",
+    "website_domain": "mts.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004910/after_0002.png",
+    "before_image": "images/gold_v16_40k_004910/before_0002.png",
+    "case_id": "gold_v16_40k_004910__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant information page for the current page objective.",
+    "task_id": "gold_v16_40k_004910",
+    "website_domain": "taboola.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_004910/after_0003.png",
+    "before_image": "images/gold_v16_40k_004910/after_0002.png",
+    "case_id": "gold_v16_40k_004910__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant information page for the current page objective.",
+    "task_id": "gold_v16_40k_004910",
+    "website_domain": "taboola.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005045/after_0003.png",
+    "before_image": "images/gold_v16_40k_005045/before_0003.png",
+    "case_id": "gold_v16_40k_005045__step_0002",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested site information for the current task.",
+    "task_id": "gold_v16_40k_005045",
+    "website_domain": "taboola.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005050/after_0001.png",
+    "before_image": "images/gold_v16_40k_005050/before_0001.png",
+    "case_id": "gold_v16_40k_005050__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the current task.",
+    "task_id": "gold_v16_40k_005050",
+    "website_domain": "itch.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005050/after_0002.png",
+    "before_image": "images/gold_v16_40k_005050/after_0001.png",
+    "case_id": "gold_v16_40k_005050__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page value for the current task.",
+    "task_id": "gold_v16_40k_005050",
+    "website_domain": "itch.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005055/after_0002.png",
+    "before_image": "images/gold_v16_40k_005055/before_0002.png",
+    "case_id": "gold_v16_40k_005055__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the current task.",
+    "task_id": "gold_v16_40k_005055",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005055/after_0003.png",
+    "before_image": "images/gold_v16_40k_005055/after_0002.png",
+    "case_id": "gold_v16_40k_005055__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page value for the current task.",
+    "task_id": "gold_v16_40k_005055",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005114/after_0001.png",
+    "before_image": "images/gold_v16_40k_005114/before_0001.png",
+    "case_id": "gold_v16_40k_005114__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the required page preference for the current task.",
+    "task_id": "gold_v16_40k_005114",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005114/after_0002.png",
+    "before_image": "images/gold_v16_40k_005114/after_0001.png",
+    "case_id": "gold_v16_40k_005114__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the required page preference for the current task.",
+    "task_id": "gold_v16_40k_005114",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005220/after_0001.png",
+    "before_image": "images/gold_v16_40k_005220/before_0001.png",
+    "case_id": "gold_v16_40k_005220__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target web resource for the current task.",
+    "task_id": "gold_v16_40k_005220",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005220/after_0002.png",
+    "before_image": "images/gold_v16_40k_005220/after_0001.png",
+    "case_id": "gold_v16_40k_005220__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target web resource for the current task.",
+    "task_id": "gold_v16_40k_005220",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005365/after_0003.png",
+    "before_image": "images/gold_v16_40k_005365/before_0003.png",
+    "case_id": "gold_v16_40k_005365__step_0002",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for the current task.",
+    "task_id": "gold_v16_40k_005365",
+    "website_domain": "mysql.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005404/after_0001.png",
+    "before_image": "images/gold_v16_40k_005404/before_0001.png",
+    "case_id": "gold_v16_40k_005404__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page section for the current task.",
+    "task_id": "gold_v16_40k_005404",
+    "website_domain": "issuu.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005404/after_0002.png",
+    "before_image": "images/gold_v16_40k_005404/after_0001.png",
+    "case_id": "gold_v16_40k_005404__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested page section for the current task.",
+    "task_id": "gold_v16_40k_005404",
+    "website_domain": "issuu.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005424/after_0002.png",
+    "before_image": "images/gold_v16_40k_005424/before_0002.png",
+    "case_id": "gold_v16_40k_005424__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed page setting for the current task.",
+    "task_id": "gold_v16_40k_005424",
+    "website_domain": "duolingo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005515/after_0002.png",
+    "before_image": "images/gold_v16_40k_005515/before_0002.png",
+    "case_id": "gold_v16_40k_005515__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target form state for the current task.",
+    "task_id": "gold_v16_40k_005515",
+    "website_domain": "paloaltonetworks.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005515/after_0003.png",
+    "before_image": "images/gold_v16_40k_005515/after_0002.png",
+    "case_id": "gold_v16_40k_005515__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target form state for the current task.",
+    "task_id": "gold_v16_40k_005515",
+    "website_domain": "paloaltonetworks.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005579/after_0001.png",
+    "before_image": "images/gold_v16_40k_005579/before_0001.png",
+    "case_id": "gold_v16_40k_005579__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant project details for the current task.",
+    "task_id": "gold_v16_40k_005579",
+    "website_domain": "mysql.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005579/after_0002.png",
+    "before_image": "images/gold_v16_40k_005579/after_0001.png",
+    "case_id": "gold_v16_40k_005579__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant project details for the current task.",
+    "task_id": "gold_v16_40k_005579",
+    "website_domain": "mysql.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005613/after_0001.png",
+    "before_image": "images/gold_v16_40k_005613/before_0001.png",
+    "case_id": "gold_v16_40k_005613__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target information area for the current task.",
+    "task_id": "gold_v16_40k_005613",
+    "website_domain": "duolingo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005613/after_0002.png",
+    "before_image": "images/gold_v16_40k_005613/after_0001.png",
+    "case_id": "gold_v16_40k_005613__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target information area for the current task.",
+    "task_id": "gold_v16_40k_005613",
+    "website_domain": "duolingo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005729/after_0001.png",
+    "before_image": "images/gold_v16_40k_005729/before_0001.png",
+    "case_id": "gold_v16_40k_005729__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed site resource for the current task.",
+    "task_id": "gold_v16_40k_005729",
+    "website_domain": "paloaltonetworks.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005729/after_0002.png",
+    "before_image": "images/gold_v16_40k_005729/after_0001.png",
+    "case_id": "gold_v16_40k_005729__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed site resource for the current task.",
+    "task_id": "gold_v16_40k_005729",
+    "website_domain": "paloaltonetworks.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005763/after_0001.png",
+    "before_image": "images/gold_v16_40k_005763/before_0001.png",
+    "case_id": "gold_v16_40k_005763__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed site resource for the current task.",
+    "task_id": "gold_v16_40k_005763",
+    "website_domain": "wired.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005763/after_0002.png",
+    "before_image": "images/gold_v16_40k_005763/after_0001.png",
+    "case_id": "gold_v16_40k_005763__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed site resource for the current task.",
+    "task_id": "gold_v16_40k_005763",
+    "website_domain": "wired.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005768/after_0001.png",
+    "before_image": "images/gold_v16_40k_005768/before_0001.png",
+    "case_id": "gold_v16_40k_005768__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant page value for the current task.",
+    "task_id": "gold_v16_40k_005768",
+    "website_domain": "vivo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005768/after_0002.png",
+    "before_image": "images/gold_v16_40k_005768/after_0001.png",
+    "case_id": "gold_v16_40k_005768__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant page value for the current task.",
+    "task_id": "gold_v16_40k_005768",
+    "website_domain": "vivo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005879/after_0002.png",
+    "before_image": "images/gold_v16_40k_005879/before_0002.png",
+    "case_id": "gold_v16_40k_005879__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested reference content for the current task.",
+    "task_id": "gold_v16_40k_005879",
+    "website_domain": "firefox.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005913/after_0002.png",
+    "before_image": "images/gold_v16_40k_005913/before_0002.png",
+    "case_id": "gold_v16_40k_005913__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant information page for the current task.",
+    "task_id": "gold_v16_40k_005913",
+    "website_domain": "time.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005913/after_0003.png",
+    "before_image": "images/gold_v16_40k_005913/after_0002.png",
+    "case_id": "gold_v16_40k_005913__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant information page for the current task.",
+    "task_id": "gold_v16_40k_005913",
+    "website_domain": "time.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005923/after_0002.png",
+    "before_image": "images/gold_v16_40k_005923/before_0002.png",
+    "case_id": "gold_v16_40k_005923__step_0001",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested interaction state for the current task.",
+    "task_id": "gold_v16_40k_005923",
+    "website_domain": "ebay.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005928/after_0001.png",
+    "before_image": "images/gold_v16_40k_005928/before_0001.png",
+    "case_id": "gold_v16_40k_005928__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant information page for the current task.",
+    "task_id": "gold_v16_40k_005928",
+    "website_domain": "wix.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_005928/after_0002.png",
+    "before_image": "images/gold_v16_40k_005928/after_0001.png",
+    "case_id": "gold_v16_40k_005928__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant information page for the current task.",
+    "task_id": "gold_v16_40k_005928",
+    "website_domain": "wix.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006009/after_0002.png",
+    "before_image": "images/gold_v16_40k_006009/before_0002.png",
+    "case_id": "gold_v16_40k_006009__step_0001",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for the requested result.",
+    "task_id": "gold_v16_40k_006009",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006068/after_0002.png",
+    "before_image": "images/gold_v16_40k_006068/before_0002.png",
+    "case_id": "gold_v16_40k_006068__step_0001",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the requested result.",
+    "task_id": "gold_v16_40k_006068",
+    "website_domain": "afternic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006078/after_0001.png",
+    "before_image": "images/gold_v16_40k_006078/before_0001.png",
+    "case_id": "gold_v16_40k_006078__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested site information for the requested result.",
+    "task_id": "gold_v16_40k_006078",
+    "website_domain": "hotjar.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006078/after_0002.png",
+    "before_image": "images/gold_v16_40k_006078/after_0001.png",
+    "case_id": "gold_v16_40k_006078__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested site information for the requested result.",
+    "task_id": "gold_v16_40k_006078",
+    "website_domain": "hotjar.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006179/after_0002.png",
+    "before_image": "images/gold_v16_40k_006179/before_0002.png",
+    "case_id": "gold_v16_40k_006179__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant page content for the requested result.",
+    "task_id": "gold_v16_40k_006179",
+    "website_domain": "eset.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006218/after_0002.png",
+    "before_image": "images/gold_v16_40k_006218/before_0002.png",
+    "case_id": "gold_v16_40k_006218__step_0001",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target page state for the requested result.",
+    "task_id": "gold_v16_40k_006218",
+    "website_domain": "mysql.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006228/after_0001.png",
+    "before_image": "images/gold_v16_40k_006228/before_0001.png",
+    "case_id": "gold_v16_40k_006228__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target web resource for the requested result.",
+    "task_id": "gold_v16_40k_006228",
+    "website_domain": "stackadapt.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006228/after_0002.png",
+    "before_image": "images/gold_v16_40k_006228/after_0001.png",
+    "case_id": "gold_v16_40k_006228__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target web resource for the requested result.",
+    "task_id": "gold_v16_40k_006228",
+    "website_domain": "stackadapt.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006238/after_0003.png",
+    "before_image": "images/gold_v16_40k_006238/before_0003.png",
+    "case_id": "gold_v16_40k_006238__step_0002",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target web resource for the requested result.",
+    "task_id": "gold_v16_40k_006238",
+    "website_domain": "teamviewer.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006250/after_0003.png",
+    "before_image": "images/gold_v16_40k_006250/before_0003.png",
+    "case_id": "gold_v16_40k_006250__step_0002",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target page state for the requested result.",
+    "task_id": "gold_v16_40k_006250",
+    "website_domain": "360.cn"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006260/after_0001.png",
+    "before_image": "images/gold_v16_40k_006260/before_0001.png",
+    "case_id": "gold_v16_40k_006260__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target web resource for the requested result.",
+    "task_id": "gold_v16_40k_006260",
+    "website_domain": "independent.co.uk"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006260/after_0002.png",
+    "before_image": "images/gold_v16_40k_006260/after_0001.png",
+    "case_id": "gold_v16_40k_006260__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target web resource for the requested result.",
+    "task_id": "gold_v16_40k_006260",
+    "website_domain": "independent.co.uk"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006319/after_0001.png",
+    "before_image": "images/gold_v16_40k_006319/before_0001.png",
+    "case_id": "gold_v16_40k_006319__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed reference material for the requested result.",
+    "task_id": "gold_v16_40k_006319",
+    "website_domain": "imgur.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006319/after_0002.png",
+    "before_image": "images/gold_v16_40k_006319/after_0001.png",
+    "case_id": "gold_v16_40k_006319__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed reference material for the requested result.",
+    "task_id": "gold_v16_40k_006319",
+    "website_domain": "imgur.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006319/after_0002.png",
+    "before_image": "images/gold_v16_40k_006319/before_0002.png",
+    "case_id": "gold_v16_40k_006319__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed reference material for the requested result.",
+    "task_id": "gold_v16_40k_006319",
+    "website_domain": "imgur.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006329/after_0001.png",
+    "before_image": "images/gold_v16_40k_006329/before_0001.png",
+    "case_id": "gold_v16_40k_006329__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed reference material for the requested result.",
+    "task_id": "gold_v16_40k_006329",
+    "website_domain": "ikea.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006329/after_0002.png",
+    "before_image": "images/gold_v16_40k_006329/after_0001.png",
+    "case_id": "gold_v16_40k_006329__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed reference material for the requested result.",
+    "task_id": "gold_v16_40k_006329",
+    "website_domain": "ikea.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006405/after_0003.png",
+    "before_image": "images/gold_v16_40k_006405/before_0003.png",
+    "case_id": "gold_v16_40k_006405__step_0002",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed page setting for the requested result.",
+    "task_id": "gold_v16_40k_006405",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006528/after_0001.png",
+    "before_image": "images/gold_v16_40k_006528/before_0001.png",
+    "case_id": "gold_v16_40k_006528__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant project details for the requested result.",
+    "task_id": "gold_v16_40k_006528",
+    "website_domain": "itch.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006528/after_0002.png",
+    "before_image": "images/gold_v16_40k_006528/after_0001.png",
+    "case_id": "gold_v16_40k_006528__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant project details for the requested result.",
+    "task_id": "gold_v16_40k_006528",
+    "website_domain": "itch.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006668/after_0001.png",
+    "before_image": "images/gold_v16_40k_006668/before_0001.png",
+    "case_id": "gold_v16_40k_006668__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested search state for the requested result.",
+    "task_id": "gold_v16_40k_006668",
+    "website_domain": "bandcamp.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006668/after_0002.png",
+    "before_image": "images/gold_v16_40k_006668/after_0001.png",
+    "case_id": "gold_v16_40k_006668__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested search state for the requested result.",
+    "task_id": "gold_v16_40k_006668",
+    "website_domain": "bandcamp.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006711/after_0001.png",
+    "before_image": "images/gold_v16_40k_006711/before_0001.png",
+    "case_id": "gold_v16_40k_006711__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed page setting for the current page objective.",
+    "task_id": "gold_v16_40k_006711",
+    "website_domain": "xham.live"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006779/after_0002.png",
+    "before_image": "images/gold_v16_40k_006779/before_0002.png",
+    "case_id": "gold_v16_40k_006779__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed site resource for the requested result.",
+    "task_id": "gold_v16_40k_006779",
+    "website_domain": "itch.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006919/after_0002.png",
+    "before_image": "images/gold_v16_40k_006919/before_0002.png",
+    "case_id": "gold_v16_40k_006919__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant information page for the requested result.",
+    "task_id": "gold_v16_40k_006919",
+    "website_domain": "washington.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006922/after_0001.png",
+    "before_image": "images/gold_v16_40k_006922/before_0001.png",
+    "case_id": "gold_v16_40k_006922__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested search state for the current page objective.",
+    "task_id": "gold_v16_40k_006922",
+    "website_domain": "haberler.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006963/after_0002.png",
+    "before_image": "images/gold_v16_40k_006963/before_0002.png",
+    "case_id": "gold_v16_40k_006963__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant information page for the requested result.",
+    "task_id": "gold_v16_40k_006963",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_006963/after_0003.png",
+    "before_image": "images/gold_v16_40k_006963/after_0002.png",
+    "case_id": "gold_v16_40k_006963__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant information page for the requested result.",
+    "task_id": "gold_v16_40k_006963",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007015/after_0003.png",
+    "before_image": "images/gold_v16_40k_007015/before_0003.png",
+    "case_id": "gold_v16_40k_007015__step_0002",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for this page goal.",
+    "task_id": "gold_v16_40k_007015",
+    "website_domain": "welt.de"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007074/after_0001.png",
+    "before_image": "images/gold_v16_40k_007074/before_0001.png",
+    "case_id": "gold_v16_40k_007074__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for this page goal.",
+    "task_id": "gold_v16_40k_007074",
+    "website_domain": "lefigaro.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007074/after_0002.png",
+    "before_image": "images/gold_v16_40k_007074/after_0001.png",
+    "case_id": "gold_v16_40k_007074__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page value for this page goal.",
+    "task_id": "gold_v16_40k_007074",
+    "website_domain": "lefigaro.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007113/after_0001.png",
+    "before_image": "images/gold_v16_40k_007113/before_0001.png",
+    "case_id": "gold_v16_40k_007113__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for this page goal.",
+    "task_id": "gold_v16_40k_007113",
+    "website_domain": "washington.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007113/after_0002.png",
+    "before_image": "images/gold_v16_40k_007113/after_0001.png",
+    "case_id": "gold_v16_40k_007113__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant page content for this page goal.",
+    "task_id": "gold_v16_40k_007113",
+    "website_domain": "washington.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007145/after_0002.png",
+    "before_image": "images/gold_v16_40k_007145/before_0002.png",
+    "case_id": "gold_v16_40k_007145__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant page content for this page goal.",
+    "task_id": "gold_v16_40k_007145",
+    "website_domain": "globalsign.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007145/after_0003.png",
+    "before_image": "images/gold_v16_40k_007145/after_0002.png",
+    "case_id": "gold_v16_40k_007145__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant page content for this page goal.",
+    "task_id": "gold_v16_40k_007145",
+    "website_domain": "globalsign.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007145/after_0003.png",
+    "before_image": "images/gold_v16_40k_007145/before_0003.png",
+    "case_id": "gold_v16_40k_007145__step_0002",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant page content for this page goal.",
+    "task_id": "gold_v16_40k_007145",
+    "website_domain": "globalsign.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007509/after_0001.png",
+    "before_image": "images/gold_v16_40k_007509/before_0001.png",
+    "case_id": "gold_v16_40k_007509__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target form state for this page goal.",
+    "task_id": "gold_v16_40k_007509",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007509/after_0002.png",
+    "before_image": "images/gold_v16_40k_007509/after_0001.png",
+    "case_id": "gold_v16_40k_007509__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target form state for this page goal.",
+    "task_id": "gold_v16_40k_007509",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007563/after_0001.png",
+    "before_image": "images/gold_v16_40k_007563/before_0001.png",
+    "case_id": "gold_v16_40k_007563__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant project details for this page goal.",
+    "task_id": "gold_v16_40k_007563",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007563/after_0002.png",
+    "before_image": "images/gold_v16_40k_007563/after_0001.png",
+    "case_id": "gold_v16_40k_007563__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant project details for this page goal.",
+    "task_id": "gold_v16_40k_007563",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007563/after_0002.png",
+    "before_image": "images/gold_v16_40k_007563/before_0002.png",
+    "case_id": "gold_v16_40k_007563__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant project details for this page goal.",
+    "task_id": "gold_v16_40k_007563",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007563/after_0003.png",
+    "before_image": "images/gold_v16_40k_007563/after_0002.png",
+    "case_id": "gold_v16_40k_007563__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant project details for this page goal.",
+    "task_id": "gold_v16_40k_007563",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007583/after_0001.png",
+    "before_image": "images/gold_v16_40k_007583/before_0001.png",
+    "case_id": "gold_v16_40k_007583__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target form state for this page goal.",
+    "task_id": "gold_v16_40k_007583",
+    "website_domain": "healthline.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007583/after_0002.png",
+    "before_image": "images/gold_v16_40k_007583/after_0001.png",
+    "case_id": "gold_v16_40k_007583__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target form state for this page goal.",
+    "task_id": "gold_v16_40k_007583",
+    "website_domain": "healthline.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007733/after_0001.png",
+    "before_image": "images/gold_v16_40k_007733/before_0001.png",
+    "case_id": "gold_v16_40k_007733__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page value for this page goal.",
+    "task_id": "gold_v16_40k_007733",
+    "website_domain": "cloudinary.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007733/after_0002.png",
+    "before_image": "images/gold_v16_40k_007733/after_0001.png",
+    "case_id": "gold_v16_40k_007733__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant page value for this page goal.",
+    "task_id": "gold_v16_40k_007733",
+    "website_domain": "cloudinary.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007738/after_0002.png",
+    "before_image": "images/gold_v16_40k_007738/before_0002.png",
+    "case_id": "gold_v16_40k_007738__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed site resource for this page goal.",
+    "task_id": "gold_v16_40k_007738",
+    "website_domain": "biblegateway.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_007738/after_0003.png",
+    "before_image": "images/gold_v16_40k_007738/after_0002.png",
+    "case_id": "gold_v16_40k_007738__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed site resource for this page goal.",
+    "task_id": "gold_v16_40k_007738",
+    "website_domain": "biblegateway.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008065/after_0002.png",
+    "before_image": "images/gold_v16_40k_008065/before_0002.png",
+    "case_id": "gold_v16_40k_008065__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the next task step.",
+    "task_id": "gold_v16_40k_008065",
+    "website_domain": "pbs.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008065/after_0003.png",
+    "before_image": "images/gold_v16_40k_008065/after_0002.png",
+    "case_id": "gold_v16_40k_008065__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page value for the next task step.",
+    "task_id": "gold_v16_40k_008065",
+    "website_domain": "pbs.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008124/after_0002.png",
+    "before_image": "images/gold_v16_40k_008124/before_0002.png",
+    "case_id": "gold_v16_40k_008124__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the required page preference for the next task step.",
+    "task_id": "gold_v16_40k_008124",
+    "website_domain": "rambler.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008168/after_0001.png",
+    "before_image": "images/gold_v16_40k_008168/before_0001.png",
+    "case_id": "gold_v16_40k_008168__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the required page preference for the next task step.",
+    "task_id": "gold_v16_40k_008168",
+    "website_domain": "bandcamp.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008168/after_0002.png",
+    "before_image": "images/gold_v16_40k_008168/after_0001.png",
+    "case_id": "gold_v16_40k_008168__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the required page preference for the next task step.",
+    "task_id": "gold_v16_40k_008168",
+    "website_domain": "bandcamp.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008215/after_0001.png",
+    "before_image": "images/gold_v16_40k_008215/before_0001.png",
+    "case_id": "gold_v16_40k_008215__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target page state for the next task step.",
+    "task_id": "gold_v16_40k_008215",
+    "website_domain": "netgear.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008215/after_0002.png",
+    "before_image": "images/gold_v16_40k_008215/after_0001.png",
+    "case_id": "gold_v16_40k_008215__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target page state for the next task step.",
+    "task_id": "gold_v16_40k_008215",
+    "website_domain": "netgear.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008215/after_0002.png",
+    "before_image": "images/gold_v16_40k_008215/before_0002.png",
+    "case_id": "gold_v16_40k_008215__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target page state for the next task step.",
+    "task_id": "gold_v16_40k_008215",
+    "website_domain": "netgear.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008215/after_0003.png",
+    "before_image": "images/gold_v16_40k_008215/after_0002.png",
+    "case_id": "gold_v16_40k_008215__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target page state for the next task step.",
+    "task_id": "gold_v16_40k_008215",
+    "website_domain": "netgear.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008328/after_0001.png",
+    "before_image": "images/gold_v16_40k_008328/before_0001.png",
+    "case_id": "gold_v16_40k_008328__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed reference material for the next task step.",
+    "task_id": "gold_v16_40k_008328",
+    "website_domain": "crazygames.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008328/after_0002.png",
+    "before_image": "images/gold_v16_40k_008328/after_0001.png",
+    "case_id": "gold_v16_40k_008328__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed reference material for the next task step.",
+    "task_id": "gold_v16_40k_008328",
+    "website_domain": "crazygames.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008489/after_0001.png",
+    "before_image": "images/gold_v16_40k_008489/before_0001.png",
+    "case_id": "gold_v16_40k_008489__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_008489",
+    "website_domain": "pbs.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008489/after_0002.png",
+    "before_image": "images/gold_v16_40k_008489/after_0001.png",
+    "case_id": "gold_v16_40k_008489__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_008489",
+    "website_domain": "pbs.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008493/after_0001.png",
+    "before_image": "images/gold_v16_40k_008493/before_0001.png",
+    "case_id": "gold_v16_40k_008493__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_008493",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008493/after_0002.png",
+    "before_image": "images/gold_v16_40k_008493/after_0001.png",
+    "case_id": "gold_v16_40k_008493__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed page setting for the next task step.",
+    "task_id": "gold_v16_40k_008493",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008613/after_0001.png",
+    "before_image": "images/gold_v16_40k_008613/before_0001.png",
+    "case_id": "gold_v16_40k_008613__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target form state for the next task step.",
+    "task_id": "gold_v16_40k_008613",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008613/after_0002.png",
+    "before_image": "images/gold_v16_40k_008613/after_0001.png",
+    "case_id": "gold_v16_40k_008613__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target form state for the next task step.",
+    "task_id": "gold_v16_40k_008613",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008845/after_0002.png",
+    "before_image": "images/gold_v16_40k_008845/before_0002.png",
+    "case_id": "gold_v16_40k_008845__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed site resource for the next task step.",
+    "task_id": "gold_v16_40k_008845",
+    "website_domain": "dribbble.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008845/after_0003.png",
+    "before_image": "images/gold_v16_40k_008845/after_0002.png",
+    "case_id": "gold_v16_40k_008845__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed site resource for the next task step.",
+    "task_id": "gold_v16_40k_008845",
+    "website_domain": "dribbble.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008947/after_0001.png",
+    "before_image": "images/gold_v16_40k_008947/before_0001.png",
+    "case_id": "gold_v16_40k_008947__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the requested result.",
+    "task_id": "gold_v16_40k_008947",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008955/after_0001.png",
+    "before_image": "images/gold_v16_40k_008955/before_0001.png",
+    "case_id": "gold_v16_40k_008955__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the requested result.",
+    "task_id": "gold_v16_40k_008955",
+    "website_domain": "hotjar.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008973/after_0001.png",
+    "before_image": "images/gold_v16_40k_008973/before_0001.png",
+    "case_id": "gold_v16_40k_008973__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed form setting for the next task step.",
+    "task_id": "gold_v16_40k_008973",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008973/after_0002.png",
+    "before_image": "images/gold_v16_40k_008973/after_0001.png",
+    "case_id": "gold_v16_40k_008973__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed form setting for the next task step.",
+    "task_id": "gold_v16_40k_008973",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008977/after_0001.png",
+    "before_image": "images/gold_v16_40k_008977/before_0001.png",
+    "case_id": "gold_v16_40k_008977__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested reference content for the next task step.",
+    "task_id": "gold_v16_40k_008977",
+    "website_domain": "lichess.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008977/after_0002.png",
+    "before_image": "images/gold_v16_40k_008977/after_0001.png",
+    "case_id": "gold_v16_40k_008977__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested reference content for the next task step.",
+    "task_id": "gold_v16_40k_008977",
+    "website_domain": "lichess.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008982/after_0001.png",
+    "before_image": "images/gold_v16_40k_008982/before_0001.png",
+    "case_id": "gold_v16_40k_008982__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed form setting for the next task step.",
+    "task_id": "gold_v16_40k_008982",
+    "website_domain": "lichess.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008982/after_0002.png",
+    "before_image": "images/gold_v16_40k_008982/after_0001.png",
+    "case_id": "gold_v16_40k_008982__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed form setting for the next task step.",
+    "task_id": "gold_v16_40k_008982",
+    "website_domain": "lichess.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_008992/after_0001.png",
+    "before_image": "images/gold_v16_40k_008992/before_0001.png",
+    "case_id": "gold_v16_40k_008992__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the required page preference for the requested result.",
+    "task_id": "gold_v16_40k_008992",
+    "website_domain": "issuu.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009085/after_0002.png",
+    "before_image": "images/gold_v16_40k_009085/before_0002.png",
+    "case_id": "gold_v16_40k_009085__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant information page for the next task step.",
+    "task_id": "gold_v16_40k_009085",
+    "website_domain": "dafont.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009085/after_0003.png",
+    "before_image": "images/gold_v16_40k_009085/after_0002.png",
+    "case_id": "gold_v16_40k_009085__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant information page for the next task step.",
+    "task_id": "gold_v16_40k_009085",
+    "website_domain": "dafont.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009102/after_0002.png",
+    "before_image": "images/gold_v16_40k_009102/before_0002.png",
+    "case_id": "gold_v16_40k_009102__step_0001",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested interaction state for the next task step.",
+    "task_id": "gold_v16_40k_009102",
+    "website_domain": "wordwall.net"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009142/after_0001.png",
+    "before_image": "images/gold_v16_40k_009142/before_0001.png",
+    "case_id": "gold_v16_40k_009142__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page value for the current page objective.",
+    "task_id": "gold_v16_40k_009142",
+    "website_domain": "fc2.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009142/after_0002.png",
+    "before_image": "images/gold_v16_40k_009142/after_0001.png",
+    "case_id": "gold_v16_40k_009142__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested page value for the current page objective.",
+    "task_id": "gold_v16_40k_009142",
+    "website_domain": "fc2.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009213/after_0001.png",
+    "before_image": "images/gold_v16_40k_009213/before_0001.png",
+    "case_id": "gold_v16_40k_009213__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the current page objective.",
+    "task_id": "gold_v16_40k_009213",
+    "website_domain": "ebay.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009213/after_0002.png",
+    "before_image": "images/gold_v16_40k_009213/after_0001.png",
+    "case_id": "gold_v16_40k_009213__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested page value for the current page objective.",
+    "task_id": "gold_v16_40k_009213",
+    "website_domain": "ebay.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009254/after_0001.png",
+    "before_image": "images/gold_v16_40k_009254/before_0001.png",
+    "case_id": "gold_v16_40k_009254__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for the current page objective.",
+    "task_id": "gold_v16_40k_009254",
+    "website_domain": "he.net"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009254/after_0002.png",
+    "before_image": "images/gold_v16_40k_009254/after_0001.png",
+    "case_id": "gold_v16_40k_009254__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant page content for the current page objective.",
+    "task_id": "gold_v16_40k_009254",
+    "website_domain": "he.net"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009303/after_0001.png",
+    "before_image": "images/gold_v16_40k_009303/before_0001.png",
+    "case_id": "gold_v16_40k_009303__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for the requested result.",
+    "task_id": "gold_v16_40k_009303",
+    "website_domain": "cornell.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009360/after_0001.png",
+    "before_image": "images/gold_v16_40k_009360/before_0001.png",
+    "case_id": "gold_v16_40k_009360__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page section for the requested result.",
+    "task_id": "gold_v16_40k_009360",
+    "website_domain": "yieldmo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009445/after_0001.png",
+    "before_image": "images/gold_v16_40k_009445/before_0001.png",
+    "case_id": "gold_v16_40k_009445__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target web resource for the current page objective.",
+    "task_id": "gold_v16_40k_009445",
+    "website_domain": "wordwall.net"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009445/after_0002.png",
+    "before_image": "images/gold_v16_40k_009445/after_0001.png",
+    "case_id": "gold_v16_40k_009445__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target web resource for the current page objective.",
+    "task_id": "gold_v16_40k_009445",
+    "website_domain": "wordwall.net"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009626/after_0001.png",
+    "before_image": "images/gold_v16_40k_009626/before_0001.png",
+    "case_id": "gold_v16_40k_009626__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page section for the current page objective.",
+    "task_id": "gold_v16_40k_009626",
+    "website_domain": "cloud.microsoft"
+  },
+  {
+    "after_image": "images/gold_v16_40k_009626/after_0002.png",
+    "before_image": "images/gold_v16_40k_009626/after_0001.png",
+    "case_id": "gold_v16_40k_009626__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested page section for the current page objective.",
+    "task_id": "gold_v16_40k_009626",
+    "website_domain": "cloud.microsoft"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010167/after_0001.png",
+    "before_image": "images/gold_v16_40k_010167/before_0001.png",
+    "case_id": "gold_v16_40k_010167__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_010167",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010167/after_0002.png",
+    "before_image": "images/gold_v16_40k_010167/after_0001.png",
+    "case_id": "gold_v16_40k_010167__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested site information for the current task.",
+    "task_id": "gold_v16_40k_010167",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010257/after_0002.png",
+    "before_image": "images/gold_v16_40k_010257/before_0002.png",
+    "case_id": "gold_v16_40k_010257__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for the current task.",
+    "task_id": "gold_v16_40k_010257",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010257/after_0003.png",
+    "before_image": "images/gold_v16_40k_010257/after_0002.png",
+    "case_id": "gold_v16_40k_010257__step_0001",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant page content for the current task.",
+    "task_id": "gold_v16_40k_010257",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010353/after_0001.png",
+    "before_image": "images/gold_v16_40k_010353/before_0001.png",
+    "case_id": "gold_v16_40k_010353__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target page state for the current task.",
+    "task_id": "gold_v16_40k_010353",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010353/after_0002.png",
+    "before_image": "images/gold_v16_40k_010353/after_0001.png",
+    "case_id": "gold_v16_40k_010353__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target page state for the current task.",
+    "task_id": "gold_v16_40k_010353",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010413/after_0001.png",
+    "before_image": "images/gold_v16_40k_010413/before_0001.png",
+    "case_id": "gold_v16_40k_010413__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target page state for the current task.",
+    "task_id": "gold_v16_40k_010413",
+    "website_domain": "360.cn"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010413/after_0002.png",
+    "before_image": "images/gold_v16_40k_010413/after_0001.png",
+    "case_id": "gold_v16_40k_010413__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target page state for the current task.",
+    "task_id": "gold_v16_40k_010413",
+    "website_domain": "360.cn"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010416/after_0003.png",
+    "before_image": "images/gold_v16_40k_010416/before_0003.png",
+    "case_id": "gold_v16_40k_010416__step_0002",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target web resource for the current task.",
+    "task_id": "gold_v16_40k_010416",
+    "website_domain": "taobao.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010469/after_0001.png",
+    "before_image": "images/gold_v16_40k_010469/before_0001.png",
+    "case_id": "gold_v16_40k_010469__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed reference material for the current task.",
+    "task_id": "gold_v16_40k_010469",
+    "website_domain": "mikrotik.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010506/after_0002.png",
+    "before_image": "images/gold_v16_40k_010506/before_0002.png",
+    "case_id": "gold_v16_40k_010506__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed reference material for the current task.",
+    "task_id": "gold_v16_40k_010506",
+    "website_domain": "mysql.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010506/after_0003.png",
+    "before_image": "images/gold_v16_40k_010506/after_0002.png",
+    "case_id": "gold_v16_40k_010506__step_0001",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the needed reference material for the current task.",
+    "task_id": "gold_v16_40k_010506",
+    "website_domain": "mysql.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010536/after_0002.png",
+    "before_image": "images/gold_v16_40k_010536/before_0002.png",
+    "case_id": "gold_v16_40k_010536__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page section for the current task.",
+    "task_id": "gold_v16_40k_010536",
+    "website_domain": "patreon.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010649/after_0001.png",
+    "before_image": "images/gold_v16_40k_010649/before_0001.png",
+    "case_id": "gold_v16_40k_010649__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant project details for the current task.",
+    "task_id": "gold_v16_40k_010649",
+    "website_domain": "paloaltonetworks.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010686/after_0003.png",
+    "before_image": "images/gold_v16_40k_010686/before_0003.png",
+    "case_id": "gold_v16_40k_010686__step_0002",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant project details for the current task.",
+    "task_id": "gold_v16_40k_010686",
+    "website_domain": "wired.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010713/after_0001.png",
+    "before_image": "images/gold_v16_40k_010713/before_0001.png",
+    "case_id": "gold_v16_40k_010713__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested search state for the current task.",
+    "task_id": "gold_v16_40k_010713",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010713/after_0002.png",
+    "before_image": "images/gold_v16_40k_010713/after_0001.png",
+    "case_id": "gold_v16_40k_010713__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested search state for the current task.",
+    "task_id": "gold_v16_40k_010713",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010773/after_0001.png",
+    "before_image": "images/gold_v16_40k_010773/before_0001.png",
+    "case_id": "gold_v16_40k_010773__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested search state for the current task.",
+    "task_id": "gold_v16_40k_010773",
+    "website_domain": "teamviewer.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010773/after_0002.png",
+    "before_image": "images/gold_v16_40k_010773/after_0001.png",
+    "case_id": "gold_v16_40k_010773__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested search state for the current task.",
+    "task_id": "gold_v16_40k_010773",
+    "website_domain": "teamviewer.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010890/after_0001.png",
+    "before_image": "images/gold_v16_40k_010890/before_0001.png",
+    "case_id": "gold_v16_40k_010890__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed form setting for the current task.",
+    "task_id": "gold_v16_40k_010890",
+    "website_domain": "patreon.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_010890/after_0002.png",
+    "before_image": "images/gold_v16_40k_010890/after_0001.png",
+    "case_id": "gold_v16_40k_010890__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the needed form setting for the current task.",
+    "task_id": "gold_v16_40k_010890",
+    "website_domain": "patreon.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011067/after_0003.png",
+    "before_image": "images/gold_v16_40k_011067/before_0003.png",
+    "case_id": "gold_v16_40k_011067__step_0002",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the requested result.",
+    "task_id": "gold_v16_40k_011067",
+    "website_domain": "teamviewer.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011136/after_0001.png",
+    "before_image": "images/gold_v16_40k_011136/before_0001.png",
+    "case_id": "gold_v16_40k_011136__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested site information for the requested result.",
+    "task_id": "gold_v16_40k_011136",
+    "website_domain": "hotjar.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011136/after_0002.png",
+    "before_image": "images/gold_v16_40k_011136/after_0001.png",
+    "case_id": "gold_v16_40k_011136__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the requested site information for the requested result.",
+    "task_id": "gold_v16_40k_011136",
+    "website_domain": "hotjar.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011427/after_0001.png",
+    "before_image": "images/gold_v16_40k_011427/before_0001.png",
+    "case_id": "gold_v16_40k_011427__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page section for the requested result.",
+    "task_id": "gold_v16_40k_011427",
+    "website_domain": "verisign.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011427/after_0002.png",
+    "before_image": "images/gold_v16_40k_011427/after_0001.png",
+    "case_id": "gold_v16_40k_011427__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested page section for the requested result.",
+    "task_id": "gold_v16_40k_011427",
+    "website_domain": "verisign.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011436/after_0002.png",
+    "before_image": "images/gold_v16_40k_011436/before_0002.png",
+    "case_id": "gold_v16_40k_011436__step_0001",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page section for the requested result.",
+    "task_id": "gold_v16_40k_011436",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011467/after_0001.png",
+    "before_image": "images/gold_v16_40k_011467/before_0001.png",
+    "case_id": "gold_v16_40k_011467__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested search state for this page goal.",
+    "task_id": "gold_v16_40k_011467",
+    "website_domain": "ebay.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011483/after_0001.png",
+    "before_image": "images/gold_v16_40k_011483/before_0001.png",
+    "case_id": "gold_v16_40k_011483__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed page setting for the requested result.",
+    "task_id": "gold_v16_40k_011483",
+    "website_domain": "pbs.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011583/after_0001.png",
+    "before_image": "images/gold_v16_40k_011583/before_0001.png",
+    "case_id": "gold_v16_40k_011583__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the target form state for the requested result.",
+    "task_id": "gold_v16_40k_011583",
+    "website_domain": "washington.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011583/after_0002.png",
+    "before_image": "images/gold_v16_40k_011583/after_0001.png",
+    "case_id": "gold_v16_40k_011583__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the target form state for the requested result.",
+    "task_id": "gold_v16_40k_011583",
+    "website_domain": "washington.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011796/after_0001.png",
+    "before_image": "images/gold_v16_40k_011796/before_0001.png",
+    "case_id": "gold_v16_40k_011796__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested reference content for the requested result.",
+    "task_id": "gold_v16_40k_011796",
+    "website_domain": "xbox.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011796/after_0002.png",
+    "before_image": "images/gold_v16_40k_011796/after_0001.png",
+    "case_id": "gold_v16_40k_011796__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested reference content for the requested result.",
+    "task_id": "gold_v16_40k_011796",
+    "website_domain": "xbox.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_011843/after_0001.png",
+    "before_image": "images/gold_v16_40k_011843/before_0001.png",
+    "case_id": "gold_v16_40k_011843__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed form setting for the requested result.",
+    "task_id": "gold_v16_40k_011843",
+    "website_domain": "namu.wiki"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012147/after_0003.png",
+    "before_image": "images/gold_v16_40k_012147/before_0003.png",
+    "case_id": "gold_v16_40k_012147__step_0002",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target web resource for this page goal.",
+    "task_id": "gold_v16_40k_012147",
+    "website_domain": "princeton.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012417/after_0003.png",
+    "before_image": "images/gold_v16_40k_012417/before_0003.png",
+    "case_id": "gold_v16_40k_012417__step_0002",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant project details for this page goal.",
+    "task_id": "gold_v16_40k_012417",
+    "website_domain": "biblegateway.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012507/after_0001.png",
+    "before_image": "images/gold_v16_40k_012507/before_0001.png",
+    "case_id": "gold_v16_40k_012507__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target information area for this page goal.",
+    "task_id": "gold_v16_40k_012507",
+    "website_domain": "nationalgeographic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012507/after_0002.png",
+    "before_image": "images/gold_v16_40k_012507/after_0001.png",
+    "case_id": "gold_v16_40k_012507__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the target information area for this page goal.",
+    "task_id": "gold_v16_40k_012507",
+    "website_domain": "nationalgeographic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012510/after_0001.png",
+    "before_image": "images/gold_v16_40k_012510/before_0001.png",
+    "case_id": "gold_v16_40k_012510__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested search state for this page goal.",
+    "task_id": "gold_v16_40k_012510",
+    "website_domain": "stripchat.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012510/after_0002.png",
+    "before_image": "images/gold_v16_40k_012510/after_0001.png",
+    "case_id": "gold_v16_40k_012510__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the requested search state for this page goal.",
+    "task_id": "gold_v16_40k_012510",
+    "website_domain": "stripchat.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012566/after_0001.png",
+    "before_image": "images/gold_v16_40k_012566/before_0001.png",
+    "case_id": "gold_v16_40k_012566__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested search state for this page goal.",
+    "task_id": "gold_v16_40k_012566",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012603/after_0001.png",
+    "before_image": "images/gold_v16_40k_012603/before_0001.png",
+    "case_id": "gold_v16_40k_012603__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page value for this page goal.",
+    "task_id": "gold_v16_40k_012603",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012603/after_0002.png",
+    "before_image": "images/gold_v16_40k_012603/after_0001.png",
+    "case_id": "gold_v16_40k_012603__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Locate the relevant page value for this page goal.",
+    "task_id": "gold_v16_40k_012603",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012629/after_0001.png",
+    "before_image": "images/gold_v16_40k_012629/before_0001.png",
+    "case_id": "gold_v16_40k_012629__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed site resource for this page goal.",
+    "task_id": "gold_v16_40k_012629",
+    "website_domain": "cloudinary.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012663/after_0001.png",
+    "before_image": "images/gold_v16_40k_012663/before_0001.png",
+    "case_id": "gold_v16_40k_012663__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant page value for this page goal.",
+    "task_id": "gold_v16_40k_012663",
+    "website_domain": "rambler.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012663/after_0002.png",
+    "before_image": "images/gold_v16_40k_012663/after_0001.png",
+    "case_id": "gold_v16_40k_012663__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "recovery_assessment",
+    "task_description": "Look for the relevant page value for this page goal.",
+    "task_id": "gold_v16_40k_012663",
+    "website_domain": "rambler.ru"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012708/after_0001.png",
+    "before_image": "images/gold_v16_40k_012708/before_0001.png",
+    "case_id": "gold_v16_40k_012708__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed form setting for this page goal.",
+    "task_id": "gold_v16_40k_012708",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012824/after_0001.png",
+    "before_image": "images/gold_v16_40k_012824/before_0001.png",
+    "case_id": "gold_v16_40k_012824__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant information page for this page goal.",
+    "task_id": "gold_v16_40k_012824",
+    "website_domain": "nic.io"
+  },
+  {
+    "after_image": "images/gold_v16_40k_012826/after_0001.png",
+    "before_image": "images/gold_v16_40k_012826/before_0001.png",
+    "case_id": "gold_v16_40k_012826__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested interaction state for this page goal.",
+    "task_id": "gold_v16_40k_012826",
+    "website_domain": "repubblica.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_014093/after_0001.png",
+    "before_image": "images/gold_v16_40k_014093/before_0001.png",
+    "case_id": "gold_v16_40k_014093__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant project details for the current page objective.",
+    "task_id": "gold_v16_40k_014093",
+    "website_domain": "admanmedia.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_014153/after_0001.png",
+    "before_image": "images/gold_v16_40k_014153/before_0001.png",
+    "case_id": "gold_v16_40k_014153__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant project details for the current page objective.",
+    "task_id": "gold_v16_40k_014153",
+    "website_domain": "polybuzz.ai"
+  },
+  {
+    "after_image": "images/gold_v16_40k_014270/after_0001.png",
+    "before_image": "images/gold_v16_40k_014270/before_0001.png",
+    "case_id": "gold_v16_40k_014270__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for the current page objective.",
+    "task_id": "gold_v16_40k_014270",
+    "website_domain": "gravatar.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_014584/after_0001.png",
+    "before_image": "images/gold_v16_40k_014584/before_0001.png",
+    "case_id": "gold_v16_40k_014584__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for the current page objective.",
+    "task_id": "gold_v16_40k_014584",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_015486/after_0001.png",
+    "before_image": "images/gold_v16_40k_015486/before_0001.png",
+    "case_id": "gold_v16_40k_015486__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for the current task.",
+    "task_id": "gold_v16_40k_015486",
+    "website_domain": "mikrotik.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_016131/after_0001.png",
+    "before_image": "images/gold_v16_40k_016131/before_0001.png",
+    "case_id": "gold_v16_40k_016131__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target page state for the requested result.",
+    "task_id": "gold_v16_40k_016131",
+    "website_domain": "stripchat.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_016307/after_0001.png",
+    "before_image": "images/gold_v16_40k_016307/before_0001.png",
+    "case_id": "gold_v16_40k_016307__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for the requested result.",
+    "task_id": "gold_v16_40k_016307",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_016428/after_0001.png",
+    "before_image": "images/gold_v16_40k_016428/before_0001.png",
+    "case_id": "gold_v16_40k_016428__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested interaction state for the current task.",
+    "task_id": "gold_v16_40k_016428",
+    "website_domain": "box.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_016711/after_0001.png",
+    "before_image": "images/gold_v16_40k_016711/before_0001.png",
+    "case_id": "gold_v16_40k_016711__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed site resource for the requested result.",
+    "task_id": "gold_v16_40k_016711",
+    "website_domain": "bandcamp.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_016731/after_0001.png",
+    "before_image": "images/gold_v16_40k_016731/before_0001.png",
+    "case_id": "gold_v16_40k_016731__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page value for the requested result.",
+    "task_id": "gold_v16_40k_016731",
+    "website_domain": "lefigaro.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_016971/after_0001.png",
+    "before_image": "images/gold_v16_40k_016971/before_0001.png",
+    "case_id": "gold_v16_40k_016971__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested interaction state for the requested result.",
+    "task_id": "gold_v16_40k_016971",
+    "website_domain": "hostgator.com.br"
+  },
+  {
+    "after_image": "images/gold_v16_40k_017086/after_0001.png",
+    "before_image": "images/gold_v16_40k_017086/before_0001.png",
+    "case_id": "gold_v16_40k_017086__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed page setting for the requested result.",
+    "task_id": "gold_v16_40k_017086",
+    "website_domain": "xham.live"
+  },
+  {
+    "after_image": "images/gold_v16_40k_017267/after_0001.png",
+    "before_image": "images/gold_v16_40k_017267/before_0001.png",
+    "case_id": "gold_v16_40k_017267__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the required page preference for this page goal.",
+    "task_id": "gold_v16_40k_017267",
+    "website_domain": "fc2.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_017390/after_0001.png",
+    "before_image": "images/gold_v16_40k_017390/before_0001.png",
+    "case_id": "gold_v16_40k_017390__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed site resource for the requested result.",
+    "task_id": "gold_v16_40k_017390",
+    "website_domain": "synology.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_017568/after_0001.png",
+    "before_image": "images/gold_v16_40k_017568/before_0001.png",
+    "case_id": "gold_v16_40k_017568__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed form setting for the requested result.",
+    "task_id": "gold_v16_40k_017568",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_017613/after_0001.png",
+    "before_image": "images/gold_v16_40k_017613/before_0001.png",
+    "case_id": "gold_v16_40k_017613__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed page setting for this page goal.",
+    "task_id": "gold_v16_40k_017613",
+    "website_domain": "imgur.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_018106/after_0001.png",
+    "before_image": "images/gold_v16_40k_018106/before_0001.png",
+    "case_id": "gold_v16_40k_018106__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested lookup value for this page goal.",
+    "task_id": "gold_v16_40k_018106",
+    "website_domain": "washington.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_018226/after_0001.png",
+    "before_image": "images/gold_v16_40k_018226/before_0001.png",
+    "case_id": "gold_v16_40k_018226__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed page setting for this page goal.",
+    "task_id": "gold_v16_40k_018226",
+    "website_domain": "repubblica.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_018588/after_0001.png",
+    "before_image": "images/gold_v16_40k_018588/before_0001.png",
+    "case_id": "gold_v16_40k_018588__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page value for this page goal.",
+    "task_id": "gold_v16_40k_018588",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_019008/after_0001.png",
+    "before_image": "images/gold_v16_40k_019008/before_0001.png",
+    "case_id": "gold_v16_40k_019008__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the next task step.",
+    "task_id": "gold_v16_40k_019008",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_019129/after_0001.png",
+    "before_image": "images/gold_v16_40k_019129/before_0001.png",
+    "case_id": "gold_v16_40k_019129__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed site resource for the next task step.",
+    "task_id": "gold_v16_40k_019129",
+    "website_domain": "ebay.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_019547/after_0001.png",
+    "before_image": "images/gold_v16_40k_019547/before_0001.png",
+    "case_id": "gold_v16_40k_019547__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested page value for the current page objective.",
+    "task_id": "gold_v16_40k_019547",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_020573/after_0001.png",
+    "before_image": "images/gold_v16_40k_020573/before_0001.png",
+    "case_id": "gold_v16_40k_020573__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant information page for the current page objective.",
+    "task_id": "gold_v16_40k_020573",
+    "website_domain": "telegram.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_020807/after_0001.png",
+    "before_image": "images/gold_v16_40k_020807/before_0001.png",
+    "case_id": "gold_v16_40k_020807__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the required page preference for the current task.",
+    "task_id": "gold_v16_40k_020807",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_021224/after_0001.png",
+    "before_image": "images/gold_v16_40k_021224/before_0001.png",
+    "case_id": "gold_v16_40k_021224__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant information page for the current page objective.",
+    "task_id": "gold_v16_40k_021224",
+    "website_domain": "mikrotik.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_021830/after_0001.png",
+    "before_image": "images/gold_v16_40k_021830/before_0001.png",
+    "case_id": "gold_v16_40k_021830__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested page section for the current task.",
+    "task_id": "gold_v16_40k_021830",
+    "website_domain": "mediafire.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_022550/after_0001.png",
+    "before_image": "images/gold_v16_40k_022550/before_0001.png",
+    "case_id": "gold_v16_40k_022550__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the requested result.",
+    "task_id": "gold_v16_40k_022550",
+    "website_domain": "lefigaro.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_022719/after_0001.png",
+    "before_image": "images/gold_v16_40k_022719/before_0001.png",
+    "case_id": "gold_v16_40k_022719__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed site resource for the requested result.",
+    "task_id": "gold_v16_40k_022719",
+    "website_domain": "hbr.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_023359/after_0001.png",
+    "before_image": "images/gold_v16_40k_023359/before_0001.png",
+    "case_id": "gold_v16_40k_023359__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed form setting for this page goal.",
+    "task_id": "gold_v16_40k_023359",
+    "website_domain": "dribbble.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_023689/after_0001.png",
+    "before_image": "images/gold_v16_40k_023689/before_0001.png",
+    "case_id": "gold_v16_40k_023689__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for the next task step.",
+    "task_id": "gold_v16_40k_023689",
+    "website_domain": "ebay.it"
+  },
+  {
+    "after_image": "images/gold_v16_40k_023929/after_0001.png",
+    "before_image": "images/gold_v16_40k_023929/before_0001.png",
+    "case_id": "gold_v16_40k_023929__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant page value for the next task step.",
+    "task_id": "gold_v16_40k_023929",
+    "website_domain": "gravatar.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_024009/after_0001.png",
+    "before_image": "images/gold_v16_40k_024009/before_0001.png",
+    "case_id": "gold_v16_40k_024009__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant information page for the next task step.",
+    "task_id": "gold_v16_40k_024009",
+    "website_domain": "fifa.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_024048/after_0001.png",
+    "before_image": "images/gold_v16_40k_024048/before_0001.png",
+    "case_id": "gold_v16_40k_024048__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant information page for the next task step.",
+    "task_id": "gold_v16_40k_024048",
+    "website_domain": "telegram.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_024437/after_0001.png",
+    "before_image": "images/gold_v16_40k_024437/before_0001.png",
+    "case_id": "gold_v16_40k_024437__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested search state for the current page objective.",
+    "task_id": "gold_v16_40k_024437",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_024497/after_0001.png",
+    "before_image": "images/gold_v16_40k_024497/before_0001.png",
+    "case_id": "gold_v16_40k_024497__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page value for the current page objective.",
+    "task_id": "gold_v16_40k_024497",
+    "website_domain": "amazon.fr"
+  },
+  {
+    "after_image": "images/gold_v16_40k_024647/after_0001.png",
+    "before_image": "images/gold_v16_40k_024647/before_0001.png",
+    "case_id": "gold_v16_40k_024647__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested interaction state for the current page objective.",
+    "task_id": "gold_v16_40k_024647",
+    "website_domain": "who.int"
+  },
+  {
+    "after_image": "images/gold_v16_40k_024889/after_0001.png",
+    "before_image": "images/gold_v16_40k_024889/before_0001.png",
+    "case_id": "gold_v16_40k_024889__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for the current task.",
+    "task_id": "gold_v16_40k_024889",
+    "website_domain": "yieldmo.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_025369/after_0001.png",
+    "before_image": "images/gold_v16_40k_025369/before_0001.png",
+    "case_id": "gold_v16_40k_025369__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the required page preference for the requested result.",
+    "task_id": "gold_v16_40k_025369",
+    "website_domain": "princeton.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_025390/after_0001.png",
+    "before_image": "images/gold_v16_40k_025390/before_0001.png",
+    "case_id": "gold_v16_40k_025390__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target page state for the requested result.",
+    "task_id": "gold_v16_40k_025390",
+    "website_domain": "mysql.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_025459/after_0001.png",
+    "before_image": "images/gold_v16_40k_025459/before_0001.png",
+    "case_id": "gold_v16_40k_025459__step_0000",
+    "executed_action": {
+      "type": "PRESS_KEY",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested lookup value for the requested result.",
+    "task_id": "gold_v16_40k_025459",
+    "website_domain": "change.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_025608/after_0001.png",
+    "before_image": "images/gold_v16_40k_025608/before_0001.png",
+    "case_id": "gold_v16_40k_025608__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the relevant project details for the requested result.",
+    "task_id": "gold_v16_40k_025608",
+    "website_domain": "nationalgeographic.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_025629/after_0001.png",
+    "before_image": "images/gold_v16_40k_025629/before_0001.png",
+    "case_id": "gold_v16_40k_025629__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target information area for the requested result.",
+    "task_id": "gold_v16_40k_025629",
+    "website_domain": "hbr.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_025750/after_0001.png",
+    "before_image": "images/gold_v16_40k_025750/before_0001.png",
+    "case_id": "gold_v16_40k_025750__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed form setting for the requested result.",
+    "task_id": "gold_v16_40k_025750",
+    "website_domain": "washington.edu"
+  },
+  {
+    "after_image": "images/gold_v16_40k_026680/after_0001.png",
+    "before_image": "images/gold_v16_40k_026680/before_0001.png",
+    "case_id": "gold_v16_40k_026680__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested lookup value for the next task step.",
+    "task_id": "gold_v16_40k_026680",
+    "website_domain": "biblegateway.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_026769/after_0001.png",
+    "before_image": "images/gold_v16_40k_026769/before_0001.png",
+    "case_id": "gold_v16_40k_026769__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant project details for the next task step.",
+    "task_id": "gold_v16_40k_026769",
+    "website_domain": "clarin.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_027440/after_0001.png",
+    "before_image": "images/gold_v16_40k_027440/before_0001.png",
+    "case_id": "gold_v16_40k_027440__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the target information area for the current page objective.",
+    "task_id": "gold_v16_40k_027440",
+    "website_domain": "telegram.org"
+  },
+  {
+    "after_image": "images/gold_v16_40k_028037/after_0001.png",
+    "before_image": "images/gold_v16_40k_028037/before_0001.png",
+    "case_id": "gold_v16_40k_028037__step_0000",
+    "executed_action": {
+      "type": "SELECT",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested search state for the current task.",
+    "task_id": "gold_v16_40k_028037",
+    "website_domain": "forter.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_028098/after_0001.png",
+    "before_image": "images/gold_v16_40k_028098/before_0001.png",
+    "case_id": "gold_v16_40k_028098__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed site resource for the current task.",
+    "task_id": "gold_v16_40k_028098",
+    "website_domain": "zoho.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_028150/after_0001.png",
+    "before_image": "images/gold_v16_40k_028150/before_0001.png",
+    "case_id": "gold_v16_40k_028150__step_0000",
+    "executed_action": {
+      "type": "TYPE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the needed form setting for the current task.",
+    "task_id": "gold_v16_40k_028150",
+    "website_domain": "patreon.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_028280/after_0001.png",
+    "before_image": "images/gold_v16_40k_028280/before_0001.png",
+    "case_id": "gold_v16_40k_028280__step_0000",
+    "executed_action": {
+      "type": "NAVIGATE",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the requested site information for the requested result.",
+    "task_id": "gold_v16_40k_028280",
+    "website_domain": "imgur.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_028929/after_0001.png",
+    "before_image": "images/gold_v16_40k_028929/before_0001.png",
+    "case_id": "gold_v16_40k_028929__step_0000",
+    "executed_action": {
+      "type": "CLICK",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Locate the relevant page content for this page goal.",
+    "task_id": "gold_v16_40k_028929",
+    "website_domain": "bankofamerica.com"
+  },
+  {
+    "after_image": "images/gold_v16_40k_029088/after_0001.png",
+    "before_image": "images/gold_v16_40k_029088/before_0001.png",
+    "case_id": "gold_v16_40k_029088__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the needed reference material for this page goal.",
+    "task_id": "gold_v16_40k_029088",
+    "website_domain": "aftonbladet.se"
+  },
+  {
+    "after_image": "images/gold_v16_40k_029388/after_0001.png",
+    "before_image": "images/gold_v16_40k_029388/before_0001.png",
+    "case_id": "gold_v16_40k_029388__step_0000",
+    "executed_action": {
+      "type": "SCROLL",
+      "value": null
+    },
+    "phase": "interaction_assessment",
+    "task_description": "Look for the requested reference content for this page goal.",
+    "task_id": "gold_v16_40k_029388",
+    "website_domain": "haberler.com"
+  }
+]

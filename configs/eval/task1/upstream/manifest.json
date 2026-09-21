@@ -1,0 +1,26 @@
+{
+  "browser_use": {
+    "repository": "browser-use/browser-use",
+    "revision": "843819cb8131e1370948d381ede9be7f8366ddc4",
+    "path": "browser_use/agent/system_prompts/system_prompt.md",
+    "url": "https://raw.githubusercontent.com/browser-use/browser-use/843819cb8131e1370948d381ede9be7f8366ddc4/browser_use/agent/system_prompts/system_prompt.md",
+    "file": "configs/eval/task1/upstream/browser_use.md",
+    "sha256": "680a833b3ebbcf47ffc6c5a0de7133587948114ace94c5236fa79e0425518bcd"
+  },
+  "agent_s2": {
+    "repository": "simular-ai/Agent-S",
+    "revision": "3aa272d23d2994c7bbde1acbbe0ef8e8d06b8693",
+    "path": "gui_agents/s2/memory/procedural_memory.py",
+    "url": "https://raw.githubusercontent.com/simular-ai/Agent-S/3aa272d23d2994c7bbde1acbbe0ef8e8d06b8693/gui_agents/s2/memory/procedural_memory.py",
+    "file": "configs/eval/task1/upstream/agent_s2.py",
+    "sha256": "d607a0a0c7a79207db976861b2d9b25677cc0706a13b39f76e7c854227a06bed"
+  },
+  "webvoyager": {
+    "repository": "MinorJerry/WebVoyager",
+    "revision": "5a7896738c10bfb8b9edccce6bb0e0411f8ae569",
+    "path": "evaluation/auto_eval.py",
+    "url": "https://raw.githubusercontent.com/MinorJerry/WebVoyager/5a7896738c10bfb8b9edccce6bb0e0411f8ae569/evaluation/auto_eval.py",
+    "file": "configs/eval/task1/upstream/webvoyager.py",
+    "sha256": "eb86b5a06e4fca1c483ce9a93812d505b69502d8ed3a6620affe14a188503f98"
+  }
+}

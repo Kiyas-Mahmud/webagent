@@ -1,0 +1,675 @@
+﻿row_id,phase,reason,count
+agent_s2_base,interaction_assessment,Insufficient information to determine the outcome.,140
+agent_s2_base,recovery_assessment,Insufficient information to determine the outcome.,107
+agent_s2_base,interaction_assessment,Insufficient information to determine the outcome of the action.,73
+agent_s2_base,recovery_assessment,Insufficient information to determine the outcome of the action.,1
+agent_s2_trained,interaction_assessment,Insufficient information to determine the outcome of the action.,80
+agent_s2_trained,recovery_assessment,Insufficient information to determine the outcome.,40
+agent_s2_trained,interaction_assessment,Insufficient information to determine the outcome.,28
+agent_s2_trained,recovery_assessment,Insufficient information to determine the outcome of the action.,26
+agent_s2_trained,interaction_assessment,No specific action or outcome can be determined from the provided images.,23
+agent_s2_trained,interaction_assessment,No specific action or result can be determined from the provided images.,13
+agent_s2_trained,interaction_assessment,No specific action or outcome can be determined from the provided input.,10
+agent_s2_trained,interaction_assessment,No change in the screen state observed after the action.,7
+agent_s2_trained,interaction_assessment,No specific action or outcome can be determined from the provided images and actions.,7
+agent_s2_trained,interaction_assessment,Insufficient information to determine the outcome of the interaction.,4
+agent_s2_trained,interaction_assessment,No specific action or outcome can be determined from the provided evidence.,4
+agent_s2_trained,recovery_assessment,No specific action or outcome can be determined from the provided evidence.,4
+agent_s2_trained,recovery_assessment,No specific outcome can be determined from the provided input.,4
+agent_s2_trained,interaction_assessment,No specific action or change observed in the provided images.,3
+agent_s2_trained,interaction_assessment,The action taken does not provide enough information to determine the outcome.,3
+agent_s2_trained,recovery_assessment,No specific change or progress can be determined from the provided images.,3
+agent_s2_trained,recovery_assessment,No specific outcome can be determined from the provided evidence.,3
+agent_s2_trained,interaction_assessment,No observable change or specific action taken.,2
+agent_s2_trained,interaction_assessment,No specific action or result can be determined from the provided evidence.,2
+agent_s2_trained,interaction_assessment,No specific action or result observed from the provided images.,2
+agent_s2_trained,recovery_assessment,No change in the screen state is observed after the action.,2
+agent_s2_trained,recovery_assessment,The action and its result cannot be determined from the supplied evidence.,2
+agent_s2_trained,interaction_assessment,No change in the displayed content after the action.,1
+agent_s2_trained,interaction_assessment,No change in the page content observed after the action.,1
+agent_s2_trained,interaction_assessment,No change in the screen state is provided to assess the outcome.,1
+agent_s2_trained,interaction_assessment,No specific action or change detected in the provided images.,1
+agent_s2_trained,interaction_assessment,No specific action or change detected in the trajectory.,1
+agent_s2_trained,interaction_assessment,No specific action or result observed.,1
+agent_s2_trained,interaction_assessment,No specific change or progress can be determined from the provided images.,1
+agent_s2_trained,interaction_assessment,No specific outcome or failure type can be determined from the provided evidence.,1
+agent_s2_trained,interaction_assessment,The action and its result are not clear enough to determine success or failure.,1
+agent_s2_trained,interaction_assessment,The action and its result are not clearly visible in the provided images.,1
+agent_s2_trained,interaction_assessment,The action of scrolling is too generic to determine its effectiveness in finding reference material.,1
+agent_s2_trained,interaction_assessment,The action taken is not specific enough to determine its success or failure based on the provided evidence.,1
+agent_s2_trained,interaction_assessment,"The action taken was a navigation, but the destination is unknown, making it impossible to assess the outcome directly.",1
+agent_s2_trained,interaction_assessment,"The action taken was to navigate to a different page, but the specific reference material needed for the next task step is not identified.",1
+agent_s2_trained,interaction_assessment,"The action type 'SELECT' was executed without specifying a value, making it unclear if the intended operation was completed successfully.",1
+agent_s2_trained,interaction_assessment,"The dropdown menu selection is unclear, and no specific action was taken.",1
+agent_s2_trained,interaction_assessment,The input does not provide enough information to determine the outcome.,1
+agent_s2_trained,recovery_assessment,Insufficient information to determine the outcome of the scroll action.,1
+agent_s2_trained,recovery_assessment,No change detected in the dropdown selection after the action.,1
+agent_s2_trained,recovery_assessment,No change in the displayed content after the action.,1
+agent_s2_trained,recovery_assessment,No change in the dropdown value observed.,1
+agent_s2_trained,recovery_assessment,No change in the form state observed after the executed action.,1
+agent_s2_trained,recovery_assessment,No change in the input or output images to assess the outcome.,1
+agent_s2_trained,recovery_assessment,No change in the page content observed after the action.,1
+agent_s2_trained,recovery_assessment,"No change in the screen state is observed, indicating no action was taken or the action was not registered.",1
+agent_s2_trained,recovery_assessment,"No change in the screen state is observed, indicating no progress was made with the current action.",1
+agent_s2_trained,recovery_assessment,No change in the screen state observed after the action.,1
+agent_s2_trained,recovery_assessment,No change in the screen state observed.,1
+agent_s2_trained,recovery_assessment,No change in the state of the page or specific action taken can be observed.,1
+agent_s2_trained,recovery_assessment,No observable change or progress in the trajectory after the action.,1
+agent_s2_trained,recovery_assessment,No specific change or action observed in the provided images.,1
+agent_s2_trained,recovery_assessment,No specific form setting change detected.,1
+agent_s2_trained,recovery_assessment,No specific form state or target is evident from the provided input.,1
+agent_s2_trained,recovery_assessment,No specific page setting or change is evident from the provided images.,1
+agent_s2_trained,recovery_assessment,"The executed action's value is null, making it impossible to determine the outcome.",1
+agent_s2_trained,recovery_assessment,The input does not provide enough information to determine the outcome.,1
+browser_use_base,recovery_assessment,Insufficient evidence to determine the outcome.,85
+browser_use_base,interaction_assessment,Insufficient evidence to determine the outcome of the action.,64
+browser_use_base,interaction_assessment,No change observed in the screenshots provided.,38
+browser_use_base,interaction_assessment,No observable change in the screenshot provided.,19
+browser_use_base,interaction_assessment,No observable change in the screenshot to determine the outcome.,18
+browser_use_base,interaction_assessment,Insufficient evidence to determine the outcome of the scroll action.,17
+browser_use_base,interaction_assessment,No change in the screenshot provided.,13
+browser_use_base,recovery_assessment,Insufficient evidence to determine the outcome of the action.,13
+browser_use_base,recovery_assessment,Insufficient evidence to determine the outcome of the scroll action.,9
+browser_use_base,interaction_assessment,Insufficient evidence to determine the outcome.,8
+browser_use_base,interaction_assessment,No change in the screenshot is observed to determine the outcome.,8
+browser_use_base,interaction_assessment,No observable change in the provided screenshots to determine the outcome.,7
+browser_use_base,interaction_assessment,No change observed in the provided screenshots.,5
+browser_use_base,interaction_assessment,Insufficient evidence to determine the outcome,4
+browser_use_base,interaction_assessment,No change in the screenshot is observed.,4
+browser_use_base,interaction_assessment,No observable change in the screenshot to determine the outcome of the action.,4
+browser_use_base,interaction_assessment,No observable change in the screenshots provided.,4
+browser_use_base,interaction_assessment,No visual evidence provided to determine the outcome.,4
+browser_use_base,recovery_assessment,No change observed in the screenshots provided.,3
+browser_use_base,interaction_assessment,No change in the screenshot or additional information provided to determine the outcome.,2
+browser_use_base,interaction_assessment,No change in the screenshot or evidence provided.,2
+browser_use_base,interaction_assessment,No change observed between the two images.,2
+browser_use_base,interaction_assessment,No observable change in the provided images to determine the outcome.,2
+browser_use_base,recovery_assessment,No change observed in the provided screenshots.,2
+browser_use_base,recovery_assessment,The provided images do not show a clear change or outcome that can be used to determine the success or failure of the action.,2
+browser_use_base,interaction_assessment,No change in the screenshot is observed to determine the outcome of the action.,1
+browser_use_base,interaction_assessment,"No change in the screenshot is observed, indicating no action was taken or the action's effect is not visible.",1
+browser_use_base,interaction_assessment,"No change in the screenshot is observed, indicating no action was taken.",1
+browser_use_base,interaction_assessment,No change in the screenshot is provided to verify the outcome.,1
+browser_use_base,interaction_assessment,No change in the screenshot to verify the action outcome.,1
+browser_use_base,interaction_assessment,No change observed in the screenshot.,1
+browser_use_base,interaction_assessment,No observable change in the provided screenshots to determine the outcome of the action.,1
+browser_use_base,interaction_assessment,No observable change in the screenshot to confirm the action's outcome.,1
+browser_use_base,interaction_assessment,No observable change in the screenshot to determine the outcome of the scroll action.,1
+browser_use_base,interaction_assessment,No visual evidence provided to determine the outcome of the action.,1
+browser_use_base,interaction_assessment,"The action involves navigating to a different page, but the screenshots do not show a clear change in the URL or content that indicates successful navigation.",1
+browser_use_base,interaction_assessment,The effect of the scroll action is not visible in the provided screenshots.,1
+browser_use_base,interaction_assessment,"The screenshots show no significant change in the content displayed, indicating no clear outcome from the scroll action.",1
+browser_use_base,recovery_assessment,No evidence available to determine the outcome.,1
+browser_use_base,recovery_assessment,The outcome of the scroll action cannot be determined from the provided screenshots.,1
+browser_use_base,recovery_assessment,The provided images do not show a clear change or outcome to determine success or failure.,1
+browser_use_base,recovery_assessment,"The screenshot shows a CAPTCHA verification page, but there is no evidence of a form state change or interaction with a form element.",1
+browser_use_trained,interaction_assessment,No change observed in the screenshots provided.,25
+browser_use_trained,recovery_assessment,No change observed in the screenshots provided.,24
+browser_use_trained,interaction_assessment,No change observed between the two screenshots.,22
+browser_use_trained,interaction_assessment,Insufficient evidence to determine the outcome of the action.,18
+browser_use_trained,interaction_assessment,No observable change in the screenshots provided.,17
+browser_use_trained,recovery_assessment,Insufficient evidence to determine the outcome.,12
+browser_use_trained,interaction_assessment,No observable change in the screenshot provided.,11
+browser_use_trained,recovery_assessment,No change observed between the two screenshots.,10
+browser_use_trained,recovery_assessment,Insufficient evidence to determine the outcome of the action.,8
+browser_use_trained,recovery_assessment,No change observed between the screenshots.,7
+browser_use_trained,interaction_assessment,No change observed between the screenshots.,5
+browser_use_trained,recovery_assessment,No observable change in the screenshots provided.,5
+browser_use_trained,interaction_assessment,The action's outcome cannot be determined from the provided screenshots.,4
+browser_use_trained,recovery_assessment,No observable change in the screenshot provided.,4
+browser_use_trained,interaction_assessment,No change in the screenshot is observed after the action.,3
+browser_use_trained,interaction_assessment,No change observed in the screenshots.,3
+browser_use_trained,interaction_assessment,No change in the language selection observed.,2
+browser_use_trained,interaction_assessment,No change in the screenshot provided.,2
+browser_use_trained,interaction_assessment,No change observed in the page content between the two screenshots.,2
+browser_use_trained,interaction_assessment,No observable change in the search bar content.,2
+browser_use_trained,interaction_assessment,No observable change in the search input field.,2
+browser_use_trained,interaction_assessment,"The action involves navigating the website, but no specific target or change is observed in the screenshots provided.",2
+browser_use_trained,recovery_assessment,No change observed in the dropdown selection.,2
+browser_use_trained,recovery_assessment,No change observed in the provided screenshots.,2
+browser_use_trained,interaction_assessment,Insufficient evidence to determine the outcome from the provided screenshots.,1
+browser_use_trained,interaction_assessment,Insufficient evidence to determine the outcome of the navigation action.,1
+browser_use_trained,interaction_assessment,Insufficient evidence to determine the outcome of the scroll action.,1
+browser_use_trained,interaction_assessment,Insufficient information to determine the outcome from the provided images.,1
+browser_use_trained,interaction_assessment,Insufficient information to determine the outcome of the action.,1
+browser_use_trained,interaction_assessment,No change in the page state observed between the two screenshots provided.,1
+browser_use_trained,interaction_assessment,No change in the screenshot or browser state provided.,1
+browser_use_trained,interaction_assessment,No change in the screenshot or evidence provided to determine the outcome.,1
+browser_use_trained,interaction_assessment,"No change in the screenshots provided, and no specific action outcome can be determined.",1
+browser_use_trained,interaction_assessment,"No change in the screenshots provided, indicating no action was taken or observed.",1
+browser_use_trained,interaction_assessment,"No change in the screenshots provided, making it impossible to determine the outcome of the action.",1
+browser_use_trained,interaction_assessment,No change observed between the screenshots provided.,1
+browser_use_trained,interaction_assessment,No change observed between the two images.,1
+browser_use_trained,interaction_assessment,No change observed in the search input field.,1
+browser_use_trained,interaction_assessment,No observable change in the content or layout between the two screenshots.,1
+browser_use_trained,interaction_assessment,No observable change in the page content or layout between the two screenshots.,1
+browser_use_trained,interaction_assessment,No observable change in the page content or search input field.,1
+browser_use_trained,interaction_assessment,No observable change in the page content or state between the two screenshots provided.,1
+browser_use_trained,interaction_assessment,No observable change in the page content or state between the two screenshots.,1
+browser_use_trained,interaction_assessment,"No observable change in the screenshots provided, indicating no action was taken or the action's effect is not visible.",1
+browser_use_trained,interaction_assessment,"No observable change in the screenshots provided, indicating the action did not result in a visible outcome.",1
+browser_use_trained,interaction_assessment,No observable change in the selected value.,1
+browser_use_trained,interaction_assessment,No significant change observed in the screenshots.,1
+browser_use_trained,interaction_assessment,"The action involves navigating the website, but the screenshots provided do not show a clear change or outcome that can be assessed.",1
+browser_use_trained,interaction_assessment,"The action involves navigating the website, but the screenshots provided do not show a clear change or specific outcome related to finding project details.",1
+browser_use_trained,interaction_assessment,"The action involves navigating the website, but the screenshots provided do not show a clear outcome or change that can be assessed for success or failure.",1
+browser_use_trained,interaction_assessment,"The action involves navigating the website, but the screenshots provided do not show a clear outcome or change that can be assessed.",1
+browser_use_trained,interaction_assessment,"The action involves navigating to a different page, but no specific target or result is identified in the screenshots provided.",1
+browser_use_trained,interaction_assessment,"The action involves navigating to a different page, but the screenshots provided do not show a clear outcome of success or failure.",1
+browser_use_trained,interaction_assessment,"The action involves navigating to a new page, but the screenshots provided do not show the result of the navigation.",1
+browser_use_trained,interaction_assessment,"The action involves pressing a key, but the screenshots do not show a clear change or result from this action.",1
+browser_use_trained,interaction_assessment,"The action involves scrolling, and the screenshots do not show a clear change in content that indicates success or failure.",1
+browser_use_trained,interaction_assessment,"The action involves typing into a search bar, but the input value is null, making it impossible to determine the outcome from the provided images alone.",1
+browser_use_trained,interaction_assessment,The action taken does not provide clear evidence of success or failure based on the provided screenshots.,1
+browser_use_trained,interaction_assessment,"The change in text content suggests a different message was displayed, but it's unclear if the intended information area was targeted.",1
+browser_use_trained,interaction_assessment,"The change in text content suggests an action was taken, but the exact outcome is not verifiable from the provided images alone.",1
+browser_use_trained,interaction_assessment,"The search bar was activated, but no text was entered.",1
+browser_use_trained,interaction_assessment,"The transition from the first image to the second shows a change in the webpage content, but it is not possible to determine the exact outcome of the action without additional context or screenshots.",1
+browser_use_trained,interaction_assessment,"The transition from the first image to the second shows a change in the webpage content, but it is unclear if the intended target resource was found. The second image shows a login page, which may not directly indicate the presence of the target resource.",1
+browser_use_trained,recovery_assessment,,1
+browser_use_trained,recovery_assessment,No change in page state observed between the two screenshots.,1
+browser_use_trained,recovery_assessment,No change in the form state is observed.,1
+browser_use_trained,recovery_assessment,No change in the provided images to assess the outcome.,1
+browser_use_trained,recovery_assessment,No change in the provided screenshots to determine the outcome.,1
+browser_use_trained,recovery_assessment,No change in the search input or results observed.,1
+browser_use_trained,recovery_assessment,No change observed between the two images.,1
+browser_use_trained,recovery_assessment,No change observed in the input field value.,1
+browser_use_trained,recovery_assessment,No change observed in the screenshot after the action.,1
+browser_use_trained,recovery_assessment,No change observed in the search bar content.,1
+browser_use_trained,recovery_assessment,No change observed in the search bar input.,1
+browser_use_trained,recovery_assessment,No change observed in the search input field.,1
+browser_use_trained,recovery_assessment,No observed change in the provided screenshots to determine the outcome.,1
+browser_use_trained,recovery_assessment,No observed change in the screenshot before and after the action.,1
+browser_use_trained,recovery_assessment,"The action involves navigating the site, but the screenshots provided do not show a clear outcome or change that can be assessed for success or failure.",1
+browser_use_trained,recovery_assessment,"The action involves navigating to a different page, but the outcome cannot be determined from the provided screenshots alone.",1
+browser_use_trained,recovery_assessment,"The action involves navigating to a different page, but the specific reference material needed for the task is not identified in the provided screenshots.",1
+browser_use_trained,recovery_assessment,"The action involves navigating to a different website, and there is no evidence to determine the outcome of the navigation.",1
+browser_use_trained,recovery_assessment,The action type 'SELECT' with a null value does not provide enough information to determine the outcome from the given screenshots.,1
+browser_use_trained,recovery_assessment,The action's outcome cannot be determined from the provided images.,1
+browser_use_trained,recovery_assessment,The change between the two images does not provide enough information to determine the outcome of the action.,1
+browser_use_trained,recovery_assessment,The change between the two images is not clear enough to determine the outcome definitively.,1
+browser_use_trained,recovery_assessment,The change between the two images is not clear enough to determine the outcome of the action.,1
+browser_use_trained,recovery_assessment,The change from one screenshot to another does not provide enough information to determine the outcome of the action.,1
+browser_use_trained,recovery_assessment,The change in the screenshots does not provide clear evidence of the action's success or failure.,1
+webvoyager_base,interaction_assessment,Insufficient information to determine the outcome,15
+webvoyager_base,recovery_assessment,The screenshot and task description do not provide enough information to determine the outcome of the action.,6
+webvoyager_base,interaction_assessment,The screenshot and task description do not provide enough information to determine the outcome of the action.,5
+webvoyager_base,interaction_assessment,The screenshot and task description do not provide enough information to determine the outcome of the action taken.,4
+webvoyager_base,interaction_assessment,Insufficient information to determine the outcome.,3
+webvoyager_base,interaction_assessment,"No change in the screenshot is observed, indicating no action was taken or the action's effect is not visible.",2
+webvoyager_base,interaction_assessment,No observable change or action completion in the screenshots provided.,2
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent banner and a country selection prompt, but there is no clear indication of the specific page content being searched for or the result of the action taken.",2
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent popup, but there is no clear indication of the target page state or the specific action taken.",2
+webvoyager_base,recovery_assessment,The screenshot does not provide enough information to determine the outcome of the action.,2
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent popup, but there is no clear indication of the target page state or the specific action taken.",2
+webvoyager_base,interaction_assessment,Insufficient information to determine the outcome of the action.,1
+webvoyager_base,interaction_assessment,Insufficient information to determine the outcome of the interaction.,1
+webvoyager_base,interaction_assessment,No change in page content observed after scrolling.,1
+webvoyager_base,interaction_assessment,No change in the screenshot indicates no action was taken or observed.,1
+webvoyager_base,interaction_assessment,"No change in the screenshot is observed, and no lookup value is provided.",1
+webvoyager_base,interaction_assessment,No observable change in the screenshot to determine the outcome of the action.,1
+webvoyager_base,interaction_assessment,No observable change or action completion in the screenshots.,1
+webvoyager_base,interaction_assessment,No observable change or action taken on the webpage is evident from the provided screenshots.,1
+webvoyager_base,interaction_assessment,"The action performed was a scroll, but the target information page is not identified or visible in the screenshots provided.",1
+webvoyager_base,interaction_assessment,"The action performed was a scroll, but the task was to look for a specific web resource. There is no evidence of whether the target resource was found.",1
+webvoyager_base,interaction_assessment,The executed action type 'SELECT' with a null value does not provide sufficient information to determine the outcome or interaction state.,1
+webvoyager_base,interaction_assessment,"The screenshot shows a Bible verse from Jeremiah 2:12, but there is no clear indication of a lookup value being entered or searched for.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a Bible verse from the website BibleGateway.com, but there is no clear indication of the requested lookup value being found or the specific action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a Princeton University webpage, but the specific target web resource is not identified or located in the provided images.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a banking page with options for different credit cards, but it does not indicate whether the relevant page content for the goal was located.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent banner, but there is no clear evidence of the reference material being located or the action taken aligning with the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent banner, but there is no clear indication of the specific page section being located or the result of the action.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent banner, but there is no indication of a lookup value being found or any specific action related to the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent dialog, but there is no clear indication of the specific page value requested or the action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear evidence of the executed action or interaction state.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear evidence of the lookup value being found or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear evidence of the needed page setting being located or interacted with.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear evidence of the page preference being located or selected.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear evidence of the specific site resource being located or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear indication of the requested page section being located or interacted with.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear indication of the specific interaction state or goal related to the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent popup, but there is no clear evidence of the reference material being found or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent popup, but there is no clear evidence of the requested page value being found or the action's success.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent popup, but there is no clear evidence of the requested page value being located or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent popup, but there is no clear evidence of the requested site information being located or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent popup, but there is no clear evidence of the search state or result for the requested task.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent popup, but there is no clear indication of the page preference being set or any specific action related to the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent popup, but there is no clear indication of the target information area for the next task step.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent prompt, but there is no evidence of a search state or specific task completion.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent settings pop-up, but the executed action type 'SELECT' does not specify a value or target. There is no clear evidence of interaction with the form settings.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a cookie consent settings pop-up, but there is no clear indication of the specific page setting being targeted for the next task step.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a download confirmation page for Firefox, but there is no evidence of reference content being located or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a form for contacting sales, but it is unclear if the task of locating project details has been completed. There is no direct evidence of project details being located.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a form with options, but the executed action does not specify a selection or target form state.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a form with various options, but the specific form setting needed for the task is not clearly identified or highlighted.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a login page for Bank of America, but there is no clear evidence of the form setting being located or any specific action taken related to the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a login page with options to sign up or log in, but there is no clear indication of a page preference being selected or identified.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a page about 'Rose Data Server (RDS)' on MikroTik's website, but there is no clear indication of the specific action taken or the objective achieved. The task description is ambiguous without further context.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a page from 'afternic.com' with information about sales landers, but there is no clear evidence of the requested page section being found or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a pop-up about cookies, but there is no clear indication of the requested interaction state or result.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a pop-up message, but it is unclear if the needed page setting was found or adjusted.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a pop-up message, but it is unclear what the 'relevant page value' is without additional context.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a pop-up message, but there is no clear indication of the page preference being located or set for the next task step.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a pop-up message, but there is no clear indication of the requested page section being located or interacted with.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a pop-up overlay on the webpage, but it is unclear if the relevant information page for the page goal has been found or accessed. The pop-up does not provide direct evidence of the task completion.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a privacy consent pop-up, but there is no clear indication of the requested reference content being located or interacted with.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a privacy consent pop-up, but there is no clear indication of the search state or objective being located.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a privacy notice, but there is no clear evidence of project details being located or the action taken aligning with the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a privacy settings pop-up and a FIFA World Cup 2026 banner, but there is no clear indication of the specific information page being located or the action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a product page for a MikroTik switch, but it is unclear if this is the relevant page content for the task without further context.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a product page for the Y500 phone, but there is no evidence of a search or specific action related to finding a page value. The task description is unclear, and no specific action can be verified from the screenshot.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a search bar on the Patreon website, but there is no evidence of a form setting being located or any specific action related to the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a search bar with 'nearby public information' typed in, but there is no clear indication of the next interaction state or task step.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a search bar with text entered, but it's unclear if the correct page setting was found for the next task step.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a search bar with text entered, but it's unclear if the task of finding a specific page setting was completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a search for 'community resources' on Imgur, but there is no clear indication of the specific page setting being looked for. The task description is vague, and the action taken does not directly align with finding a specific page setting.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a search interface, but there is no evidence of the requested page value being found or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a security prompt on Taobao, but it's unclear if the task of looking for a specific web resource was completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a webpage from the University of Washington, but the specific page content or goal is not clear from the provided images. The task requires locating relevant content, but there is no clear indication of whether the action was successful or not.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a webpage from the University of Washington, but there is no clear indication of the target form state or the result of the action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a webpage from the World Health Organization (WHO) with a headline about cancer, but there is no clear indication of the specific page section requested. The task requires locating a specific page section, but the screenshot does not provide enough information to confirm this action was completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a webpage with a pop-up message, but there is no clear indication of the requested page value or result. The task description is vague, and the action taken (typing) is not clearly linked to a specific goal.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a webpage with a promotional offer, but there is no clear indication of the target page state or task completion.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a webpage with information about a bridge, but it is unclear if the task of locating a specific information page was completed. No specific information page is identified.",1
+webvoyager_base,interaction_assessment,The screenshot shows a webpage with no visible form settings or input fields to interact with.,1
+webvoyager_base,interaction_assessment,"The screenshot shows a webpage with options to 'Sign Up For Free' and 'Contact Sales', but there is no clear evidence of the specific page value being located or the action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a webpage with various elements, but it is unclear what specific site information was requested. The action taken is a click, but without knowing the target, it's impossible to determine if the task was successfully completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a webpage with various sections, but the specific target information area is not clearly identified or highlighted in the provided images.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a website with a form for cookie settings, but there is no clear indication of the target page state or task completion.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a website with a pop-up for cookie settings, but there is no clear indication of the requested page value being found or interacted with.",1
+webvoyager_base,interaction_assessment,The screenshot shows a website with no clear indication of the search state or results for the task. The executed action type 'SELECT' with no value specified does not provide sufficient evidence to determine the outcome.,1
+webvoyager_base,interaction_assessment,"The screenshot shows a website with no visible search state or results, and the action type 'SELECT' with no value indicates an incomplete or unclear action.",1
+webvoyager_base,interaction_assessment,"The screenshot shows a website with options to adjust cookie settings, but it's unclear if the needed page setting was located.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the 'Documentation' page on the Let's Encrypt website, but it is unclear what specific reference material was being sought. The action taken was a click, but the target is not specified.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the 'Explore' section of Issuu, but there is no clear indication of the specific page section being located or the result of the action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the 'Latest Stories' section of the National Geographic website, but there is no clear indication of the target information area being located or interacted with. The task requires locating a specific information area, which is not evident from the provided screenshot.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Amazon homepage with promotional banners and cookie consent information, but there is no clear indication of the search state or specific action taken related to the task instruction.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Amazon homepage with various banners and options, but there is no clear indication of a form setting being selected or interacted with.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Amazon homepage with various categories and promotional banners, but there is no clear indication of the target page state for the next task step. The task description is vague, and no specific action or target state is identified.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Amazon homepage with various promotional banners and cookie consent information, but there is no clear indication of a specific page preference being selected or any action taken related to the task instruction.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Amazon homepage with various promotional banners and cookie consent information, but there is no clear indication of a specific page value being located or selected.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the BibleGateway website, but the executed action is a click without specifying the target. There is no clear evidence of progress or completion of the task.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the BibleGateway website, but the specific project details or goal are not visible. The task requires locating relevant project details, which are not clearly identified in the provided screenshot.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Blogger website, not teamviewer.com. There is no evidence of interaction with the requested site.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Box website with a focus on 'Contracts + AI', but there is no clear evidence of a specific information page being located or accessed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Box website with different sections, but it is unclear if the requested page section was located based on the provided information.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Box website with options related to 'Content + AI' and 'Proposals + AI', but it is unclear what specific page value was requested. There is no clear evidence of the requested page value being found.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Box website with options to 'Get started' or 'Contact us', but there is no clear indication of a form state or specific target form state for the next task step.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Change.org homepage with options to start a petition or explore topics, but there is no specific evidence of project details being accessed or displayed as a result of the action.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Change.org homepage with options to start a petition or get started with AI, but there is no clear indication of a form setting being located or selected.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Change.org homepage with options to start a petition or get started with AI, but there is no clear indication of a specific page preference being located or selected.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Change.org homepage with options to start a petition or get started with AI, but there is no clear indication of a specific page value being located for the next task step.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Change.org homepage with options to start a petition or get started with AI, but there is no clear indication of the requested page value being found or any specific action related to the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the DreamHost homepage, but there is no clear indication of the target information area for the requested result. The task requires locating specific information, which is not evident in the provided screenshot.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Dribbble homepage, but there is no clear evidence of the specific information page being located for the next task step.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Dribbble homepage, but there is no clear indication of the specific form setting being located or the action taken. The task description is not fully addressed in the evidence provided.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Dribbble website, but it is unclear if the needed site resource for the next task step has been found. No specific resource is highlighted.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Duolingo homepage with options to learn various languages, but the specific target information area for the task is not identified.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Duolingo homepage with options to learn various languages, but there is no clear indication of the specific reference content being located or the result of the action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Duolingo homepage with options to start learning or log in, but there is no clear evidence of a specific page setting being located or adjusted.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the ESET homepage, but there is no clear evidence of the specific reference material being located or the result of the action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the FC2 website with various options, but the specific requested page value is not clearly identified.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Forter website homepage, but it is unclear if the relevant page content for the task has been located. The task requires locating specific content, but the screenshot does not provide enough information to confirm this.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Gofundme homepage, but there is no clear evidence of a specific site resource being identified or accessed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Gumgum website, but there is no clear indication of the target page state or the specific action taken. The task description is vague, and the executed action (pressing a key) is not detailed enough to assess success or failure.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Harvard Business Review website with an article titled 'U.S. and Japanese Companies Struggle with Different Parts of AI Adoption—and Offer Different Lessons for Making It Work.' However, there is no clear indication of the target information area being located or the specific action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Harvard Business Review website, but the executed action does not provide enough information to determine if the target web resource was located.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Harvard Business Review website, but there is no clear evidence of the specific page preference being identified or the action taken.",1
+webvoyager_base,interaction_assessment,The screenshot shows the Healthline website with an article titled 'Day 10: 6 Strategies I Used to Beat Energy Slumps' but does not provide enough information to determine if the relevant information page was found.,1
+webvoyager_base,interaction_assessment,The screenshot shows the Healthline website with no clear indication of the target form state or specific action taken.,1
+webvoyager_base,interaction_assessment,"The screenshot shows the Hotjar homepage, but there is no specific section or result requested to verify.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Hotjar website, but it is unclear if the requested site information was found or verified.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Hotjar website, but the specific requested page value is not visible or identifiable in the provided images.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Hotjar website, but the task description and action do not provide enough information to determine if the requested site information was found.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Imgur homepage, but there is no clear indication of a specific page setting being located or adjusted.",1
+webvoyager_base,interaction_assessment,The screenshot shows the Imgur website with no clear indication of the reference material being located or the task being completed.,1
+webvoyager_base,interaction_assessment,"The screenshot shows the Independent website, but the executed action is to navigate without specifying a target. There is no evidence of locating a specific site resource.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Itch.io website with various game options, but there is no clear indication of the specific project details being located or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Let's Encrypt homepage, but it is unclear if the needed reference material has been found. No specific action or result is evident.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Lichess website with various game options, but there is no indication of a specific reference content being located or any action related to the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Lichess website with various game settings, but there is no visible form to complete for the next task step.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the MediaFire homepage, but there is no clear indication of the specific page section requested. The task requires locating a specific section, which is not evident in the provided screenshot.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Microsoft 365 Copilot page, but there is no clear evidence of the requested page section being located or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Microsoft 365 Copilot page, but there is no evidence of locating relevant page content for a specific task.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the MikroTik website, but it is unclear if the needed reference material has been located. The task requires locating a specific reference material, but the screenshot does not provide enough information to confirm this.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the MySQL homepage, but there is no clear evidence of the lookup value being found or the specific action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the MySQL website homepage, but it is unclear if the needed reference material has been found. No specific action or result is evident from the screenshot.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the MySQL website homepage, but there is no clear evidence of the specific project details being located or the action taken aligning with the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the PBS website with various sections, but there is no clear indication of the requested page section being located or interacted with.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the PBS website with various shows, but there is no clear indication of the requested page value or specific action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Palo Alto Networks homepage, but it is unclear if the needed site resource has been located. No specific resource is identified.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Polybuzz.ai website with options to create webtoon series and generate images, but it does not provide specific project details relevant to the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the TIME website homepage, but it is unclear if the relevant information page for the task has been located. No specific action or result is evident from the screenshot.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Taboola website, but there is no evidence of the target page state or specific task completion.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the TeamViewer website, but the executed action does not provide enough information to determine if the target web resource was located.",1
+webvoyager_base,interaction_assessment,The screenshot shows the Telegram homepage with no specific reference material identified.,1
+webvoyager_base,interaction_assessment,"The screenshot shows the Telegram homepage, but there is no evidence of a specific reference material being located or the action of navigating to find it.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Threads Terms of Use page, but it is unclear if the relevant project details were found as the task description is vague and the screenshot does not provide specific project details.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the WHO homepage, but there is no evidence of a specific target web resource being located or accessed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the WHO homepage, but there is no specific lookup value or task objective provided in the input.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the WHO website, but the specific action taken (click) is not detailed enough to determine if the task was successfully completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Wired website with various articles, but it is unclear which specific information page was targeted or clicked on.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Wired website with various articles, but there is no clear evidence of the specific project details being located or the action taken aligning with the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Wix website with options to start creating a website, but there is no clear indication of the specific target page state or result achieved.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the Xbox homepage with no specific project details visible. The task requires locating project details, but the screenshot does not provide enough information to determine if the task was completed.",1
+webvoyager_base,interaction_assessment,The screenshot shows the Xbox homepage with no specific reference content located for the task.,1
+webvoyager_base,interaction_assessment,"The screenshot shows the Zoho website, but there is no clear evidence of the specific task being completed or the result of the action taken.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the content on Imgur, but there is no clear indication of whether the needed reference material has been located. The task requires locating a specific reference material, which is not evident from the screenshot.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the eBay homepage, but there is no clear indication of the specific site resource being located. The task requires locating a specific site resource, but the screenshot does not provide enough information to determine if this has been accomplished.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the eBay homepage, but there is no clear indication of what the lookup value is or what specific action was taken. The task description is vague, and the executed action (pressing a key) does not provide enough information to determine success or failure.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of 360.cn, but there is no clear indication of the target page state or specific task completion. The task description is vague, and no specific action or result can be definitively assessed from the provided information.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of 360.cn, but there is no clear indication of the target page state or task completion. The executed action type 'TYPE' is unspecified, making it difficult to assess the outcome.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of ESET with no specific action taken to find relevant page content. The task requires locating specific content, but the screenshot does not provide evidence of this action.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of Imgur with no specific search state or result visible. The task description is unclear, making it difficult to determine if the action aligns with the instruction.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of National Geographic with various categories and stories, but there is no clear evidence of the specific project details being located or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of Palo Alto Networks, but there is no clear evidence of the specific project details being located or the action taken aligning with the task description.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of Stripchat with no clear indication of the target page state being reached. The executed action is a key press, but the result is not visible.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of change.org, but there is no specific information about project details visible. The task requires looking for project details, which are not clearly presented in the screenshot.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of dafont.com with various font categories, but it does not provide specific information relevant to the task of looking for a page with information for the next task step. The task description is vague, and no specific page or information is identified.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of imgur.com, but there is no clear evidence of the requested site information being located or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of stackadapt.com, but there is no clear evidence of the target web resource being located or the task being completed.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the homepage of the 360 website, but there is no clear indication of the specific target page state or result requested. The executed action type 'TYPE' does not provide sufficient information to determine the outcome.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the website 'clarin.com' with no clear indication of project details being located or interacted with. The action taken is a click, but the target is not specified.",1
+webvoyager_base,interaction_assessment,The screenshot shows the website content but does not provide enough information to determine if the target web resource has been located.,1
+webvoyager_base,interaction_assessment,"The screenshot shows the website content but does not provide enough information to determine if the task was successfully completed. The task involves locating specific site information, which is not clearly visible or verifiable from the screenshot alone.",1
+webvoyager_base,interaction_assessment,"The screenshot shows the website interface, but there is no clear indication of whether the needed reference material has been located. The task requires locating a specific reference material, but the screenshot does not provide enough information to confirm this action.",1
+webvoyager_base,interaction_assessment,The screenshot shows the website's homepage with no clear indication of the target form state or the result of the action taken.,1
+webvoyager_base,interaction_assessment,"The screenshots show the MySQL homepage before and after an action, but the executed action type 'TYPE' with a null value does not provide sufficient information to determine the outcome.",1
+webvoyager_base,interaction_assessment,"The screenshots show the MySQL homepage before and after an action, but the specific target page state for the requested result is not clearly identified.",1
+webvoyager_base,interaction_assessment,The task description and executed action do not provide enough information to determine success or failure. The action 'NAVIGATE' with no specific value makes it unclear whether the correct site resource was located.,1
+webvoyager_base,recovery_assessment,The outcome of the task cannot be determined from the provided screenshots and instructions.,1
+webvoyager_base,recovery_assessment,The screenshot does not provide enough information to determine if the requested page section was located.,1
+webvoyager_base,recovery_assessment,The screenshot does not provide enough information to determine if the requested reference content was located.,1
+webvoyager_base,recovery_assessment,The screenshot does not provide enough information to determine the outcome of the task related to finding a form setting.,1
+webvoyager_base,recovery_assessment,The screenshot does not provide enough information to determine the outcome of the task.,1
+webvoyager_base,recovery_assessment,"The screenshot does not show any form state or input field relevant to the task description, making it impossible to determine the outcome.",1
+webvoyager_base,recovery_assessment,"The screenshot does not show any specific page setting being adjusted or identified, and the task description is unclear.",1
+webvoyager_base,recovery_assessment,"The screenshot does not show any specific page value being requested or displayed, and there is no evidence of the executed action's outcome.",1
+webvoyager_base,recovery_assessment,"The screenshot does not show the specific page content or domain 'forter.com', making it impossible to determine the outcome.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a Bible verse from Jeremiah 2:12, but there is no clear indication of a lookup value being requested or provided. The task description mentions looking for a lookup value, but the screenshot does not show any specific lookup action or result.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a Microsoft page, not dzen.ru, and there is no evidence of the requested site information being found.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a Patreon page, but there is no clear evidence of the specific content or action taken to find the relevant page content.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent banner and a country selection prompt, but there is no clear indication of the specific page content being searched for or the result of the action taken.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent banner, but there is no clear evidence of the needed page setting being located or selected.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent banner, but there is no clear evidence of the target form state or the specific action taken.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear evidence of the needed page setting being located or adjusted.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear evidence of the reference material being located or the action taken.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent pop-up, but there is no clear indication of the requested lookup value being found or processed.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent popup on the Netgear website, but there is no clear indication of the target information area for the next task step.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent popup, but there is no clear evidence of the requested page value being found or the task being completed.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent popup, but there is no clear evidence of the search state or result. The task description is not fully addressed in the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a cookie consent popup, but there is no clear indication of the requested page value or task completion. The action taken is not sufficient to determine the outcome.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a font page on dafont.com, but it is unclear which specific information page is relevant for the next task step. No clear evidence of the task being completed or not.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a form for contacting sales, but there is no clear evidence of project details being located or displayed.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a form for logging in, but there is no clear evidence of the specific form setting being located or modified as per the task description.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a form on the Hurricane Electric website, but there is no evidence of the specific page content being located or interacted with as per the task description. The action taken is a click, but the target is not specified.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a form with options to select gender and a button labeled 'I'm Over', but there is no clear indication of the search state or specific goal achieved. The task description is unclear, making it difficult to determine if the action aligns with the goal.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a form with options, but the executed action does not specify a selection or target form state. No clear evidence of the task being completed or not.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a pop-up overlay with information about cookies, but it does not provide clear evidence of the target information area for the page goal. The task requires locating specific information, which is not clearly visible in the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a privacy pop-up, but there is no clear evidence of the required page preference being identified or set.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a product page for the Y500 phone, but there is no clear evidence of the specific page value being looked for. The task requires finding a specific value, but the screenshot does not provide enough information to determine if the task was successfully completed.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a search bar on the Patreon website, but there is no evidence of a form setting being located or any specific action related to the task description.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a search bar with 'public information' entered, but there is no clear indication of the requested interaction state for the next task step.",1
+webvoyager_base,recovery_assessment,The screenshot shows a search form but does not provide evidence of the target form state or the executed action's outcome.,1
+webvoyager_base,recovery_assessment,"The screenshot shows a security verification page, but there is no clear indication of the target form state for the next task step. The page is focused on verifying the user's humanity, which does not directly relate to the task instruction.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a webpage from the World Health Organization (WHO), but there is no clear evidence of a form state or the specific target form state being located. The task description mentions locating a target form state, but the screenshot does not provide enough information to confirm this action was completed.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a webpage from the World Health Organization (WHO), but there is no specific information about the requested page section or task completion. The task description and action type do not provide enough context to determine success or failure.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a webpage with a section titled 'Собирали всё для вашего авто' (Collected everything for your car), but it is unclear if this is the requested page section for the next task step. No specific details about the task completion are provided.",1
+webvoyager_base,recovery_assessment,The screenshot shows a webpage with no clear indication of the requested page value being located or the result of the action taken.,1
+webvoyager_base,recovery_assessment,"The screenshot shows a webpage with no clear indication of the specific site resource needed for the next task step. The action taken is a click, but the target is not specified, making it impossible to determine if the task was successfully accomplished.",1
+webvoyager_base,recovery_assessment,"The screenshot shows a webpage with various sections, but the specific target information area is not clearly identified or highlighted in the provided images.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Amazon homepage with promotional banners and cookie consent information, but there is no clear indication of the requested search state or specific action taken.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Amazon homepage with various categories and promotions, but there is no clear indication of the target page state for the next task step. The task description is to look for a specific page state, which is not evident in the provided screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Amazon homepage with various promotional banners and cookie consent information, but it does not provide a clear indication of the specific page value being sought. There is no explicit evidence of the relevant page value being located or identified.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the BibleGateway website, but it is unclear if the needed site resource has been located. No specific resource is highlighted or identified as the target.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Box website with a focus on 'Contracts + AI,' but there is no clear evidence of the specific information page being accessed or the result of the action.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Box website with options related to 'Proposals + AI' and 'Knowledge + AI', but it is unclear what specific page value was requested. There is no clear evidence of the requested page value being found or verified.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Change.org homepage with various petitions and options, but there is no clear evidence of a specific page value being identified or retrieved as per the task objective.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Change.org homepage with various petitions, but there is no clear indication of the specific page value being located for the next task step. The executed action type 'SELECT' with a null value does not provide sufficient information to determine the outcome.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Change.org homepage, but there is no clear indication of the page preference being located or selected. The executed action type 'SELECT' with a null value does not provide sufficient evidence to determine the outcome.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Cloudinary website, but the executed action is a key press without specifying which key was pressed. There is no clear evidence of locating a specific page value.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Dribbble homepage, but it is unclear if the relevant information page for the next task step has been found. No specific action or result is evident from the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Dribbble homepage, but it is unclear which specific site resource was being looked for. There is no clear evidence of the task being completed or not.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Forter website, but the task description and action details are insufficient to determine the target page state or the success of the action.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Gofundme homepage, but there is no evidence of a specific site resource being identified or accessed. The task requires locating a specific resource, which is not evident from the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Gumgum website, but there is no clear indication of the target page state or specific action taken. The task requires locating a target page state, which is not evident from the provided information.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Hotjar homepage, but there is no specific evidence of the requested page section being located or the result of the action.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Hotjar website, but it is unclear if the requested site information has been found. No specific information is highlighted or extracted from the page.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Imgur website with posts, but there is no clear evidence of locating a specific reference material as per the task description. The task requires locating a reference material, but the screenshot does not indicate whether this has been achieved.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Issuu website with options to explore publications and add links & videos, but there is no clear indication of the requested page section being located. The action taken is a click, but the target is not specified.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Itch.io homepage with various game options, but there is no clear indication of the requested page value being found or any specific action taken based on the task description.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Itch.io website with various game categories and featured games, but it does not provide specific project details for a requested result. The task of locating relevant project details is not clearly completed or evident from the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Itch.io website, but there is no evidence of a specific page value being requested or found. The task description is unclear, and no specific action or result can be determined from the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Let's Encrypt homepage, but it is unclear if the needed reference material has been found. No specific reference material is highlighted in the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Lichess website with various game settings, but there is no visible form or specific setting related to the next task step. The action taken (pressing a key) does not provide clear evidence of progress towards finding the needed form setting.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Lichess website, but it does not provide specific reference content for the next task step. The task requires locating requested reference content, which is not clearly visible or identifiable in the provided screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the MTS website with various options and a promotional banner, but it does not indicate a specific target page state or task completion. The executed action is a key press, but the result is not clear from the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Microsoft 365 Copilot page, but there is no evidence of locating relevant page content for a specific task. The action taken was scrolling, but the result is not clear.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the MySQL website with information about MySQL HeatWave, but it does not provide specific project details relevant to the task. The task requires looking for project details, which are not clearly visible or identified in the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the MySQL website, but it is unclear if the needed reference material has been found. No specific action or result is evident from the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the PBS website with various shows, but there is no indication of a specific page value being requested or found. The action taken was pressing a key, but the result is not clear from the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the TIME website homepage, but there is no clear indication of the specific information page being located or the action taken. The task requires locating a specific information page, but the screenshot does not provide enough evidence to determine if this was accomplished.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Telegram website, but there is no evidence of the specific reference material being located or identified.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the UW News page, but it is unclear if the relevant page content for the goal has been located. More information is needed to determine success or failure.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Verisign homepage, but there is no clear evidence of the requested page section being located or the result of the action.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the WHO homepage, but there is no evidence of a form state or target form state being located. The task requires identifying a form state, which is not visible in the provided screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the WHO website, but the executed action type 'SELECT' with no value specified does not provide enough information to determine the outcome.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Wired website with various sections, but it is unclear if the relevant information page for the task has been found. No specific action or result is evident from the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Wired website, but it is unclear if the needed site resource has been located. No specific resource is identified as found.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Wix homepage, but there is no clear evidence of the target web resource being located or interacted with. The task requires looking for a specific resource, which is not evident in the provided screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Wix homepage, but there is no clear indication of the specific information page being located. The task requires locating a specific page, but the screenshot does not provide enough evidence to confirm this action.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Wix website homepage, but there is no clear indication of the target page state or result achieved from the executed action. The action type 'PRESS_KEY' with no value specified does not provide enough information to determine the outcome.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Wordwall website, but there is no specific evidence of the target web resource being located or the objective achieved. The task requires identifying a specific resource, which is not clearly indicated in the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the Xbox homepage with game promotions, but there is no specific information about project details visible. The task requires locating project details, which are not evident in the provided screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the eBay homepage with no specific form settings visible that align with the task description. The task requires identifying a form setting, but the screenshot does not provide enough information to determine if the action was successful.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the eBay homepage, but there is no clear indication of the requested page value being found or any specific action taken based on the task description.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the homepage of Palo Alto Networks, but there is no clear evidence of the target form state or the specific action taken. The task requires locating a form state, which is not visible in the provided screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the homepage of change.org with various petitions, but there is no specific evidence of project details being found or interacted with.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the homepage of change.org, but there is no evidence of a specific site resource being located or identified.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the homepage of change.org, but there is no specific evidence of project details being located or displayed as a result of the action.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the page before and after a scroll action, but it does not provide enough information to determine if the relevant information page was located.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the website content but does not provide evidence of the search state or the specific action taken. The executed action is a key press, but its effect is not visible in the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the website interface, but it is unclear if the needed reference material has been located. No specific reference material is identified in the screenshot.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the website's footer with a newsletter signup form, but there is no clear indication of the target form state or specific action taken.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the website's footer, but there is no clear indication of the target page state or specific task completion. The task description is vague, and the action taken (pressing a key) is not clearly linked to achieving the task.",1
+webvoyager_base,recovery_assessment,"The screenshot shows the website's homepage with options like 'Solutions', 'Resources', 'Customers', 'Company', and 'Partners'. There is no clear indication of a specific page setting being selected or adjusted for the next task step.",1
+webvoyager_base,recovery_assessment,"The screenshot shows various topics and articles, but it is unclear what the specific target information area is without further context or instructions.",1
+webvoyager_base,recovery_assessment,"The screenshots show a transition on the Imgur website, but the specific search state or result requested is not clearly visible or identifiable from the provided images.",1
+webvoyager_base,recovery_assessment,"The screenshots show different promotional messages for Duolingo, but there is no clear indication of the target information area for the task. The task description is vague, and the screenshots do not provide enough context to determine the outcome.",1
+webvoyager_base,recovery_assessment,"The screenshots show different promotional messages on the Duolingo website, but there is no clear evidence of the requested reference content being located. The task requires locating specific reference content, which is not evident in the provided screenshots.",1
+webvoyager_base,recovery_assessment,"The screenshots show different sections of the Box website, but there is no clear evidence of the requested interaction state or result. The task description and action type do not provide enough information to determine the outcome.",1
+webvoyager_trained,interaction_assessment,No change in page state observed between the screenshots.,8
+webvoyager_trained,interaction_assessment,No change in the webpage content observed between the two screenshots.,6
+webvoyager_trained,interaction_assessment,No change in the screenshot indicates no action was taken.,5
+webvoyager_trained,interaction_assessment,"No change observed between the screenshots, indicating no action was taken.",5
+webvoyager_trained,interaction_assessment,No observable change or action completion evident from the screenshots provided.,3
+webvoyager_trained,recovery_assessment,No change in the page state is observed between the screenshots.,3
+webvoyager_trained,interaction_assessment,"No change detected between the screenshots, indicating no action was taken.",2
+webvoyager_trained,interaction_assessment,No change in page content observed after the click action.,2
+webvoyager_trained,interaction_assessment,No change in page elements or settings observed.,2
+webvoyager_trained,interaction_assessment,No change in the page content observed after the action.,2
+webvoyager_trained,interaction_assessment,No change in the page content observed between the screenshots.,2
+webvoyager_trained,interaction_assessment,No change in the page content or relevant information is visible after the scroll action.,2
+webvoyager_trained,interaction_assessment,No change in the page content or state observed between the screenshots.,2
+webvoyager_trained,interaction_assessment,No change in the screenshot indicates no action was taken or observed.,2
+webvoyager_trained,interaction_assessment,No change in the webpage content observed after the action.,2
+webvoyager_trained,interaction_assessment,No observable change between the screenshots provided.,2
+webvoyager_trained,interaction_assessment,No observable change in the page state.,2
+webvoyager_trained,interaction_assessment,No significant change observed between the screenshots.,2
+webvoyager_trained,interaction_assessment,The executed action type 'SELECT' with a null value does not provide sufficient information to determine the outcome.,2
+webvoyager_trained,interaction_assessment,The executed action type 'SELECT' with no value specified does not provide sufficient information to determine the outcome.,2
+webvoyager_trained,recovery_assessment,No change in the page content is observed between the two screenshots.,2
+webvoyager_trained,recovery_assessment,No change in the page content observed between the screenshots.,2
+webvoyager_trained,recovery_assessment,No change in the page content or state is observed between the screenshots.,2
+webvoyager_trained,recovery_assessment,The executed action type 'SELECT' with a null value does not provide sufficient information to determine the outcome based on the given instructions.,2
+webvoyager_trained,interaction_assessment,Insufficient information to determine the outcome from the provided screenshots and task instructions.,1
+webvoyager_trained,interaction_assessment,No action performed or outcome observed.,1
+webvoyager_trained,interaction_assessment,"No action was performed on the page, and no search state change is evident.",1
+webvoyager_trained,interaction_assessment,No action was performed on the page.,1
+webvoyager_trained,interaction_assessment,No action was taken or completed.,1
+webvoyager_trained,interaction_assessment,No action was taken or recorded.,1
+webvoyager_trained,interaction_assessment,No action was taken or selected value provided.,1
+webvoyager_trained,interaction_assessment,No change in form settings observed between the screenshots.,1
+webvoyager_trained,interaction_assessment,No change in form state observed,1
+webvoyager_trained,interaction_assessment,No change in page content observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in page content or form state observed between the screenshots.,1
+webvoyager_trained,interaction_assessment,No change in page content or language selection observed.,1
+webvoyager_trained,interaction_assessment,No change in page elements or preferences observed.,1
+webvoyager_trained,interaction_assessment,No change in page state observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the form setting is observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the page content or action observed between the screenshots.,1
+webvoyager_trained,interaction_assessment,No change in the page content or clear outcome observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the page content or setting is observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the page content or setting observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the page content or state observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the page elements or values observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the page state is observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the page state is observed between the two screenshots.,1
+webvoyager_trained,interaction_assessment,No change in the page state observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the page state or content observed between the screenshots.,1
+webvoyager_trained,interaction_assessment,No change in the screenshot indicates no action was taken after typing.,1
+webvoyager_trained,interaction_assessment,No change in the screenshot indicates no action was taken or completed.,1
+webvoyager_trained,interaction_assessment,No change in the screenshot indicates no action was taken or recorded.,1
+webvoyager_trained,interaction_assessment,No change in the search input field is observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the search input is observed between the screenshots.,1
+webvoyager_trained,interaction_assessment,No change in the webpage content between the screenshots provided.,1
+webvoyager_trained,interaction_assessment,No change in the webpage content is observed after the action.,1
+webvoyager_trained,interaction_assessment,No change in the webpage content or interaction is observed between the two screenshots.,1
+webvoyager_trained,interaction_assessment,"No change in the webpage content or state is observed between the screenshots, indicating no action was taken.",1
+webvoyager_trained,interaction_assessment,No change observed between the screenshots; no form setting was altered.,1
+webvoyager_trained,interaction_assessment,No changes observed between the screenshots.,1
+webvoyager_trained,interaction_assessment,No discernible change or action related to the task is evident in the screenshots.,1
+webvoyager_trained,interaction_assessment,No observable change in the interaction state or result from the executed action.,1
+webvoyager_trained,interaction_assessment,No observable change in the page content or interaction result.,1
+webvoyager_trained,interaction_assessment,No observable change in the page content or setting after the action.,1
+webvoyager_trained,interaction_assessment,No observable change in the page content or state after the action.,1
+webvoyager_trained,interaction_assessment,No observable change in the page content or state between the screenshots provided.,1
+webvoyager_trained,interaction_assessment,No observable change in the page state after the action.,1
+webvoyager_trained,interaction_assessment,No observable change in the page state or form field interaction.,1
+webvoyager_trained,interaction_assessment,No observable change in the screenshot to assess the outcome.,1
+webvoyager_trained,interaction_assessment,No observable change or progress in the screenshots provided.,1
+webvoyager_trained,interaction_assessment,No observable change or specific action outcome can be determined from the provided screenshots.,1
+webvoyager_trained,interaction_assessment,No relevant changes observed between the screenshots.,1
+webvoyager_trained,interaction_assessment,No specific action or result can be determined from the provided screenshots and instructions.,1
+webvoyager_trained,interaction_assessment,No specific action or result can be determined from the provided screenshots and task description.,1
+webvoyager_trained,interaction_assessment,No specific lookup value or result was identified from the provided screenshots and task description.,1
+webvoyager_trained,interaction_assessment,No specific page setting or action related to the task description is visible in the screenshot.,1
+webvoyager_trained,interaction_assessment,No specific page value requested or observed.,1
+webvoyager_trained,interaction_assessment,No specific project details were identified or interacted with in the provided screenshots.,1
+webvoyager_trained,interaction_assessment,"The action pressed a key without specifying which key, making it impossible to determine the intended operation.",1
+webvoyager_trained,interaction_assessment,"The action pressed a key, but the specific key and its intended effect are not specified, making it unclear how it aligns with the task instruction.",1
+webvoyager_trained,interaction_assessment,"The action pressed a key, but the specific key and its intended effect are unknown. The screenshot shows the homepage of Dribbble, but it's unclear how this action contributes to locating a form setting.",1
+webvoyager_trained,interaction_assessment,"The action taken does not provide clear evidence of progress towards locating the relevant information page. The screenshot shows different sections of the website, but it is unclear if the intended information page was reached.",1
+webvoyager_trained,interaction_assessment,The executed action (typing) does not provide visible evidence of progress or completion of the task. The screenshots show no significant change in content relevant to locating a specific page value.,1
+webvoyager_trained,interaction_assessment,The executed action and resulting screenshots do not provide enough information to determine the outcome of the task.,1
+webvoyager_trained,interaction_assessment,"The executed action involves typing, but the specific value entered is not provided, making it impossible to assess the accuracy or relevance of the input.",1
+webvoyager_trained,interaction_assessment,"The executed action involves typing, but the target input field is not specified. The screenshots show a cookie consent popup, but it is unclear if the intended preference page was accessed.",1
+webvoyager_trained,interaction_assessment,"The executed action involves typing, but the value entered is not visible in the screenshots provided.",1
+webvoyager_trained,interaction_assessment,"The executed action is a click, but the target of the click is not specified. The screenshots show different pages, but it is unclear if the click led to the appropriate reference material.",1
+webvoyager_trained,interaction_assessment,"The executed action is a click, but the target page content is not specified. The screenshot shows different sections of the website, but it is unclear which content was intended to be located.",1
+webvoyager_trained,interaction_assessment,The executed action type 'SELECT' with a null value does not provide sufficient information to determine the outcome from the screenshots provided.,1
+webvoyager_trained,interaction_assessment,The executed action type 'SELECT' with a null value does not provide sufficient information to determine the outcome. No specific interaction with the page elements is evident.,1
+webvoyager_trained,interaction_assessment,The executed action type 'SELECT' with a null value does not provide sufficient information to determine the outcome. No specific selection or change is evident from the action description.,1
+webvoyager_trained,interaction_assessment,"The executed action type is TYPE, but the value is null, making it unclear what was typed. No observable change in the search field content is evident.",1
+webvoyager_trained,interaction_assessment,"The executed action type is TYPE, but the value is null, making it unclear what was typed. The screenshot shows a change in the search bar from '3' to 'research', but no specific form state change is evident.",1
+webvoyager_trained,interaction_assessment,The outcome of the action cannot be determined from the provided screenshots alone.,1
+webvoyager_trained,interaction_assessment,The outcome of the action cannot be determined from the provided screenshots and instructions.,1
+webvoyager_trained,interaction_assessment,The outcome of the action cannot be determined from the provided screenshots and task description.,1
+webvoyager_trained,interaction_assessment,The screenshot and task description do not provide enough information to determine the outcome of the action taken.,1
+webvoyager_trained,interaction_assessment,"The screenshot shows a QR code login page, but there is no evidence of the target web resource being found or interacted with.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows a cookie consent popup, but there is no clear indication of the specific page value requested.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows a form for requesting a P-Transit quote, but there is no clear indication of the specific page objective being addressed. The task requires locating relevant page content, but the screenshot does not provide enough context to determine if the objective has been met.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows a form with various settings, but the specific form setting needed for the current page objective is not identified or highlighted.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows a pop-up overlay, but it is unclear if the relevant information page for the goal was found or accessed.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows a privacy pop-up, but there is no clear evidence of the specific task being completed or the result of the action taken.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows a transition to a different section of the website, but it's unclear if the relevant page content for the goal was located.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows a website with cookie consent settings, but there is no clear indication of the requested lookup value or task completion.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows different sections of the Forter website, but it's unclear if the project details for the current task have been located.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows different sections of the Forter website, but it's unclear if the relevant page content for the task has been located.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows different sections of the Wired website, but it is unclear which page was clicked or what information was sought.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the BibleGateway homepage after a click, but it does not provide specific details about a project goal. More information is needed to assess the task completion.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the Dribbble homepage, but it is unclear which specific information page was targeted for the next task step.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the Harvard Business Review website with an advertisement overlay, but it is unclear if the needed site resource for the requested result was found.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the Polybuzz.ai website with options for generating images and characters, but it does not provide specific project details related to the task objective.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the Wired website with various articles, but there is no specific evidence of project details being found or the action of navigating to relevant project details completed.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the Wired website, but the specific resource needed for the task is not identified or accessed.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the Wordwall website, but the specific target web resource is not identified or located in the provided images.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the footer of the Princeton University website, but it is unclear what specific page preference or result was being looked for. There is no clear indication of the task being completed or not.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the homepage of ESET with options for home security solutions, but it does not provide specific reference material for the requested result.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the homepage of Palo Alto Networks, but it does not provide specific project details relevant to the task. More specific navigation or action is needed to locate project details.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the homepage of change.org, but there is no specific information about project details visible. The task requires looking for project details, which are not clearly presented in the screenshot.",1
+webvoyager_trained,interaction_assessment,"The screenshot shows the website's homepage and a page for discovering causes, but there is no specific evidence of project details being viewed or interacted with.",1
+webvoyager_trained,interaction_assessment,"The screenshots show a cookie consent banner and a shopping cart, but there is no clear evidence of locating reference material for a requested result.",1
+webvoyager_trained,interaction_assessment,"The screenshots show changes in the website interface, but the executed action 'NAVIGATE' with no specific value makes it unclear if the relevant information page was found.",1
+webvoyager_trained,interaction_assessment,"The screenshots show different content on the MySQL website, indicating a change in the page or content displayed, but no specific lookup value is provided or identified.",1
+webvoyager_trained,interaction_assessment,"The screenshots show different promotional messages, but there is no clear evidence of the specific reference content being located or the result of the action taken.",1
+webvoyager_trained,interaction_assessment,"The screenshots show different promotional messages, but there is no clear evidence of the target information area being located or the specific task completed.",1
+webvoyager_trained,interaction_assessment,"The screenshots show different sections of the Princeton University website, but it is unclear what specific target web resource was being located. No clear indication of success or failure in locating the resource.",1
+webvoyager_trained,interaction_assessment,"The screenshots show different sections of the website, but there is no clear evidence of the specific target web resource being located. The task requires locating a specific resource, but the screenshots do not provide enough information to confirm this.",1
+webvoyager_trained,interaction_assessment,The screenshots show no significant change or specific project details being interacted with.,1
+webvoyager_trained,interaction_assessment,"The search bar was activated, but no search term was entered.",1
+webvoyager_trained,interaction_assessment,"The search bar was interacted with, but the specific input or result is not visible in the screenshot.",1
+webvoyager_trained,interaction_assessment,"The search field was activated, but no search term was entered.",1
+webvoyager_trained,interaction_assessment,"The search input field was interacted with, but the specific action (typing 'open data') is not reflected in the screenshot. The search results are not visible, and no new page state is evident.",1
+webvoyager_trained,interaction_assessment,"The search input field was modified, but the final value is not visible in the screenshot.",1
+webvoyager_trained,interaction_assessment,"The search input field was selected, but no search term was entered.",1
+webvoyager_trained,interaction_assessment,"The search term 'community resources' was entered, but the result does not show a specific page setting being adjusted or identified.",1
+webvoyager_trained,interaction_assessment,"The transition from the first to the second screenshot shows a change in the webpage content, but it does not provide clear evidence of the specific site information requested. The task requires locating specific site information, which is not clearly demonstrated in the screenshots.",1
+webvoyager_trained,recovery_assessment,No change in form state observed; dropdown selection action not reflected.,1
+webvoyager_trained,recovery_assessment,No change in page content observed between the two screenshots.,1
+webvoyager_trained,recovery_assessment,No change in page content or setting selection observed.,1
+webvoyager_trained,recovery_assessment,No change in page state observed between the screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the page content is observed after the action.,1
+webvoyager_trained,recovery_assessment,No change in the page content is observed between the screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the page content observed between the two screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the page content or action is observed between the two screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the page content or form settings is observed between the screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the page content or relevant action is observed between the screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the page content or significant action observed between the screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the page content or specific action taken can be observed between the screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the page content or state observed between the screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the screenshot indicates no action was taken or completed.,1
+webvoyager_trained,recovery_assessment,No change in the screenshot indicates no action was taken or observed.,1
+webvoyager_trained,recovery_assessment,No change in the screenshot indicates no relevant page content was located.,1
+webvoyager_trained,recovery_assessment,No change in the search bar content is observed between the two screenshots.,1
+webvoyager_trained,recovery_assessment,No change in the webpage content is observed after the action.,1
+webvoyager_trained,recovery_assessment,No change in the webpage content is observed between the two screenshots.,1
+webvoyager_trained,recovery_assessment,No observable change in the page content or state due to the action.,1
+webvoyager_trained,recovery_assessment,No observable change or progress detected between the screenshots.,1
+webvoyager_trained,recovery_assessment,"The executed action involves typing, but the specific value entered is not provided. The screenshots show a search box, but the input value change is not clear from the provided information.",1
+webvoyager_trained,recovery_assessment,"The executed action involves typing, but the value entered is null, making it impossible to determine the target form state.",1
+webvoyager_trained,recovery_assessment,"The executed action involves typing, but the value is null, making it impossible to determine the outcome based on the provided information.",1
+webvoyager_trained,recovery_assessment,The executed action type 'TYPE' with a null value does not provide sufficient information to determine the outcome. No specific search or result is evident from the screenshots provided.,1
+webvoyager_trained,recovery_assessment,"The executed action type is TYPE, but the value is null, and there is no visible change in the search bar content between the two screenshots. The search bar content remains the same, indicating no action was taken to change it.",1
+webvoyager_trained,recovery_assessment,The outcome of the task cannot be determined from the provided screenshots alone.,1
+webvoyager_trained,recovery_assessment,The outcome of the task cannot be determined from the provided screenshots and instructions.,1
+webvoyager_trained,recovery_assessment,"The screenshot shows a Microsoft page, not dzen.ru. The task was to look for information on dzen.ru, but the screenshot does not provide relevant evidence.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows a Patreon page with podcast-related content, but there is no clear evidence of the specific action taken or the result of the click.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows a cookie consent popup on the Netgear website, but there is no clear indication of the target information area for the next task step.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows a cookie consent popup, but there is no clear indication of the needed page setting for the next task step.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows a security verification page, but there is no clear indication of the target form state for the next task step.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows different sections of the website, but no specific page setting is identified or selected.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the Harvard Business Review website, but it is unclear what specific page preference is being sought. No clear outcome can be determined from the provided information.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the Rackspace website with various sections, but it does not provide enough information to determine the requested lookup value for the next task step.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the Wired website with various articles, but it is unclear if the relevant information page for the task has been found. More specific details are needed to determine success or failure.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the Wired website, but the executed action does not provide specific evidence of finding a needed site resource. No specific resource is identified as being found or used.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the bottom part of the webpage, indicating the task might be complete, but there is no clear evidence of the target page state. Further context is needed.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the footer of the healthline.com website, but there is no clear indication of the target form state or specific action related to the task goal. The executed action is pressing a key, but the result is not visible in the provided screenshot.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the footer of the webpage, but it is unclear what the target form state was requested to look for. More context is needed to determine if the task was successfully accomplished.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the footer section of the Cloudinary website, but there is no specific page value or information that directly corresponds to the task goal of locating a relevant page value. The task description is vague, and the executed action does not provide clear evidence of progress towards the goal.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the homepage of change.org, but there is no specific evidence of project details being found or displayed as a result of the action.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the homepage of the World Health Organization (WHO) with various navigation options, but it is unclear what the target form state is without additional context or specific instructions.",1
+webvoyager_trained,recovery_assessment,"The screenshot shows the website's footer with various links, but it is unclear what the target page state is without further context or instructions.",1
+webvoyager_trained,recovery_assessment,"The screenshots show different messages on the Duolingo homepage, but there is no clear target information area specified for the task. The task description is vague, and the action taken does not provide enough evidence to determine success or failure.",1
+webvoyager_trained,recovery_assessment,"The screenshots show different messages on the Duolingo homepage, but there is no specific reference content requested to locate. The task description is unclear, making it difficult to determine the outcome.",1
+webvoyager_trained,recovery_assessment,"The screenshots show different sections of the Box website, but there is no clear evidence of the executed action's outcome. The action type 'SELECT' with a null value does not provide sufficient information to determine success or failure.",1
+webvoyager_trained,recovery_assessment,"The screenshots show different sections of the Box website, but there is no clear evidence of the requested page value being identified or selected.",1
+webvoyager_trained,recovery_assessment,The screenshots show different sections of the website (one for 'Sublime字体' and one for 'Propositions police') without clear evidence of the next task step or specific information page being identified.,1
+webvoyager_trained,recovery_assessment,The screenshots show no significant change or specific page setting adjustment related to the task instruction.,1
+webvoyager_trained,recovery_assessment,"The search bar content changed from 'Rechercher Amazon' to 'Rechercher Amazon.fr', but no specific search state or action is evident from the screenshots.",1
+webvoyager_trained,recovery_assessment,"The search input field text changed slightly, but it's unclear if this was intentional or if the task was completed successfully.",1
+webvoyager_trained,recovery_assessment,"The search input field value changed from 'nearly public information' to 'public information', but there is no clear evidence of the next task step or interaction state.",1
+webvoyager_trained,recovery_assessment,"The search input field was interacted with, but the specific form setting needed for the task is not visible or identifiable from the screenshot.",1
+webvoyager_trained,recovery_assessment,The search state change is not clearly visible in the provided screenshots.,1
+webvoyager_trained,recovery_assessment,The target page state is unclear due to the different language content and lack of specific instruction details.,1
+webvoyager_trained,recovery_assessment,The task description and action type do not provide enough information to determine the outcome. The action type 'SELECT' with a null value does not indicate a specific change or target state.,1

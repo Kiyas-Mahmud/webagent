@@ -1,0 +1,13 @@
+{
+  "repository": "browser-use/browser-use",
+  "revision": "843819cb8131e1370948d381ede9be7f8366ddc4",
+  "url": "https://codeload.github.com/browser-use/browser-use/tar.gz/843819cb8131e1370948d381ede9be7f8366ddc4",
+  "archive_sha256": "9b717ce739c4f002017b955ff8802590df97650973a68475c117f8ded75f3726",
+  "source_path": ".task2-assets/source/browser-use-843819cb8131e1370948d381ede9be7f8366ddc4",
+  "files": {
+    "pyproject.toml": "f06f598f90b6b71f6509013174fab0e7c625e8aa59797ef97430043f3c1dec82",
+    "browser_use/agent/service.py": "10f7c14458ed7089c49f34a06ad7b3ce12212a589d9d000c5cf4d9cc7ddd8479",
+    "browser_use/llm/base.py": "e4983edd7bbf65b979c9b047907de99ec1ad2b49f8be86559d9b77833ab3db05",
+    "LICENSE": "135c57671b0ee957669b05a0ca00cc06f645496d351e2e732832c6e276da9a5e"
+  }
+}

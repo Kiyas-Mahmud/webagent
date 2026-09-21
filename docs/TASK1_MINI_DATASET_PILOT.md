@@ -2,6 +2,11 @@
 
 Date: 2026-09-14. **Metadata analysis and selection complete; no agent evaluated.**
 
+**2026-09-15:** [implementation and runbook](TASK1_IMPLEMENTATION_AND_RUNBOOK.md)
+now tracks the implemented adapters, 360 phase requests per system and 12
+separate development cases. Original selection artifacts below are unchanged.
+PC-03 full epoch 0 is the selected trained comparator. External development inference has started locally; pilot inference is pending.
+
 Current design: [agent comparison architecture and actual data example](TASK1_AGENT_COMPARISON_ARCHITECTURE.md).
 The selected external candidates are Browser Use, Agent S2 and WebVoyager's
 adapted assessment components. Their exact versions, backends and runtime

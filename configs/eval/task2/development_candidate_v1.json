@@ -1,0 +1,47 @@
+{
+  "schema": "task2.development-candidate.v1",
+  "status": "engineering_only_not_frozen_for_live_execution",
+  "systems": {
+    "A": "Existing agent with its own standard recovery",
+    "B": "Same actor plus frozen InternVL diagnosis, advisory strategy and recovery assessment",
+    "C": "B plus frozen advisory memory using its original PC01 query encoder, explicitly user-authorized; live parity required"
+  },
+  "agent_candidate": {
+    "repository": "browser-use/browser-use",
+    "revision": "843819cb8131e1370948d381ede9be7f8366ddc4",
+    "selection_basis": "Pinned source exposes pre/post-step hooks and custom LLM interface; functional compatibility remains unverified",
+    "max_actions_per_step": 1,
+    "installation_verified": true,
+    "isolated_python": "/home/aiub/kiyas/webagent/.task2-assets/browser-use-env/bin/python",
+    "local_backend_verified": false
+  },
+  "actor_candidate": {
+    "family": "InternVL3.5-8B-HF",
+    "variant": "frozen_base",
+    "revision": "3974c115d44f0e13eae8b654f680b1e561c71ae9",
+    "selection_basis": "Available local backend; assessment-head scores do not establish browser-action generation ability",
+    "same_for_all_systems": true
+  },
+  "assessor": {
+    "family": "InternVL3.5-8B-HF",
+    "checkpoint_sha256": "35eec6c940836e581abe597006cbf4d9aedbcba06c574ba3d8c2829f667d28cb",
+    "epoch": 0,
+    "seed": 42,
+    "recovery_success_rule": "logit > 0",
+    "head_input_contract": "Reuse PC03Assessor.batch; action values and targets retained for actor/evidence only"
+  },
+  "memory": {
+    "store_directory": "/home/aiub/kiyas/table2-evidence/p4-local-embeddings-v1",
+    "count": 1974,
+    "dimension": 768,
+    "required_query_checkpoint_sha256": "9eaab6d24719b7bce8d0dd2ccf9169c3ddf83e0a800714a84531679c0c94895a",
+    "threshold": 0.7371385097503662,
+    "internvl_query_compatible": false,
+    "query_route": "original PC01 encoder for queries only; user-authorized 2026-09-16",
+    "writes_enabled": false
+  },
+  "development_families_proposed": ["click-button", "enter-text", "click-test", "click-button-sequence"],
+  "protocol_pending": ["native actor and local backend acceptance", "one-action execution mapping", "recovery incidents and continuation", "memory query route", "resets and overlap", "matched total budgets", "generic assessor control decision", "independent terminal scoring"],
+  "live_ready": false,
+  "final_evaluation_ready": false
+}

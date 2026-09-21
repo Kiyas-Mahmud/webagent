@@ -2,6 +2,13 @@
 
 Date: 2026-09-14. Status: design only; no new inference or image access.
 
+**Implementation update, 2026-09-15:** the local harness and engineering checks
+are complete. Development inference has started on the user-authorized local lab
+dataset; InternVL parity and the comparative run remain pending. PC-03 full-trained epoch 0 and a shared frozen Qwen base are selected.
+The [implementation runbook](TASK1_IMPLEMENTATION_AND_RUNBOOK.md) supersedes
+the unresolved identity/backend choices and checklist below. No live result is
+implied by the implemented inference path.
+
 ## Purpose
 
 Test Browser Use, Agent S2 and WebVoyager's relevant assessment components on
@@ -47,7 +54,7 @@ explicit authorization. Image availability has not yet been verified.
 
 | Row | Existing component | Required adaptation and boundary |
 |---|---|---|
-| Our trained model | Frozen outcome, failure and recovery heads | Preserve the selected checkpoint's existing processor and inputs. Pin one checkpoint before comparative inference; the mini/full and PC-01/PC-02 discussion is not an implemented switch. |
+| Our trained model | Frozen outcome, failure and recovery heads | Preserve the selected checkpoint's existing processor and inputs. Pin one checkpoint before comparative inference; the mini/full and PC-01/PC-03 discussion is not an implemented switch. |
 | Browser Use, adapted assessment | `evaluation_previous_goal` and action context | Reconstruct recorded previous-action context without a live DOM. Keep evaluation enabled; map its assessment to the declared schema. |
 | Agent S2, adapted reflection | Reflection on task/subtask history | Supply only available completed history and screenshots. Do not fabricate plans, DOM trees or prior experience. Full S2 memory/planning is not exercised by an isolated reflection call. |
 | WebVoyager, adapted evaluator | Screenshot-based task-success evaluator | Its native target is whole-task success. Explicitly change the question to action-transition or recovery-transition assessment. This is a method adaptation, not a file-format conversion alone. |

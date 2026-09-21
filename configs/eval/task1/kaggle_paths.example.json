@@ -1,0 +1,6 @@
+{
+  "checkpoint": "/kaggle/input/task1-models/best_e0_outcome-mcc0.641.ckpt",
+  "qwen_base": "/kaggle/input/task1-models/Qwen2-VL-2B-Instruct/snapshots/895c3a49bc3fa70a340399125c650a463535e71c",
+  "internvl_base": "/kaggle/input/task1-models/InternVL3_5-8B-HF/snapshots/3974c115d44f0e13eae8b654f680b1e561c71ae9",
+  "image_root": "/kaggle/input/web-gold-40k"
+}

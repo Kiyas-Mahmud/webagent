@@ -1,0 +1,14 @@
+{
+  "base_status": "Pinned InternVL download in progress",
+  "checkpoint_status": "LFS fetch in progress",
+  "gpu_check": "NVIDIA GB10; CUDA and BF16 available outside sandbox",
+  "host": "spark-ec0d",
+  "images_verified": 626,
+  "locked_test_read": false,
+  "matches_frozen_source": true,
+  "scope": "Local dataset file identity and required image decoding; no model inference",
+  "source": "/home/aiub/kiyas/webagent_full/data/original/final_data_set_40k/split_val.json",
+  "source_sha256": "42df34295f2b0f81e48a29e4acae1b8b16c862ed2a140c19d2a63c4c950d435c",
+  "status": "PASS",
+  "tests": "42 passed"
+}

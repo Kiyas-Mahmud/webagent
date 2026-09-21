@@ -1,0 +1,6 @@
+{
+  "checkpoint": "/home/aiub/kiyas/webagent/.task1-assets/best_e0_outcome-mcc0.641.ckpt",
+  "qwen_base": "/home/aiub/kiyas/table2-inputs/Qwen2-VL-2B-Instruct/snapshots/895c3a49bc3fa70a340399125c650a463535e71c",
+  "internvl_base": "/home/aiub/kiyas/webagent/.task1-assets/InternVL3_5-8B-HF/snapshots/3974c115d44f0e13eae8b654f680b1e561c71ae9",
+  "image_root": "/home/aiub/kiyas/webagent_full/data/original/final_data_set_40k"
+}

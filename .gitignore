@@ -77,6 +77,8 @@ venv/
 !.env.template
 
 # local data dumps - never commit
+.task1-assets/
+.task2-assets/
 FinalData.zip
 *.zip
 FinalData/

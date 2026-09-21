@@ -1,0 +1,46 @@
+{
+  "copied_files_verified": 3255,
+  "development_parity": "PASS",
+  "development_records": 126,
+  "engineering_tests": 60,
+  "freeze_sha256": "630345286e3086c4c95de595403762aed511174a06802107c56688df407ed737",
+  "frozen_source_files_verified": 194,
+  "historical_qwen_files_verified": 3243,
+  "known_model_calls": 2520,
+  "limits": "One saved record per selected request after the authorized retry; the original interrupted attempt remains separate. Costs exclude model loading, development and engineering checks. No native-agent or live-completion superiority claim.",
+  "new_saved_predictions": 896,
+  "prior_interrupted_attempts": 1,
+  "profile": "internvl_dual_v2",
+  "retained_prior_predictions": 1624,
+  "retry_request": {
+    "latency_seconds": null,
+    "model_calls": null,
+    "old_record": ".task1-assets/runs/task1-internvl-dual-v2/pilot/agent_s2_trained/702d43ac5df4a91c9c2f3b4b45f4caf0a934bc706258976232e9873d4a8d36b0.json",
+    "old_record_sha256": "a62d09f688e95f1c1826c4d654cf24daad8a3eb2032a5c5fee1bc9177b3b5da9",
+    "old_started_sha256": "d67f8393f4b7b6ae9931fe735d1c507b8be99db25c8c4f7529dd3cb01ed32109",
+    "old_status": "interrupted",
+    "request_key": "702d43ac5df4a91c9c2f3b4b45f4caf0a934bc706258976232e9873d4a8d36b0",
+    "system": "agent_s2_trained"
+  },
+  "retry_result_sha256": "19e4e0ba1c6609d1aded2f92f9b1155a8c8546f7891a542d72ac5a4706023400",
+  "retry_result_status": "abstention",
+  "review_sha256": "581657b780a155d7064b94d230cab22d9b17a3f6783ca1468b77b4a6362e1d91",
+  "run_path": ".task1-assets/runs/task1-internvl-dual-v2/pilot-reviewed-20260916",
+  "scoring_verification": {
+    "independent_metric_checks": 105,
+    "records": 2520,
+    "report_sha256": "755de0cc84326a47fef418c57624cf650761f95955286b7ee67bd03fe0ef9687",
+    "scope": "Raw replay/adapter/input parity checked by runner; trained logit decoding and sklearn metric recomputation",
+    "status": "PASS"
+  },
+  "selected_phase_records": 2520,
+  "status": "PASS",
+  "statuses": {
+    "abstention": 1801,
+    "parse_error": 40,
+    "valid": 679
+  },
+  "unique_attempts_including_preserved_interruption": 2521,
+  "unknown_call_cost_attempts": 1,
+  "user_authorized_retries": 1
+}

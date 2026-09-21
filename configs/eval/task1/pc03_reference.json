@@ -1,0 +1,30 @@
+{
+  "source_git_commit": "4ace05d649d40c17d3bf87203dc5a4d8ee48812a",
+  "source_report_sha256": "d7144fa69ee7a27efe47123742ba97e6c730d122962abcb80cdcbfa369c30b93",
+  "source_report_path": "results/model_comparison/runs/internvl35_8b_gold_v2_8_dgx/seed_42/full/report.json",
+  "epoch": 0,
+  "seed": 42,
+  "checkpoint_sha256": "35eec6c940836e581abe597006cbf4d9aedbcba06c574ba3d8c2829f667d28cb",
+  "checkpoint_bytes": 645434661,
+  "results_kind": "historical original validation, NOT mini comparison",
+  "metrics": {
+    "outcome_mcc": 0.6410198486527205,
+    "outcome_bal_acc": 0.8225843091883909,
+    "failure_macro_f1": 0.8201111804236105,
+    "failtype_macro_f1": 0.5406686254719619,
+    "recovery_outcome_mcc": 0.839652828294401,
+    "recovery_outcome_macro_f1": 0.9197927908482625,
+    "recovery_outcome_acc": 0.9289558665231432,
+    "memory_mcc": 0.6542580275434535,
+    "memory_macro_f1": 0.8209075123495495,
+    "strategy_attempted_macro_f1": 0.48923989958465636,
+    "action_macro_f1": 0.3369681895674041,
+    "bbox_mean_iou": 0.09221658162033942,
+    "bbox_recall_iou50": 0.09535972754363559
+  },
+  "denominators": {
+    "original": 7861,
+    "recovery": 1858,
+    "bbox": 2349
+  }
+}

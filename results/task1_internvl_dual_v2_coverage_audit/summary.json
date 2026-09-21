@@ -1,0 +1,54 @@
+{
+  "abstention_theme_occurrences": {
+    "no_change_language": 502,
+    "null_value_mentioned": 22,
+    "specific_action_or_target_mentioned": 150,
+    "uncertainty_language": 970
+  },
+  "accepted_abstentions_with_invalid_failure_label": 701,
+  "bound_images_verified": 596,
+  "frozen_files_verified_unchanged": 5069,
+  "generation_eos_endings": 2160,
+  "generation_records": 2160,
+  "generic_description_pattern_count": 360,
+  "identical_pixels_by_phase": {
+    "interaction_assessment": 52,
+    "recovery_assessment": 33
+  },
+  "input_records": 360,
+  "model_calls": 0,
+  "null_values": 360,
+  "parse_error_declared_outcomes": {
+    "ABSTAIN": 37,
+    "FAILURE": 2,
+    "None": 1
+  },
+  "parse_error_defect_combinations": {
+    "invalid_failure_label": 2,
+    "missing:failure_type_4": 7,
+    "missing:failure_type_4|missing:reason": 29,
+    "missing:reason": 1,
+    "not_bare_json": 1
+  },
+  "parse_error_syntax": {
+    "json": 39,
+    "not_bare_json": 1
+  },
+  "reason_theme_rules": {
+    "no_change_language": "\\bno (?:\\w+ ){0,3}(?:change|progress)\\b|\\bunchanged\\b|\\bidentical\\b|\\bsame (?:page|screen)",
+    "null_value_mentioned": "\\bnull\\b",
+    "specific_action_or_target_mentioned": "specific (?:action|target)|not (?:detailed|specified)|unspecified",
+    "uncertainty_language": "insufficient|not enough|cannot|can.not|unable|unclear|unknown|not .*?(?:clear|specified)|does not provide"
+  },
+  "scope": "Post-hoc audit of saved pilot requests/responses and their already-bound images. No new predictions, prompt changes or rescoring.",
+  "script_sha256": "4118ddcbb048c77e20d3f3c52298731c9e4d1760dd11eb1dc8c8a85093fa85a7",
+  "source_records": 2520,
+  "status_counts": {
+    "abstention": 1801,
+    "parse_error": 40,
+    "valid": 319
+  },
+  "theme_limitations": "Overlapping literal-text indicators of model-stated reasons, not verified causal labels or manual adjudication.",
+  "token_limit_hits": 0,
+  "unique_task_descriptions": 137
+}
