@@ -3,8 +3,9 @@
 ## Authoritative current status
 
 **2026-09-16: implementation and engineering checks complete; matched live
-DEVELOPMENT COMPLETE AND AUDITED (A/B/C each 4/4); FINAL EVALUATION
-RUNNING, 90 episodes frozen. No final result is available yet.**
+DEVELOPMENT COMPLETE AND AUDITED (A/B/C each 4/4). The 90-episode final
+evaluation is frozen as a plan but was not completed. No final Task 2 result is
+available.**
 The live status is `.task2-assets/task2-native-evaluation-v1/status.json`.
 Read [completed development evidence](TASK2_NATIVE_DEVELOPMENT_RESULTS.md).
 Engineering PASS does not establish task completion or memory benefit.
@@ -149,9 +150,10 @@ latency, exclusions and infrastructure failures separately.
 
 Readiness requires audited execution and a verified complete module path. A
 poor policy prediction remains a failure; a positive performance difference is
-not an engineering gate. Development readiness is recorded in the linked results; final results remain
-pending until the full run and independent audit finish. All historical E0–E3/H0–H3 and Task 1 results remain
-separate and unchanged.
+not an engineering gate. Development readiness is recorded in the linked
+results. The final Task 2 run and independent audit were not completed in this
+session, so Task 2 remains pending. All historical E0–E3/H0–H3 and Task 1
+results remain separate and unchanged.
 
 ## Monitoring
 
@@ -169,4 +171,4 @@ tail -n 20 .task2-assets/task2-native-evaluation-v1/execution.log
 | Development freeze | Complete, 12 eligible episodes |
 | Matched live development | Version 4 complete, audit PASS, A/B/C each 4/4 |
 | Final readiness audit | Ready; limitations documented in development results |
-| Final comparison, CSVs, paired analysis | 90-episode frozen run launched; outcomes pending |
+| Final comparison, CSVs, paired analysis | Not run; frozen 90-episode plan only |

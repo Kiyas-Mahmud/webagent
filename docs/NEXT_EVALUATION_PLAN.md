@@ -1,6 +1,6 @@
 # Next evaluation plan: model comparison first, agent integration second
 
-> **Current status, 2026-09-16:** the [Task 1 InternVL mini comparison](TASK1_INTERNVL_DUAL_V2_RESULTS.md) is complete. [Task 2 agent integration](TASK2_AGENT_INTEGRATION.md) is the authoritative checklist. Its engineering checks and 12-episode development audit passed (A/B/C each 4/4; no observed completion increment). The separately frozen 90-episode Task 2 evaluation is running. The user approved the original PC-01 encoder for memory queries only. InternVL remains actor and assessor. The public-benchmark extension below has not run; older pending statuses and PC-01-only choices are historical.
+> **Current status, 2026-09-21:** the [Task 1 InternVL mini comparison](TASK1_INTERNVL_DUAL_V2_RESULTS.md) is complete and pushed. [Task 2 agent integration](TASK2_AGENT_INTEGRATION.md) is implementation/development evidence only: engineering checks and the 12-episode development audit passed (A/B/C each 4/4), while the planned 90-episode final evaluation was not completed. The user approved the original PC-01 encoder for memory queries only. InternVL remains actor and assessor. The public-benchmark extension has not run; older pending statuses and PC-01-only choices are historical.
 
 Date: 2026-09-14
 
