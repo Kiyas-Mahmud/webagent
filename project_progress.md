@@ -1963,3 +1963,106 @@ Root analysis in `~/.claude/plans/you-are-proffesional-phd-gentle-dewdrop.md`.
   same four pre-existing failures. `tests/table2` needs the optional `table2` extra
   (`cryptography`), not installed on this training box.
 - NOT YET RUN. Requires the 16-row smoke first, then the full run on the other PC.
+
+## 2026-09-12 - Early stopping on PC-01 investigated: NOT a bug, do not "fix" it
+
+- Question raised: PC-01 (Qwen2-VL-2B, `qwen2vl_2b_gold_v2_8_dgx`, seed 42) ran all 10
+  full epochs, so early stopping looked broken. It is not broken.
+- Recovered PC-01's committed `full/epoch_metrics.csv` from commit `12b6c3e` and replayed
+  `Trainer.fit`'s exact rule (`metric > best + 1e-4`, patience 3, `outcome_mcc`) against it:
+  outcome MCC set a NEW BEST at epochs 0 (0.58990), 1 (0.60092), 2 (0.61613), 4 (0.61750)
+  and 6 (0.62422). `bad_epochs` never reached 3 until epoch 9 - the last epoch of
+  `range(0, 10)` - so the stop condition was satisfied exactly once, at the point the loop
+  was ending anyway. `report.json` agrees: `early_stopped=False`, `selected_epoch=6`,
+  `best_metric=0.62422`. Nothing to repair; the run simply kept improving slowly.
+- Verified the same machinery is live and correct for the 7B: merged
+  `qwen25vl_7b_gold_v2_8_dgx` resolves to `epochs=10 / early_stop_patience=3 /
+  early_stop_metric=outcome_mcc`, and the on-disk `best_e1` checkpoint carries
+  `early_stop_state={'best_metric': 0.67826, 'bad_epochs': 1}`, proving the counter is
+  persisted and restored across this run's many resumes. As of this check the 7B full run
+  is alive (pid 42575) at epoch 2, mid-epoch `batch_in_epoch=4336`, `step=2050`, with
+  epoch 0 MCC 0.67826 and epoch 1 MCC 0.66678. It will stop after epoch 4 only if epochs
+  2, 3 and 4 all fail to beat 0.67826.
+- **Do NOT edit `train.epochs` on a live/resumable run.** Two independent reasons, both
+  verified: (1) `epochs` is inside `resume.training_signature` (`_TRAIN_KEYS`), so the next
+  resume raises "checkpoint training configuration does not match this resume" and the run
+  cannot continue from `last.ckpt`; (2) `trainer.py:402` computes the cosine schedule as
+  `total = steps_per_epoch * self.epochs`, so changing it changes the learning rate at every
+  step - it is a real training change, not just a stopping rule.
+- `train.early_stop_patience` is NOT in the resume signature (checked directly: changing it
+  leaves `training_signature` identical) and touches nothing but the stop decision - no LR,
+  optimizer, data or loss effect. It is technically safe to change, and only takes effect on
+  the next process restart, but it breaks comparability with PC-01, which already completed
+  under patience 3, and `docs/DGX_THREE_MODEL_COMPARISON.md` registers the early-stopping
+  behavior as part of the immutable contract.
+- Counterfactual on PC-01's real numbers, varying only patience: patience 2 stops after
+  epoch 8 (9/10 epochs) and still selects epoch 6 at 0.62422 - one epoch saved, zero quality
+  loss. Patience 1 stops after epoch 3 and selects epoch 2 at 0.61613 - six epochs saved but
+  -0.00809 outcome MCC. Patience 4+ is identical to 3. So the only honest saving available is
+  about one epoch, and it is not worth changing the registered protocol mid-comparison.
+- No code or config was changed by this investigation.
+
+## 2026-09-21 - PC-02 (Qwen2.5-VL-7B) full run FINISHED via early stopping
+
+- The `qwen25vl_7b_gold_v2_8_dgx` seed-42 full run completed today at 14:17. No training
+  process is alive any more; the notebook kernel (pid 42911) is idle. Artifacts are in the
+  separate run workspace `/home/aiub/kiyas/webagent_comparison/outputs/model_comparison/
+  qwen25vl_7b_gold_v2_8_dgx/seed_42/full/` (the repo checkout has no `outputs/` - that is
+  expected, the notebook writes to `webagent_comparison`, not to the code checkout).
+- `report.json`: `status=PASS`, `full_training_finished=True`, `early_stopped=True`,
+  `requested_epochs=10`, `completed_epochs=[0,1,2,3]`,
+  `training_disposition=FULL_TRAINING_COMPLETE_SELECT_VALIDATION_CHECKPOINT`.
+  `loss_decreased=True`, `checkpoint_roundtrip=True`, `test_rows_read=0` (locked test split
+  still unopened), `peak_gpu_gb=15.11`, train 24,107 / val 7,861 rows.
+- Early stopping fired exactly as the 2026-09-12 analysis predicted: epoch 0 set the best
+  outcome MCC at 0.67826 and epochs 1-3 all failed to beat it (0.66678, 0.66409, 0.64660),
+  so `bad_epochs` hit patience 3 after epoch 3 and the loop stopped 6 epochs early.
+- Selected checkpoint is `best_e0_outcome-mcc0.678.ckpt` (`selected_epoch=0`). All four
+  epochs passed every quality gate (`eligible_epochs=[0,1,2,3]`), so selection was decided
+  purely by outcome MCC - and the highest was the first epoch.
+- FLAG for the owner, not acted on: outcome MCC decreased monotonically across all four
+  epochs, so the best 7B model is the one-epoch model. Meanwhile `train_loss` went
+  0.49 -> -2.54 -> -5.71 -> -8.73 (negative is normal here - the uncertainty-weighting
+  log-var terms are unbounded below) and `action_macro_f1` crept up 0.318 -> 0.336. That
+  pattern reads as the model fitting train while the primary validation metric degrades.
+  Worth a look before treating 0.678 as the 7B's headline number.
+- Comparison status overall: PC-01 Qwen2-VL-2B done and committed (epoch 6, outcome MCC
+  0.62422, commits `545f5b5`/`12b6c3e`). PC-02 Qwen2.5-VL-7B done as of today (epoch 0,
+  outcome MCC 0.67826) - artifacts committed in this same commit. PC-03 InternVL3.5-8B-HF
+  has only a `run_contract.json` from 2026-08-23, no mini and no full run started.
+
+## 2026-09-21 - PC-02 7B artifacts committed to origin/Code via Git LFS
+
+- Committed the full `qwen25vl_7b_gold_v2_8_dgx/seed_42` run directory (mini + full) into
+  the in-repo `webagent_comparison/` tree, matching the layout `12b6c3e` established for
+  the 2B. 23 files: 11 checkpoints (~659 MB each, 6 mini + 5 full) through Git LFS, plus
+  12 text artifacts (both stages' `epoch_metrics.csv`, `report.json`, `diagnostics.json`,
+  `source_validation.csv`, the `run_contract.json` and its two `.bak` snapshots, and
+  `model_compatibility_report.json`).
+- GOTCHA for the next person on this box: the run writes to the SIBLING directory
+  `/home/aiub/kiyas/webagent_comparison/`, which is NOT the in-repo `webagent_comparison/`
+  tree that gets committed. Artifacts have to be copied in; they do not land there.
+- GOTCHA: this DGX box had no `git-lfs` at all (no binary, no `.git/lfs`, no filter config)
+  even though `Code` has carried `.gitattributes` with
+  `webagent_comparison/**/*.ckpt filter=lfs` since `12b6c3e`. `apt` needs sudo, which this
+  box lacks passwordless, so git-lfs 3.5.1 (linux-arm64) was installed unprivileged to
+  `~/.local/bin/git-lfs` and enabled per-repo with `git lfs install --local`. Without it
+  the 659 MB checkpoints would have been staged as raw blobs and GitHub would have rejected
+  the push outright at its 100 MB per-file limit.
+- The checkout was on a detached HEAD at `2bd3d0d`, 22 commits behind `Code` (a strict
+  ancestor, no divergence) because the notebook's contract freezes the checkout for the
+  duration of a resumable run. The run being finished, the checkout was moved to `Code`
+  with `GIT_LFS_SKIP_SMUDGE=1` so the 2B's already-committed LFS checkpoints stayed as
+  134-byte pointers instead of pulling ~3 GB that nothing here needs.
+- The frozen checkout's `project_progress.md` was 730 lines BEHIND Code's copy, so
+  committing it wholesale would have silently deleted 730 lines of newer entries. The two
+  uncommitted entries (2026-09-12 early stopping, 2026-09-21 run finished) were extracted
+  as a verified pure append and re-applied on top of Code's version instead.
+- Deliberately NOT committed: `hf_cache/` (20 GB, re-downloadable from HuggingFace, and
+  already excluded by the `12b6c3e` precedent); anything under `qwen2vl_2b_gold_v2_8_dgx/`
+  or `internvl35_8b_gold_v2_8_dgx/`, to keep this commit free of any other model's results.
+- `webagent_comparison/environment.json` was left at its committed value on purpose. It
+  differs from the sibling copy in one field, `git_commit`: committed `2fadf0f` (the
+  checkout the 2B run used) vs `2bd3d0d` (the checkout the 7B run used). It is a single
+  shared file across all three models, so overwriting it would have rewritten the 2B's
+  provenance record. The 7B's own checkout commit is `2bd3d0d`, recorded here instead.

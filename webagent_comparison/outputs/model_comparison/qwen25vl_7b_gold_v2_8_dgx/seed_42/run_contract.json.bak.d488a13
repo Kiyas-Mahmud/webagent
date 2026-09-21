@@ -1,0 +1,23 @@
+{
+  "candidate": {
+    "model_id": "qwen25vl_7b_gold_v2_8_dgx",
+    "config": "configs/backbones/qwen25vl_7b_gold_v2_8_dgx.yaml",
+    "label": "Qwen2.5-VL-7B",
+    "accepted_prior_mini": false,
+    "prior_mini_evidence": "none; this backbone must pass its own mini"
+  },
+  "git_commit": "d488a13b16aa8c338ece71152f9b71ccc8ba5a43",
+  "config_name": "Y_QWEN25VL_7B_GOLD_V2_8_DGX",
+  "model_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+  "seed": 42,
+  "maximum_full_epochs": 10,
+  "controlled_mini_epochs": 5,
+  "effective_batch_size": 32,
+  "checkpoint_selection": "all_gates_then_outcome_mcc",
+  "checkpoint_selection_source": "original_gold_validation_only",
+  "supplement_validation_selects_checkpoint": false,
+  "train_rows": 24107,
+  "original_validation_rows": 7861,
+  "supplement_validation_rows": 194,
+  "test_rows_read": 0
+}
