@@ -1,0 +1,8 @@
+﻿row_id,method,backend,weight_variant,output_mode,seed,phase,mcc,balanced_accuracy,macro_f1,accuracy,all_case_accuracy,valid_outputs,eligible_cases,parse_error,abstention,infrastructure_error,interrupted,missing,model_calls_known,model_calls_unknown_records,latency_seconds_total,token_limit_hits
+browser_use_base,browser_use,Qwen2.5-VL-7B-Instruct,base,generation,42,recovery_assessment,-0.12156613477096617,0.47619047619047616,0.4,0.6666666666666666,0.16666666666666666,30,120,1,89,0,0,0,120,0,443.63947394300703,0
+agent_s2_base,agent_s2,Qwen2.5-VL-7B-Instruct,base,generation,42,recovery_assessment,-0.10425720702853737,0.4891304347826087,0.33088235294117646,0.4945054945054945,0.375,91,120,0,29,0,0,0,120,0,392.48790166800336,0
+webvoyager_base,webvoyager,Qwen2.5-VL-7B-Instruct,base,generation,42,recovery_assessment,,,,,0.0,0,120,120,0,0,0,0,120,0,445.4040678049914,0
+browser_use_trained,browser_use,Qwen2.5-VL-7B-Instruct,trained,generation,42,recovery_assessment,-0.06160411036336975,0.4838709677419355,0.46153846153846156,0.8571428571428571,0.25,35,120,74,11,0,0,0,120,0,216.2327940389987,0
+agent_s2_trained,agent_s2,Qwen2.5-VL-7B-Instruct,trained,generation,42,recovery_assessment,-0.07559289460184544,0.48333333333333334,0.4461538461538462,0.8055555555555556,0.24166666666666667,36,120,79,5,0,0,0,120,0,238.96563087400318,0
+webvoyager_trained,webvoyager,Qwen2.5-VL-7B-Instruct,trained,generation,42,recovery_assessment,0.0,0.5,0.4411764705882353,0.7894736842105263,0.125,19,120,86,15,0,0,0,120,0,547.7736429220222,5
+qwen25_heads,trained_heads,Qwen2.5-VL-7B-Instruct,trained,heads,42,recovery_assessment,0.8408409924953906,0.9166666666666666,0.9162946428571428,0.9166666666666666,0.9166666666666666,120,120,0,0,0,0,0,120,0,229.13512842400633,0

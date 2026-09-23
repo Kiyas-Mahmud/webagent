@@ -1,0 +1,7 @@
+{
+  "independent_metric_checks": 90,
+  "records": 2520,
+  "report_sha256": "20bfbdf7838d6c6b76db75e6d4ec1ac28068aa266df0269783aa84c88a3b930f",
+  "scope": "Raw replay/adapter/input parity checked by runner; trained logit decoding and sklearn metric recomputation",
+  "status": "PASS"
+}
