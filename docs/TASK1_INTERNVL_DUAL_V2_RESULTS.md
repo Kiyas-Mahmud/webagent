@@ -1,4 +1,4 @@
-# Task 1 — InternVL dual assessment results
+co# Task 1 — InternVL dual assessment results
 
 Status: **complete**. These are validation-pilot results.
 Post-hoc diagnostic audit: [coverage, abstentions, input limits and output errors](TASK1_INTERNVL_COVERAGE_ERROR_ANALYSIS.md). No predictions or scores were changed.

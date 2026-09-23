@@ -30,12 +30,13 @@ def tree_identity(folder):
     if 'config.json' not in files: raise ValueError('Missing base config')
     return files
 
-def preflight(config, requests, model_revisions=None):
+def preflight(config, requests, model_revisions=None, checkpoint_hash=CHECKPOINT_HASH,
+              checkpoint_stage='pc03_checkpoint'):
     issues=[]; assets={}
     checkpoint=Path(config['checkpoint'])
-    if not checkpoint.is_file(): issues.append({'stage':'pc03_checkpoint','reason':'Selected checkpoint file unavailable','path':str(checkpoint)})
-    elif file_hash(checkpoint)!=CHECKPOINT_HASH: issues.append({'stage':'pc03_checkpoint','reason':'SHA-256 mismatch'})
-    else: assets['checkpoint_sha256']=CHECKPOINT_HASH
+    if not checkpoint.is_file(): issues.append({'stage':checkpoint_stage,'reason':'Selected checkpoint file unavailable','path':str(checkpoint)})
+    elif file_hash(checkpoint)!=checkpoint_hash: issues.append({'stage':checkpoint_stage,'reason':'SHA-256 mismatch'})
+    else: assets['checkpoint_sha256']=checkpoint_hash
     for key,revision in (model_revisions if model_revisions is not None else [('qwen_base',QWEN_REVISION),('internvl_base',INTERNVL_REVISION)]):
         path=Path(config[key])
         try:
@@ -83,9 +84,20 @@ def binding(config, prepared, requests):
 def main(argv=None):
     import sys
     argv = list(sys.argv[1:] if argv is None else argv)
-    if any(a == '--profile' or a.startswith('--profile=') for a in argv):
-        from .dual import main as dual_main
-        return dual_main(argv)
+    profile = None
+    for index, value in enumerate(argv):
+        if value == '--profile' and index + 1 < len(argv):
+            profile = argv[index + 1]
+        elif value.startswith('--profile='):
+            profile = value.split('=', 1)[1]
+    if profile is not None:
+        if profile == 'internvl_dual_v2':
+            from .dual import main as dual_main
+            return dual_main(argv)
+        if profile == 'qwen25_dual_v1':
+            from .qwen25_dual import main as qwen25_main
+            return qwen25_main(argv)
+        raise ValueError('Unknown Task 1 profile: ' + profile)
     p=argparse.ArgumentParser(description=__doc__); sub=p.add_subparsers(dest='command',required=True)
     prep=sub.add_parser('prepare'); prep.add_argument('--source',required=True); prep.add_argument('--out',required=True)
     prep.add_argument('--selection',default=str(ROOT/'docs/evidence/task1-mini-validation-240-v1'))

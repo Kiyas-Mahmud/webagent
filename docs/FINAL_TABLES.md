@@ -1,33 +1,47 @@
 # Final evaluation tables — current state
 
-2026-09-12. Follows the agreed five-table structure. **Bold = measured and
+2026-09-22. Follows the agreed five-table structure. **Bold = measured and
 verified. `XX` = not yet run.** No number here is estimated or projected.
 
 ---
 
-## Table 1 — Component performance
+## Table 1 — Three-backbone component comparison
 
-Dataset Web-Gold-40K · unit = one interaction step · **currently validation
-split, seed 42, one backbone**. The locked test portion has never been read.
+Web-Gold-40K original validation split · seed 42 · 7,861 interaction steps ·
+1,858 attempted-recovery cases · 2,349 grounded-action cases. The locked test
+portion has never been read. Arrows indicate the preferred direction; bold
+marks the best value in each column.
 
-| Model / Backbone | Failure macro-F1 | Failure MCC | Action macro-F1 | Recovery-strategy macro-F1 | Recovery-outcome MCC | BBox mean IoU | Recall@IoU50 | Memory macro-F1 † |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| **Qwen2-VL-2B** | **0.809** | **0.624** | **0.327** | **0.389** | **0.796** | **0.101** | **0.081** | **0.830** |
-| Qwen2.5-VL-7B | XX | XX | XX | XX | XX | XX | XX | XX |
-| InternVL3-8B | XX | XX | XX | XX | XX | XX | XX | XX |
-| **Selected model** | XX | XX | XX | XX | XX | XX | XX | XX |
+| Backbone | Epoch | Outcome MCC ↑ | Failure macro-F1 ↑ | Failure-type macro-F1 ↑ | Action macro-F1 ↑ | Recovery-strategy macro-F1 ↑ | Recovery MCC ↑ | Recovery macro-F1 ↑ | Memory MCC ↑ | Memory macro-F1 ↑ | BBox mIoU ↑ | R@IoU50 ↑ | ECE ↓ |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Qwen2-VL-2B | 6 | 0.624 | 0.809 | 0.502 | 0.327 | 0.469 | 0.796 | 0.898 | 0.663 | 0.830 | 0.101 | 0.081 | 0.163 |
+| **Qwen2.5-VL-7B (selected)** | **0** | **0.678** | **0.839** | **0.542** | 0.318 | **0.493** | **0.852** | **0.925** | **0.695** | **0.846** | **0.155** | 0.083 | 0.072 |
+| InternVL3.5-8B-HF | 0 | 0.641 | 0.820 | 0.541 | **0.337** | 0.489 | 0.840 | 0.920 | 0.654 | 0.821 | 0.092 | **0.095** | **0.040** |
 
-Majority baselines on the same split: failure-type 0.147 · outcome acc 0.584 ·
-action macro-F1 0.053 · recovery-strategy acc 0.764 · memory macro-F1 0.383.
+Qwen2.5-VL-7B is selected by the registered primary rule: highest validation
+outcome MCC after the per-run quality gates. It also leads recovery-outcome MCC
+and macro-F1, memory MCC and macro-F1, and bounding-box mean IoU.
+InternVL3.5-8B-HF leads action macro-F1, Recall@IoU50 and calibration, but those
+are not the primary selection metric.
+
+Majority baselines on the same split: failure-type macro-F1 0.147 · outcome
+accuracy 0.584 · action macro-F1 0.053 · recovery-strategy macro-F1 0.233 ·
+memory macro-F1 0.383.
 
 **† The `Memory Recall@1/@3/@5` columns in the original design cannot be filled.**
 The trained memory head is a **binary store / don't-store classifier**, not a
 retriever. Recall@k needs relevance labels and a retrieval evaluation that does
-not exist. Either build that evaluation or replace those three columns with the
-storage metrics above (macro-F1 0.830, MCC 0.670, accuracy 0.843).
+not exist. Table 1 therefore reports the selected model's storage-decision
+metrics instead (macro-F1 0.846, MCC 0.695, accuracy 0.858).
 
-**Still required:** test-portion results · 3 seeds for mean ± std · two further
-backbones.
+**Evidence boundary:** these are single-seed validation results, not locked-test
+results or mean ± standard deviation over multiple seeds. The immutable run
+contracts record different source commits. The numerical ranking is therefore
+the validation-selected order, while a claim of a fully commit-matched
+comparison remains blocked by the provenance audit.
+
+Paper-ready details and exact values are in
+[the Table 1 comparison record](TABLE1_THREE_MODEL_COMPARISON.md).
 
 ---
 
@@ -124,7 +138,7 @@ contextual. Our dataset is Mind2Web-derived, so the transfer is natural.
 
 | Table | State | Remaining work |
 |---|---|---|
-| 1 | 8/8 metric columns filled for one backbone, validation only | test split · 3 seeds · 2 backbones · resolve memory-recall metric |
+| 1 | Three-backbone, seed-42 validation comparison complete; PC2 selected descriptively | locked test · multiple seeds · reconcile source-commit provenance |
 | **2** | ✅ **complete, audited** | none |
 | 3 | ✅ drafted from literature | fill `N/R` cells from the papers |
 | 4 | not started | adapter + 1 training run |
@@ -146,17 +160,21 @@ contextual. Our dataset is Mind2Web-derived, so the transfer is natural.
 
 ## What the paper can claim today
 
-- Failure detection at **MCC 0.624 / 80.4% balanced accuracy** from a 2B model,
-  in the band of GPT-4o-scale pipelines.
-- Failure-type classification at **macro-F1 0.502** against a 0.147 baseline.
-- Recovery-outcome prediction at **MCC 0.796**.
-- Memory storage decisions at **macro-F1 0.830** against 0.383.
+- Qwen2.5-VL-7B is the validation-selected backbone at **outcome MCC 0.678**
+  under the registered primary ranking rule.
+- Its failure-type classification reaches **macro-F1 0.542** against a 0.147
+  majority baseline.
+- Its recorded recovery-outcome prediction reaches **MCC 0.852**.
+- Its memory-storage decisions reach **MCC 0.695 / macro-F1 0.846**; these are
+  storage-label metrics, not retrieval or live-task success.
 - A complete, audited end-to-end study with **honest negative results** and a
   documented cause.
 
 ## What it cannot claim yet
 
-- Any backbone-agnostic property — one backbone, one seed.
+- Multi-seed robustness — every backbone currently has only seed 42.
+- A fully source-matched three-backbone comparison — the immutable run
+  contracts record different Git commits.
 - Any generalisation — the locked test split is unread.
 - That the unified four-pillar design helps — A4/A5 ablations never run.
 - Superiority over any external agent — no matched external baseline exists.
