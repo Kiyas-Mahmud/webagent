@@ -8,7 +8,7 @@ import jsonschema
 from pathlib import Path
 
 from web_agent.eval.task1.core import file_hash, write_new
-from web_agent.eval.task2.native_model import strict_object
+from web_agent.eval.task2.native_model import strict_object, unwrap_native_fence
 
 
 def paired_test(improved, worsened):
@@ -42,6 +42,19 @@ def summarize_pairs(pairs):
     return contrasts
 
 
+def check_native_selection(event, proposed):
+    """Issued action is the native first proposed action, or upstream's empty-action noop."""
+    selection=event['native_selection'];issued=event['native_output']['action']
+    if selection.get('upstream_noop'):
+        assert not proposed and selection['proposed_actions']==0, 'Upstream noop requires an empty proposal'
+        assert len(issued)==1 and list(issued[0])==['done'], 'Only the upstream empty-action noop may replace an empty proposal'
+        assert issued[0]['done']['success'] is False and issued[0]['done']['text']=='No next action returned by LLM!'
+        return
+    assert selection['selected_index']==0
+    assert selection['proposed_actions']==len(proposed) and selection['deferred_actions']==len(proposed)-1
+    assert issued==proposed[:1], 'Native first-action selection changed the issued action'
+
+
 def audit(root):
     root=Path(root).resolve();plan=json.loads((root/'plan.json').read_text())
     for group in ('sources','bindings'):
@@ -68,7 +81,7 @@ def audit(root):
             raw_paths=list(folder.glob('actor-*-raw.json'))
             for p in raw_paths:
                 payload=json.loads(p.read_text());raw_count+=1
-                assert payload['backend']=='InternVL3.5-8B-HF' and payload['weight_variant']=='base'
+                assert payload['backend']==plan.get('actor_backend','InternVL3.5-8B-HF') and payload['weight_variant']=='base'
                 assert payload['model_calls']==1 and payload['token_count']==len(payload['generated_tokens'])
                 if '-memory-' in p.name:memory_exposures[system]+=1
             started=list(folder.glob('actor-*-started.json'))
@@ -81,8 +94,8 @@ def audit(root):
                 if not selected.exists():selected=folder/(prefix+'-raw.json')
                 raw=json.loads(selected.read_text())['raw_response']
                 try:
-                    value=strict_object(raw)
-                    assert isinstance(value.get('action'),list) and len(value['action'])>=1
+                    value=strict_object(unwrap_native_fence(raw))
+                    assert isinstance(value.get('action'),list)
                     # JSON Schema validation is independent of the native Pydantic parser.
                     schema=json.loads(started_path.read_text())['request']['output_schema']
                     jsonschema.validate(value,schema)
@@ -103,14 +116,19 @@ def audit(root):
             for action_path in actions:
                 event=json.loads(action_path.read_text())
                 if event['native_output']:
-                    selection=event['native_selection'];assert selection['selected_index']==0
+                    selection=event['native_selection']
                     proposed=json.loads((folder/(selection['actor_request_id']+'-parsed.json')).read_text())['native_proposal']['action']
-                    assert selection['proposed_actions']==len(proposed) and selection['deferred_actions']==len(proposed)-1
-                    assert event['native_output']['action']==proposed[:1], 'Native first-action selection changed the issued action'
+                    check_native_selection(event,proposed)
             paired['results'][system]=result;rows.append(result)
         pairs.append(paired)
     if errors:raise ValueError('Missing/invalid episodes: '+str(errors))
-    contrasts=summarize_pairs(pairs)
+    contrasts=summarize_pairs(pairs) if {'A','B','C'}<=set(plan['systems']) else []
+    per_family=[]
+    for system in plan['systems']:
+        for task in dict.fromkeys(b['task'] for b in plan['blocks']):
+            selected=[r for r in rows if r['system']==system and r['block']['task']==task]
+            per_family.append({'system':system,'task':task,'episodes':len(selected),
+                               'completed':sum(r['completion'] for r in selected)})
     summary=[]
     for system in plan['systems']:
         selected=[r for r in rows if r['system']==system]
@@ -124,9 +142,10 @@ def audit(root):
             'invalid_actor_outputs':parse_failures[system],
             'elapsed_seconds':sum(r['elapsed_seconds'] for r in selected)})
     result={'status':'PASS','phase':plan['phase'],'episodes':len(rows),'summary':summary,'contrasts':contrasts,
+            'per_family':per_family,'repeats':plan.get('repeats',max(b['repeat_id'] for b in plan['blocks'])+1),
             'excluded_blocks':[b for b in plan['blocks'] if not b['eligible']],
             'infrastructure_errors':errors,'raw_generations_audited':raw_count,
-            'claim_scope':'Native Browser Use configured with local InternVL; package effects on fixed MiniWoB families; no claim of four isolated pillar gains'}
+            'claim_scope':'Native Browser Use configured with local '+plan.get('actor_backend','InternVL3.5-8B-HF')+'; package effects on fixed MiniWoB families; no claim of four isolated pillar gains'}
     write_new(root/'audit.json',result)
     with (root/'result_matrix.csv').open('x',newline='') as f:
         writer=csv.DictWriter(f,fieldnames=list(summary[0]));writer.writeheader();writer.writerows(summary)

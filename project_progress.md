@@ -1,5 +1,133 @@
 # Project Progress Tracker
 
+## 2026-09-28 — P1 on MiniWoB: no signal, not a rendering problem
+
+- Measured on all 122 live Qwen2.5 assessments (17 episodes): P1 labels 100%
+  FAILURE, including all 32 steps of MiniWoB-completed episodes; P(failure)
+  0.92–1.00.
+- Rendering diagnostic (recorded transitions re-assessed; original 332×214,
+  upscaled onto 1280×720, pasted on a 1280×720 page): 100% FAILURE in every
+  condition; mean P(failure) 0.95–0.99 for both completed and failed episodes.
+  Screenshot size is not the cause, and no threshold can separate them.
+- Consequence: on MiniWoB, B/C recovery is triggered on every step and P4 stores
+  every incident as "not resolved"; any B/C gain there could not be attributed to
+  trained diagnosis. In-domain (Task 1) the same heads reach interaction MCC 0.649.
+- Options (no full-model retraining): run the agent on real websites (training
+  domain), or adapt only the small heads/probe on frozen features using labelled
+  MiniWoB transitions.
+- **Correction (user):** the dataset is the user's own collection
+  (`web_agent_gold_v16_500_domain_40k`, 500 real domains), not Mind2Web.
+- **Runtime path verified correct:** 240 validation rows through the exact Task 2
+  bridge give accuracy 0.825, MCC 0.647 (Task 1: 0.649), predicted FAILURE 54% vs
+  gold 56%. Swapping MiniWoB's domain to `apple.com` or its goal to a training
+  template leaves 100% FAILURE — the screenshots drive it.
+- **Root cause:** in the training data, SUCCESS steps change a median 36% of
+  pixels (FAILURE 0.7%; 34% of FAILURE steps identical). MiniWoB steps change a
+  median 0.19% (73% under 1%). The heads learned "visible page change = success",
+  which real sites exhibit and MiniWoB widgets do not. The 15 identical MiniWoB
+  transitions are genuine no-effect actions (non-interactive clicks, TYPE into a
+  checkbox) — FAILURE is correct for those.
+- **Real-website suite built** (`docs/TASK2_WEB_SUITE.md`): 20 tasks on 15 sites
+  from the dataset's domains, 1280×720, URL-rule completion never shown to the
+  agent; `web_worker.py`; runner `--suite web`. First live check: P1 gives
+  SUCCESS on correct real-site steps (P(failure) 0.00–0.36), FAILURE on a
+  bot-block page. DuckDuckGo and Opera removed, Debian goal reworded (engineering,
+  before any comparison). 59 Task 2 tests pass.
+- **20-task analysis run (ours):** 12/19 completed, 1 infra error. P1 SUCCESS rate
+  57% on interaction steps of completed episodes (median P(failure) 0.34) vs 18%
+  on failed episodes (1.00); recovery 80% vs 8%. MiniWoB was 0% everywhere. The
+  P1 problem is solved by running in the training domain. Fixes from the run:
+  runner prints errors and continues instead of hanging; control-snapshot shape
+  bug in the rounding clamp; CDP screenshot fallback when fonts never load (TED).
+- **Comparison prepared and frozen:** `scripts/compare_agents.py` (freeze / resumable
+  run / report with exact sign test). Plan `.task2-assets/comparison/web-v1`:
+  20 tasks × 2 repeats × 2 systems = 80 episodes, order alternates per task,
+  memory empty at start, 15 steps; refuses to run if any frozen source changed.
+  Smoke (jquery-download): baseline and ours both completed; report works.
+  Runbook: `docs/TASK2_WEB_COMPARISON_RUNBOOK.md`. **Next (2026-09-29, 10:00):**
+  start the run (~6 h), then `report`.
+
+## 2026-09-27 (later) — Agent build first; P4 rebuilt as experience memory
+
+- **User direction:** build the complete agent (Browser Use + our pillars) first;
+  the with/without comparison comes later. The v1 headroom screen stopped at 12/75
+  (`review_required`, preserved, not a result).
+- **Runner:** `scripts/run_agent.py --task T --mode baseline|ours --seed S [S ...]`
+  prints a per-step pillar trace; several seeds share one model load and one
+  memory store. Browser Use leaves background tasks alive, so the runner exits
+  explicitly after saving results.
+- **P4 analysis:** the old label store could never help (all 1,974 items lack
+  corrective values and element info; 93% always excluded; PC-01 space; read-only).
+- **P4 rebuild (`src/web_agent/memory/experience.py`):** incidents opened by P1 are
+  recorded with Browser Use's `interacted_element`, P1 diagnosis/strategy, every
+  recovery attempt and P1's verdict; the trained memory head (P(store) > 0.5)
+  decides writes; resolved and unresolved incidents kept; keys are the selected
+  Qwen2.5 memory embedding; retrieval is same-page, top-3, threshold, and requires
+  a recorded element visible now. Design and findings: `docs/P4_EXPERIENCE_MEMORY.md`.
+- **Calibration finding:** Qwen2.5 memory embedding of the 1,974 training
+  transitions — threshold 0.839 (strict relevance), but AUC 0.60 and median top-1
+  cosine 0.989: a store classifier, not a retriever. Hence page scoping.
+- **P1 finding:** on click-checkboxes-soft the failure head flags nearly every
+  checkbox click (P ≈ 0.97–1.00), including correct partial progress.
+- Tests: 58 Task 2 tests pass, incl. a live-loop import check inside the isolated
+  Browser Use env (caught a numpy import leak).
+- **Live P4 demos:** login-user 3 seeds (fresh store): 3 written, admitted and
+  shown in episodes 2–3 with concrete element advice; 3/3 completed.
+  click-checkboxes-soft: 5 written, element advice correctly not transferable
+  across randomised resets; bug fixed (element-less records now excluded).
+- **Bottleneck is P1 on MiniWoB:** correct steps are labelled FAILURE, so stored
+  experiences say "not resolved" for successful sequences. Next development item:
+  measure and address P1 (failure and recovery-outcome heads) on live transitions.
+
+## 2026-09-27 — Task 2 moved to Qwen2.5-VL-7B; headroom protocol task2-qwen25-v1
+
+- **Catch-up, 2026-09-14..23 (previously unlogged):** Task 1 offline assessment
+  completed for InternVL (`TASK1_INTERNVL_DUAL_V2_RESULTS.md`) and the selected
+  Qwen2.5-VL-7B (`TASK1_QWEN25_DUAL_V1_RESULTS.md`, heads interaction MCC 0.649,
+  recovery MCC 0.841, 240/240 and 120/120 valid). Task 2 native Browser Use
+  development v4 passed its audit (A/B/C each 4/4). Figures in `evalution/table-02/`.
+- **09-16 Task 2 final-run stop diagnosed:** `task2-native-evaluation-v1` stopped
+  at 3/90 because the host was powered off from the desktop dialog at 16:50:59
+  (journalctl). Not a code defect. Stop receipt written; status set to
+  `stopped_superseded`; the 3 episodes stay immutable and unpooled.
+- **User decisions:** Qwen2.5-VL-7B (PC-02, validation-selected) is the model for
+  Task 2 — frozen base as Browser Use actor, trained heads as assessor. Memory
+  keeps the original PC-01 query encoder (store embedding space). Browser Use stays
+  the actor framework; AgentLab GenericAgent is the fallback.
+- **Why tasks change:** in every saved v1/dev episode the base agent solved the
+  task in one step, so B−A was zero by construction. New protocol
+  `configs/eval/task2/qwen25_v1.json`: A-only headroom screen (15 harder families
+  × 5 resets), frozen selection rule (keep 1–4/5 families, closest to 50%, max 10,
+  min 6), A/B/C development, then evaluation with ~100 pairs per contrast on
+  disjoint reset seeds. Wall-clock cap raised to 1,800 s as a safety bound so
+  assessment latency cannot end B/C episodes; call/executor budgets unchanged.
+- **Code:** `campaign_v2.py` (config-driven phases, pid in status), Qwen backend in
+  `model_worker.py`, `Qwen25TransitionAssessor` (argmax unchanged, probabilities
+  logged), audit generalised (actor label, per-family, A-only screen),
+  `task2_supervise_v2.py` (systemd shutdown inhibitor),
+  `task2_regression_receipt.py`. 46 Task 2 tests pass (39 old + 7 new); receipt
+  `.task2-assets/task2-regression-qwen25-v1.json`.
+- **Engineering:** `.task2-assets/engineering-model-qwen25-v1/` PASS — Qwen head
+  bridge logits equal Task 1 route, PC-01 memory replay identical, actor ~2 s/call.
+- **Live smoke v1 (defect):** Qwen wrapped valid native JSON in a whole-response
+  ```` ```json ```` fence after the advisory message; strict parsing rejected it and
+  greedy decoding repeated it until `native_max_failures` (B/C failed, A passed).
+  Fix: the upstream Browser Use 0.13.10 Ollama `_JSON_FENCE_RE` rule, in the adapter
+  and the audit; body never edited; test pins it to the upstream source.
+- **Live smoke v2 → host freeze (defect):** enter-text A/B/C all completed, then the
+  host OOM-froze at 12:01 during `click-checkboxes-soft`. Reproduced by replaying the
+  recorded requests: peak 23–29 GB/call, but the PyTorch caching allocator kept
+  ~12 GB per distinct sequence length; GB10 GPU memory is host RAM. Fix:
+  `expandable_segments`, `empty_cache()` after each op (numerics unchanged, 12-call
+  replay flat at 111 GB free), worker refuses ops below 16 GB free, supervisor kills
+  the run below 12 GB. Receipts in each smoke folder; neither run is a result.
+- **Live smoke v3: 6/6, audit PASS**, memory flat (83–100 GB free). Findings:
+  empty action lists were rejected locally while upstream retries once then
+  inserts `done(success=False)` → aligned to upstream (audit check extracted to
+  `check_native_selection`, unit-tested); random tab id is the only A/B prompt
+  difference (documented limitation); C admitted 0/15 memory candidates (frozen
+  rules kept). 50 Task 2 tests; receipt `task2-regression-qwen25-v5.json`.
+
 ## 2026-09-13 — Table 2 lab pause and home-session archive
 
 - Prepared `docs/TABLE2_HOME_SESSION_HANDOFF.md` and branch

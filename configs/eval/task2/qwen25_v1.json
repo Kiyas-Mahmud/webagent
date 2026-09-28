@@ -1,0 +1,49 @@
+{
+  "protocol": "task2-qwen25-v1",
+  "backend": "qwen25",
+  "actor_backend": "Qwen2.5-VL-7B-Instruct",
+  "actor_label": "Qwen2.5-VL-7B-Instruct-local-base",
+  "actor": "Qwen2.5-VL-7B-Instruct frozen base, 4-bit, greedy, 512 new tokens",
+  "assessor": "Qwen2.5-VL-7B PC-02 full epoch 0 seed 42 trained heads, unchanged argmax/logit>0 rules",
+  "memory_query": "Original PC-01 encoder only, user-authorized; frozen 1974-vector store; zero writes",
+  "decided": "2026-09-27, before any Qwen Task 2 browser outcome was observed",
+  "settings": {
+    "budget": {"max_model_calls": 102, "max_executor_requests": 30, "seconds": 1800},
+    "max_agent_steps": 30,
+    "excluded_memory_tasks": [],
+    "recovery_attempts_per_incident": 2,
+    "recovery_attempts_per_episode": 4,
+    "seed": 42,
+    "actor_max_new_tokens": 512,
+    "actor_do_sample": false,
+    "memory_encoder_authorized": true,
+    "native_history_items": 6,
+    "score": "terminated, not invalid/truncated, raw reward exactly 1.0"
+  },
+  "budget_rationale": "Executor and model-call limits are unchanged from native-evaluation-v1. The wall-clock cap is a safety bound only, so that assessment overhead cannot be what ends a B/C episode; latency is reported separately.",
+  "screen": {
+    "systems": ["A"],
+    "repeats": 5,
+    "families": [
+      "click-checkboxes-soft", "click-checkboxes-large", "login-user-popup", "enter-date",
+      "book-flight", "search-engine", "email-inbox", "social-media", "click-tab-2",
+      "use-autocomplete", "choose-list", "click-collapsible-2", "form-sequence-2",
+      "multi-layouts", "click-scroll-list"
+    ]
+  },
+  "selection_rule": {
+    "description": "Keep families where screened A completed some but not all eligible resets (1-4 of 5 when none is excluded). If more than max_families qualify, keep those with A success rate closest to 0.5, ties by family name. If fewer than min_families qualify, add 0-success families in name order until min_families. All-success families are never kept: the base agent has no failure to recover from.",
+    "max_families": 10,
+    "min_families": 6
+  },
+  "development": {"systems": ["A", "B", "C"], "repeats": 1},
+  "evaluation": {"systems": ["A", "B", "C"], "target_pairs_per_contrast": 100},
+  "analysis": {
+    "primary_contrasts": [["A", "B"], ["B", "C"]],
+    "paired_test": "exact two-sided discordant binomial",
+    "multiplicity": "Holm over two contrasts",
+    "resamples": 10000,
+    "seed": 20250831,
+    "unit": "task-reset pair, resample within fixed family"
+  }
+}

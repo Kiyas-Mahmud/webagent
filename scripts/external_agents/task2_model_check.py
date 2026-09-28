@@ -11,7 +11,8 @@ from web_agent.eval.task2.ipc import Worker
 
 root=Path(sys.argv[1]);root.mkdir(parents=True,exist_ok=False)
 fixture=json.loads(Path(sys.argv[2]).read_text())
-worker=Worker('.venv/bin/python','web_agent.eval.task2.model_worker',[],root/'model.log')
+backend=sys.argv[3] if len(sys.argv)>3 else 'internvl'
+worker=Worker('.venv/bin/python','web_agent.eval.task2.model_worker',[backend],root/'model.log')
 try:
     t=time.monotonic();write_new(root/'initialization-started.json',{'at':time.time()})
     init=worker.call('initialize',timeout=600)
@@ -32,8 +33,20 @@ try:
         result=worker.call('memory',transition=asdict(transition),image_root=row['image_root'],applicability_transition=applicability)
         calls.append(result);write_new(root/f'memory-replay-{attempt}.json',result)
     assert calls[0]==calls[1], 'Frozen query replay changed'
-    write_new(root/'result.json',{'status':'PASS','scope':'Engineering transition parity and deterministic original-encoder query replay',
-                'live_model_episodes':0,'model_calls':6,'original_query_encoder':calls[0]['query_checkpoint_sha256'],
+    # Actor transport/latency probe on the same captured screenshot; not task efficacy.
+    import base64
+    image=base64.b64encode((Path(row['image_root'])/row['before']['image']).read_bytes()).decode()
+    schema={'type':'object','properties':{'action':{'type':'array','items':{'type':'object'}}},'required':['action']}
+    request={'messages':[{'role':'user','content':[{'type':'text','text':'Task: Enter Exact Value 42! in Field. Current page screenshot follows.'},
+                                                  {'type':'image_url','image_url':{'url':'data:image/png;base64,'+image}}]}],
+             'output_schema':schema,'advice':None,'previous_proposal_rejection':None}
+    latencies=[]
+    for attempt in range(2):
+        t=time.monotonic();generated=worker.call('generate',request=request);latencies.append(time.monotonic()-t)
+        write_new(root/f'actor-probe-{attempt}.json',dict(generated,latency_seconds=latencies[-1]))
+    write_new(root/'result.json',{'status':'PASS','backend':backend,'scope':'Engineering transition parity, deterministic original-encoder query replay and actor transport probe',
+                'live_model_episodes':0,'model_calls':8,'original_query_encoder':calls[0]['query_checkpoint_sha256'],
+                'actor_probe_latency_seconds':latencies,'actor_probe_tokens':generated['token_count'],
                 'memory_writes':0})
     print('PASS engineering head parity and frozen query replay',flush=True)
 finally:worker.close()

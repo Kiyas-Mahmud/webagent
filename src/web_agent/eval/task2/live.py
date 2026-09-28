@@ -9,6 +9,7 @@ import time
 from web_agent.eval.task1.core import write_new
 from web_agent.eval.task2.assessment import Observation, ExecutedTransition, recovery_advice
 from web_agent.eval.task2.native_model import LocalInternVL
+from web_agent.eval.task2.elements import element_summary
 
 NATIVE_ACTIONS={'click':'CLICK','input':'TYPE','select_dropdown':'SELECT','scroll':'SCROLL',
                 'navigate':'NAVIGATE','send_keys':'PRESS_KEY','go_back':'NAVIGATE'}
@@ -52,6 +53,17 @@ def recorded_action(native):
     return dict(action_type=NATIVE_ACTIONS[name],target=target,value=value)
 
 
+def interacted_element(agent):
+    """Observable description of the element the last native action hit (P4 experience key)."""
+    try:
+        items=agent.history.history[-1].state.interacted_element or []
+    except (AttributeError,IndexError):
+        return None
+    item=items[0] if items else None
+    if item is None:return None
+    return element_summary(item.to_dict() if hasattr(item,'to_dict') else item)
+
+
 async def create_agent(reset, local_model, output):
     from browser_use import Agent, BrowserSession
     from browser_use.tools.service import Tools
@@ -62,7 +74,7 @@ async def create_agent(reset, local_model, output):
     browser=BrowserSession(cdp_url=reset['cdp_url'],is_local=False,keep_alive=True,
                            enable_default_extensions=False,headless=True,
                            viewport=reset['viewport'],device_scale_factor=1,
-                           allowed_domains=['127.0.0.1','localhost'])
+                           allowed_domains=reset.get('allowed_domains',['127.0.0.1','localhost']))
     agent=Agent(task=reset['goal'],llm=local_model,browser_session=browser,tools=tools,
                 use_vision=True,use_thinking=False,use_judge=False,
                 max_actions_per_step=1,max_failures=5,max_history_items=6,
@@ -93,12 +105,31 @@ async def episode(*, system, block, root, browser_worker, model_worker, settings
     if reset['goal'] != block['goal']:raise RuntimeError('Frozen reset goal mismatch')
     await asyncio.to_thread(model_worker.call,'reset')
     budget=Budget(**settings['budget'])
-    llm=LocalInternVL(model_worker,root,budget)
+    llm=LocalInternVL(model_worker,root,budget,settings.get('actor_label'))
+    experience=system=='C' and settings.get('memory_mode')=='experience'
+    if experience:llm.memory_kind='experience'
+    pending=None
     agent,browser=await create_agent(reset,llm,root)
     before=await asyncio.to_thread(browser_worker.call,'observe',episode_id=episode_id)
     write_new(root/'observation-0000.json',before)
     incident=None; incident_attempts=0; recovery_total=0; next_is_recovery=False; incident_diagnosis=None
     counters={'executed':0,'rejected':0,'executed_recoveries':0,'assessments':0,'memory_queries':0,'memory_exposures':0}
+    if experience:counters['memory_writes']=0
+
+    async def close_incident(resolved):
+        # P4 write: the trained memory head decides whether this incident is worth keeping.
+        nonlocal pending
+        if pending is None:return
+        record=dict(pending['record'],resolved=resolved)
+        decision={'incident_id':record['incident_id'],'resolved':resolved,'store_probability':pending['store_probability'],
+                  'stored':pending['store_probability']>0.5 and bool(settings['experience_memory'].get('write'))}
+        if decision['stored']:
+            written=await asyncio.to_thread(model_worker.call,'experience_write',store=settings['experience_memory'],
+                                            record=record,vector=pending['vector'])
+            decision.update(memory_id=written['memory_id'],store_size=written['store_size'])
+            counters['memory_writes']+=1
+        write_new(root/f"experience-{record['incident_id']}.json",dict(decision,record=record))
+        pending=None
     history=[]; stop='budget'; score={'terminated':False,'raw_reward':0.0}; step=0; steps_completed=0
     from browser_use.agent.views import AgentStepInfo
     try:
@@ -127,10 +158,17 @@ async def episode(*, system, block, root, browser_worker, model_worker, settings
                 if len(output.action)!=1:raise RuntimeError('Non-atomic native output reached executor')
                 native=output.action[0].model_dump(mode='json',exclude_none=True)
                 proposal=json.loads((root/f'actor-{llm.calls:04d}-parsed.json').read_text())['native_proposal']
-                event['native_selection']={'actor_request_id':f'actor-{llm.calls:04d}',
-                    'proposed_actions':len(proposal['action']),'selected_index':0,
-                    'deferred_actions':len(proposal['action'])-1}
+                if proposal['action']:
+                    event['native_selection']={'actor_request_id':f'actor-{llm.calls:04d}',
+                        'proposed_actions':len(proposal['action']),'selected_index':0,
+                        'deferred_actions':len(proposal['action'])-1}
+                else:
+                    # Upstream retried once, then inserted done(success=False); nothing was proposed.
+                    event['native_selection']={'actor_request_id':f'actor-{llm.calls:04d}',
+                        'proposed_actions':0,'selected_index':None,'deferred_actions':0,'upstream_noop':True}
             action=recorded_action(native) if native else None
+            element=interacted_element(agent) if action else None
+            if element:event['element']=element
             rejected=not results or any(r.error for r in results)
             if native:
                 budget.executor_requests+=1
@@ -145,8 +183,8 @@ async def episode(*, system, block, root, browser_worker, model_worker, settings
             # Independent termination is authoritative, never self-reported success.
             terminal=score['terminated'] or score['invalid_url']
             if action and not rejected and system!='A' and budget.available():
-                transition=ExecutedTransition(episode_id=episode_id,task_id='miniwob.'+block['task'],
-                    action_id=f'a{step}',task_description=reset['goal'],website_domain='miniwob.local',
+                transition=ExecutedTransition(episode_id=episode_id,task_id=reset.get('task_id','miniwob.'+block['task']),
+                    action_id=f'a{step}',task_description=reset['goal'],website_domain=reset.get('website_domain','miniwob.local'),
                     before=observation(before),after=observation(after),**action,
                     phase='recovery_assessment' if next_is_recovery else 'interaction_assessment',
                     incident_id=incident if next_is_recovery else None,terminated=terminal)
@@ -155,15 +193,34 @@ async def episode(*, system, block, root, browser_worker, model_worker, settings
                 counters['assessments']+=1
                 write_new(root/f'assessment-{step:04d}.json',{'transition':asdict(transition),'assessment':assessment})
                 failed=assessment['signals']['outcome_label']=='FAILURE'
+                if pending and transition.phase=='recovery_assessment':
+                    pending['record']['recovery_attempts'].append({'action_type':action['action_type'],'element':element,
+                        'value':action['value'],'assessed_outcome':assessment['signals']['outcome_label']})
                 if not failed:
+                    await close_incident(resolved=True)
                     incident=None;incident_attempts=0;next_is_recovery=False
                 elif not terminal and recovery_total<settings['recovery_attempts_per_episode'] and (incident is None or incident_attempts<settings['recovery_attempts_per_incident']):
-                    if incident is None:
+                    new_incident=incident is None
+                    if new_incident:
                         incident=f'incident-{step}';incident_attempts=0;incident_diagnosis=assessment['signals']
                     next_is_recovery=True
                     llm.advice=recovery_advice(transition,assessment)
                     llm.advice['incident_diagnosis']=incident_diagnosis
-                    if system=='C' and budget.available(3):
+                    if experience and budget.available(3):
+                        budget.charge('memory_query')
+                        memory=await asyncio.to_thread(model_worker.call,'experience',transition=asdict(transition),
+                            image_root=reset['image_root'],store=settings['experience_memory'],
+                            episode_id=episode_id,controls=after['controls'],url=reset['url'])
+                        if new_incident:
+                            signals=assessment['signals']
+                            pending={'vector':memory['vector'],'store_probability':memory['store_probability'],'record':{
+                                'episode_id':episode_id,'incident_id':incident,'task_goal':reset['goal'],'page_url':reset['url'],
+                                'failed_action':{'action_type':action['action_type'],'element':element,'value':action['value']},
+                                'failure_type':signals['failure_type'],'strategy':signals['recovery_strategy'],'recovery_attempts':[]}}
+                        write_new(root/f'memory-{step:04d}.json',{k:v for k,v in memory.items() if k!='vector'})
+                        counters['memory_queries']+=1
+                        llm.memory_context=memory['examples']
+                    elif system=='C' and not experience and budget.available(3):
                         budget.charge('memory_query')
                         applicability={'post_observation':{'causal_history':history,'current_page_state':{'visible_controls':after['controls']}},
                                        'execution_result':{'status':'executed','error_kind':None},
@@ -174,9 +231,11 @@ async def episode(*, system, block, root, browser_worker, model_worker, settings
                         counters['memory_queries']+=1
                         llm.memory_context=memory['examples']
                 else:
+                    await close_incident(resolved=False)
                     incident=None;incident_attempts=0;next_is_recovery=False
             elif next_is_recovery:
                 if incident_attempts>=settings['recovery_attempts_per_incident'] or recovery_total>=settings['recovery_attempts_per_episode']:
+                    await close_incident(resolved=False)
                     incident=None;incident_attempts=0;next_is_recovery=False
                 else:
                     # Native rejection feedback accompanies the same incident's
@@ -191,6 +250,7 @@ async def episode(*, system, block, root, browser_worker, model_worker, settings
                 stop='environment_terminal';break
             if native and 'done' in native:
                 stop='agent_done';break
+        await close_incident(resolved=False)
         counters['memory_exposures']=llm.memory_exposures
         result={'episode_id':episode_id,'system':system,'block':block,'status':'complete',
                 'completion':bool(score['terminated'] and not score.get('invalid_url') and score['raw_reward']==1.0),

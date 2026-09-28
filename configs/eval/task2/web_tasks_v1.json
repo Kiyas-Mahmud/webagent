@@ -1,0 +1,280 @@
+{
+  "suite": "web-tasks-v1",
+  "created": "2026-09-28",
+  "purpose": "Live real-website tasks on domains taken from the user's own dataset (web_agent_gold_v16_500_domain_40k), so P1 judges pages like its training data.",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "success_rule": "Completed when the current page URL (lower-cased) contains success.url_contains; checked by the environment after every step, never shown to the agent.",
+  "verification": "Each target URL fetched on 2026-09-28 (HTTP 200) and its final URL matched the rule.",
+  "tasks": [
+    {
+      "id": "wikipedia-wiki-alan-turing",
+      "dataset_domain": "wikipedia.org",
+      "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+      "goal": "Search Wikipedia for \"Alan Turing\" and open his article.",
+      "success": {
+        "url_contains": "en.wikipedia.org/wiki/alan_turing"
+      },
+      "allowed_domains": [
+        "*.wikipedia.org"
+      ],
+      "verified_target": "https://en.wikipedia.org/wiki/Alan_Turing"
+    },
+    {
+      "id": "wikipedia-wiki-eiffel-tower",
+      "dataset_domain": "wikipedia.org",
+      "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+      "goal": "Use the search box to open the Wikipedia article about the Eiffel Tower.",
+      "success": {
+        "url_contains": "en.wikipedia.org/wiki/eiffel_tower"
+      },
+      "allowed_domains": [
+        "*.wikipedia.org"
+      ],
+      "verified_target": "https://en.wikipedia.org/wiki/Eiffel_Tower"
+    },
+    {
+      "id": "wikipedia-wiki-photosynthesis",
+      "dataset_domain": "wikipedia.org",
+      "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+      "goal": "Search Wikipedia for \"photosynthesis\" and open the article.",
+      "success": {
+        "url_contains": "en.wikipedia.org/wiki/photosynthesis"
+      },
+      "allowed_domains": [
+        "*.wikipedia.org"
+      ],
+      "verified_target": "https://en.wikipedia.org/wiki/Photosynthesis"
+    },
+    {
+      "id": "wiktionary-wiki-serendipity",
+      "dataset_domain": "wiktionary.org",
+      "start_url": "https://en.wiktionary.org/wiki/Wiktionary:Main_Page",
+      "goal": "Look up the word \"serendipity\" on Wiktionary.",
+      "success": {
+        "url_contains": "en.wiktionary.org/wiki/serendipity"
+      },
+      "allowed_domains": [
+        "*.wiktionary.org"
+      ],
+      "verified_target": "https://en.wiktionary.org/wiki/serendipity"
+    },
+    {
+      "id": "wiktionary-wiki-ephemeral",
+      "dataset_domain": "wiktionary.org",
+      "start_url": "https://en.wiktionary.org/wiki/Wiktionary:Main_Page",
+      "goal": "Look up the word \"ephemeral\" on Wiktionary.",
+      "success": {
+        "url_contains": "en.wiktionary.org/wiki/ephemeral"
+      },
+      "allowed_domains": [
+        "*.wiktionary.org"
+      ],
+      "verified_target": "https://en.wiktionary.org/wiki/ephemeral"
+    },
+    {
+      "id": "arxiv-abs-1706-03762",
+      "dataset_domain": "arxiv.org",
+      "start_url": "https://arxiv.org/",
+      "goal": "Search arXiv for \"Attention Is All You Need\" and open the abstract page of that paper.",
+      "success": {
+        "url_contains": "arxiv.org/abs/1706.03762"
+      },
+      "allowed_domains": [
+        "*.arxiv.org"
+      ],
+      "verified_target": "https://arxiv.org/abs/1706.03762"
+    },
+    {
+      "id": "arxiv-list-cs-ai",
+      "dataset_domain": "arxiv.org",
+      "start_url": "https://arxiv.org/",
+      "goal": "Open the arXiv list of recent papers in Computer Science, Artificial Intelligence (cs.AI).",
+      "success": {
+        "url_contains": "arxiv.org/list/cs.ai"
+      },
+      "allowed_domains": [
+        "*.arxiv.org"
+      ],
+      "verified_target": "https://arxiv.org/list/cs.AI/recent"
+    },
+    {
+      "id": "debian-distrib",
+      "dataset_domain": "debian.org",
+      "start_url": "https://www.debian.org/",
+      "goal": "Open Debian's \"Getting Debian\" page, which lists the ways to obtain Debian.",
+      "success": {
+        "url_contains": "debian.org/distrib"
+      },
+      "allowed_domains": [
+        "*.debian.org"
+      ],
+      "verified_target": "https://www.debian.org/distrib/"
+    },
+    {
+      "id": "debian-security",
+      "dataset_domain": "debian.org",
+      "start_url": "https://www.debian.org/",
+      "goal": "Open the Debian security information page.",
+      "success": {
+        "url_contains": "debian.org/security"
+      },
+      "allowed_domains": [
+        "*.debian.org"
+      ],
+      "verified_target": "https://www.debian.org/security/"
+    },
+    {
+      "id": "creativecommons-cc-licenses",
+      "dataset_domain": "creativecommons.org",
+      "start_url": "https://creativecommons.org/",
+      "goal": "Open the Creative Commons page that explains the CC licenses.",
+      "success": {
+        "url_contains": "creativecommons.org/cc-licenses"
+      },
+      "allowed_domains": [
+        "*.creativecommons.org"
+      ],
+      "verified_target": "https://creativecommons.org/share-your-work/cclicenses/"
+    },
+    {
+      "id": "gov-renew-adult-passport",
+      "dataset_domain": "www.gov.uk",
+      "start_url": "https://www.gov.uk/",
+      "goal": "Search GOV.UK for \"renew passport\" and open the page about renewing an adult passport.",
+      "success": {
+        "url_contains": "gov.uk/renew-adult-passport"
+      },
+      "allowed_domains": [
+        "*.gov.uk"
+      ],
+      "verified_target": "https://www.gov.uk/renew-adult-passport"
+    },
+    {
+      "id": "gov-bank-holidays",
+      "dataset_domain": "www.gov.uk",
+      "start_url": "https://www.gov.uk/",
+      "goal": "Use GOV.UK to find the page for checking the UK bank holidays.",
+      "success": {
+        "url_contains": "gov.uk/bank-holidays"
+      },
+      "allowed_domains": [
+        "*.gov.uk"
+      ],
+      "verified_target": "https://www.gov.uk/bank-holidays"
+    },
+    {
+      "id": "ted-talks",
+      "dataset_domain": "ted.com",
+      "start_url": "https://www.ted.com/",
+      "goal": "Open the TED page that lists talks.",
+      "success": {
+        "url_contains": "ted.com/talks"
+      },
+      "allowed_domains": [
+        "*.ted.com"
+      ],
+      "verified_target": "https://www.ted.com/talks"
+    },
+    {
+      "id": "jquery-download",
+      "dataset_domain": "jquery.com",
+      "start_url": "https://jquery.com/",
+      "goal": "Open the jQuery download page.",
+      "success": {
+        "url_contains": "jquery.com/download"
+      },
+      "allowed_domains": [
+        "*.jquery.com"
+      ],
+      "verified_target": "https://jquery.com/download/"
+    },
+    {
+      "id": "jquery-api-jquery-com",
+      "dataset_domain": "jquery.com",
+      "start_url": "https://jquery.com/",
+      "goal": "Open the jQuery API documentation site.",
+      "success": {
+        "url_contains": "api.jquery.com"
+      },
+      "allowed_domains": [
+        "*.jquery.com"
+      ],
+      "verified_target": "https://api.jquery.com/"
+    },
+    {
+      "id": "epa-climate-change",
+      "dataset_domain": "epa.gov",
+      "start_url": "https://www.epa.gov/",
+      "goal": "Open the EPA page about climate change.",
+      "success": {
+        "url_contains": "epa.gov/climate-change"
+      },
+      "allowed_domains": [
+        "*.epa.gov"
+      ],
+      "verified_target": "https://www.epa.gov/climate-change"
+    },
+    {
+      "id": "ietf-process-rfcs",
+      "dataset_domain": "ietf.org",
+      "start_url": "https://www.ietf.org/",
+      "goal": "Open the IETF page about RFCs.",
+      "success": {
+        "url_contains": "ietf.org/process/rfcs"
+      },
+      "allowed_domains": [
+        "*.ietf.org"
+      ],
+      "verified_target": "https://www.ietf.org/process/rfcs/"
+    },
+    {
+      "id": "stanford-admission-stanford-edu",
+      "dataset_domain": "stanford.edu",
+      "start_url": "https://www.stanford.edu/",
+      "goal": "Open Stanford University's admission page.",
+      "success": {
+        "url_contains": "admission.stanford.edu"
+      },
+      "allowed_domains": [
+        "*.stanford.edu"
+      ],
+      "verified_target": "https://admission.stanford.edu/"
+    },
+    {
+      "id": "yale-admissions",
+      "dataset_domain": "yale.edu",
+      "start_url": "https://www.yale.edu/",
+      "goal": "Open Yale's admissions page.",
+      "success": {
+        "url_contains": "yale.edu/admissions"
+      },
+      "allowed_domains": [
+        "*.yale.edu"
+      ],
+      "verified_target": "https://www.yale.edu/admissions"
+    },
+    {
+      "id": "europa-principles-countries-history-eu-countrie",
+      "dataset_domain": "europa.eu",
+      "start_url": "https://european-union.europa.eu/index_en",
+      "goal": "Open the page listing the EU countries.",
+      "success": {
+        "url_contains": "european-union.europa.eu/principles-countries-history/eu-countries"
+      },
+      "allowed_domains": [
+        "*.europa.eu"
+      ],
+      "verified_target": "https://european-union.europa.eu/principles-countries-history/eu-countries_en"
+    }
+  ],
+  "excluded_after_engineering_check": {
+    "duckduckgo-q-bangladesh": "DuckDuckGo serves a bot-block page (418) after the first automated search",
+    "opera-download": "the page's main Download button starts a file download instead of a page, like the Debian ISO button"
+  },
+  "revisions": [
+    "2026-09-28: debian-distrib goal reworded; the original wording led to the ISO download button (file download, no page)."
+  ]
+}

@@ -145,6 +145,29 @@ class InternVLTransitionAssessor:
                     actor_context=transition.actor_context())
 
 
+class Qwen25TransitionAssessor(InternVLTransitionAssessor):
+    """Selected PC-02 Qwen2.5-VL-7B heads through the verified Task 1 batch contract."""
+
+    @classmethod
+    def load(cls, config):
+        from web_agent.eval.task1.qwen25_backends import QWEN25_CHECKPOINT_HASH, Qwen25Assessor
+        if file_hash(config['checkpoint']) != QWEN25_CHECKPOINT_HASH:
+            raise ValueError('Task 2 requires the selected Qwen2.5 checkpoint')
+        return cls(Qwen25Assessor(config))
+
+    def assess(self, transition: ExecutedTransition) -> dict:
+        from web_agent.eval.task1.qwen25_backends import QWEN25_CHECKPOINT_HASH
+        result = super().assess(transition)
+        result['checkpoint_sha256'] = QWEN25_CHECKPOINT_HASH
+        if transition.phase == 'interaction_assessment':
+            # Logged only; the decision rule stays the unchanged argmax.
+            torch = self.backend.torch
+            probability = torch.softmax(torch.tensor(result['raw_logits']['outcome']), -1)[0]
+            result['outcome_probabilities'] = {label: float(probability[index])
+                                               for index, label in EXECUTION_OUTCOME_INV.items()}
+        return result
+
+
 def assess_for_system(system, transition, assessor, *, memory_ready=False):
     """A never invokes our module. C is fail-closed until retrieval is integrated."""
     if system not in ('A', 'B', 'C'):
