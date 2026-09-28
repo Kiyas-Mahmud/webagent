@@ -4,6 +4,7 @@
 each part works, what went wrong on the way and how it was fixed, and how we
 test whether our system makes the agent better. For exact numbers and file
 details, follow the links to the technical documents.
+(Bengali version: [AGENT_BUILD_EXPLAINED_BN.md](AGENT_BUILD_EXPLAINED_BN.md))
 
 ---
 
