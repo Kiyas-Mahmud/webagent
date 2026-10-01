@@ -36,6 +36,63 @@ note, (ii) offer a numbered list of concrete actions for the actor to choose
 from, and (iii) refuse to execute an exact repeat of an action the assessor has
 already judged failed. It never substitutes an action of its own.
 
+### 1.1 Architecture overview (Figure)
+
+```mermaid
+flowchart TB
+    subgraph ENV["Real website (Chromium, 1280×720)"]
+        PAGE["Web page"]
+    end
+    subgraph ACT["Actor — Browser Use 0.13.10 + Qwen2.5-VL-7B-Instruct (frozen base)"]
+        OBS["Observe: screenshot + indexed interactive elements"]
+        DEC["Decide one action (JSON) — or pick a numbered recovery option"]
+        EXE["Execute: click · input · select · scroll · navigate · send_keys · go_back"]
+    end
+    subgraph ASSESS["Learned assessor — Qwen2.5-VL-7B + QLoRA + trained heads (ours)"]
+        P1["P1 outcome head: P(FAILURE | before, after, task, domain, action type)"]
+        GATE{"FAILURE and P ≥ 0.9?"}
+        P1R["P1 recovery-outcome head: did the recovery work?"]
+    end
+    subgraph REC["Adaptive recovery layer (deterministic, triggered only by P1)"]
+        FACTS["Page facts from live DOM"]
+        NOTE["Plain-text recovery note"]
+        GUARD["Repeat guard (block judged-failed action on this page)"]
+        OPTS["Numbered recovery options"]
+    end
+    subgraph MEM["Experience memory (P4)"]
+        MH["Memory head: store? P > 0.5"]
+        STORE[("Incident records + 768-d keys")]
+        RET["Same-page retrieval, top-3, cos ≥ 0.839"]
+    end
+    PAGE --> OBS --> DEC --> EXE --> PAGE
+    EXE -- "before/after screenshots + action type" --> P1
+    P1 --> GATE
+    GATE -- "no: nothing shown (actor input = baseline)" --> OBS
+    GATE -- "yes" --> FACTS --> NOTE
+    GATE -- "yes" --> GUARD
+    FACTS --> OPTS
+    GATE -- "yes" --> RET
+    RET --> NOTE
+    NOTE --> DEC
+    OPTS --> DEC
+    GUARD --> DEC
+    EXE -- "recovery attempt" --> P1R
+    P1R -- "incident closes" --> MH --> STORE --> RET
+```
+
+Text version (for slides or plain viewers):
+
+```
+ Real website ──screenshot+elements──► ACTOR (Browser Use + Qwen2.5-VL-7B base) ──action──► Real website
+      │                                        ▲        ▲        ▲
+      │ before/after                           │ note   │ options│ block
+      ▼                                        │        │        │
+ P1 ASSESSOR (Qwen2.5-VL-7B + QLoRA heads) ──FAILURE ≥ 0.9──► RECOVERY LAYER (page facts, note,
+      │  outcome / recovery-outcome / memory heads                 options, repeat guard)
+      │                                                               ▲
+      └── incident closes ──► P4 MEMORY (memory head stores; same-page retrieval) ─┘
+```
+
 ## 2. Components and where they live in the code
 
 | Component | File |
@@ -50,6 +107,53 @@ already judged failed. It never substitutes an action of its own.
 | Task suite | `configs/eval/task2/web_tasks_v1.json` (v2 pending, §7) |
 | Single runs / paired comparison | `scripts/run_agent.py`, `scripts/compare_agents.py` |
 | Tests | `tests/task2/` (85 passing) |
+
+### 2.1 The trained multimodal assessor (exact configuration)
+Source: the selected checkpoint's saved config
+(`best_e0_outcome-mcc0.678.ckpt`, sha `71f867cc…`) and `src/web_agent/models/`.
+
+| Part | Setting |
+|---|---|
+| Backbone | Qwen2.5-VL-7B-Instruct (revision `cc59489…`), 4-bit QLoRA, bfloat16 compute |
+| LoRA | rank 16, alpha 32, dropout 0.05, on q/k/v/o and gate/up/down projections |
+| Image input | before and after screenshots, Qwen2.5-VL processor with 50,176–200,704 pixels per image |
+| Text input | `"{instruction} current_task: {task} \| domain: {domain} \| executed_action: {type}"` (≤ 128 tokens); the action *value/target* is not an input |
+| Pooling | last token of the backbone (hidden 3,584) → adapter Linear(3,584→768) + LayerNorm + dropout 0.1 |
+| Causal routes | *pre* route: before image + "Choose the next action…" (action head); *post* route: before + after images + executed action type + "Assess the result by comparing the page before and after execution." (failure, memory heads); *recovery* route: failure state + post-recovery state + "Assess whether the executed recovery succeeded…" (recovery-outcome head) |
+| Task adapters | residual bottleneck adapters (768→128→768, GELU, LayerNorm, dropout 0.1) per task: policy, diagnosis, memory, recovery, grounding |
+| P1 failure head | trunk Linear(768→256)+ReLU+Dropout(0.3); outputs outcome (2), failure type (4: none, action mismatch, perception error, loop), confidence (1), recovery strategy (6), needs-recovery (1) |
+| P1 recovery-outcome head | same trunk; 1 logit (success if > 0) |
+| P4 memory head | same trunk; memory flag (1 logit, store if sigmoid > 0.5) + recovery strategy (6). Its 768-d input (memory task-adapter output on the post route) is the memory key |
+| P3 action head | action type (6) + bounding box — trained but **not used** at run time (macro-F1 0.318) |
+| Loss weights | outcome 0.22, failure type 0.18, action type 0.15, bbox 0.10, memory 0.10, recovery outcome 0.09, recovery 0.05, confidence 0.05, calibration 0.05, needs-recovery 0.04, supervised contrastive 0.04; label smoothing 0.1; uncertainty-based dynamic weighting; class weights for action and failure type |
+| Data | Web-Gold-40K v2.8: 24,107 training cases (23,499 original + 608 retry/abort supplement), 7,861 validation cases, 1,858 attempted-recovery validation cases; domains from the author's dataset (305) |
+| Training / selection | up to 10 epochs, early stop on outcome MCC (patience 3); selected epoch 0, seed 42 |
+| Validation (Table 1) | outcome MCC 0.678, failure macro-F1 0.839, failure-type macro-F1 0.542, recovery-strategy macro-F1 0.493, recovery-outcome MCC 0.852 (acc 93.5 %), memory MCC 0.695 (acc 85.8 %, macro-F1 0.846) |
+
+### 2.2 Run-time processes and data flow
+- **Orchestrator** (`scripts/run_agent.py` / `compare_agents.py`, isolated
+  Browser Use environment): runs the episode loop (`live.py`) and Browser Use.
+- **Model worker** (`model_worker.py`, project environment, GPU): one process
+  holding the actor (frozen base) and the assessor (trained heads); JSON
+  requests over stdin/stdout: `generate` (actor), `assess` (P1), `experience`
+  (memory key + P(store) + retrieval), `experience_write`.
+- **Web worker** (`web_worker.py`, Playwright): launches Chromium with a CDP
+  port; `reset` opens the task's start page, `observe` saves the screenshot used
+  by P1, `score` applies the hidden completion rule, `facts` reads page facts.
+  Browser Use attaches to the same Chromium over CDP and performs the actions.
+- **Memory store** on disk: `records.jsonl` + `embeddings.npy` per store
+  directory; a paired run shares one store across its C episodes.
+- Safety on the GB10 unified-memory host: CUDA cache released after each
+  model call; model calls refused below 16 GB free host memory.
+
+### 2.3 Actor configuration (identical for A and C)
+Browser Use 0.13.10, `use_vision=True`, `max_actions_per_step=1`,
+`max_failures=5`, `max_history_items=6`, no thinking field, no judge, no
+message compaction; allowed actions: click, input, select_dropdown, scroll,
+navigate, send_keys, go_back, done; navigation restricted to the task's
+domain. LLM: Qwen2.5-VL-7B-Instruct frozen base, greedy decoding, ≤ 512 new
+tokens, repetition penalty 1.05. Step limit 15. The only output post-processing
+is Browser Use's own rule that removes a Markdown fence around the whole JSON.
 
 ## 3. One agent step (system C, recovery mode v3.3)
 
@@ -156,6 +260,37 @@ Answer "0" returns to the normal Browser Use prompt with the note.
 2 recovery attempts per incident; up to 15 per episode (i.e. any confident
 failure in a 15-step episode can receive help). Each recovery attempt is
 re-assessed by the recovery-outcome head (MCC 0.852).
+
+### 4.5 What the actor actually receives (examples from the logs)
+**Recovery note** (IETF, v3 check, step 2; appended after Browser Use's prompt; the v3 note also listed "Already done successfully: scroll down; scroll down", which v3.1+ omits for scrolls):
+```
+FAILURE MONITOR: your last action (scroll down) did not make progress (learned confidence 0.98).
+- Repeating exactly that action will be blocked.
+- You are at the bottom of the page: there is nothing further down.
+- Links on this page whose words match the task (hidden = inside a closed menu; any of them can be opened with navigate):
+  * 'RFC Editor' -> https://www.rfc-editor.org/about/rfc-editor/ (hidden)
+  * 'Independent Submissions Editor' -> https://www.rfc-editor.org/authors/rfc-independent-submissions/ (hidden)
+  * 'About RFCs' -> https://www.ietf.org/process/rfcs/ (hidden)
+- This page has a search box ('Search the email archive').
+Choose your next action yourself from the current page.
+```
+**Option question** (TED, v3.1, step 2; separate short request: screenshot +
+text):
+```
+Task: Open the TED page that lists talks.
+FAILURE MONITOR: your last action (scroll down) did not make progress (learned confidence 0.98). …
+Recovery options for the next action:
+1. Open the link 'TED TalksBrowse the library of TED talks and speakers' (https://www.ted.com/talks)
+2. Open the link 'TED Playlists100+ collections of TED Talks, for curious minds' (https://www.ted.com/playlists)
+3. Go back to the previous page
+0. None of these; I will choose my own action.
+Reply with only the number of the best option.
+```
+Actor reply: `1` → Browser Use executes `navigate(https://www.ted.com/talks)`.
+
+**Guard message** (when a blocked action is proposed):
+`PROPOSAL BLOCKED, NOT EXECUTED: '<action in words>' was already tried on this
+page and did not make progress. Choose a different action.`
 
 ## 5. Experience memory (P4)
 - **What is stored:** one record per incident — task goal, page URL, failed
