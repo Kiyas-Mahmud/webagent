@@ -9,7 +9,7 @@ import torch
 from web_agent.eval.task1.core import CHECKPOINT_HASH, file_hash
 from web_agent.eval.task2.assessment import (
     Observation, ExecutedTransition, InternVLTransitionAssessor,
-    assess_for_system, recovery_advice,
+    assess_for_system, recovery_advice, recovery_note,
 )
 from web_agent.eval.task2.memory_contract import verify_memory_query_identity
 
@@ -114,6 +114,40 @@ def test_advice_is_bound_and_never_replaces_action(transition, tmp_path):
     assert recovery_advice(replace(transition, truncated=True), result) is None
     with pytest.raises(ValueError, match='another transition'):
         recovery_advice(replace(transition, action_id='future-action'), result)
+
+
+def test_advice_names_failed_step_and_steps_not_to_redo(transition, tmp_path):
+    # Pilot regression: vague "FAILURE / REPLAN" made the actor retype an already-typed word.
+    result = InternVLTransitionAssessor(Backend(tmp_path)).assess(transition)
+    typed = {'action_type': 'TYPE', 'element': {'tag': 'input', 'text': '', 'attributes': {'type': 'search'}}, 'value': 'serendipity'}
+    clicked = {'tag': 'div', 'text': '', 'attributes': {}}
+    advice = recovery_advice(transition, result, failed_element=clicked, page_changed=False, succeeded=[typed])
+    assert advice['schema'] == 'task2.advisory.v2'
+    assert advice['failed_step'] == {'action_type': 'TYPE', 'element': clicked, 'value': 'Exact Text!', 'page_changed': False}
+    assert advice['already_succeeded'] == [typed]
+    assert advice['diagnosis']['failure_type'] == 'ACTION_MISMATCH'
+    assert advice['diagnosis']['meaning'] and advice['diagnosis']['strategy_meaning']
+    assert 'do not redo them' in advice['instruction'] and 'next_action' not in advice
+    # Defaults keep the original call valid.
+    assert recovery_advice(transition, result)['already_succeeded'] == []
+
+
+def test_v3_note_shows_only_outcome_and_page_facts(transition, tmp_path):
+    result = InternVLTransitionAssessor(Backend(tmp_path)).assess(transition)
+    facts = {'scroll': {'at_bottom': False}, 'field': {'label': 'Search', 'value': 'Exact Text!', 'submit': 'Go'},
+             'goal_links': [{'text': 'About RFCs', 'href': 'https://x.org/process/rfcs/', 'visible': False}],
+             'search_boxes': [{'label': 'Search site', 'visible': True}]}
+    note = recovery_note(transition, result, element={'tag': 'input', 'text': 'Search', 'attributes': {}},
+                         page_changed=False, facts=facts)
+    text = note['text']
+    assert note['schema'] == 'task2.recovery_note.v3' and 'next_action' not in note
+    assert "type 'Exact Text!' into <input> 'Search'" in text and 'page did not change' in text
+    assert "Enter key or its 'Go' button" in text and "'About RFCs' -> https://x.org/process/rfcs/ (hidden)" in text
+    assert "search box ('Search site')" in text
+    for label in ('ACTION_MISMATCH', 'REPLAN', 'PERCEPTION'):
+        assert label not in text
+    assert note['logged_signals']['failure_type'] == 'ACTION_MISMATCH'
+    assert recovery_note(replace(transition, terminated=True), result) is None
 
 
 def test_nonfinite_model_output_rejected(transition, tmp_path):

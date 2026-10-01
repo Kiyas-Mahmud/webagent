@@ -149,6 +149,8 @@ page are shown. Details: [P4_EXPERIENCE_MEMORY.md](P4_EXPERIENCE_MEMORY.md).
 | A run could hang silently after an error | The runner prints every error and continues with the next task |
 | Some sites block robots (DuckDuckGo) or start file downloads (Opera, Debian button) | Those tasks removed or reworded before any comparison |
 | A power-off killed a long run | Runs hold a shutdown lock; they can stop and resume without losing results |
+| Pilot: after one wrong click, vague advice ("FAILURE / REPLAN") made the actor retype a word it had already typed ("serendipityserendipity") | Advice v2: names the failed step (action, element, value, whether the page changed), lists steps already judged successful with "do not redo these", explains each label |
+| P1 calls correct **typing** steps failures (few pixels change), which started needless recovery (Alan Turing broke this way) | Recovery opens only when P1 is confident: P(failure) ≥ 0.9, chosen on the development run; less confident failures send no advice |
 
 ---
 
@@ -199,7 +201,7 @@ fixed **and** P1 notices it **and** the agent follows the advice. In the
 3 were the actor producing invalid output — something our system cannot fix.
 Ways to make a real difference visible (decided before a final run, never after
 seeing its results): harder multi-step tasks, more runs per task (so memory can
-help later attempts), and triggering recovery only when P1 is very confident.
+help later attempts), and triggering recovery only when P1 is very confident (adopted on 2026-09-29: P(failure) ≥ 0.9).
 
 Even without a large completion gain, the evidence that P1 correctly detects
 failures on real sites, and concrete rescued cases, remain valid results.
@@ -217,8 +219,8 @@ PYTHONPATH=src:scripts .task2-assets/browser-use-env/bin/python scripts/run_agen
 
 # The frozen baseline-vs-ours comparison (resumable)
 PYTHONPATH=src:scripts .task2-assets/browser-use-env/bin/python -u scripts/compare_agents.py \
-    run .task2-assets/comparison/web-v1
-PYTHONPATH=src .venv/bin/python scripts/compare_agents.py report .task2-assets/comparison/web-v1
+    run .task2-assets/comparison/web-v2
+PYTHONPATH=src .venv/bin/python scripts/compare_agents.py report .task2-assets/comparison/web-v2
 
 # Live progress bar in a second terminal
 python3 scripts/progress.py
@@ -228,12 +230,39 @@ Full run instructions: [TASK2_WEB_COMPARISON_RUNBOOK.md](TASK2_WEB_COMPARISON_RU
 
 ---
 
-## Where things stand (2026-09-28)
+## Step 9 — What the first comparison taught us, and the redesign (2026-10-01)
 
-- The agent is complete: Browser Use acting, P1 judging, P4 remembering, all
-  working live on real websites.
-- The 20-task development run: 12/19 tasks completed; P1 separates good from bad
-  steps.
-- The baseline-vs-ours comparison (20 tasks × 2 runs × 2 systems = 80 episodes)
-  is frozen and ready. A 6-task pilot has started.
-- Next: run the comparison and report how many tasks each system completes.
+The first full comparison (web-v2, 38 pairs) went against us: baseline 27/38,
+ours 20/38 (after correcting one false completion), helped 0, hurt 7. Looking at
+every trace showed that **P1 was not the problem** — it flagged the baseline's
+loops within 0–2 steps and almost never raised false alarms on good steps. The
+problems were around it:
+
+| What went wrong | Fix (v3 → v3.3) |
+|---|---|
+| Waiting for P1 delayed the actor's next look at the page, which changed what it saw | P1 now runs in parallel; the actor sees the page at the same moment as the baseline |
+| JSON advice was ignored by the actor | A short plain-text note with facts from the page |
+| P1's weak heads (failure type, strategy) sent the actor the wrong way | Only "this step failed, confidence X" is shown; labels are only logged |
+| The actor repeated the same failed action 10–13 times | That exact action is blocked on that page (the actor must choose something else) |
+| The actor knew *what* to do ("search") but could not write the right action | After a failure it picks from numbered options built from the page: open a matching link (even one hidden in a menu), search the site then press Enter then open a result, scroll to top, go back |
+
+Browser Use still chooses and performs every action; our layer only detects,
+informs, blocks a repeat, and offers choices.
+
+**Development checks** (5 tasks the baseline failed 10/10, 5 tasks it solves):
+our system rescued 8 of 21 attempts (IETF, TED and EPA repeatedly; arXiv and
+Debian never — they need knowledge not on the page) and harmed 0 of 10.
+Details and exact settings: [TASK2_FAILURE_AWARE_AGENT_METHOD.md](TASK2_FAILURE_AWARE_AGENT_METHOD.md).
+
+---
+
+## Where things stand (2026-10-01)
+
+- Recovery v3.3 is implemented and tested (85 tests). It no longer harms tasks
+  the baseline solves, and it rescues tasks the baseline never solves.
+- A task audit found scoring rules that were too lenient (e.g. TED's 101
+  single-talk links, Wiktionary "ephemeral_lake") and two goals that are
+  infeasible or misleading (arXiv paper, Debian). These are fixed before the
+  next run (two goals await the author's decision).
+- Next (Sunday): new task file with exact-page rules, ~20 extra held-out tasks,
+  then the full paired comparison (~3 lab days).

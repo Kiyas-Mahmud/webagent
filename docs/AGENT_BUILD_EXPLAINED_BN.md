@@ -148,6 +148,8 @@ MiniWoB step-কেই failure ভাবে।
 | কোনো error হলে run চুপচাপ আটকে যেত | Runner এখন প্রতিটা error দেখায় আর পরের task-এ চলে যায় |
 | কিছু site robot আটকায় (DuckDuckGo) বা file download শুরু করে (Opera, Debian-এর button) | তুলনার আগেই সেই task বাদ দেওয়া বা নতুন করে লেখা হয়েছে |
 | PC বন্ধ করায় একটা লম্বা run মারা গিয়েছিল | Run চলার সময় shutdown-lock থাকে; থামিয়ে আবার চালালে ফল হারায় না |
+| Pilot-এ একটা ভুল click-এর পর অস্পষ্ট পরামর্শের ("FAILURE / REPLAN") কারণে agent আগে থেকে লেখা শব্দটা আবার লিখেছিল ("serendipityserendipity") | Advice v2: কোন step ব্যর্থ (action, element, মান, page বদলেছে কিনা) স্পষ্ট বলা হয়; যেসব step আগেই সফল সেগুলোর তালিকা "আবার করো না" নির্দেশসহ দেওয়া হয়; প্রতিটা label-এর মানে বুঝিয়ে দেওয়া হয় |
+| লেখা (TYPE) step-এ page-এর pixel কম বদলায়, তাই P1 সঠিক step-কেও FAILURE বলত আর অকারণে recovery শুরু হত (Alan Turing এভাবেই ভেঙেছিল) | P1 নিশ্চিত হলেই কেবল recovery: P(failure) ≥ ০.৯ (development run দেখে ঠিক করা); এর কম হলে কোনো পরামর্শ যায় না |
 
 ---
 
@@ -217,8 +219,8 @@ PYTHONPATH=src:scripts .task2-assets/browser-use-env/bin/python scripts/run_agen
 
 # Freeze করা baseline বনাম ours তুলনা (থামিয়ে আবার চালানো যায়)
 PYTHONPATH=src:scripts .task2-assets/browser-use-env/bin/python -u scripts/compare_agents.py \
-    run .task2-assets/comparison/web-v1
-PYTHONPATH=src .venv/bin/python scripts/compare_agents.py report .task2-assets/comparison/web-v1
+    run .task2-assets/comparison/web-v2
+PYTHONPATH=src .venv/bin/python scripts/compare_agents.py report .task2-assets/comparison/web-v2
 
 # আরেকটা terminal-এ live progress bar
 python3 scripts/progress.py
@@ -228,12 +230,37 @@ python3 scripts/progress.py
 
 ---
 
-## বর্তমান অবস্থা (২০২৬-০৯-২৮)
+## ধাপ ৯ — প্রথম তুলনা থেকে যা শিখলাম, আর নতুন design (২০২৬-১০-০১)
 
-- Agent সম্পূর্ণ: Browser Use কাজ করছে, P1 বিচার করছে, P4 মনে রাখছে, আর সবকিছু
-  আসল website-এ live চলছে।
-- ২০টা task-এর development run: ১৯টার মধ্যে ১২টা complete; P1 ভালো আর খারাপ step
-  আলাদা করতে পারছে।
-- Baseline বনাম ours তুলনা (২০টা task × ২ বার × ২টা system = ৮০টা episode) freeze
-  করা আর চালানোর জন্য তৈরি। ৬টা task-এর একটা pilot শুরু হয়েছে।
-- পরের কাজ: তুলনাটা চালানো আর দেখা কোন system কতগুলো task complete করে।
+প্রথম পুরো তুলনা (web-v2, ৩৮ জোড়া) আমাদের বিপক্ষে গিয়েছিল: baseline ২৭/৩৮,
+ours ২০/৩৮ (একটা ভুল "complete" ঠিক করার পর), সাহায্য ০, ক্ষতি ৭। প্রতিটা trace
+দেখে বোঝা গেল **সমস্যা P1-এ না**। P1 baseline-এর loop ০–২ step-এর মধ্যেই ধরেছে,
+আর ভালো step-এ প্রায় কখনো ভুল সতর্কতা দেয়নি। সমস্যা ছিল তার চারপাশে:
+
+| কী ভুল হয়েছিল | সমাধান (v3 → v3.3) |
+|---|---|
+| P1-এর জন্য অপেক্ষায় actor দেরিতে page দেখত, তাতে page বদলে যেত | P1 এখন পাশাপাশি চলে; actor baseline-এর মতো একই মুহূর্তে page দেখে |
+| JSON পরামর্শ actor মানত না | page-এর তথ্যসহ ছোট, সাধারণ ভাষার নোট |
+| P1-এর দুর্বল head (failure type, strategy) actor-কে ভুল দিকে পাঠাত | শুধু "এই step ব্যর্থ, এত নিশ্চিত" দেখানো হয়; label শুধু log-এ থাকে |
+| Actor একই ব্যর্থ action ১০–১৩ বার করত | সেই action ওই page-এ আটকানো হয় (actor-কে অন্য কিছু বাছতে হয়) |
+| Actor বুঝত কী করতে হবে ("search করো"), কিন্তু সঠিক action লিখতে পারত না | ব্যর্থতার পর page থেকে বানানো নম্বরসহ বিকল্প থেকে বাছে: মেলে এমন link খোলো (menu-তে লুকানো হলেও), site-এ search করে Enter চেপে ফলাফল খোলো, ওপরে যাও, back যাও |
+
+সব action এখনো Browser Use নিজে বাছে আর করে; আমাদের layer শুধু ব্যর্থতা ধরে,
+তথ্য দেয়, একই ভুল আটকায়, আর বিকল্প দেখায়।
+
+**Development পরীক্ষা** (baseline ১০ বারে ১০ বারই ব্যর্থ এমন ৫টা task, আর baseline
+পারে এমন ৫টা): ২১ চেষ্টায় ৮ বার উদ্ধার (IETF, TED, EPA বারবার; arXiv আর Debian
+কখনো না, কারণ ওগুলোতে page-এ নেই এমন জ্ঞান লাগে), আর ১০ বারে ০ বার ক্ষতি।
+বিস্তারিত আর সঠিক setting: [TASK2_FAILURE_AWARE_AGENT_METHOD.md](TASK2_FAILURE_AWARE_AGENT_METHOD.md)।
+
+---
+
+## বর্তমান অবস্থা (২০২৬-১০-০১)
+
+- Recovery v3.3 তৈরি আর পরীক্ষিত (৮৫টা test)। Baseline যা পারে তা আর নষ্ট করে না,
+  আর baseline যা কখনো পারে না তার কিছু উদ্ধার করে।
+- Task যাচাইয়ে কিছু ঢিলেঢালা নিয়ম পাওয়া গেছে (যেমন TED-এর ১০১টা আলাদা talk-এর
+  link, Wiktionary "ephemeral_lake"), আর দুটো goal অসম্ভব বা বিভ্রান্তিকর (arXiv
+  paper, Debian)। পরের run-এর আগে ঠিক করা হবে; দুটো goal-এ লেখকের সিদ্ধান্ত বাকি।
+- পরের কাজ (রবিবার): exact-page নিয়মসহ নতুন task file, আরও ~২০টা নতুন (held-out)
+  task, তারপর পুরো paired তুলনা (~৩ lab দিন)।

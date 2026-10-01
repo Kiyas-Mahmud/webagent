@@ -59,13 +59,23 @@ def native_messages(request):
             normalized.append({'type':'text','text':json.dumps({'tool_calls':message['tool_calls']})})
         messages.append({'role':role,'content':normalized})
     # Preserve native prompts/history. Only describe the local structured-output interface.
+    if request.get('plain'):
+        # v3.1 recovery-option choice: a short numbered question, no action schema.
+        return messages, images
     contract = 'Return exactly one JSON object matching this response schema. No Markdown. Choose exactly one immediate action.\n'+json.dumps(request['output_schema'])
     messages.append({'role':'user','content':[{'type':'text','text':contract}]})
-    if request.get('previous_proposal_rejection'):
+    rejection = request.get('previous_proposal_rejection')
+    if rejection and rejection.get('stage') == 'recovery_guard':
+        messages.append({'role':'user','content':[{'type':'text','text':'PROPOSAL BLOCKED, NOT EXECUTED: '+rejection['reason']}]})
+    elif rejection:
         messages.append({'role':'user','content':[{'type':'text','text':
             'PREVIOUS PROPOSAL WAS NOT EXECUTED. Interface feedback:\n'+json.dumps(request['previous_proposal_rejection'])}]})
-    if request.get('advice'):
-        messages.append({'role':'user','content':[{'type':'text','text':'ADVISORY TRAINED ASSESSMENT (not evaluator truth):\n'+json.dumps(request['advice'])}]})
+    advice = request.get('advice')
+    if advice and advice.get('schema') == 'task2.recovery_note.v3':
+        # Plain text: the actor ignored JSON advice in web-v2.
+        messages.append({'role':'user','content':[{'type':'text','text':advice['text']}]})
+    elif advice:
+        messages.append({'role':'user','content':[{'type':'text','text':'ADVISORY TRAINED ASSESSMENT (not evaluator truth):\n'+json.dumps(advice)}]})
     return messages, images
 
 

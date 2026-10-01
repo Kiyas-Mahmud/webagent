@@ -1,5 +1,317 @@
 # Project Progress Tracker
 
+## 2026-10-01 (end of day) — v3.3 status, task audit, docs for the methodology
+
+- **Final v3.3 rerun (16:20):** EPA ✓ (13 steps). The chain was P1 1.00 at
+  the page bottom → "scroll to top and search" → type → Enter → "Open the link
+  'Climate Change'". The TED rerun was also ✓ (14 steps); it is an extra sample,
+  and the first v3.3 TED attempt (false "done" at step 0) stays counted as ✗.
+- **Development totals since v3:**
+  - Rescue set (baseline failed 10/10): **8/21**. IETF, TED and EPA were
+    rescued repeatedly (8/13); arXiv and Debian 0/8.
+  - Harm set: **10/10 completed** (no harm).
+- **Task audit (live, no model):**
+  - Substring rules are too lenient:
+    - `wiki/ephemeral` matched `ephemeral_lake`: 2 false completions, both
+      for system C. web-v2 C is corrected from 21 to 20/38 and hurt from 6
+      to 7.
+    - TED's homepage has 101 `/talks/<slug>` links that satisfy
+      `ted.com/talks`.
+    - Yale, IETF and Stanford sub-pages also satisfy their rules.
+  - Creative Commons: the target metadata is stale; the new URL is
+    `/cc-licenses/`.
+  - arXiv: the title-only search never shows 1706.03762 in the top 50 (it
+    ranks first with "Vaswani"), so the task is infeasible as written.
+  - Debian: the goal names "Getting Debian", but the link text is "Other
+    downloads" and the page title is "Download Debian"; "Download" is an ISO
+    file.
+  - **Pending author decisions:** arXiv (add the author, or use the ID) and
+    Debian (reword, or replace).
+- **Docs for writing the methodology at home:**
+  - New `docs/TASK2_FAILURE_AWARE_AGENT_METHOD.md`: the full method with
+    every setting, the evidence behind each decision, the evaluation protocol,
+    development results, the audit, and threats to validity.
+  - `AGENT_BUILD_EXPLAINED(_BN).md` gained Step 9 and a status update.
+  - The runbook has a status note.
+- **Sunday plan:**
+  1. Write `web_tasks_v2.json` with exact-page rules and the author's
+     arXiv/Debian decisions.
+  2. Add the `you` stopword.
+  3. Add about 20 held-out tasks and verify them live.
+  4. Freeze `web-v3` and start the paired run (about 16 h over about 3 lab
+     days).
+  5. Report development and held-out tasks separately.
+
+## 2026-10-01 — Evidence-based analysis of baseline failures; recovery v3
+
+Target, set by the user: tasks that Browser Use alone fails must be completed by
+our system. Browser Use still performs every action; the action head is not used.
+
+- **The 11 baseline failures in web-v2:**
+  - 9 are no-progress loops:
+    - arXiv ×2: the query was typed into the header search input, which is
+      hidden at 1280 px; then the actor clicked the input 10–13 times. Its
+      own eval: "cannot see it in the image".
+    - Debian ×2, EPA ×2, TED r0: scrolling down long after reaching the page
+      bottom.
+    - IETF ×2: a megamenu toggle clicked 5 times, then scrolling on the wrong
+      page.
+  - TED r1: false "done" at step 0.
+  - jQuery API r1: invalid output format from step 0.
+- **P1 detection is not the bottleneck:**
+  - In ours, the first confident FAILURE (≥0.9) came at steps 0–2 for arXiv,
+    Debian, EPA and TED; IETF only at step 9 (the toggles scored 0.45 because
+    the page did change).
+  - On completed episodes, only 2 of 40 non-terminal steps scored ≥0.9, and
+    both were real failures.
+- **The response was the bottleneck:**
+  - After advice, the actor repeated the identical action every time.
+  - The advice also showed weak heads: Table 1 failure-type macro-F1 0.542,
+    strategy macro-F1 0.493, action macro-F1 0.318.
+  - Reliable heads: outcome MCC 0.678, recovery outcome 0.852, memory 0.695.
+- **Page probe (no model)** for goal-matching links on the start pages:
+  - Found: TED "/talks", jQuery "api.jquery.com", IETF "About RFCs" (hidden
+    in a menu), and the arXiv "Search" page.
+  - EPA and gov.uk have no direct link, but each has a search box.
+  - The Debian /distrib link is labelled "Other downloads" and shares no word
+    with the goal, so it is not found.
+- **v3 implemented** (`recovery_mode: v3` in `qwen25_v1.json`):
+  1. Assessment overlaps the next step. Browser Use captures the page first,
+     then `LocalInternVL.ainvoke` awaits the assessment before generating, so
+     the actor sees the page at the baseline's moment.
+  2. On a confident FAILURE, `recovery_note` sends plain text: the outcome
+     verdict plus observable facts from the new web_worker `facts` op. Facts:
+     page unchanged, page bottom, typed field not submitted (Enter or its
+     button), goal-matching links including hidden ones, search box present,
+     P4 experiences.
+     - Failure-type and strategy labels are logged, never shown.
+     - `facts` sees only the goal text, never the completion rule.
+  3. Repeat guard: an action judged failed (same type, element xpath and
+     value; scroll direction when the page did not move) is blocked on that
+     URL. The actor is asked again up to 2 times; if it insists, the action
+     runs (no substitution).
+  4. Recovery per episode raised from 4 to 15; wall clock 2700 s; memory goes
+     inside the note as a single generation.
+  - Tests: `tests/task2`, 79 passed.
+- **2-hour check** (`.task2-assets/v3-check.log`, ours only, fresh memory):
+  - Rescue set: arXiv, Debian, EPA, IETF, TED. The baseline failed 2/2 on
+    each. **Pass: ≥3 of 5 completed.**
+  - Harm set: Alan Turing, photosynthesis, bank holidays, serendipity, jQuery
+    download. **Pass: ≥4 of 5 completed.**
+  - Only if both pass: a new full paired run.
+  - The first launch was killed after 30 min by the tool's background limit
+    (only arXiv finished). The remaining 9 tasks were relaunched detached
+    (`setsid nohup`), log `.task2-assets/v3-check-2.log`.
+- **v3 check, partial results:**
+  - **arXiv ✗**, but the loop was broken. The actor followed the note's
+    "Search" link to arxiv.org/search, typed the query there and reached the
+    results page, then clicked a footer link. Weaknesses seen:
+    - The block list was reset by `?query=` URL changes.
+    - The guard was overridden 3 times.
+  - **Debian ✗**: the note stopped the scrolling. The actor then chose the ISO
+    "Download" link, which Browser Use failed to execute 5 times in a row
+    (native_max_failures). Executor-rejected actions were not blocked.
+  - **EPA ✗**: the actor understood it should search (guessed `/search`,
+    clicked the box 3 times) but never typed the query.
+  - **IETF ✓ (rescued; the baseline failed 2/2):**
+    - Step 2: P1 flagged the scroll 0.98.
+    - The note listed the hidden "About RFCs" link.
+    - The actor navigated to it and completed the task in 5 steps.
+- **Diagnosis:** after the loop is broken, the actor knows *what* to do (search,
+  use a link) but often cannot produce the right Browser Use action JSON.
+- **v3.1 implemented** (code + tests ready; launch after the v3 check ends):
+  - **Recovery options** (`recovery_options: true`): after a confident
+    failure, the actor gets a short question with the screenshot, task and
+    note, plus 2–5 numbered concrete actions built from page facts. It answers
+    a number; the chosen action is returned as Browser Use's own AgentOutput
+    and executed by Browser Use. "0" falls back to normal generation.
+    - Options: open goal-matching link; search the site for the goal phrase,
+      with an automatic "press Enter" follow-up option; Enter to submit a
+      filled field; scroll to top; go back.
+    - Options already blocked are not offered.
+    - All option actions were validated against the real AgentOutput.
+  - Blocks are scoped to the page path (the query string is ignored).
+  - Executor-rejected actions are blocked.
+  - Scrolls are omitted from the note's "already done" list.
+  - Tests: 85 passed.
+- **v3 check final (13:09):**
+  - **Harm set 5/5 completed (PASS).** Alan Turing, photosynthesis and bank
+    holidays, all lost in web-v2, are now completed; bank holidays needed 2
+    recoveries.
+  - **Rescue set 1/5 (FAIL):** IETF ✓; arXiv, Debian, EPA, TED ✗.
+  - TED: the note listed the hidden "TED Talks → /talks" link first, but the
+    actor kept scrolling. The page is 13 screens long, so each scroll moves it
+    and is not blocked.
+- **v3.1 check launched 13:09** (same 10 tasks, fresh memory
+  `experience-memory/v31-check`, log `.task2-assets/v31-check.log`).
+- **v3.1 check final (14:23):**
+  - **Harm set 5/5 (PASS again).**
+  - **Rescue set 2/5:**
+    - EPA ✓: the scroll was blocked, then the actor navigated to
+      /climate-change itself.
+    - TED ✓ in 4 steps: P1 0.98 at step 1, the options listed "Open the link
+      'TED Talks'", the actor answered 1, and Browser Use navigated to /talks.
+    - arXiv ✗: the search option worked and reached the results page, but
+      arXiv sorts newest first, so the 2017 paper is not shown; later a
+      `chrome-error` page appeared.
+    - Debian ✗: the ISO "Download" link failed in Browser Use 5 times; the
+      guard was overridden.
+    - IETF ✗: my options capped goal links at 2, which cut the third-ranked
+      "About RFCs" (the link v3's note led to). The actor took the wrong
+      search box instead ("Search the email archive").
+  - Across v3 and v3.1, three distinct baseline-failed tasks were rescued:
+    IETF, EPA, TED.
+- **v3.2** = v3.1 with all 3 goal links offered as options (tests 85 passed).
+  Rescue-only check launched 14:23, log `.task2-assets/v32-check.log`. Harm set
+  not rerun: the change only affects options after a confident failure, and
+  harm was 5/5 under both v3 and v3.1.
+- **v3.2 rescue result (15:13): 2/5.** IETF ✓ (the link fix worked) and TED ✓
+  (2/2 since v3.1). EPA ✗, arXiv ✗, Debian ✗.
+  - EPA failure: at the page bottom, Browser Use's element list omits the
+    off-screen header search box, so no search option was offered (only "top"
+    and "back", both refused).
+  - Later the actor searched by itself and reached the "climate change"
+    results. P1 said SUCCESS, so no help followed, and the actor clicked
+    "Inspector General". arXiv failed the same way after its search.
+- **v3.3**:
+  - Search is a three-step recovery plan: type, then a press-Enter option,
+    then an "open a goal-matching link on the results page" option (facts
+    fetched on the results page).
+  - If the search box is off-screen, the option is "scroll to top and search"
+    (scroll, then a search option).
+  - Tests: 85 passed.
+  - Rescue-only check launched 15:14, log `.task2-assets/v33-check.log`.
+- **v3.3 result (15:45):**
+  - IETF ✓ in 5 steps (2/2 with three links).
+  - TED ✗: the actor said "done" at step 0, so no action and nothing to assess
+    (same as baseline TED r1).
+  - arXiv ✗: result titles are not links, so goal-word matching found
+    "Yang You". "you" is missing from STOPWORDS; fix later.
+  - Debian ✗.
+  - EPA: infrastructure error, not counted. The search plan ran ("scroll to top
+    and search" → type → Enter → results page), then `observe` crashed in
+    `bind_controls` ("hit point outside its own target box").
+- **Worker fix:**
+  - `observe` tolerates a `load` timeout (the Stanford cause, 4/4 episodes
+    lost in web-v2) and control-extraction errors (controls only feed memory
+    applicability).
+  - Both are recorded in the observation.
+  - Applies equally to A and C.
+  - EPA and TED rerun launched 15:46 (log `.task2-assets/v33-rerun.log`).
+- **Memory note:** in today's checks, 58 of 60 retrieved candidates were
+  excluded as SAME_EPISODE. Each task ran once with an empty store, so reuse
+  was never possible; the memory head's storage decisions did run (writes 1–4
+  per episode). Training memory: acc 0.858, F1 0.846, MCC 0.695 at epoch 0
+  (0.695–0.708 over epochs 0–3), against a majority baseline of acc 0.620.
+  Reuse will be measured in the paired run (2 repeats sharing a store).
+- **Thesis title fixed by the user:** "A multimodal framework for failure
+  detection, adaptive recovery, and experience memory in autonomous web
+  agents" (memory wording decided by the user).
+
+## 2026-09-29 — Pilot loss traced to vague recovery advice; advice v2
+
+- Pilot (`comparison/pilot-v1`, stopped at 2/12): Wiktionary "serendipity" —
+  baseline completed in 3 steps; ours failed.
+- Trace: step 0 identical and correct (TYPE; P1 SUCCESS 0.92, no advice sent).
+  Step 1 diverged **before any advice** (actor noise): baseline clicked the
+  Search button, ours clicked a suggestion div that did nothing. P1 correctly
+  flagged it (FAILURE 0.99, ACTION_MISMATCH, REPLAN). With only "FAILURE /
+  REPLAN" and a raw element index as advice, the actor concluded the text was
+  not entered and **retyped "serendipity" into the same box**, producing
+  "serendipityserendipity", and never recovered.
+- Design fix (`recovery_advice` v2 in `assessment.py`, wired in `live.py`): the
+  advice names the failed step in observable terms (action, element, value,
+  whether the page changed), lists the steps P1 already judged successful with
+  "do not redo these", and explains failure-type and strategy labels. It still
+  never selects an action. Test added in `tests/task2/test_assessment.py`.
+- Second design flaw, found in the 20-task development run
+  (`demo/20260928T122723-web-20tasks-ours-s0`): P1 flags **correct TYPE steps**
+  as FAILURE (Alan Turing 0.59, Eiffel 0.55, passport 0.85, plus a click at
+  0.52). Typing changes few pixels, which is the same "small change = failure"
+  bias seen on MiniWoB. Every such false alarm opened recovery. On Alan Turing the actor then
+  retyped twice into another element and the task broke. Across the run, all
+  non-terminal false alarms on completed tasks were < 0.9; genuine first
+  failures were 0.95–1.00 (the exceptions ietf 0.63 and stanford 0.75 had recovery marked
+  SUCCESS).
+- Fix: **recovery trigger gate**, `settings.recovery_trigger_probability = 0.9`
+  in `qwen25_v1.json`. Recovery opens only on argmax FAILURE with P(FAILURE) ≥
+  0.9. An uncertain failure sends no advice and is not listed as succeeded, and
+  is logged as `gate-NNNN.json` and `counters.uncertain_failures`. The argmax label is
+  unchanged. Threshold chosen on development data before any web comparison
+  outcome with this code. Test: `test_only_confident_failure_opens_recovery`.
+- Tests: `tests/task2` 64 passed.
+- Live check of advice v2 (without the gate, started before it was added):
+  `demo/20260929T123957-web-4tasks-ours-s0`.
+  - **Serendipity**: now completed by ours. The step-1 wrong click was flagged
+    (0.99). The actor did not retype; it clicked another element and reached the
+    page.
+  - **Ephemeral**: completed.
+  - **Alan Turing**: step 0 correct (P1 SUCCESS 0.20, no advice), then five
+    invalid actor outputs. The actor hallucinated "article opened" and emitted
+    `DoneAction` instead of `done`. This is an actor limit independent of our
+    system; outputs are not repaired, by rule.
+  - **Photosynthesis**: `Page.goto` timeout, infrastructure only.
+- `web-v1` is superseded. **`comparison/web-v2` frozen 2026-09-29 13:06** (80
+  episodes, gate 0.9, advice v2). The run started 13:06, logs to
+  `comparison/web-v2.log`, and is resumable: stop before 17:00, rerun `run` tomorrow.
+  Auto-stop armed for 16:45 (scratchpad `autostop.sh`, logs to
+  `comparison/web-v2-autostop.log`).
+- web-v2 check after the first 6 tasks (repeat 0, 14:18):
+  - Both completed: Eiffel, photosynthesis, serendipity (ours recovered after
+    2 recovery attempts), ephemeral.
+  - Both failed: arXiv abs.
+  - Discordant: **Alan Turing, baseline ✅ / ours ❌**. Ours emitted
+    `DoneAction` (invalid schema) five times from step 2.
+  - The Alan Turing step-2 actor prompts of A and C were diffed. `advice` is null in both (step 0
+    was P1 SUCCESS), no memory context was added, and the only differences are
+    live-page noise (element indices, the value field mid-autocomplete
+    "Alan Tur" vs "Alan Tu", suggestion ids).
+  - So this loss is actor sensitivity to page noise under greedy decoding, not an input from our system.
+    The user decided: no change, let it run.
+- 16:38: run stopped manually at the user's request; auto-stop timer removed.
+  **41/80 episodes saved.** The interrupted episode is rerun on the next `run`.
+  Resume tomorrow:
+  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True PYTHONPATH=src:scripts systemd-inhibit --what=shutdown:sleep .task2-assets/browser-use-env/bin/python -u scripts/compare_agents.py run .task2-assets/comparison/web-v2 >> .task2-assets/comparison/web-v2.log 2>&1`
+- 2026-09-30 10:57: resumed. Frozen sources unchanged, 41/80 already done.
+  Three folders were moved to `interrupted/`: the Stanford r0 A+C pair (page-load
+  timeout, infrastructure) and the Eiffel r1 A episode (the manual stop).
+  Auto-stop moved to `.task2-assets/comparison/autostop.sh`, because the /tmp
+  scratchpad does not survive a reboot. Armed for 16:45.
+- **web-v2 result (2026-09-30 14:18)**: 76/80 episodes. The Stanford task timed
+  out on page load after its 2nd click in all 4 attempts (A and C alike;
+  `observe` waits 30 s for the `load` event), so it is excluded for both systems.
+  - Completion on 38 pairs: **baseline 27/38, ours 21/38; helped 0, hurt 6,
+    exact sign p = 0.031.** Ours is significantly worse.
+  - The gate did its job: 9 uncertain failures were suppressed in 7 episodes,
+    and all 7 completed.
+  - Memory shown 3 times, 25 writes. Mean episode time: A 250 s, C 344 s.
+- Cause A — **latency side effect** (3 losses: Alan Turing r0/r1,
+  photosynthesis r1). No advice was sent. The synchronous P1 call delays the
+  actor's next observation by tens of seconds, so the actor sees a settled page:
+  Browser Use's orange interaction highlight has faded and every suggestion
+  thumbnail has loaded (screenshots compared). Under greedy decoding the actor
+  then hallucinates completion and emits invalid `DoneAction` five times. The
+  baseline never did this on these tasks.
+- Cause B — **advice misleads after a correct detection** (3 losses: bank
+  holidays r0/r1, serendipity r1).
+  - Bank holidays: the real error was TYPE with an empty value. P1 outcome was
+    right (0.95), but its failure type said PERCEPTION_ERROR ("wrong element")
+    and its strategy said REPLAN. The actor then clicked the same box 13 times.
+    The baseline simply retyped with text.
+  - Serendipity r1: the advice listed the typed step as succeeded, yet the actor
+    retyped 10 times. The recovery-outcome head also called a retype SUCCESS.
+  - The categorical failure-type and strategy heads are weaker than the outcome
+    head and should not be presented as a diagnosis.
+- Proposed v3 (not implemented; awaiting the user):
+  1. Remove the latency effect: capture the next browser state immediately, as
+     the baseline does, and let the actor call wait for the assessment.
+  2. Advice gives only the reliable outcome plus observable facts (e.g. "typed
+     value was empty", "page unchanged"). No failure-type or strategy labels.
+  3. Block an exact repeat of an action that P1 judged failed.
+- Candidate for v3, only after web-v2 completes: block exact repeats of an action P1 judged
+  failed (same type + element + value). In arXiv abs, ours got 4 recovery
+  advisories but the actor kept clicking the same input.
+
 ## 2026-09-28 — P1 on MiniWoB: no signal, not a rendering problem
 
 - Measured on all 122 live Qwen2.5 assessments (17 episodes): P1 labels 100%

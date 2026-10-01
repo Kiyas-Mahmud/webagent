@@ -8,11 +8,15 @@
   "memory_query": "Original PC-01 encoder only, user-authorized; frozen 1974-vector store; zero writes",
   "decided": "2026-09-27, before any Qwen Task 2 browser outcome was observed",
   "settings": {
-    "budget": {"max_model_calls": 102, "max_executor_requests": 30, "seconds": 1800},
+    "budget": {"max_model_calls": 102, "max_executor_requests": 30, "seconds": 2700},
     "max_agent_steps": 30,
     "excluded_memory_tasks": [],
     "recovery_attempts_per_incident": 2,
-    "recovery_attempts_per_episode": 4,
+    "recovery_attempts_per_episode": 15,
+    "recovery_mode": "v3",
+    "guard_regenerations": 2,
+    "recovery_options": true,
+    "recovery_trigger_probability": 0.9,
     "seed": 42,
     "actor_max_new_tokens": 512,
     "actor_do_sample": false,
@@ -20,6 +24,8 @@
     "native_history_items": 6,
     "score": "terminated, not invalid/truncated, raw reward exactly 1.0"
   },
+  "recovery_trigger_rationale": "2026-09-29, from the 20-task development run (before the web comparison): P1 scored correct TYPE steps P(FAILURE) 0.55-0.85 because typing changes few pixels; recovery then made the actor retype. Every non-terminal false alarm there was below 0.9 and genuine failures were 0.95-1.00. Recovery opens only on argmax FAILURE with P(FAILURE) >= 0.9; the argmax label itself is unchanged.",
+  "recovery_v3_rationale": "2026-10-01, from web-v2 (baseline 27/38, ours 21/38): P1 detected the baseline loops within 0-2 steps but the actor ignored JSON advice, the weak failure-type/strategy heads misdirected it, and the synchronous assessment delayed the actor's page capture. v3 overlaps assessment with the next page capture, sends a plain-text note with only the outcome verdict and observable page facts, and blocks exact repeats of a judged-failed action on the same page. The actor still chooses every action. Recovery advice is no longer capped per episode (15) so loops keep receiving it; wall clock raised for guard regenerations.",
   "budget_rationale": "Executor and model-call limits are unchanged from native-evaluation-v1. The wall-clock cap is a safety bound only, so that assessment overhead cannot be what ends a B/C episode; latency is reported separately.",
   "screen": {
     "systems": ["A"],
