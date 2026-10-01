@@ -25,8 +25,11 @@
   - Debian: the goal names "Getting Debian", but the link text is "Other
     downloads" and the page title is "Download Debian"; "Download" is an ISO
     file.
-  - **Pending author decisions:** arXiv (add the author, or use the ID) and
-    Debian (reword, or replace).
+  - **Author decisions (2026-10-01, to apply Sunday):**
+    - arXiv: add the author. 'Search arXiv for the paper "Attention Is All
+      You Need" by Vaswani et al. and open its abstract page.'
+    - Debian: reword. "Open the Debian web page that lists the different ways
+      to download Debian (a web page, not an installer file)." 
 - **Docs for writing the methodology at home:**
   - New `docs/TASK2_FAILURE_AWARE_AGENT_METHOD.md`: the full method with
     every setting, the evidence behind each decision, the evaluation protocol,
@@ -34,8 +37,8 @@
   - `AGENT_BUILD_EXPLAINED(_BN).md` gained Step 9 and a status update.
   - The runbook has a status note.
 - **Sunday plan:**
-  1. Write `web_tasks_v2.json` with exact-page rules and the author's
-     arXiv/Debian decisions.
+  1. Write `web_tasks_v2.json` with exact-page rules and the two decided
+     goals.
   2. Add the `you` stopword.
   3. Add about 20 held-out tasks and verify them live.
   4. Freeze `web-v3` and start the paired run (about 16 h over about 3 lab

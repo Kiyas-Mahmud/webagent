@@ -204,7 +204,7 @@ A live audit (no model) of all 20 tasks found:
   (jQuery API site; arXiv cs.AI list variants).
 - **Stale metadata:** Creative Commons target is now `/cc-licenses/`
   (the old URL redirects there); the rule itself was correct.
-- **Infeasible or misleading goals (author decision pending):**
+- **Infeasible or misleading goals** (author decided 2026-10-01: arXiv → add the author "Vaswani et al." to the goal; Debian → reword the goal as a web page listing the ways to download Debian, not an installer file):
   - arXiv paper: searching the title (all fields or title field) does not show
     1706.03762 in the first 50 results; title + "Vaswani" ranks it first.
     Options: add the author to the goal, or use the arXiv ID.
@@ -261,8 +261,8 @@ Representative rescues (all actions chosen by the actor):
   measurable with repeated visits.
 
 ## 10. Next steps (planned)
-1. Author decisions on arXiv and Debian goals; write `web_tasks_v2.json` with
-   exact-page rules; fix the `you` stop word in goal matching.
+1. Write `web_tasks_v2.json` with exact-page rules and the two decided goals;
+   fix the `you` stop word in goal matching.
 2. Add ~20 held-out tasks from the dataset's domains (multi-step: search,
    menus), verified live before freezing.
 3. Freeze `web-v3`; paired run (≈ 40 tasks × 2 repeats × 2 systems ≈ 16 h,
