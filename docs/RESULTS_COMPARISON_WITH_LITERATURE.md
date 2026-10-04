@@ -44,17 +44,64 @@ tasks.
 
 ---
 
-## Table B. Backbone comparison on our data (identical data, protocol and seed)
+## Table B. Controlled comparison on our data: trained assessor vs. agent-style prompted assessment (same model, same cases)
 
-| Backbone | Outcome MCC | Failure Macro-F1 | Failure-type Macro-F1 | Recovery-outcome MCC | Recovery-outcome acc. | Memory MCC |
+Task 1 pilots, frozen validation subset: 240 interaction cases and 120 linked
+recovery cases, identical labels, phase definitions and scoring rules
+(audited exports in `results/task1_qwen25_dual_v1/`, `results/task1_internvl_dual_v2/`,
+`results/task1_qwen_backend_v1/`). The prompted rows run the *same frozen
+decoder* with the assessment instructions adapted from three public agents
+(Browser Use, Agent S2, WebVoyager); they are component adaptations, not the
+native agents. Invalid or unparsable outputs count as wrong (all-case accuracy).
+
+### B1. Step-outcome assessment (240 cases)
+
+| Assessor | Backbone | Trained? | MCC | Balanced acc. | Macro-F1 | All-case acc. | Valid outputs |
+|---|---|---|---|---|---|---|---|
+| Browser Use-style prompt | Qwen2.5-VL-7B base | no | 0.000 | 50.0 % | 0.237 | 11.3 % | 87 / 240 |
+| Agent S2-style prompt | Qwen2.5-VL-7B base | no | 0.000 | 50.0 % | 0.183 | 15.8 % | 170 / 240 |
+| WebVoyager-style prompt | Qwen2.5-VL-7B base | no | — | — | — | 0.0 % | 0 / 240 |
+| Browser Use-style prompt | Qwen2.5-VL-7B + our LoRA decoder | partly | 0.151 | 53.4 % | 0.314 | 16.3 % | 107 / 240 |
+| Agent S2-style prompt | Qwen2.5-VL-7B + our LoRA decoder | partly | 0.000 | 50.0 % | 0.238 | 12.5 % | 96 / 240 |
+| WebVoyager-style prompt | Qwen2.5-VL-7B + our LoRA decoder | partly | −0.276 | 44.6 % | 0.219 | 10.4 % | 89 / 240 |
+| Browser Use-style prompt | Qwen2-VL-2B base | no | 0.000 | 50.0 % | 0.206 | 24.6 % | 228 / 240 |
+| Agent S2-style prompt | Qwen2-VL-2B base | no | 0.000 | 50.0 % | 0.199 | 24.6 % | 238 / 240 |
+| WebVoyager-style prompt | Qwen2-VL-2B base | no | 0.000 | 50.0 % | 0.200 | 22.9 % | 220 / 240 |
+| Trained heads | InternVL3.5-8B-HF | **yes** | 0.558 | 80.8 % | 0.768 | 80.4 % | 240 / 240 |
+| **Trained heads (selected)** | **Qwen2.5-VL-7B** | **yes** | **0.649** | **84.7 %** | **0.820** | **85.4 %** | **240 / 240** |
+
+### B2. Recovery-outcome assessment (120 cases)
+
+| Assessor | Backbone | Trained? | MCC | Macro-F1 | All-case acc. | Valid outputs |
+|---|---|---|---|---|---|---|
+| Browser Use-style prompt | Qwen2.5-VL-7B base | no | −0.122 | 0.400 | 16.7 % | 30 / 120 |
+| Agent S2-style prompt | Qwen2.5-VL-7B base | no | −0.104 | 0.331 | 37.5 % | 91 / 120 |
+| WebVoyager-style prompt | Qwen2.5-VL-7B base | no | — | — | 0.0 % | 0 / 120 |
+| Browser Use-style prompt | Qwen2-VL-2B base | no | 0.000 | 0.329 | 45.8 % | 112 / 120 |
+| Agent S2-style prompt | Qwen2-VL-2B base | no | 0.000 | 0.333 | 50.0 % | 120 / 120 |
+| WebVoyager-style prompt | Qwen2-VL-2B base | no | 0.000 | 0.335 | 45.8 % | 109 / 120 |
+| Trained heads | InternVL3.5-8B-HF | **yes** | 0.884 | 0.942 | 94.2 % | 120 / 120 |
+| **Trained heads (selected)** | **Qwen2.5-VL-7B** | **yes** | **0.841** | **0.916** | **91.7 %** | **120 / 120** |
+
+### B3. Full-validation backbone comparison (7,861 / 1,858 cases; Table 1)
+
+| Backbone | Outcome MCC | Failure Macro-F1 | Failure-type Macro-F1 | Recovery-outcome MCC | Recovery acc. | Memory MCC |
 |---|---|---|---|---|---|---|
 | Qwen2-VL-2B | 0.624 | 0.809 | 0.502 | 0.796 | 90.9 % | 0.663 |
 | **Qwen2.5-VL-7B (selected)** | **0.678** | **0.839** | **0.542** | **0.852** | **93.5 %** | **0.695** |
 | InternVL3.5-8B-HF | 0.641 | 0.820 | 0.541 | 0.840 | 92.9 % | 0.654 |
 
-Seed 42; one selected checkpoint per backbone (registered selection rule:
-outcome MCC). Values from Table 1 of the thesis. Single-seed; differences are
-descriptive, not tested for significance.
+**Reading.** On identical cases, every agent-style prompted assessor is at or
+below chance (MCC ≤ 0.15, often exactly 0), and the prompted decoders fail to
+produce a valid structured verdict for a large share of cases (WebVoyager-style
+prompting on the Qwen2.5 base: none). The trained heads reach MCC 0.65 (step
+outcome) and 0.84 (recovery outcome) with valid output on every case. This is
+the controlled evidence that the gain comes from training on Web-Gold-40K, not
+from the backbone: the same frozen Qwen2.5-VL-7B goes from MCC 0.00 (prompted)
+to 0.65 (trained heads). The three trained backbones agree within 0.06 MCC on
+the full validation set (B3). Note the subset values (B1/B2: 0.649 / 0.841)
+differ slightly from the full-validation values (B3: 0.678 / 0.852) because
+they are computed on 240 / 120 selected cases; both are reported as such.
 
 ---
 
