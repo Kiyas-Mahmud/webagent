@@ -15,26 +15,48 @@ each system's own baseline.
 
 ---
 
-## Table A. Step-level failure detection: our trained assessor vs. prompted large models
+## Table A. Step-level failure detection (existing results only; no new runs)
 
-Task: given the page before and after an action, decide whether the step
-succeeded or failed.
+### A1. Our trained assessor on our data (Table 1, validation, seed 42)
 
-| System | Model (size, access) | Training | Measured on | Accuracy | MCC | Macro-F1 |
+| Head | Decision | Measured on | Accuracy | MCC | Macro-F1 | Majority baseline |
 |---|---|---|---|---|---|---|
-| Detecting Pipeline Failures, TG setting [1] | GPT-4o (closed) | prompting only | recovery-error detection | 83.8 | — | — |
-| Detecting Pipeline Failures, TG [1] | InternVL2-Llama3-76B (open) | prompting only | same | 82.4 | — | — |
-| Detecting Pipeline Failures, TG [1] | Gemini-1.5-pro (closed) | prompting only | same | 79.7 | — | — |
-| Detecting Pipeline Failures, default [1] | GPT-4o | prompting only | same | 74.4 | — | — |
-| Detecting Pipeline Failures, default [1] | Gemini-1.5-flash | prompting only | same | 61.5 | — | — |
-| **Ours — step outcome head** | **Qwen2.5-VL-7B, 4-bit (open)** | **QLoRA + task heads on Web-Gold-40K** | 7,861 validation transitions | **≈83** | **0.678** | **0.839** |
-| **Ours — recovery-outcome head** | same | same | 1,858 attempted recoveries | **93.5** | **0.852** | **0.925** |
-| **Ours — memory-storage head** | same | same | 7,861 validation cases (majority baseline 62.0) | **85.8** | **0.695** | **0.846** |
+| Step outcome (P1) | step succeeded / failed | 7,861 validation transitions | ≈83 | 0.678 | 0.839 | — |
+| Recovery outcome (P1) | recovery succeeded / failed | 1,858 attempted recoveries | 93.5 | 0.852 | 0.925 | — |
+| Memory storage (P4) | store this incident? | 7,861 validation cases | 85.8 | 0.695 | 0.846 | 62.0 % acc., 0.383 F1 |
 
-Reading: a 7B open model, trained on our dataset and run in 4-bit, detects
-failed steps with accuracy in the same range as prompted GPT-4o and a 76B open
-model, on different data. Our heads additionally output calibrated
-probabilities (used as the recovery trigger) and verify recovery outcomes.
+### A2. Published prompted detectors, different data (context only) [1]
+
+| Setting | Model | Training | Accuracy |
+|---|---|---|---|
+| Textual grounding | GPT-4o (closed) | none | 83.8 |
+| Textual grounding | InternVL2-Llama3-76B (open) | none | 82.4 |
+| Textual grounding | Gemini-1.5-pro | none | 79.7 |
+| Default prompt | GPT-4o | none | 74.4 |
+| Default prompt | Gemini-1.5-flash | none | 61.5 |
+
+### A3. Live precision of the deployed detector (web-v2 traces, real websites)
+
+| Measurement | Value |
+|---|---|
+| Confident failure alarms (P ≥ 0.9) on non-terminal steps of *completed* episodes | 2 of 40 steps; both genuine failures |
+| First confident failure in baseline-failed tasks | step 0–2 (arXiv, Debian, EPA, TED, bank holidays); step 9 (IETF) |
+| Uncertain alarms suppressed by the 0.9 gate | 9 in 7 episodes; all 7 episodes completed |
+
+### What Table A supports
+
+| Claim | Evidence | Wording |
+|---|---|---|
+| Assessor well above chance, class-balanced | A1 (MCC 0.678; memory 85.8 % vs. majority 62.0 %) | "substantially above the majority baseline" |
+| Reliable recovery verification | A1 (MCC 0.852, 93.5 %) | "reliable recovery-outcome verification" |
+| Not a backbone accident | Table B (0.62–0.68 MCC on three backbones) | "consistent across three VLM backbones" |
+| 7B open model vs. prompted GPT-4o | A1 vs. A2 | "comparable magnitude on different data" — never "outperforms" |
+| Works outside the training distribution | A3 | "on live websites, confident alarms were almost always genuine failures" |
+
+Caveats to state: A2 numbers are from [1]'s own benchmark, A1 from our
+validation split, so accuracy is not transferable across rows (class balance
+differs; hence MCC and the majority baseline). Table 1 values are single-seed
+validation results.
 
 ---
 
