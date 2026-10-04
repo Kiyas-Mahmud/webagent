@@ -1,5 +1,34 @@
 # Project Progress Tracker
 
+## 2026-10-04 — Task suite v2 (exact-page rules, held-out split); web-v3 run started
+
+- **Decision (user):** drop the two invalid tasks (arXiv paper, Debian distrib)
+  rather than reword them; replace them with clean tasks.
+- **`configs/eval/task2/web_tasks_v2.json`** — 42 tasks:
+  - `development` (20): the 18 kept v1 tasks + `arxiv-list-math-recent` and
+    `debian-news`. Recovery v3–v3.3 was designed while observing 10 of these.
+  - `held_out` (22): written and live-verified today, before any agent run on
+    them. Domains all from the dataset: Wikipedia ×3, Wiktionary, GOV.UK ×2,
+    EPA ×2, IETF ×2, WordPress ×2, Yale, Wisconsin, NOAA, europa.eu, GitHub,
+    GitLab, Nextcloud, Coursera, cPanel, Stripe.
+  - Rejected after live check: w3.org and loc.gov (Cloudflare challenge),
+    creativecommons /about and harvard /admissions (redirect elsewhere).
+  - **Rules:** `page` (exact host+path, no www/query/fragment/trailing slash),
+    `page_prefix` (list pages), `site` (jQuery API). Fixes the v1 substring
+    leaks (ephemeral_lake, TED single talks, Yale/IETF/Stanford sub-pages).
+    `url_contains` kept in code for reproducing v1 runs.
+  - Creative Commons target metadata updated to `/cc-licenses/`.
+- `web_worker.task_complete` implements the rules; `STOPWORDS` gained
+  you/your/is/are/all/need/… (arXiv "Yang You" link bug).
+- `compare_agents.py`: plan schema `web-comparison-v2` carries each task's
+  split; `report` adds per-split pairs, helped/hurt, sign test, rescue rate on
+  baseline failures and harm rate on baseline successes.
+- Tests: `tests/task2` **98 passed** (new: rule unit tests; every v2 target
+  satisfies its own rule and no start page does).
+- **`comparison/web-v3` frozen 11:26** (168 episodes = 42 × 2 × 2; gate 0.9,
+  recovery v3 + options). Run started 11:27, log `comparison/web-v3.log`;
+  auto-stop armed for 16:45. Expected ≈ 16–18 h total → finishes on day 3.
+
 ## 2026-10-01 (end of day) — v3.3 status, task audit, docs for the methodology
 
 - **Final v3.3 rerun (16:20):** EPA ✓ (13 steps). The chain was P1 1.00 at

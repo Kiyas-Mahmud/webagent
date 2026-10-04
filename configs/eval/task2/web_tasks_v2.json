@@ -1,0 +1,622 @@
+{
+ "suite": "web-tasks-v2",
+ "created": "2026-10-04",
+ "derived_from": "web-tasks-v1 (2026-09-28)",
+ "purpose": "Live real-website tasks on domains from the author's dataset (web_agent_gold_v16_500_domain_40k, 305 domains). P1 judges pages like its training data.",
+ "viewport": {
+  "width": 1280,
+  "height": 720
+ },
+ "success_rule": "Completed when the current page equals the target page: lower-cased host without 'www.' plus path without trailing slash, ignoring query string and fragment ('page'); or starts with it ('page_prefix', list pages); or its host is the given site ('site'). Checked by the environment after every step, never shown to the agent.",
+ "splits": {
+  "development": "the 18 v1 tasks kept + 2 replacements; recovery v3-v3.3 was designed while observing 10 of these",
+  "held_out": "20 tasks written and verified on 2026-10-04 before any agent run with them"
+ },
+ "audit_2026_10_04": {
+  "removed": {
+   "arxiv-abs-1706-03762": "title-only search never shows 1706.03762 in the top 50 results (first with author name, which the goal lacks); infeasible as written",
+   "debian-distrib": "goal names a 'Getting Debian' page that does not exist; the link reads 'Other downloads' and the prominent Download button is an ISO file"
+  },
+  "rule_change": "v1 used URL substring matching: it accepted wiki/ephemeral_lake for 'ephemeral' (2 false completions for system C in web-v2), 101 single-talk pages for ted.com/talks, and sub-pages of yale/admissions, ietf/process/rfcs, admission.stanford.edu",
+  "metadata_fix": {
+   "creativecommons-cc-licenses": "target now /cc-licenses/ (old URL redirects there)"
+  },
+  "held_out_rejected": {
+   "w3c-standards": "Cloudflare challenge (403)",
+   "loc-collections": "Cloudflare challenge (403) on target",
+   "creativecommons-about": "/about redirects to /what-we-do",
+   "harvard-admissions": "/admissions redirects to /programs"
+  }
+ },
+ "verification": "Every start page and target fetched live on 2026-10-04 (HTTP 200, final URL equals the rule); start pages checked for a path to the target (link, hidden menu link, or site search).",
+ "tasks": [
+  {
+   "id": "wikipedia-wiki-alan-turing",
+   "split": "development",
+   "goal": "Search Wikipedia for \"Alan Turing\" and open his article.",
+   "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+   "allowed_domains": [
+    "*.wikipedia.org"
+   ],
+   "dataset_domain": "wikipedia.org",
+   "success": {
+    "page": "en.wikipedia.org/wiki/alan_turing"
+   },
+   "verified_target": "https://en.wikipedia.org/wiki/Alan_Turing"
+  },
+  {
+   "id": "wikipedia-wiki-eiffel-tower",
+   "split": "development",
+   "goal": "Use the search box to open the Wikipedia article about the Eiffel Tower.",
+   "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+   "allowed_domains": [
+    "*.wikipedia.org"
+   ],
+   "dataset_domain": "wikipedia.org",
+   "success": {
+    "page": "en.wikipedia.org/wiki/eiffel_tower"
+   },
+   "verified_target": "https://en.wikipedia.org/wiki/Eiffel_Tower"
+  },
+  {
+   "id": "wikipedia-wiki-photosynthesis",
+   "split": "development",
+   "goal": "Search Wikipedia for \"photosynthesis\" and open the article.",
+   "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+   "allowed_domains": [
+    "*.wikipedia.org"
+   ],
+   "dataset_domain": "wikipedia.org",
+   "success": {
+    "page": "en.wikipedia.org/wiki/photosynthesis"
+   },
+   "verified_target": "https://en.wikipedia.org/wiki/Photosynthesis"
+  },
+  {
+   "id": "wiktionary-wiki-serendipity",
+   "split": "development",
+   "goal": "Look up the word \"serendipity\" on Wiktionary.",
+   "start_url": "https://en.wiktionary.org/wiki/Wiktionary:Main_Page",
+   "allowed_domains": [
+    "*.wiktionary.org"
+   ],
+   "dataset_domain": "wiktionary.org",
+   "success": {
+    "page": "en.wiktionary.org/wiki/serendipity"
+   },
+   "verified_target": "https://en.wiktionary.org/wiki/serendipity"
+  },
+  {
+   "id": "wiktionary-wiki-ephemeral",
+   "split": "development",
+   "goal": "Look up the word \"ephemeral\" on Wiktionary.",
+   "start_url": "https://en.wiktionary.org/wiki/Wiktionary:Main_Page",
+   "allowed_domains": [
+    "*.wiktionary.org"
+   ],
+   "dataset_domain": "wiktionary.org",
+   "success": {
+    "page": "en.wiktionary.org/wiki/ephemeral"
+   },
+   "verified_target": "https://en.wiktionary.org/wiki/ephemeral"
+  },
+  {
+   "id": "arxiv-list-cs-ai",
+   "split": "development",
+   "goal": "Open the arXiv list of recent papers in Computer Science, Artificial Intelligence (cs.AI).",
+   "start_url": "https://arxiv.org/",
+   "allowed_domains": [
+    "*.arxiv.org"
+   ],
+   "dataset_domain": "arxiv.org",
+   "success": {
+    "page_prefix": "arxiv.org/list/cs.ai"
+   },
+   "verified_target": "https://arxiv.org/list/cs.AI/recent"
+  },
+  {
+   "id": "debian-security",
+   "split": "development",
+   "goal": "Open the Debian security information page.",
+   "start_url": "https://www.debian.org/",
+   "allowed_domains": [
+    "*.debian.org"
+   ],
+   "dataset_domain": "debian.org",
+   "success": {
+    "page": "debian.org/security"
+   },
+   "verified_target": "https://www.debian.org/security/"
+  },
+  {
+   "id": "creativecommons-cc-licenses",
+   "split": "development",
+   "goal": "Open the Creative Commons page that explains the CC licenses.",
+   "start_url": "https://creativecommons.org/",
+   "allowed_domains": [
+    "*.creativecommons.org"
+   ],
+   "dataset_domain": "creativecommons.org",
+   "success": {
+    "page": "creativecommons.org/cc-licenses"
+   },
+   "verified_target": "https://creativecommons.org/cc-licenses/"
+  },
+  {
+   "id": "gov-renew-adult-passport",
+   "split": "development",
+   "goal": "Search GOV.UK for \"renew passport\" and open the page about renewing an adult passport.",
+   "start_url": "https://www.gov.uk/",
+   "allowed_domains": [
+    "*.gov.uk"
+   ],
+   "dataset_domain": "www.gov.uk",
+   "success": {
+    "page": "gov.uk/renew-adult-passport"
+   },
+   "verified_target": "https://www.gov.uk/renew-adult-passport"
+  },
+  {
+   "id": "gov-bank-holidays",
+   "split": "development",
+   "goal": "Use GOV.UK to find the page for checking the UK bank holidays.",
+   "start_url": "https://www.gov.uk/",
+   "allowed_domains": [
+    "*.gov.uk"
+   ],
+   "dataset_domain": "www.gov.uk",
+   "success": {
+    "page": "gov.uk/bank-holidays"
+   },
+   "verified_target": "https://www.gov.uk/bank-holidays"
+  },
+  {
+   "id": "ted-talks",
+   "split": "development",
+   "goal": "Open the TED page that lists talks.",
+   "start_url": "https://www.ted.com/",
+   "allowed_domains": [
+    "*.ted.com"
+   ],
+   "dataset_domain": "ted.com",
+   "success": {
+    "page": "ted.com/talks"
+   },
+   "verified_target": "https://www.ted.com/talks"
+  },
+  {
+   "id": "jquery-download",
+   "split": "development",
+   "goal": "Open the jQuery download page.",
+   "start_url": "https://jquery.com/",
+   "allowed_domains": [
+    "*.jquery.com"
+   ],
+   "dataset_domain": "jquery.com",
+   "success": {
+    "page": "jquery.com/download"
+   },
+   "verified_target": "https://jquery.com/download/"
+  },
+  {
+   "id": "jquery-api-jquery-com",
+   "split": "development",
+   "goal": "Open the jQuery API documentation site.",
+   "start_url": "https://jquery.com/",
+   "allowed_domains": [
+    "*.jquery.com"
+   ],
+   "dataset_domain": "jquery.com",
+   "success": {
+    "site": "api.jquery.com"
+   },
+   "verified_target": "https://api.jquery.com/"
+  },
+  {
+   "id": "epa-climate-change",
+   "split": "development",
+   "goal": "Open the EPA page about climate change.",
+   "start_url": "https://www.epa.gov/",
+   "allowed_domains": [
+    "*.epa.gov"
+   ],
+   "dataset_domain": "epa.gov",
+   "success": {
+    "page": "epa.gov/climate-change"
+   },
+   "verified_target": "https://www.epa.gov/climate-change"
+  },
+  {
+   "id": "ietf-process-rfcs",
+   "split": "development",
+   "goal": "Open the IETF page about RFCs.",
+   "start_url": "https://www.ietf.org/",
+   "allowed_domains": [
+    "*.ietf.org"
+   ],
+   "dataset_domain": "ietf.org",
+   "success": {
+    "page": "ietf.org/process/rfcs"
+   },
+   "verified_target": "https://www.ietf.org/process/rfcs/"
+  },
+  {
+   "id": "stanford-admission-stanford-edu",
+   "split": "development",
+   "goal": "Open Stanford University's admission page.",
+   "start_url": "https://www.stanford.edu/",
+   "allowed_domains": [
+    "*.stanford.edu"
+   ],
+   "dataset_domain": "stanford.edu",
+   "success": {
+    "page": "admission.stanford.edu"
+   },
+   "verified_target": "https://admission.stanford.edu/"
+  },
+  {
+   "id": "yale-admissions",
+   "split": "development",
+   "goal": "Open Yale's admissions page.",
+   "start_url": "https://www.yale.edu/",
+   "allowed_domains": [
+    "*.yale.edu"
+   ],
+   "dataset_domain": "yale.edu",
+   "success": {
+    "page": "yale.edu/admissions"
+   },
+   "verified_target": "https://www.yale.edu/admissions"
+  },
+  {
+   "id": "europa-principles-countries-history-eu-countrie",
+   "split": "development",
+   "goal": "Open the page listing the EU countries.",
+   "start_url": "https://european-union.europa.eu/index_en",
+   "allowed_domains": [
+    "*.europa.eu"
+   ],
+   "dataset_domain": "europa.eu",
+   "success": {
+    "page": "european-union.europa.eu/principles-countries-history/eu-countries_en"
+   },
+   "verified_target": "https://european-union.europa.eu/principles-countries-history/eu-countries_en"
+  },
+  {
+   "id": "arxiv-list-math-recent",
+   "split": "development",
+   "goal": "Open the arXiv list of recent papers in Mathematics (math).",
+   "start_url": "https://arxiv.org/",
+   "allowed_domains": [
+    "*.arxiv.org"
+   ],
+   "dataset_domain": "arxiv.org",
+   "success": {
+    "page_prefix": "arxiv.org/list/math/recent"
+   },
+   "verified_target": "https://arxiv.org/list/math/recent"
+  },
+  {
+   "id": "debian-news",
+   "split": "development",
+   "goal": "Open the Debian news page.",
+   "start_url": "https://www.debian.org/",
+   "allowed_domains": [
+    "*.debian.org"
+   ],
+   "dataset_domain": "debian.org",
+   "success": {
+    "page": "debian.org/news"
+   },
+   "verified_target": "https://www.debian.org/News/"
+  },
+  {
+   "id": "coursera-degrees",
+   "split": "held_out",
+   "goal": "Open the Coursera page that lists online degrees.",
+   "start_url": "https://www.coursera.org/",
+   "allowed_domains": [
+    "*.coursera.org"
+   ],
+   "dataset_domain": "coursera.org",
+   "success": {
+    "page": "coursera.org/degrees"
+   },
+   "verified_target": "https://www.coursera.org/degrees"
+  },
+  {
+   "id": "cpanel-pricing",
+   "split": "held_out",
+   "goal": "Open the cPanel pricing page.",
+   "start_url": "https://cpanel.net/",
+   "allowed_domains": [
+    "*.cpanel.net"
+   ],
+   "dataset_domain": "cpanel.net",
+   "success": {
+    "page": "cpanel.net/pricing"
+   },
+   "verified_target": "https://cpanel.net/pricing/"
+  },
+  {
+   "id": "epa-laws-regulations",
+   "split": "held_out",
+   "goal": "Open the EPA page about laws and regulations.",
+   "start_url": "https://www.epa.gov/",
+   "allowed_domains": [
+    "*.epa.gov"
+   ],
+   "dataset_domain": "epa.gov",
+   "success": {
+    "page": "epa.gov/laws-regulations"
+   },
+   "verified_target": "https://www.epa.gov/laws-regulations"
+  },
+  {
+   "id": "epa-recycle",
+   "split": "held_out",
+   "goal": "Open the EPA page about how to recycle (recycling basics).",
+   "start_url": "https://www.epa.gov/",
+   "allowed_domains": [
+    "*.epa.gov"
+   ],
+   "dataset_domain": "epa.gov",
+   "success": {
+    "page": "epa.gov/recycle"
+   },
+   "verified_target": "https://www.epa.gov/recycle"
+  },
+  {
+   "id": "europa-institutions",
+   "split": "held_out",
+   "goal": "Open the page listing the institutions and bodies of the European Union.",
+   "start_url": "https://european-union.europa.eu/index_en",
+   "allowed_domains": [
+    "*.europa.eu"
+   ],
+   "dataset_domain": "europa.eu",
+   "success": {
+    "page": "european-union.europa.eu/institutions-law-budget/institutions-and-bodies_en"
+   },
+   "verified_target": "https://european-union.europa.eu/institutions-law-budget/institutions-and-bodies_en"
+  },
+  {
+   "id": "github-pricing",
+   "split": "held_out",
+   "goal": "Open the GitHub pricing page.",
+   "start_url": "https://github.com/",
+   "allowed_domains": [
+    "*.github.com"
+   ],
+   "dataset_domain": "github.com",
+   "success": {
+    "page": "github.com/pricing"
+   },
+   "verified_target": "https://github.com/pricing"
+  },
+  {
+   "id": "gitlab-pricing",
+   "split": "held_out",
+   "goal": "Open the GitLab pricing page.",
+   "start_url": "https://about.gitlab.com/",
+   "allowed_domains": [
+    "*.gitlab.com"
+   ],
+   "dataset_domain": "gitlab.com",
+   "success": {
+    "page": "about.gitlab.com/pricing"
+   },
+   "verified_target": "https://about.gitlab.com/pricing/"
+  },
+  {
+   "id": "gov-uk-apply-driving-licence",
+   "split": "held_out",
+   "goal": "Use GOV.UK to open the page for applying for your first provisional driving licence.",
+   "start_url": "https://www.gov.uk/",
+   "allowed_domains": [
+    "*.gov.uk"
+   ],
+   "dataset_domain": "www.gov.uk",
+   "success": {
+    "page": "gov.uk/apply-first-provisional-driving-licence"
+   },
+   "verified_target": "https://www.gov.uk/apply-first-provisional-driving-licence"
+  },
+  {
+   "id": "gov-uk-state-pension-age",
+   "split": "held_out",
+   "goal": "Search GOV.UK for \"state pension age\" and open the page for checking your State Pension age.",
+   "start_url": "https://www.gov.uk/",
+   "allowed_domains": [
+    "*.gov.uk"
+   ],
+   "dataset_domain": "www.gov.uk",
+   "success": {
+    "page": "gov.uk/state-pension-age"
+   },
+   "verified_target": "https://www.gov.uk/state-pension-age"
+  },
+  {
+   "id": "ietf-about",
+   "split": "held_out",
+   "goal": "Open the page that explains what the IETF is (About the IETF).",
+   "start_url": "https://www.ietf.org/",
+   "allowed_domains": [
+    "*.ietf.org"
+   ],
+   "dataset_domain": "ietf.org",
+   "success": {
+    "page": "ietf.org/about"
+   },
+   "verified_target": "https://www.ietf.org/about/"
+  },
+  {
+   "id": "ietf-meetings-upcoming",
+   "split": "held_out",
+   "goal": "Open the IETF page listing upcoming meetings.",
+   "start_url": "https://www.ietf.org/",
+   "allowed_domains": [
+    "*.ietf.org"
+   ],
+   "dataset_domain": "ietf.org",
+   "success": {
+    "page": "ietf.org/meeting/upcoming"
+   },
+   "verified_target": "https://www.ietf.org/meeting/upcoming/"
+  },
+  {
+   "id": "nextcloud-install",
+   "split": "held_out",
+   "goal": "Open the Nextcloud page for installing/downloading Nextcloud.",
+   "start_url": "https://nextcloud.com/",
+   "allowed_domains": [
+    "*.nextcloud.com"
+   ],
+   "dataset_domain": "nextcloud.com",
+   "success": {
+    "page": "nextcloud.com/install"
+   },
+   "verified_target": "https://nextcloud.com/install/"
+  },
+  {
+   "id": "noaa-weather",
+   "split": "held_out",
+   "goal": "Open the NOAA page about weather.",
+   "start_url": "https://www.noaa.gov/",
+   "allowed_domains": [
+    "*.noaa.gov"
+   ],
+   "dataset_domain": "noaa.gov",
+   "success": {
+    "page": "noaa.gov/weather"
+   },
+   "verified_target": "https://www.noaa.gov/weather"
+  },
+  {
+   "id": "stripe-pricing",
+   "split": "held_out",
+   "goal": "Open the Stripe pricing page.",
+   "start_url": "https://stripe.com/",
+   "allowed_domains": [
+    "*.stripe.com"
+   ],
+   "dataset_domain": "stripe.com",
+   "success": {
+    "page": "stripe.com/pricing"
+   },
+   "verified_target": "https://stripe.com/pricing"
+  },
+  {
+   "id": "wikipedia-random",
+   "split": "held_out",
+   "goal": "Open the Wikipedia community portal page.",
+   "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+   "allowed_domains": [
+    "*.wikipedia.org"
+   ],
+   "dataset_domain": "wikipedia.org",
+   "success": {
+    "page": "en.wikipedia.org/wiki/wikipedia:community_portal"
+   },
+   "verified_target": "https://en.wikipedia.org/wiki/Wikipedia:Community_portal"
+  },
+  {
+   "id": "wikipedia-wiki-black-hole",
+   "split": "held_out",
+   "goal": "Use the search box to open the Wikipedia article about black holes.",
+   "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+   "allowed_domains": [
+    "*.wikipedia.org"
+   ],
+   "dataset_domain": "wikipedia.org",
+   "success": {
+    "page": "en.wikipedia.org/wiki/black_hole"
+   },
+   "verified_target": "https://en.wikipedia.org/wiki/Black_hole"
+  },
+  {
+   "id": "wikipedia-wiki-marie-curie",
+   "split": "held_out",
+   "goal": "Search Wikipedia for \"Marie Curie\" and open her article.",
+   "start_url": "https://en.wikipedia.org/wiki/Main_Page",
+   "allowed_domains": [
+    "*.wikipedia.org"
+   ],
+   "dataset_domain": "wikipedia.org",
+   "success": {
+    "page": "en.wikipedia.org/wiki/marie_curie"
+   },
+   "verified_target": "https://en.wikipedia.org/wiki/Marie_Curie"
+  },
+  {
+   "id": "wiktionary-wiki-ubiquitous",
+   "split": "held_out",
+   "goal": "Look up the word \"ubiquitous\" on Wiktionary.",
+   "start_url": "https://en.wiktionary.org/wiki/Wiktionary:Main_Page",
+   "allowed_domains": [
+    "*.wiktionary.org"
+   ],
+   "dataset_domain": "wiktionary.org",
+   "success": {
+    "page": "en.wiktionary.org/wiki/ubiquitous"
+   },
+   "verified_target": "https://en.wiktionary.org/wiki/ubiquitous"
+  },
+  {
+   "id": "wisc-admissions",
+   "split": "held_out",
+   "goal": "Open the University of Wisconsin-Madison admissions page.",
+   "start_url": "https://www.wisc.edu/",
+   "allowed_domains": [
+    "*.wisc.edu"
+   ],
+   "dataset_domain": "wisc.edu",
+   "success": {
+    "page": "wisc.edu/admissions"
+   },
+   "verified_target": "https://www.wisc.edu/admissions/"
+  },
+  {
+   "id": "wordpress-download",
+   "split": "held_out",
+   "goal": "Open the WordPress download page.",
+   "start_url": "https://wordpress.org/",
+   "allowed_domains": [
+    "*.wordpress.org"
+   ],
+   "dataset_domain": "wordpress.org",
+   "success": {
+    "page": "wordpress.org/download"
+   },
+   "verified_target": "https://wordpress.org/download/"
+  },
+  {
+   "id": "wordpress-plugins",
+   "split": "held_out",
+   "goal": "Open the WordPress plugin directory.",
+   "start_url": "https://wordpress.org/",
+   "allowed_domains": [
+    "*.wordpress.org"
+   ],
+   "dataset_domain": "wordpress.org",
+   "success": {
+    "page": "wordpress.org/plugins"
+   },
+   "verified_target": "https://wordpress.org/plugins/"
+  },
+  {
+   "id": "yale-about",
+   "split": "held_out",
+   "goal": "Open the 'About Yale' page.",
+   "start_url": "https://www.yale.edu/",
+   "allowed_domains": [
+    "*.yale.edu"
+   ],
+   "dataset_domain": "yale.edu",
+   "success": {
+    "page": "yale.edu/about-yale"
+   },
+   "verified_target": "https://www.yale.edu/about-yale"
+  }
+ ]
+}

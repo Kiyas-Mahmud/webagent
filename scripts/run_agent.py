@@ -21,7 +21,7 @@ from web_agent.eval.task2.ipc import Worker
 MODES = {'baseline': 'A', 'ours': 'C'}
 SETTINGS = json.loads((ROOT/'configs/eval/task2/qwen25_v1.json').read_text())
 CALIBRATION = Path('/home/aiub/kiyas/table2-evidence/p4-qwen25-embeddings-v1/manifest.json')
-WEB_TASKS = ROOT/'configs/eval/task2/web_tasks_v1.json'
+WEB_TASKS = ROOT/'configs/eval/task2/web_tasks_v2.json'
 
 
 def trace(folder):
@@ -55,7 +55,7 @@ def trace(folder):
 async def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--task', required=True, nargs='+',
-                        help='MiniWoB family (e.g. click-checkboxes-soft) or, with --suite web, task ids from configs/eval/task2/web_tasks_v1.json (or "all")')
+                        help='MiniWoB family (e.g. click-checkboxes-soft) or, with --suite web, task ids from configs/eval/task2/web_tasks_v2.json (or "all")')
     parser.add_argument('--suite', choices=['miniwob', 'web'], default='miniwob',
                         help='web = live real-website tasks on domains from the training dataset (1280x720)')
     parser.add_argument('--mode', choices=MODES, required=True)

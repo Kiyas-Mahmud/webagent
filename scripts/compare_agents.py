@@ -27,13 +27,13 @@ from web_agent.eval.task2.ipc import Worker
 
 SYSTEMS = {'A': 'baseline', 'C': 'ours'}
 SETTINGS = ROOT/'configs/eval/task2/qwen25_v1.json'
-WEB_TASKS = ROOT/'configs/eval/task2/web_tasks_v1.json'
+WEB_TASKS = ROOT/'configs/eval/task2/web_tasks_v2.json'
 CALIBRATION = Path('/home/aiub/kiyas/table2-evidence/p4-qwen25-embeddings-v1/manifest.json')
 SOURCES = ['src/web_agent/eval/task2/live.py', 'src/web_agent/eval/task2/web_worker.py',
            'src/web_agent/eval/task2/native_model.py', 'src/web_agent/eval/task2/model_worker.py',
            'src/web_agent/eval/task2/assessment.py', 'src/web_agent/eval/task2/elements.py',
            'src/web_agent/memory/experience.py', 'scripts/compare_agents.py',
-           'configs/eval/task2/web_tasks_v1.json', 'configs/eval/task2/qwen25_v1.json']
+           'configs/eval/task2/web_tasks_v2.json', 'configs/eval/task2/qwen25_v1.json']
 
 
 def sha(path):
@@ -55,8 +55,9 @@ def freeze(out, repeats, only=None):
     for repeat in range(repeats):
         for task in suite['tasks']:
             systems = ('A', 'C') if repeat % 2 == 0 else ('C', 'A')
-            order += [{'repeat': repeat, 'task': task['id'], 'goal': task['goal'], 'system': s} for s in systems]
-    plan = {'schema': 'web-comparison-v1', 'frozen_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'repeats': repeats,
+            order += [{'repeat': repeat, 'task': task['id'], 'goal': task['goal'], 'system': s,
+                       'split': task.get('split', 'development')} for s in systems]
+    plan = {'schema': 'web-comparison-v2', 'frozen_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'repeats': repeats,
             'systems': SYSTEMS, 'settings': settings, 'suite': suite['suite'], 'episodes': order,
             'sources': {p: sha(ROOT/p) for p in SOURCES},
             'analysis': 'paired per (task, repeat): exact two-sided sign test on discordant pairs; completion = URL rule'}
@@ -141,7 +142,19 @@ def report(out):
                          'memory_shown': sum(r['counters']['memory_exposures'] for r in rs),
                          'memory_written': sum(r['counters'].get('memory_writes', 0) for r in rs),
                          'mean_seconds': round(sum(r['elapsed_seconds'] for r in rs)/max(len(rs), 1))}
-    result = {'planned_episodes': len(plan['episodes']), 'finished_episodes': len(results), 'pairs': len(pairs),
+    # Per split (development tasks were observed while designing recovery; held-out tasks were not).
+    split_of = {e['task']: e.get('split', 'development') for e in plan['episodes']}
+    by_split = {}
+    for name in sorted(set(split_of.values())):
+        ps = [p for p in pairs if split_of[p[1]] == name]
+        imp = [p for p in improved if split_of[p[1]] == name]; wor = [p for p in worsened if split_of[p[1]] == name]
+        a_fail = [p for p in ps if not results[p+('A',)]['completion']]
+        a_ok = [p for p in ps if results[p+('A',)]['completion']]
+        by_split[name] = {'pairs': len(ps), 'baseline_completed': len(a_ok), 'ours_completed': sum(results[p+('C',)]['completion'] for p in ps),
+                          'helped': len(imp), 'hurt': len(wor), 'exact_sign_test_p': exact_sign_p(len(imp), len(wor)),
+                          'rescue_rate_on_baseline_failures': (len(imp)/len(a_fail)) if a_fail else None,
+                          'harm_rate_on_baseline_successes': (len(wor)/len(a_ok)) if a_ok else None}
+    result = {'planned_episodes': len(plan['episodes']), 'finished_episodes': len(results), 'pairs': len(pairs), 'by_split': by_split,
               'summary': summary, 'ours_minus_baseline': (len(improved)-len(worsened))/len(pairs) if pairs else None,
               'improved_pairs': [list(p) for p in improved], 'worsened_pairs': [list(p) for p in worsened],
               'exact_sign_test_p': exact_sign_p(len(improved), len(worsened))}
@@ -152,6 +165,11 @@ def report(out):
               f"memory shown {s['memory_shown']} written {s['memory_written']}  mean {s['mean_seconds']}s/episode")
     print(f"  pairs: ours better {len(improved)}, baseline better {len(worsened)}, same {len(pairs)-len(improved)-len(worsened)}  "
           f"exact sign test p = {result['exact_sign_test_p']:.3f}")
+    for name, b in by_split.items():
+        rr = f"{b['rescue_rate_on_baseline_failures']:.0%}" if b['rescue_rate_on_baseline_failures'] is not None else 'n/a'
+        hr = f"{b['harm_rate_on_baseline_successes']:.0%}" if b['harm_rate_on_baseline_successes'] is not None else 'n/a'
+        print(f"  [{name}] pairs {b['pairs']}  baseline {b['baseline_completed']}  ours {b['ours_completed']}  "
+              f"helped {b['helped']} hurt {b['hurt']}  p = {b['exact_sign_test_p']:.3f}  rescue {rr}  harm {hr}")
 
 
 def main():

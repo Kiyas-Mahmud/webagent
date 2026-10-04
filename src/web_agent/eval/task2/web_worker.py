@@ -1,6 +1,6 @@
 """Live real-website environment for the agent (same IPC contract as browser_worker).
 
-Tasks come from configs/eval/task2/web_tasks_v1.json: sites taken from the
+Tasks come from configs/eval/task2/web_tasks_v2.json: sites taken from the
 user's own dataset, rendered at the training screenshot size (1280x720).
 Native Browser Use acts through CDP on this Chromium; this worker only resets,
 observes and scores. The completion rule is never exposed to the agent.
@@ -13,9 +13,33 @@ import sys
 import traceback
 
 CHROME = '/home/aiub/kiyas/table2-inputs/miniwob-browsers/chromium-1117/chrome-linux/chrome'
-TASKS = Path(__file__).resolve().parents[4]/'configs/eval/task2/web_tasks_v1.json'
+TASKS = Path(__file__).resolve().parents[4]/'configs/eval/task2/web_tasks_v2.json'
 # Headless Chromium announces itself as "HeadlessChrome"; several dataset sites refuse that.
 USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+
+
+def page_identity(url):
+    """Lower-cased host without 'www.' plus path without trailing slash; query and fragment ignored."""
+    from urllib.parse import urlsplit
+    parts = urlsplit((url or '').lower())
+    host = (parts.hostname or '')
+    host = host[4:] if host.startswith('www.') else host
+    return host + parts.path.rstrip('/')
+
+
+def task_complete(success, url):
+    """web-tasks-v2 rules. 'page': exact page; 'page_prefix': that page or a sub-path (list pages);
+    'site': any page on that host. The v1 'url_contains' rule is kept for reproducing v1 runs."""
+    page = page_identity(url)
+    if 'page' in success:
+        return page == success['page']
+    if 'page_prefix' in success:
+        return page == success['page_prefix'] or page.startswith(success['page_prefix'] + '/')
+    if 'site' in success:
+        return page.split('/')[0] == success['site']
+    if 'url_contains' in success:
+        return success['url_contains'] in (url or '').lower()
+    raise ValueError('Unknown success rule')
 
 
 def clamp_rounding(snapshot, tolerance=1e-5):
@@ -74,6 +98,7 @@ PAGE_FACTS_JAVASCRIPT = r"""
 }
 """
 STOPWORDS = {'the', 'a', 'an', 'of', 'and', 'or', 'to', 'on', 'in', 'for', 'that', 'which', 'with', 'from', 'by',
+             'you', 'your', 'is', 'are', 'all', 'need', 'it', 'its', 'at', 'as', 'be',
              'open', 'page', 'pages', 'about', 'lists', 'list', 'its', 'his', 'her', 'their', 'this', 'site', 'website',
              'ways', 'way', 'find', 'look', 'up', 'go', 'use', 'using', 'checking', 'check', 'navigate', 'view'}
 
@@ -199,7 +224,7 @@ def main():
             elif op == 'score':
                 # Independent scorer only: never exposed to actor or model inputs.
                 url = page().url
-                done = task['success']['url_contains'] in url.lower()
+                done = task_complete(task['success'], url)
                 value = {'terminated': done, 'raw_reward': 1.0 if done else 0.0, 'binary_reward': 1.0 if done else 0.0,
                          'invalid_url': False, 'url': url}
             elif op == 'facts':
