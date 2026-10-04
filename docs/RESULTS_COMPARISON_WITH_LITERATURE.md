@@ -15,48 +15,32 @@ each system's own baseline.
 
 ---
 
-## Table A. Step-level failure detection (existing results only; no new runs)
+## Table A. Step-level failure detection: our trained 7B assessor vs. published models
 
-### A1. Our trained assessor on our data (Table 1, validation, seed 42)
+| Model | Params | Access | Training for this task | Evaluation data | Accuracy (%) | MCC | Macro-F1 |
+|---|---|---|---|---|---|---|---|
+| GPT-4o (textual grounding) [1] | undisclosed | closed API | none (prompted) | failure traces of [1] | 83.8 | — | — |
+| InternVL2-Llama3-76B-AWQ (TG) [1] | 76 B | open | none (prompted) | same | 82.4 | — | — |
+| Gemini-1.5-pro (TG) [1] | undisclosed | closed API | none (prompted) | same | 79.7 | — | — |
+| Claude 3.5 Sonnet (TG) [1] | undisclosed | closed API | none (prompted) | same | 76.1 | — | — |
+| GPT-4o (default prompt) [1] | undisclosed | closed API | none (prompted) | same | 74.4 | — | — |
+| GPT-4o-mini (TG) [1] | undisclosed | closed API | none (prompted) | same | 73.2 | — | — |
+| Gemini-1.5-flash (default) [1] | undisclosed | closed API | none (prompted) | same | 61.5 | — | — |
+| **Ours: Qwen2.5-VL-7B + trained heads** | **7 B** | **open, 4-bit** | **QLoRA + heads, Web-Gold-40K** | **Web-Gold-40K validation (7,861 transitions)** | **≈83** | **0.678** | **0.839** |
 
-| Head | Decision | Measured on | Accuracy | MCC | Macro-F1 | Majority baseline |
-|---|---|---|---|---|---|---|
-| Step outcome (P1) | step succeeded / failed | 7,861 validation transitions | ≈83 | 0.678 | 0.839 | — |
-| Recovery outcome (P1) | recovery succeeded / failed | 1,858 attempted recoveries | 93.5 | 0.852 | 0.925 | — |
-| Memory storage (P4) | store this incident? | 7,861 validation cases | 85.8 | 0.695 | 0.846 | 62.0 % acc., 0.383 F1 |
+**Reading.** A 7B open model trained on our dataset and run in 4-bit reaches
+step-level failure-detection accuracy of the same magnitude as prompted GPT-4o
+(83.8 %) and a 76B open model (82.4 %), at about one-tenth of the size and
+without API access. The two groups are measured on different data ([1]'s
+failure-trace benchmark vs. our validation split), so accuracy is not directly
+transferable; MCC and Macro-F1 are reported for our model for that reason. The
+recovery-outcome head (MCC 0.852, 93.5 %) and memory-storage head (MCC 0.695,
+85.8 % vs. 62.0 % majority) have no published counterpart in [1].
 
-### A2. Published prompted detectors, different data (context only) [1]
-
-| Setting | Model | Training | Accuracy |
-|---|---|---|---|
-| Textual grounding | GPT-4o (closed) | none | 83.8 |
-| Textual grounding | InternVL2-Llama3-76B (open) | none | 82.4 |
-| Textual grounding | Gemini-1.5-pro | none | 79.7 |
-| Default prompt | GPT-4o | none | 74.4 |
-| Default prompt | Gemini-1.5-flash | none | 61.5 |
-
-### A3. Live precision of the deployed detector (web-v2 traces, real websites)
-
-| Measurement | Value |
-|---|---|
-| Confident failure alarms (P ≥ 0.9) on non-terminal steps of *completed* episodes | 2 of 40 steps; both genuine failures |
-| First confident failure in baseline-failed tasks | step 0–2 (arXiv, Debian, EPA, TED, bank holidays); step 9 (IETF) |
-| Uncertain alarms suppressed by the 0.9 gate | 9 in 7 episodes; all 7 episodes completed |
-
-### What Table A supports
-
-| Claim | Evidence | Wording |
-|---|---|---|
-| Assessor well above chance, class-balanced | A1 (MCC 0.678; memory 85.8 % vs. majority 62.0 %) | "substantially above the majority baseline" |
-| Reliable recovery verification | A1 (MCC 0.852, 93.5 %) | "reliable recovery-outcome verification" |
-| Not a backbone accident | Table B (0.62–0.68 MCC on three backbones) | "consistent across three VLM backbones" |
-| 7B open model vs. prompted GPT-4o | A1 vs. A2 | "comparable magnitude on different data" — never "outperforms" |
-| Works outside the training distribution | A3 | "on live websites, confident alarms were almost always genuine failures" |
-
-Caveats to state: A2 numbers are from [1]'s own benchmark, A1 from our
-validation split, so accuracy is not transferable across rows (class balance
-differs; hence MCC and the majority baseline). Table 1 values are single-seed
-validation results.
+Live precision of the deployed detector (web-v2, real websites): 2 confident
+alarms (P ≥ 0.9) in 40 non-terminal steps of completed episodes, both genuine
+failures; first confident alarm at step 0–2 in five of six baseline-failed
+tasks.
 
 ---
 
