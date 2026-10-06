@@ -1,8 +1,8 @@
 # Results in context: our model and agent compared with published work
 
 Prepared 2026-10-04. Model-level results are final (Table 1, validation set).
-Agent-level results for our system will be filled in when the paired run
-`web-v3` completes (42 tasks × 2 repeats × 2 systems). Published numbers are
+Agent-level results are from the completed paired run `web-v3`
+(2026-10-04 to 2026-10-06; 42 tasks × 2 repeats × 2 systems = 168 episodes). Published numbers are
 taken from the cited papers' tables and should be checked against the original
 PDFs before use in the thesis.
 
@@ -119,8 +119,9 @@ they are computed on 240 / 120 selected cases; both are reported as such.
 | OSCAR [6] | state-aware re-planning | GPT-4 | GAIA (vs. FRIDAY) | 22.4 | 28.7 | +6.3 | no | — |
 | SkillWeaver [7] | self-discovered skills | GPT-4o | WebArena | 22.6 | 29.8 | +7.2 | no | — |
 | ReUseIt [8] | reusable workflow memory | — | 15 task families | 24.2 | 70.1 | +45.9 | no | — |
-| **Ours — development split** | learned failure detection + adaptive recovery + experience memory | **Qwen2.5-VL-7B base** | 20 real-website tasks, 2 repeats | *pending* | *pending* | *pending* | **yes (exact sign test)** | no |
-| **Ours — held-out split** | same | same | 22 real-website tasks, 2 repeats | *pending* | *pending* | *pending* | **yes** | **yes** |
+| **Ours — development split** | learned failure detection + adaptive recovery + experience memory | **Qwen2.5-VL-7B base** | 20 real-website tasks, 2 repeats (40 pairs) | 70.0 | 87.5 | **+17.5** (helped 8, hurt 1, p = 0.039) | **yes (exact sign test)** | no |
+| **Ours — held-out split** | same | same | 22 real-website tasks, 2 repeats (44 pairs) | 75.0 | 84.1 | **+9.1** (helped 5, hurt 1, p = 0.219) | **yes** | **yes** |
+| **Ours — all tasks** | same | same | 42 tasks, 84 pairs | 72.6 | 85.7 | **+13.1** (helped 13, hurt 2, p = 0.007) | **yes** | mixed |
 
 Observations that already hold:
 

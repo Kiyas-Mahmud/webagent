@@ -1,5 +1,69 @@
 # Project Progress Tracker
 
+## 2026-10-06 — web-v3 COMPLETE: 168/168 episodes, 84 pairs
+
+- Resumed 12:42 (13 left); the Coursera r0 baseline episode hit a 60 s
+  page-load timeout (infrastructure) and was rerun alone at 14:49 → completed.
+- **Final (84 pairs, 42 tasks × 2 repeats):**
+  - Baseline 61/84 = 72.6 % [62.3, 81.0]; ours 72/84 = 85.7 % [76.7, 91.6]
+    (Wilson 95 % CI). Helped 13, hurt 2, same 69; exact sign test p = 0.007.
+  - Development (40 pairs): A 28 (70.0 %), C 35 (87.5 %); helped 8, hurt 1;
+    p = 0.039; rescue 8/12 = 67 %; harm 1/28 = 4 %.
+  - Held-out (44 pairs): A 33 (75.0 %), C 37 (84.1 %); helped 5, hurt 1;
+    p = 0.219; rescue 5/11 = 45 %; harm 1/33 = 3 %.
+  - Per repeat: r0 A 28 / C 36; r1 A 33 / C 36.
+  - Helped: cPanel pricing ×2, EPA climate ×2, bank holidays, renew passport,
+    IETF RFCs, Wikipedia community portal, Alan Turing, Eiffel Tower, Marie
+    Curie, GOV.UK driving licence, TED talks. Hurt: Wikipedia black hole (r0),
+    jQuery API (r1).
+  - Both systems failed on all 4 runs: debian-news, epa-recycle, noaa-weather.
+  - Cost: mean episode 175 s (C) vs 220 s (A); on the 59 both-completed pairs,
+    mean steps 3.32 (C) vs 3.08 (A).
+  - Recovery activity (C): 31/84 episodes had ≥1 recovery, 55 recovery
+    attempts, 69 option choices, 30 guard blocks, 22 uncertain alarms gated,
+    memory shown 10 times, 34 memory writes.
+- Next: error analysis (labelling script over all 168 episodes, taxonomy
+  F1–F6, pipeline stages for C, tables E1–E3, case studies).
+
+## 2026-10-05 — web-v3 resumed (74/168 done, 94 to run)
+
+- Network back (gov.uk, epa.gov, ietf.org 200). Frozen sources unchanged.
+- **Outage rule (decided before resuming, applied to all counted episodes of
+  both systems):** an episode with any `chrome-error://` observation is
+  infrastructure. Yesterday's outage was intermittent DNS failure, 32 reset
+  failures between 13:44:15 and 16:44. Only one counted episode matched:
+  `0-ietf-process-rfcs-C` (observations 4–7 chrome-error; ended 13:44:15, the
+  second the outage began). Moved to `interrupted/…-network`, logged in
+  `interrupted.jsonl`, will be rerun. `0-noaa-weather-C` (about:blank, no
+  network-error evidence) and the hurt pair `wikipedia-wiki-black-hole` stay
+  counted.
+- Run resumed 12:04; auto-stop armed for 16:45.
+
+## 2026-10-04 (end of day) — web-v3 partial: 75/168 episodes, auto-stopped 16:45
+
+- **Partial report (37 complete pairs; not final):** baseline 26/37, ours
+  34/38 episodes; helped 8, hurt 1, exact sign p = 0.039.
+  - development: 26 pairs, baseline 18, ours 24, helped 6, hurt 0.
+  - held-out: 11 pairs, baseline 8, ours 9, helped 2, hurt 1.
+  - Helped: EPA climate, bank holidays, renew passport, Wikipedia community
+    portal, Alan Turing, Eiffel Tower, Marie Curie (all r0), TED talks (r1).
+  - Hurt: `wikipedia-wiki-black-hole` r0 — ours ended on "Black Holes and
+    Baby Universes…" with 5 invalid actor outputs (native_max_failures).
+- **Network outage during the run:** 31 episodes failed at reset with
+  `ERR_NAME_NOT_RESOLVED` (lab DNS/internet down for a stretch). They are
+  infrastructure errors: not counted, rerun automatically on the next `run`.
+  The run had reached episode 107/168 (repeat 1) when stopped.
+- **To check before resuming:** two counted C episodes ended on a browser
+  error/blank page (`0-ietf-process-rfcs-C` chrome-error, `0-noaa-weather-C`
+  about:blank) and may be outage-damaged. Decide a neutral rule (e.g. an
+  episode whose final page is a browser error page is infrastructure, for
+  both systems) *before* looking further, then rerun those.
+- Also today: `docs/RESULTS_COMPARISON_WITH_LITERATURE.md` (Tables A–D) and
+  `docs/Results_Comparison_Handout.pdf` (5 tables + plain-English notes for
+  the supervisor; PDF not pushed).
+- Resume: same command as the runbook with `web-v3`; ≈ 93 episodes left
+  (≈ 6–7 h).
+
 ## 2026-10-04 — Task suite v2 (exact-page rules, held-out split); web-v3 run started
 
 - **Decision (user):** drop the two invalid tasks (arXiv paper, Debian distrib)

@@ -1,6 +1,7 @@
 # Failure-aware web agent: method reference for the methodology chapter
 
-Status: 2026-10-01 (lab session end). This document records the agent exactly as
+Status: 2026-10-06. Final paired results: [TASK2_WEB_V3_RESULTS.md](TASK2_WEB_V3_RESULTS.md).
+Originally written 2026-10-01 (lab session end). This document records the agent exactly as
 implemented in this repository, with every setting and the evidence behind each
 design decision, so the methodology chapter can be written from it. Numbers in
 §8 are **development checks**, not the final evaluation (see §9).
@@ -395,11 +396,10 @@ Representative rescues (all actions chosen by the actor):
 - **Memory:** storage is validated offline (Table 1); reuse effect is only
   measurable with repeated visits.
 
-## 10. Next steps (planned)
-1. Write `web_tasks_v2.json` with exact-page rules and the two decided goals;
-   fix the `you` stop word in goal matching.
-2. Add ~20 held-out tasks from the dataset's domains (multi-step: search,
-   menus), verified live before freezing.
-3. Freeze `web-v3`; paired run (≈ 40 tasks × 2 repeats × 2 systems ≈ 16 h,
-   resumable over ~3 lab days); report development and held-out sets
-   separately, plus memory reuse on repeat 2.
+## 10. Final evaluation (done) and next steps
+- `web_tasks_v2.json` (42 tasks, exact-page rules, 20 development + 22
+  held-out) frozen as `web-v3`; run completed 2026-10-06. Results in
+  [TASK2_WEB_V3_RESULTS.md](TASK2_WEB_V3_RESULTS.md): baseline 72.6 % → ours
+  85.7 % (84 pairs; helped 13, hurt 2; p = 0.007); held-out +9.1 (p = 0.22).
+- Next: error analysis over all 168 episodes (taxonomy F1–F6, pipeline
+  stages, case studies), then the thesis results chapter.
