@@ -18,6 +18,7 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.patches
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 
@@ -32,9 +33,10 @@ OURS_LIGHT = '#9ec5f4' # same hue, lighter step: totals of Ours episodes
 BASE = '#8c8b85'       # Browser Use alone
 HURT = '#e34948'
 SAME = '#d9d8d2'
-INK = '#0b0b0b'
-INK2 = '#52514e'
-MUTED = '#898781'
+INK = '#111111'
+# All text is near-black for legibility in print and on projectors (user rule: no light text).
+INK2 = INK
+MUTED = INK
 GRID = '#e8e7e1'
 AXIS = '#c3c2b7'
 
@@ -505,8 +507,472 @@ def fig7_backbones():
     save(fig, 'fig7_backbones')
 
 
+def _band(ax, x0, x1, top0, bot0, top1, bot1, color, alpha=1.0):
+    """Filled S-shaped band between two vertical intervals (a Sankey flow)."""
+    from matplotlib.path import Path as MPath
+    from matplotlib.patches import PathPatch
+    xm = (x0 + x1) / 2
+    verts = [(x0, top0), (xm, top0), (xm, top1), (x1, top1), (x1, bot1), (xm, bot1), (xm, bot0), (x0, bot0), (x0, top0)]
+    codes = [MPath.MOVETO, MPath.CURVE4, MPath.CURVE4, MPath.CURVE4, MPath.LINETO, MPath.CURVE4, MPath.CURVE4,
+             MPath.CURVE4, MPath.CLOSEPOLY]
+    ax.add_patch(PathPatch(MPath(verts, codes), facecolor=color, edgecolor='none', alpha=alpha, zorder=2))
+
+
+def fig8_outcome_flow():
+    """Sankey: Browser Use outcome -> Browser Use + Ours outcome over the 84 pairs."""
+    _, eps = load_episodes()
+    pairs = pairs_by_split(eps)['All']
+    flows = {(a, c): sum(1 for x, y in pairs if x == a and y == c) for a in (True, False) for c in (True, False)}
+    assert flows == {(True, True): 59, (True, False): 2, (False, True): 13, (False, False): 10}, flows
+    left = {True: flows[(True, True)] + flows[(True, False)], False: flows[(False, True)] + flows[(False, False)]}
+    right = {True: flows[(True, True)] + flows[(False, True)], False: flows[(True, False)] + flows[(False, False)]}
+    gap, node_w, x0, x1 = 7, 0.035, 0.0, 1.0
+    total = len(pairs)
+    # node intervals (y measured downward from the top; plotted with inverted axis)
+    lnode = {True: (0, left[True]), False: (left[True] + gap, left[True] + gap + left[False])}
+    rnode = {True: (0, right[True]), False: (right[True] + gap, right[True] + gap + right[False])}
+    fig, ax = plt.subplots(figsize=(140 * MM, 74 * MM))
+    styles = {(True, True): ('#d9d8d2', None), (False, False): ('#bdbcb6', None),
+              (False, True): (OURS, 'rescued'), (True, False): (HURT, 'lost')}
+    # outgoing order on the left and incoming order on the right keep crossings to the unavoidable one
+    lcursor = {True: lnode[True][0], False: lnode[False][0]}
+    rcursor = {True: rnode[True][0], False: rnode[False][0]}
+    order = [(True, True), (True, False), (False, True), (False, False)]
+    rorder = [(True, True), (False, True), (True, False), (False, False)]
+    rstart = {}
+    for key in rorder:
+        rstart[key] = rcursor[key[1]]
+        rcursor[key[1]] += flows[key]
+    for key in order:
+        n = flows[key]
+        l0 = lcursor[key[0]]; lcursor[key[0]] += n
+        r0 = rstart[key]
+        color, _ = styles[key]
+        _band(ax, x0 + node_w, x1 - node_w, l0, l0 + n, r0, r0 + n, color, alpha=0.95)
+        styles[key] = (color, styles[key][1], (l0 + n / 2, r0 + n / 2))
+    for side, nodes, x, color in (('left', lnode, x0, BASE), ('right', rnode, x1 - node_w, OURS)):
+        for done, (a, b) in nodes.items():
+            ax.add_patch(plt.Rectangle((x, a), node_w, b - a, color=color, lw=0, zorder=3))
+            n = b - a
+            text = f"{'Completed' if done else 'Failed'}\n{n} ({100 * n / total:.1f}%)"
+            if side == 'left':
+                ax.text(x - 0.02, (a + b) / 2, text, ha='right', va='center', fontsize=8, color=INK, linespacing=1.3)
+            else:
+                ax.text(x + node_w + 0.02, (a + b) / 2, text, ha='left', va='center', fontsize=8, color=INK, linespacing=1.3)
+    # flow labels
+    lab = {(True, True): f'{flows[(True, True)]} both completed', (False, False): f'{flows[(False, False)]} both failed',
+           (False, True): f'{flows[(False, True)]} rescued', (True, False): f'{flows[(True, False)]} lost'}
+    pos = {(True, True): (0.5, None), (False, False): (0.5, None), (False, True): (0.3, None), (True, False): (0.74, None)}
+    lost_text = lab.pop((True, False))
+    # the 'lost' band is two units thick: label it in the white gap between the right-hand nodes
+    ax.text(x1 - node_w - 0.06, rnode[True][1] + gap / 2 - 0.3, lost_text, ha='right', va='center', fontsize=7.5,
+            color=INK, fontweight='bold')
+    for key, text in lab.items():
+        lm, rm = styles[key][2]
+        t = pos[key][0]
+        ym = lm + (rm - lm) * (3 * t ** 2 - 2 * t ** 3)   # follows the band's S-curve
+        white = key in ((False, True), (True, False))
+        ax.text(x0 + node_w + t * (x1 - x0 - 2 * node_w), ym, text, ha='center', va='center', fontsize=7.5,
+                color='white' if white else INK, fontweight='bold',
+                bbox=None if white else dict(boxstyle='round,pad=0.15', facecolor='white', edgecolor='none', alpha=0.85))
+    ax.text(x0 + node_w / 2, -4.5, 'Browser Use', ha='center', va='bottom', fontsize=8.5, color=INK, fontweight='bold')
+    ax.text(x1 - node_w / 2, -4.5, 'Browser Use + Ours', ha='center', va='bottom', fontsize=8.5, color=INK, fontweight='bold')
+    ax.set_xlim(-0.32, 1.32)
+    ax.set_ylim(total + gap + 2, -9)
+    ax.axis('off')
+    save(fig, 'fig8_outcome_flow')
+
+
+def fig9_step_budget():
+    """Cumulative completion as a function of the step budget."""
+    _, eps = load_episodes()
+    budget = 15
+    fig, ax = plt.subplots(figsize=(140 * MM, 64 * MM))
+    finals = {}
+    for s_, color, label in (('A', BASE, 'Browser Use'), ('C', OURS, 'Browser Use + Ours')):
+        done_at = [v['agent_steps'] for k, v in eps.items() if k[2] == s_ and v['completion']]
+        assert max(done_at) <= budget
+        n = sum(1 for k in eps if k[2] == s_)
+        ks = list(range(0, budget + 1))
+        ys = [100 * sum(d <= k for d in done_at) / n for k in ks]
+        ax.step(ks, ys, where='post', color=color, lw=1.8, zorder=3)
+        ax.plot(ks[1:], ys[1:], ls='none', marker='o', markersize=3, color=color, markeredgecolor='white',
+                markeredgewidth=0.5, zorder=4)
+        finals[s_] = ys[-1]
+        ax.text(budget + 0.3, ys[-1], f'{label}  {ys[-1]:.1f}%', ha='left', va='center', fontsize=7.5, color=INK,
+                fontweight='bold')
+    check('final A', finals['A'], 72.6)
+    check('final C', finals['C'], 85.7)
+    ax.annotate('', xy=(budget - 0.4, finals['C']), xytext=(budget - 0.4, finals['A']),
+                arrowprops=dict(arrowstyle='<->', color=INK, lw=0.7, shrinkA=1, shrinkB=1))
+    ax.text(budget - 0.7, (finals['A'] + finals['C']) / 2 - 2.9, f'+{finals["C"] - finals["A"]:.1f} pts', ha='right',
+            va='center', fontsize=7.5, color=INK)
+    ax.set_xlim(0, budget + 0.2)
+    ax.set_xticks(range(0, budget + 1, 1))
+    ax.set_ylim(0, 100)
+    ax.set_yticks(range(0, 101, 20))
+    ax.set_xlabel('Step budget (maximum actions allowed per episode)')
+    ax.set_ylabel('Tasks completed within budget (%)')
+    ax.grid(axis='y', zorder=0)
+    ax.spines['bottom'].set_bounds(0, budget)
+    save(fig, 'fig9_step_budget')
+
+
+def longest_identical_run(folder):
+    """Longest run of consecutive identical executed actions (same type and element; scrolls by direction)."""
+    best = run = 0
+    prev = None
+    for a in sorted(folder.glob('action-*.json')):
+        e = json.loads(a.read_text())
+        t = e.get('action_type')
+        if t is None:
+            prev, run = None, 0
+            continue
+        if t == 'SCROLL':
+            sig = ('SCROLL', 'up' if '"down": false' in (e.get('value') or '') else 'down')
+        else:
+            el = e.get('element')
+            sig = (t, json.dumps(el, sort_keys=True) if el else e.get('target'),
+                   (e.get('value') or '') if t in ('TYPE', 'NAVIGATE', 'PRESS_KEY', 'SELECT') else '')
+        run = run + 1 if sig == prev else 1
+        prev = sig
+        best = max(best, run)
+    return best
+
+
+def fig10_loops():
+    """Distribution of the longest identical-action run per episode."""
+    _, eps = load_episodes()
+    runs = {s_: [(longest_identical_run(v['folder']), v['completion']) for k, v in eps.items() if k[2] == s_] for s_ in 'AC'}
+    loops = {s_: sum(b >= 5 for b, _ in runs[s_]) for s_ in 'AC'}
+    failed_loops = {s_: sum(b >= 5 and not ok for b, ok in runs[s_]) for s_ in 'AC'}
+    assert loops == {'A': 16, 'C': 7} and failed_loops == {'A': 15, 'C': 3}, (loops, failed_loops)
+    buckets = [('0\u20131', 0, 1), ('2', 2, 2), ('3\u20134', 3, 4), ('5\u20139', 5, 9), ('10\u201315', 10, 15)]
+    fig, ax = plt.subplots(figsize=(140 * MM, 62 * MM))
+    w = 0.36
+    for off, s_, color, label in ((-w / 2 - 0.02, 'A', BASE, 'Browser Use'), (w / 2 + 0.02, 'C', OURS, 'Browser Use + Ours')):
+        counts = [sum(lo <= b <= hi for b, _ in runs[s_]) for _, lo, hi in buckets]
+        xs = [i + off for i in range(len(buckets))]
+        ax.bar(xs, counts, w, color=color, label=label, zorder=2)
+        for x, c in zip(xs, counts):
+            ax.text(x, c + 0.8, str(c), ha='center', va='bottom', fontsize=7.5, color=INK)
+    ax.set_xticks(range(len(buckets)))
+    ax.set_xticklabels([b[0] for b in buckets])
+    ax.tick_params(axis='x', length=0)
+    ax.set_xlabel('Longest run of the same action repeated in a row (per episode)')
+    ax.set_ylabel('Number of episodes')
+    ax.set_ylim(0, 66)
+    ax.set_yticks(range(0, 61, 10))
+    ax.grid(axis='y', zorder=0)
+    ax.axvspan(2.5, 4.5, color='#f1f0ec', zorder=0)
+    ax.text(3.5, 40, f'Loops of 5 or more identical actions\nBrowser Use: {loops["A"]} episodes ({failed_loops["A"]} failed)\n'
+                     f'Browser Use + Ours: {loops["C"]} episodes ({failed_loops["C"]} failed)',
+            ha='center', va='center', fontsize=7.5, color=INK, linespacing=1.4)
+    ax.legend(loc='upper right', handlelength=1.2)
+    ax.set_xlim(-0.6, len(buckets) - 0.4)
+    save(fig, 'fig10_action_loops')
+
+
+def fig11_case_study():
+    """Case study (held-out task cPanel pricing, repeat 2): screenshots of both systems."""
+    from PIL import Image
+    pair = '1-cpanel-pricing'
+    ep = {s_: RUN / 'episodes' / f'{pair}-{s_}' for s_ in 'AC'}
+    shots = {s_: RUN / 'browser/20261005T120423' / f'cpanel-pricing-r1-{s_}' / 'images' for s_ in 'AC'}
+    res = {s_: json.loads((ep[s_] / 'result.json').read_text()) for s_ in 'AC'}
+    assert not res['A']['completion'] and res['C']['completion']
+    pfail = {int(a.stem[-4:]): json.loads(a.read_text())['assessment'].get('outcome_probabilities', {}).get('FAILURE')
+             for a in ep['C'].glob('assessment-*.json')}
+    choice = json.loads((ep['C'] / 'actor-0003-choice.json').read_text())
+    assert choice['chosen'] == 1 and 'Pricing' in choice['options'][0]['label']
+    assert abs(pfail[1] - 0.98) < 0.005 and (ep['C'] / 'note-0001.json').exists()
+    a_actions = [json.loads(f.read_text()).get('action_type') for f in sorted(ep['A'].glob('action-*.json'))]
+    assert a_actions[:14] == ['SCROLL'] * 14
+
+    def thumb(path):
+        im = Image.open(path).convert('RGB')
+        return im.resize((560, 315), Image.LANCZOS)
+
+    fig = plt.figure(figsize=(190 * MM, 100 * MM))
+    cols, w, h, gap = 5, 0.178, 0.178 * (190 / 100) * 315 / 560, 0.027
+    x0 = 0.012
+    rows_y = {'A': 0.6, 'C': 0.14}
+
+    def place(col, y, img, caption, border=AXIS, lw=0.5):
+        ax = fig.add_axes([x0 + col * (w + gap), y, w, h])
+        ax.imshow(img)
+        ax.set_xticks([]); ax.set_yticks([])
+        for sp in ax.spines.values():
+            sp.set_visible(True); sp.set_color(border); sp.set_linewidth(lw)
+        fig.text(x0 + col * (w + gap) + w / 2, y - 0.018, caption, ha='center', va='top', fontsize=7, color=INK,
+                 linespacing=1.3)
+
+    fig.text(x0, rows_y['A'] + h + 0.045, 'Browser Use alone: scrolls down 14 times and runs out of steps (task failed)',
+             ha='left', va='bottom', fontsize=8.5, color=INK, fontweight='bold')
+    for col, (k, cap) in enumerate(((0, 'Start page'), (1, 'Step 1: scroll down'), (2, 'Step 2: scroll down'),
+                                    (7, 'Steps 3\u20137: scroll down'), (14, 'Step 14: scroll down\nend of page, budget used up'))):
+        place(col, rows_y['A'], thumb(shots['A'] / f'{k:04d}.png'), cap, border=BASE, lw=1.0)
+    fig.text(x0, rows_y['C'] + h + 0.045, f"Browser Use + Ours: failure detected at step 2, recovery option taken, task completed "
+             f"(scored after step {res['C']['agent_steps']})",
+             ha='left', va='bottom', fontsize=8.5, color=INK, fontweight='bold')
+    place(0, rows_y['C'], thumb(shots['C'] / '0000.png'), 'Start page', border=OURS, lw=1.0)
+    place(1, rows_y['C'], thumb(shots['C'] / '0001.png'), f'Step 1: scroll down\nP(failure) = {pfail[0]:.2f}', border=OURS, lw=1.0)
+    place(2, rows_y['C'], thumb(shots['C'] / '0002.png'), f'Step 2: scroll down\nP(failure) = {pfail[1]:.2f} \u2265 0.9',
+          border=INK, lw=1.6)
+    # recovery note and options, in the 4th column of the bottom row
+    bx = fig.add_axes([x0 + 3 * (w + gap), rows_y['C'] - 0.005, w, h + 0.01])
+    bx.set_xticks([]); bx.set_yticks([])
+    for sp in bx.spines.values():
+        sp.set_visible(True); sp.set_color(INK); sp.set_linewidth(0.8)
+    bx.set_facecolor('#f4f3ef')
+    bx.text(0.06, 0.93, 'Recovery options shown\nto the actor:', transform=bx.transAxes, ha='left', va='top', fontsize=6.8,
+            color=INK, fontweight='bold', linespacing=1.25)
+    bx.text(0.06, 0.58, "1. Open link 'Pricing'\n    (hidden in a menu)\n2. Go back\n0. Decide myself", transform=bx.transAxes,
+            ha='left', va='top', fontsize=6.6, color=INK, linespacing=1.18)
+    fig.text(x0 + 3 * (w + gap) + w / 2, rows_y['C'] - 0.023, 'Actor answers "1";\nBrowser Use navigates', ha='center',
+             va='top', fontsize=7, color=INK, linespacing=1.3)
+    place(4, rows_y['C'], thumb(shots['C'] / '0003.png'), 'Step 3: navigate to Pricing\n(target page reached)', border=OURS, lw=1.6)
+    # arrows between consecutive panels of the bottom row
+    for col in range(4):
+        xa = x0 + col * (w + gap) + w + 0.002
+        fig.add_artist(matplotlib.patches.FancyArrowPatch((xa, rows_y['C'] + h / 2), (xa + gap - 0.004, rows_y['C'] + h / 2),
+                                                          transform=fig.transFigure, arrowstyle='-|>', mutation_scale=7,
+                                                          color=INK, lw=0.8))
+    for col in range(4):
+        xa = x0 + col * (w + gap) + w + 0.002
+        style = '-|>' if col != 2 else '-'
+        fig.add_artist(matplotlib.patches.FancyArrowPatch((xa, rows_y['A'] + h / 2), (xa + gap - 0.004, rows_y['A'] + h / 2),
+                                                          transform=fig.transFigure, arrowstyle='-|>', mutation_scale=7,
+                                                          color=INK, lw=0.8, linestyle='-' if col != 2 else (0, (2, 1.5))))
+    save(fig, 'fig11_case_study_cpanel')
+
+
+def option_kind(label):
+    for prefix, name in (('Open the link', 'Open a goal-matching link'), ('Scroll to the top and search', 'Scroll to top, then search'),
+                         ('Search this site', 'Search the site'), ('Press Enter to submit the search', 'Press Enter (after a search)'),
+                         ('Press Enter', 'Press Enter to submit a field'), ('Scroll back to the top', 'Scroll back to top'),
+                         ('Go back', 'Go back')):
+        if label.startswith(prefix):
+            return name
+    return label
+
+
+def fig12_options():
+    """Which recovery option the actor chose, and whether P1 judged the resulting action successful."""
+    import collections
+    _, eps = load_episodes()
+    offered, verdict = collections.Counter(), collections.Counter()
+    prompts = 0
+    for (r, t, s_), v in eps.items():
+        if s_ != 'C':
+            continue
+        d = v['folder']
+        step_of = {}
+        for a in d.glob('action-*.json'):
+            sel = (json.loads(a.read_text()).get('native_selection') or {}).get('actor_request_id')
+            if sel:
+                step_of[sel] = int(a.stem[-4:])
+        ass = {int(a.stem[-4:]): json.loads(a.read_text())['assessment'] for a in d.glob('assessment-*.json')}
+        for c in d.glob('actor-*-choice.json'):
+            j = json.loads(c.read_text())
+            prompts += 1
+            for o in j['options']:
+                offered[option_kind(o['label'])] += 1
+            k = 'Decided itself (answered "0")' if not j['chosen'] else option_kind(j['picked']['label'])
+            a = ass.get(step_of.get(c.name.replace('-choice.json', '')))
+            verdict[(k, a['signals']['outcome_label'] if a else 'none')] += 1
+    taken = sum(n for (k, _), n in verdict.items() if not k.startswith('Decided'))
+    assert (prompts, taken) == (86, 69), (prompts, taken)
+    kinds = ['Open a goal-matching link', 'Search the site', 'Press Enter (after a search)', 'Scroll to top, then search',
+             'Press Enter to submit a field', 'Scroll back to top', 'Go back', 'Decided itself (answered "0")']
+    fig, ax = plt.subplots(figsize=(190 * MM, 70 * MM))
+    fig.subplots_adjust(left=0.27, right=0.86)
+    for y, k in enumerate(kinds[::-1]):
+        left = 0
+        for key, color, txt in (('SUCCESS', OURS, 'white'), ('FAILURE', HURT, 'white'), ('none', SAME, INK)):
+            n = verdict.get((k, key), 0)
+            if n:
+                ax.barh(y, n, height=0.62, left=left, color=color, edgecolor='white', linewidth=0.8, zorder=2)
+                if n >= 2:
+                    ax.text(left + n / 2, y, str(n), ha='center', va='center', fontsize=7, color=txt, fontweight='bold')
+                left += n
+        chosen = sum(verdict.get((k, key), 0) for key in ('SUCCESS', 'FAILURE', 'none'))
+        right = f'{chosen} / {prompts} prompts' if k.startswith('Decided') else f'{chosen} / {offered[k]} offered'
+        ax.text(1.01, y, right, transform=ax.get_yaxis_transform(), ha='left', va='center', fontsize=7.5, color=INK)
+    ax.text(1.01, len(kinds) - 0.35, 'chosen / offered', transform=ax.get_yaxis_transform(), ha='left', va='bottom',
+            fontsize=7, color=INK, fontweight='bold')
+    ax.set_yticks(range(len(kinds)))
+    ax.set_yticklabels(kinds[::-1], fontsize=7.5)
+    ax.tick_params(axis='y', length=0)
+    ax.spines['left'].set_visible(False)
+    ax.set_xlim(0, 28)
+    ax.set_xticks(range(0, 27, 5))
+    ax.spines['bottom'].set_bounds(0, 25)
+    ax.set_xlabel('Times chosen by the actor')
+    ax.grid(axis='x', zorder=0)
+    handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in (OURS, HURT, SAME)]
+    ax.legend(handles, ['Next step judged successful by P1', 'Next step judged failed by P1', 'No P1 judgement recorded'],
+              loc='upper center', bbox_to_anchor=(0.42, 1.16), ncol=3, handlelength=1.2, columnspacing=1.4)
+    save(fig, 'fig12_recovery_options')
+
+
+def fig13_action_mix():
+    """Share of action types per system, split by episode outcome."""
+    import collections
+    _, eps = load_episodes()
+    types = [('SCROLL', 'Scroll', '#eb6834', INK), ('CLICK', 'Click', '#1baf7a', INK), ('TYPE', 'Type', '#eda100', INK),
+             ('NAVIGATE', 'Navigate / back', '#e87ba4', INK), ('PRESS_KEY', 'Press key', '#008300', 'white'),
+             (None, 'Invalid output', '#4a3aa7', 'white')]
+    groups = [('A', True, 'Browser Use, completed'), ('A', False, 'Browser Use, failed'),
+              ('C', True, 'Browser Use + Ours, completed'), ('C', False, 'Browser Use + Ours, failed')]
+    data = {}
+    for s_, ok, name in groups:
+        c = collections.Counter()
+        n_eps = 0
+        for k, v in eps.items():
+            if k[2] != s_ or v['completion'] != ok:
+                continue
+            n_eps += 1
+            for a in v['folder'].glob('action-*.json'):
+                e = json.loads(a.read_text())
+                c[e.get('action_type')] += 1
+        data[name] = (c, n_eps)
+    fig, ax = plt.subplots(figsize=(190 * MM, 58 * MM))
+    fig.subplots_adjust(left=0.22, right=0.86)
+    for y, (s_, ok, name) in enumerate(groups[::-1]):
+        c, n_eps = data[name]
+        total = sum(c.values())
+        left = 0
+        for key, label, color, txt in types:
+            share = 100 * c.get(key, 0) / total
+            if share:
+                ax.barh(y, share, height=0.62, left=left, color=color, edgecolor='white', linewidth=0.8, zorder=2)
+                if share >= 6:
+                    ax.text(left + share / 2, y, f'{share:.0f}%', ha='center', va='center', fontsize=7, color=txt,
+                            fontweight='bold')
+                left += share
+        ax.text(1.01, y, f'{n_eps} episodes\n{total} actions', transform=ax.get_yaxis_transform(), ha='left',
+                va='center', fontsize=7, color=INK, linespacing=1.25)
+    ax.set_yticks(range(len(groups)))
+    ax.set_yticklabels([g[2] for g in groups[::-1]], fontsize=7.5)
+    ax.tick_params(axis='y', length=0)
+    ax.spines['left'].set_visible(False)
+    ax.set_xlim(0, 100)
+    ax.set_xticks(range(0, 101, 20))
+    ax.set_xlabel('Share of all actions in these episodes (%)')
+    handles = [plt.Rectangle((0, 0), 1, 1, color=t[2]) for t in types]
+    ax.legend(handles, [t[1] for t in types], loc='upper center', bbox_to_anchor=(0.45, 1.24), ncol=6,
+              handlelength=1.1, columnspacing=1.1)
+    c_failed_A = data['Browser Use, failed'][0]
+    assert c_failed_A['SCROLL'] / sum(c_failed_A.values()) > 0.5
+    save(fig, 'fig13_action_mix')
+
+
+def fig14_detector_scores():
+    """Live P1 scores on the non-terminal steps of Browser Use + Ours episodes, with the 0.9 gate."""
+    _, eps = load_episodes()
+    ps = []
+    for k, v in eps.items():
+        if k[2] != 'C':
+            continue
+        for f in v['folder'].glob('assessment-*.json'):
+            j = json.loads(f.read_text())
+            a = j['assessment']
+            if a['phase'] == 'interaction_assessment' and not j['transition']['terminated']:
+                ps.append(a['outcome_probabilities']['FAILURE'])
+    n = len(ps)
+    hi = sum(p >= 0.9 for p in ps)
+    gated = sum(0.5 < p < 0.9 for p in ps)
+    low = sum(p <= 0.5 for p in ps)
+    assert (n, hi) == (244, 42), (n, hi)
+    bins = [i / 20 for i in range(21)]
+    counts = [sum(lo <= p < hi_ or (hi_ == 1.0 and p == 1.0) for p in ps) for lo, hi_ in zip(bins[:-1], bins[1:])]
+    fig, ax = plt.subplots(figsize=(140 * MM, 62 * MM))
+    for lo, c in zip(bins[:-1], counts):
+        color = OURS if lo >= 0.9 else ('#a9a8a2' if lo >= 0.5 else '#d6d5cf')
+        ax.bar(lo + 0.025, c, 0.046, color=color, zorder=2)
+    ax.axvline(0.9, color=INK, lw=0.9, zorder=3)
+    ax.text(0.893, max(counts) * 0.97, 'gate 0.9', ha='right', va='top', fontsize=7.5, color=INK, fontweight='bold')
+    ymax = max(counts)
+    ax.text(0.25, ymax * 0.62, f'{low} steps\njudged successful\n(P \u2264 0.5)', ha='center', va='center', fontsize=7.5,
+            color=INK, linespacing=1.3)
+    ax.text(0.7, ymax * 0.62, f'{gated} uncertain alarms\n(0.5 < P < 0.9)\nheld back by the gate', ha='center',
+            va='center', fontsize=7.5, color=INK, linespacing=1.3)
+    ax.text(0.953, ymax * 0.62, f'{hi} steps\nopened\nrecovery', ha='center', va='center', fontsize=7, color=INK,
+            linespacing=1.3)
+    ax.set_xlim(0, 1)
+    ax.set_xticks([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+    ax.set_xlabel('P1 probability that the step failed, P(failure)')
+    ax.set_ylabel('Number of steps')
+    ax.grid(axis='y', zorder=0)
+    ax.set_title(f'{n} non-terminal steps of the 84 Browser Use + Ours episodes', loc='left', color=INK)
+    save(fig, 'fig14_detector_scores')
+
+
+SITE_NAMES = {'wikipedia.org': 'Wikipedia', 'wiktionary.org': 'Wiktionary', 'arxiv.org': 'arXiv', 'debian.org': 'Debian',
+              'creativecommons.org': 'Creative Commons', 'www.gov.uk': 'GOV.UK', 'ted.com': 'TED', 'jquery.com': 'jQuery',
+              'epa.gov': 'EPA', 'ietf.org': 'IETF', 'stanford.edu': 'Stanford', 'yale.edu': 'Yale', 'europa.eu': 'Europa (EU)',
+              'coursera.org': 'Coursera', 'cpanel.net': 'cPanel', 'github.com': 'GitHub', 'gitlab.com': 'GitLab',
+              'nextcloud.com': 'Nextcloud', 'noaa.gov': 'NOAA', 'stripe.com': 'Stripe', 'wisc.edu': 'UW-Madison',
+              'wordpress.org': 'WordPress'}
+
+
+def fig15_per_site():
+    """Dumbbell: completion per website, Browser Use vs Browser Use + Ours."""
+    _, eps = load_episodes()
+    suite = {t['id']: t for t in json.loads((ROOT / 'configs/eval/task2/web_tasks_v2.json').read_text())['tasks']}
+    site = {}
+    for (r, t, s_), v in eps.items():
+        d = SITE_NAMES[suite[t]['dataset_domain']]
+        site.setdefault(d, {'A': [], 'C': [], 'tasks': set()})
+        site[d][s_].append(v['completion'])
+        site[d]['tasks'].add(t)
+    rows = []
+    for d, v in site.items():
+        a = 100 * sum(v['A']) / len(v['A'])
+        c = 100 * sum(v['C']) / len(v['C'])
+        rows.append((c - a, a, d, len(v['tasks']), len(v['A'])))
+    rows.sort(key=lambda x: (-x[0], -x[1], x[2]))
+    assert sum(len(v['A']) for v in site.values()) == 84
+    fig, ax = plt.subplots(figsize=(140 * MM, 112 * MM))
+    fig.subplots_adjust(left=0.24, right=0.97)
+    for y, (diff, a, d, nt, ne) in enumerate(rows[::-1]):
+        c = a + diff
+        ax.plot([a, c], [y, y], color=INK if diff else AXIS, lw=0.9 if diff else 0.6, zorder=2)
+        if diff:
+            ax.plot(a, y, 'o', markersize=5.2, color=BASE, markeredgecolor='white', markeredgewidth=0.6, zorder=3)
+            ax.plot(c, y, 'o', markersize=5.2, color=OURS, markeredgecolor='white', markeredgewidth=0.6, zorder=4)
+        else:   # equal: one dot, half grey and half blue, so neither system is hidden
+            ax.plot(a, y, 'o', markersize=6.2, fillstyle='left', markerfacecolor=BASE, markerfacecoloralt=OURS,
+                    markeredgecolor='white', markeredgewidth=0.6, zorder=4)
+        if diff:
+            ax.text(max(a, c) + 3, y, f'{diff:+.0f}'.replace('-', '\u2212'), ha='left', va='center', fontsize=7,
+                    color=INK, fontweight='bold')
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels([f'{d}  ({nt} task{"s" if nt > 1 else ""})' for _, _, d, nt, _ in rows[::-1]], fontsize=7.2)
+    ax.tick_params(axis='y', length=0)
+    ax.spines['left'].set_visible(False)
+    ax.set_xlim(-4, 112)
+    ax.set_xticks(range(0, 101, 20))
+    ax.spines['bottom'].set_bounds(0, 100)
+    ax.set_xlabel('Task completion (%), both repeats')
+    ax.grid(axis='x', zorder=0)
+    ax.set_ylim(-0.7, len(rows) - 0.3)
+    handles = [plt.Line2D([], [], marker='o', ls='', markersize=5.2, color=BASE),
+               plt.Line2D([], [], marker='o', ls='', markersize=5.2, color=OURS),
+               plt.Line2D([], [], marker='o', ls='', markersize=6.2, fillstyle='left', markerfacecolor=BASE,
+                          markerfacecoloralt=OURS, markeredgecolor='white')]
+    ax.legend(handles, ['Browser Use', 'Browser Use + Ours', 'Both equal'], loc='upper center', bbox_to_anchor=(0.4, 1.07),
+              ncol=3, handletextpad=0.3, columnspacing=1.6)
+    save(fig, 'fig15_per_site')
+
+
 FIGURES = {'fig1': fig1_completion, 'fig2': fig2_paired_outcomes, 'fig3': fig3_per_task, 'fig4': fig4_cost,
-           'fig5': fig5_recovery, 'fig6': fig6_task1, 'fig7': fig7_backbones}
+           'fig5': fig5_recovery, 'fig6': fig6_task1, 'fig7': fig7_backbones,
+           'fig8': fig8_outcome_flow, 'fig9': fig9_step_budget,
+           'fig10': fig10_loops, 'fig11': fig11_case_study,
+           'fig12': fig12_options, 'fig13': fig13_action_mix,
+           'fig14': fig14_detector_scores, 'fig15': fig15_per_site}
 
 if __name__ == '__main__':
     names = sys.argv[1:] or list(FIGURES)

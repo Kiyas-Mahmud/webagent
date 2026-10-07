@@ -11,6 +11,7 @@ Style: Elsevier artwork sizes (final width 90 / 140 / 190 mm), Liberation Sans
 across all figures: **grey `#8c8b85` = Browser Use alone / untrained approach**,
 **blue `#2a78d6` = Browser Use + Ours / our trained heads**; red `#e34948` =
 hurt pairs only. Palettes checked with the colour validator (CVD and contrast).
+All text in every figure is near-black (`#111111`); no light-grey text.
 
 | File | Width | Section | Suggested caption |
 |---|---|---|---|
@@ -20,6 +21,14 @@ hurt pairs only. Palettes checked with the colour validator (CVD and contrast).
 | `fig4_cost` | 140 mm | Task 2 | (a) Wall-clock time per episode for all 84 episodes of each system (box: quartiles; white line: median; diamond: mean). (b) Number of steps on the 59 pairs both systems completed. |
 | `fig5_recovery_pipeline` | 190 mm | Task 2 mechanism | (a) Recovery pipeline over the 84 Browser Use + Ours episodes: a confident failure on a non-terminal step (P(failure) ≥ 0.9) opened recovery in 31 episodes; the actor took an offered option in all 31; 26 completed. (b) Completion of both systems split by whether the framework acted: all 12 rescues and no harm occurred where it acted; both losses occurred where the detector stayed silent. |
 | `fig6_trained_vs_prompted` | 190 mm | Task 1 | Step-failure (a) and recovery-outcome (b) assessment on identical Task 1 cases. Grey: untrained backbones prompted with the self-assessment instructions of three public agents (adapted); blue: our heads trained on Web-Gold-40K. Right column: cases with a valid, parsable verdict (invalid outputs count as wrong; MCC is computed on valid outputs). |
+| `fig8_outcome_flow` | 140 mm | Task 2 main result (alternative to Fig. 2) | Outcome flow over the 84 paired episodes. Left: outcome of Browser Use alone; right: outcome with the framework; band width = number of pairs. 13 failed episodes were rescued (blue), 2 completed episodes were lost (red). |
+| `fig9_step_budget` | 140 mm | Task 2 cost | Cumulative task completion as a function of the step budget. With very small budgets (≤ 4 steps) Browser Use alone is slightly ahead, because recovery spends steps; from 5 steps on the framework leads and ends 13.1 points higher at the 15-step budget used in the study. |
+| `fig10_action_loops` | 140 mm | Task 2 mechanism | Longest run of the same action repeated in a row per episode (same type and element; scrolls by direction). Loops of five or more identical actions occur in 16 Browser Use episodes (15 of them failed) and in 7 episodes with the framework (3 failed). |
+| `fig11_case_study_cpanel` | 190 mm | Task 2 case study | Held-out task "Open the cPanel pricing page" (repeat 2). Top: Browser Use alone scrolls down 14 times and runs out of steps. Bottom: with the framework, P1 flags the second scroll (P(failure) = 0.98 ≥ 0.9); the actor is offered a link found in a closed menu and answers "1"; Browser Use opens the pricing page. Screenshots are the recorded observations (a cookie dialog is present on this site in both runs). The environment scores completion after the next step because the navigation was still loading when the step was scored. |
+| `fig12_recovery_options` | 190 mm | Task 2 mechanism | Recovery options chosen by the actor (86 option prompts, 69 options taken) and P1's judgement of the resulting step. "Open a goal-matching link" and "Search then Enter" account for most verified recoveries; "Scroll back to top" and "Go back" were offered 58 times and never chosen; answering "0" (deciding itself) never led to a verified recovery. |
+| `fig13_action_mix` | 190 mm | Task 2 behaviour | Share of action types per system and outcome. Browser Use failures are dominated by scrolling (67 %); with the framework, failed episodes are instead dominated by invalid actor output (24 %) and typing, which the framework cannot fix. |
+| `fig14_detector_scores` | 140 mm | Task 2 detector behaviour | P1 scores on the 244 non-terminal steps of the framework's episodes. 183 steps are judged successful, 19 uncertain alarms (0.5 < P < 0.9) are held back by the gate, and 42 confident failures (P ≥ 0.9) opened recovery. |
+| `fig15_per_site` | 140 mm | Task 2 (or appendix) | Completion per website over both repeats. Gains concentrate on cPanel, TED, GOV.UK, EPA, Wikipedia and IETF; the only loss is jQuery (one API-docs episode); half-grey/half-blue dots mark websites where both systems scored the same. |
 | `fig7_backbones` | 190 mm | Task 1 | Validation performance of the three backbones trained on Web-Gold-40K (7,861 interactions; 1,858 recovery cases; seed 42; one checkpoint per backbone selected by outcome MCC). |
 
 ## Facts shown in the figures (for the text)
@@ -31,6 +40,10 @@ hurt pairs only. Palettes checked with the colour validator (CVD and contrast).
 - Cost: mean episode 220 s vs 175 s; steps on both-completed pairs 3.08 vs 3.32.
 - Task 1: same Qwen2.5-VL-7B prompted MCC 0.00 (Browser Use / Agent S2 style) or
   no valid output (WebVoyager style) vs trained heads 0.65 (step) / 0.84 (recovery).
+
+## Not produced
+- Time breakdown per step (actor / assessment / memory / option prompt): only actor latency is logged; the other
+  components are not timed separately, so this figure would be an estimate. Add per-call timing to the next run.
 
 ## Still to produce (need the error-analysis labelling script)
 Failure-class distribution (A vs C, development vs held-out), rescue by failure
