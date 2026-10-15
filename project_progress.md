@@ -32,6 +32,7 @@
   line style (dashed SeeAct) or marker (square SeeAct). v1 figures in docs/figures/ kept.
 - Case-study figures R12/R13 redesigned (user: too small, then too much text): now the WebVoyager/SeeAct convention - two rows (alone / + WebFARM), two 16:9 frames of 92 mm per row (60 mm was still unreadable; detail frames are zoomed crops), red box on the failing action, blue box on the target, small tags (scroll, x12, P(failure)), the chosen WebFARM option named in the frame label, two-line labels; details moved to the captions in docs/figures_v2/README.md. Found while doing it: raw SeeAct's EPA loop clicks the <dt> title row next to the real <a> link with the same words.
 - Case studies final form (user showed a WebVoyager figure): one image per step, step1..step4 per case (docs/figures_v2/R12_case_browser_use_wikipedia/, R13_case_seeact_epa/), 90 mm each, orange box + callout on the acted element, red P1-failure tag, blue WebFARM-option tag, step label under the image; *_all.* = 2x2 preview. Browser Use example switched from cPanel (cookie overlay) to held-out Wikipedia 'Marie Curie' r0 (P = 1.00 at step 2; options search -> Enter). Superseded storyboard files removed (never committed).
+- `docs/RESULTS_FULL_REPORT.md`: single detailed results report (Task 1 + Task 2 on both agents, mechanism, case studies, losses, limitations, files, paper wording). Pushed 2026-10-15.
 - Next: commit/push everything; decide on the index.en.html re-score; error analysis across 4 systems;
   figures for the two-agent result; rename "Ours" → WebFARM at the end.
 
