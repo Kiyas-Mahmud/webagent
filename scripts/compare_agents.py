@@ -6,7 +6,10 @@
 
 Baseline = native Browser Use + frozen Qwen2.5-VL-7B base (system A).
 Ours     = the same agent + P1 trained assessment/recovery + P4 experience memory (C).
-Both systems alternate per task (A,C then C,A on the next repeat) so site drift
+SeeAct   = the unmodified SeeAct agent (OSU, ICML 2024) with the same frozen actor (S);
+           no assessment, recovery or memory. Optional: `freeze --systems A S`.
+SeeAct+Ours = SeeAct with the same framework attached (T): `freeze --systems S T`.
+Systems alternate per task (A,C then C,A on the next repeat) so site drift
 hits them equally. Memory starts empty in DIR/memory and learns during the run.
 Completion comes only from the task's URL rule; it never reaches the agent.
 """
@@ -25,7 +28,8 @@ import traceback
 from web_agent.eval.task2.campaign import BROWSER_PYTHON, ROOT
 from web_agent.eval.task2.ipc import Worker
 
-SYSTEMS = {'A': 'baseline', 'C': 'ours'}
+SYSTEMS = {'A': 'baseline', 'C': 'ours', 'S': 'seeact', 'T': 'seeact_ours'}
+SEEACT_PYTHON = ROOT/'.task2-assets/seeact-env/bin/python'
 SETTINGS = ROOT/'configs/eval/task2/qwen25_v1.json'
 WEB_TASKS = ROOT/'configs/eval/task2/web_tasks_v2.json'
 CALIBRATION = Path('/home/aiub/kiyas/table2-evidence/p4-qwen25-embeddings-v1/manifest.json')
@@ -33,6 +37,8 @@ SOURCES = ['src/web_agent/eval/task2/live.py', 'src/web_agent/eval/task2/web_wor
            'src/web_agent/eval/task2/native_model.py', 'src/web_agent/eval/task2/model_worker.py',
            'src/web_agent/eval/task2/assessment.py', 'src/web_agent/eval/task2/elements.py',
            'src/web_agent/memory/experience.py', 'scripts/compare_agents.py',
+           'src/web_agent/eval/task2/seeact_live.py', 'src/web_agent/eval/task2/seeact_worker.py',
+           'src/web_agent/eval/task2/seeact_common.py', 'src/web_agent/eval/task2/seeact_framework.py',
            'configs/eval/task2/web_tasks_v2.json', 'configs/eval/task2/qwen25_v1.json']
 
 
@@ -40,7 +46,10 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def freeze(out, repeats, only=None):
+def freeze(out, repeats, only=None, systems=('A', 'C')):
+    systems = tuple(systems)
+    if not systems or any(s not in SYSTEMS for s in systems):
+        raise SystemExit('systems must be one or more of '+', '.join(SYSTEMS)+' (a single system is for pilots only)')
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=False)
     suite = json.loads(WEB_TASKS.read_text())
@@ -54,15 +63,15 @@ def freeze(out, repeats, only=None):
     order = []
     for repeat in range(repeats):
         for task in suite['tasks']:
-            systems = ('A', 'C') if repeat % 2 == 0 else ('C', 'A')
+            run_order = systems if repeat % 2 == 0 else tuple(reversed(systems))
             order += [{'repeat': repeat, 'task': task['id'], 'goal': task['goal'], 'system': s,
-                       'split': task.get('split', 'development')} for s in systems]
+                       'split': task.get('split', 'development')} for s in run_order]
     plan = {'schema': 'web-comparison-v2', 'frozen_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'repeats': repeats,
-            'systems': SYSTEMS, 'settings': settings, 'suite': suite['suite'], 'episodes': order,
+            'systems': {s: SYSTEMS[s] for s in systems}, 'settings': settings, 'suite': suite['suite'], 'episodes': order,
             'sources': {p: sha(ROOT/p) for p in SOURCES},
             'analysis': 'paired per (task, repeat): exact two-sided sign test on discordant pairs; completion = URL rule'}
     (out/'plan.json').write_text(json.dumps(plan, indent=2)+'\n')
-    print(f'frozen {len(order)} episodes ({len(suite["tasks"])} tasks x {repeats} repeats x 2 systems) -> {out}')
+    print(f'frozen {len(order)} episodes ({len(suite["tasks"])} tasks x {repeats} repeats x {len(systems)} systems {systems}) -> {out}')
 
 
 def folder_for(out, e):
@@ -71,6 +80,8 @@ def folder_for(out, e):
 
 async def run(out):
     from web_agent.eval.task2.live import episode
+    from web_agent.eval.task2.seeact_live import seeact_episode
+    from web_agent.eval.task2.seeact_framework import seeact_framework_episode
     out = Path(out).resolve(); plan = json.loads((out/'plan.json').read_text())
     changed = [p for p, digest in plan['sources'].items() if sha(ROOT/p) != digest]
     if changed:
@@ -95,6 +106,10 @@ async def run(out):
     model = Worker(ROOT/'.venv/bin/python', 'web_agent.eval.task2.model_worker', ['qwen25'], out/f'model-{stamp}.log')
     browser = Worker(BROWSER_PYTHON, 'web_agent.eval.task2.web_worker', [out/'browser'/stamp], out/f'browser-{stamp}.log',
                      env={'PLAYWRIGHT_BROWSERS_PATH': '/home/aiub/kiyas/table2-inputs/miniwob-browsers'})
+    seeact = None
+    if any(e['system'] in ('S', 'T') for e in todo):
+        seeact = Worker(SEEACT_PYTHON, 'web_agent.eval.task2.seeact_worker', [], out/f'seeact-{stamp}.log')
+        print('seeact worker:', seeact.call('ping'), flush=True)
     try:
         print('loading models (about 7 minutes)...', flush=True)
         await asyncio.to_thread(model.call, 'initialize', timeout=1200)
@@ -103,14 +118,23 @@ async def run(out):
             block = {'task': e['task'], 'repeat_id': e['repeat'], 'browser_reset_seed': 0, 'goal': e['goal']}
             print(f"\n[{done}/{total}] {SYSTEMS[e['system']]:8s} {e['task']}  (repeat {e['repeat']})", flush=True)
             try:
-                r = await episode(system=e['system'], block=block, root=folder_for(out, e),
-                                  browser_worker=browser, model_worker=model, settings=plan['settings'])
+                if e['system'] == 'S':
+                    r = await seeact_episode(block=block, root=folder_for(out, e), browser_worker=browser, model_worker=model,
+                                             seeact_worker=seeact, settings=plan['settings'])
+                elif e['system'] == 'T':
+                    r = await seeact_framework_episode(block=block, root=folder_for(out, e), browser_worker=browser, model_worker=model,
+                                                       seeact_worker=seeact, settings=plan['settings'])
+                else:
+                    r = await episode(system=e['system'], block=block, root=folder_for(out, e),
+                                      browser_worker=browser, model_worker=model, settings=plan['settings'])
                 print(f"   completed={r['completion']}  steps={r['agent_steps']}  recoveries={r['counters']['executed_recoveries']}  "
                       f"memory shown={r['counters']['memory_exposures']}  {r['elapsed_seconds']:.0f}s", flush=True)
             except Exception:
                 print('   INFRASTRUCTURE ERROR (not a result; rerun on next `run`):\n'+traceback.format_exc(), flush=True)
     finally:
         browser.close(); model.close()
+        if seeact is not None:
+            seeact.close()
         # Browser Use leaves background tasks that block asyncio shutdown; every
         # episode is saved, so leave from inside the loop instead of hanging.
         print('run finished; episodes saved', flush=True)
@@ -135,7 +159,7 @@ def report(out):
     improved = [p for p in pairs if results[p+('C',)]['completion'] and not results[p+('A',)]['completion']]
     worsened = [p for p in pairs if results[p+('A',)]['completion'] and not results[p+('C',)]['completion']]
     summary = {}
-    for s, name in SYSTEMS.items():
+    for s, name in plan.get('systems', SYSTEMS).items():
         rs = [v for k, v in results.items() if k[2] == s]
         summary[name] = {'episodes': len(rs), 'completed': sum(r['completion'] for r in rs),
                          'recoveries': sum(r['counters']['executed_recoveries'] for r in rs),
@@ -154,7 +178,30 @@ def report(out):
                           'helped': len(imp), 'hurt': len(wor), 'exact_sign_test_p': exact_sign_p(len(imp), len(wor)),
                           'rescue_rate_on_baseline_failures': (len(imp)/len(a_fail)) if a_fail else None,
                           'harm_rate_on_baseline_successes': (len(wor)/len(a_ok)) if a_ok else None}
+    # Every other system against Browser Use alone (S = raw SeeAct), same paired test.
+    versus_baseline = {}
+    for s, name in plan.get('systems', SYSTEMS).items():
+        if s == 'A':
+            continue
+        ps = sorted({(r, t) for r, t, _ in results if (r, t, 'A') in results and (r, t, s) in results})
+        better = [p for p in ps if results[p+(s,)]['completion'] and not results[p+('A',)]['completion']]
+        worse = [p for p in ps if results[p+('A',)]['completion'] and not results[p+(s,)]['completion']]
+        versus_baseline[name] = {'pairs': len(ps), 'baseline_completed': sum(results[p+('A',)]['completion'] for p in ps),
+                                 'completed': sum(results[p+(s,)]['completion'] for p in ps), 'better': len(better), 'worse': len(worse),
+                                 'exact_sign_test_p': exact_sign_p(len(better), len(worse))}
+    seeact_pairs = None
+    if {'S', 'T'} <= set(plan.get('systems', SYSTEMS)):
+        ps = sorted({(r, t) for r, t, _ in results if (r, t, 'S') in results and (r, t, 'T') in results})
+        helped = [p for p in ps if results[p+('T',)]['completion'] and not results[p+('S',)]['completion']]
+        hurt = [p for p in ps if results[p+('S',)]['completion'] and not results[p+('T',)]['completion']]
+        s_fail = [p for p in ps if not results[p+('S',)]['completion']]; s_ok = [p for p in ps if results[p+('S',)]['completion']]
+        seeact_pairs = {'pairs': len(ps), 'seeact_completed': len(s_ok), 'seeact_ours_completed': sum(results[p+('T',)]['completion'] for p in ps),
+                        'helped': len(helped), 'hurt': len(hurt), 'exact_sign_test_p': exact_sign_p(len(helped), len(hurt)),
+                        'rescue_rate_on_seeact_failures': (len(helped)/len(s_fail)) if s_fail else None,
+                        'harm_rate_on_seeact_successes': (len(hurt)/len(s_ok)) if s_ok else None,
+                        'helped_pairs': [list(p) for p in helped], 'hurt_pairs': [list(p) for p in hurt]}
     result = {'planned_episodes': len(plan['episodes']), 'finished_episodes': len(results), 'pairs': len(pairs), 'by_split': by_split,
+              'versus_baseline': versus_baseline, 'seeact_pairs': seeact_pairs,
               'summary': summary, 'ours_minus_baseline': (len(improved)-len(worsened))/len(pairs) if pairs else None,
               'improved_pairs': [list(p) for p in improved], 'worsened_pairs': [list(p) for p in worsened],
               'exact_sign_test_p': exact_sign_p(len(improved), len(worsened))}
@@ -165,6 +212,14 @@ def report(out):
               f"memory shown {s['memory_shown']} written {s['memory_written']}  mean {s['mean_seconds']}s/episode")
     print(f"  pairs: ours better {len(improved)}, baseline better {len(worsened)}, same {len(pairs)-len(improved)-len(worsened)}  "
           f"exact sign test p = {result['exact_sign_test_p']:.3f}")
+    for name, v in versus_baseline.items():
+        if name != 'ours':
+            print(f"  {name} vs baseline: pairs {v['pairs']}  baseline {v['baseline_completed']}  {name} {v['completed']}  "
+                  f"better {v['better']} worse {v['worse']}  p = {v['exact_sign_test_p']:.3f}")
+    if seeact_pairs:
+        q = seeact_pairs
+        print(f"  SeeAct pairs: {q['pairs']}  seeact {q['seeact_completed']}  seeact+ours {q['seeact_ours_completed']}  "
+              f"helped {q['helped']} hurt {q['hurt']}  p = {q['exact_sign_test_p']:.3f}")
     for name, b in by_split.items():
         rr = f"{b['rescue_rate_on_baseline_failures']:.0%}" if b['rescue_rate_on_baseline_failures'] is not None else 'n/a'
         hr = f"{b['harm_rate_on_baseline_successes']:.0%}" if b['harm_rate_on_baseline_successes'] is not None else 'n/a'
@@ -177,13 +232,14 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     f = sub.add_parser('freeze'); f.add_argument('--out', required=True); f.add_argument('--repeats', type=int, default=2)
     f.add_argument('--tasks', nargs='*', help='subset of task ids (smoke tests only)')
+    f.add_argument('--systems', nargs='+', default=['A', 'C'], help='systems to run, e.g. A C, A S, or S alone with A')
     sub.add_parser('run').add_argument('dir')
     sub.add_parser('report').add_argument('dir')
     args = parser.parse_args()
     os.environ['ANONYMIZED_TELEMETRY'] = 'false'
     os.environ['BROWSER_USE_CONFIG_DIR'] = str(ROOT/'.task2-assets/browser-use-config')
     if args.command == 'freeze':
-        freeze(args.out, args.repeats, args.tasks)
+        freeze(args.out, args.repeats, args.tasks, args.systems)
     elif args.command == 'report':
         report(args.dir)
     else:
