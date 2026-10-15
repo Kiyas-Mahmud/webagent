@@ -1,5 +1,123 @@
 # Project Progress Tracker
 
+## 2026-10-14 — web-v5-seeact-ours COMPLETE: WebFARM on SeeAct, 84/84
+- Run 10:57–14:03 (+ one rerun of cPanel r0: browser page closed after navigation; completed).
+  No plan amendments. **SeeAct 52/84 = 61.9 % → SeeAct + WebFARM 69/84 = 82.1 % [72.6, 88.9]**;
+  helped 21 / hurt 4 / same 59, p = 0.0009; rescue 66 %, harm 8 %. Dev 60.0 → 77.5 (9/2, p 0.065),
+  held-out 63.6 → 86.4 (12/2, p 0.013). Mean 182 → 123 s. BU+WebFARM vs SeeAct+WebFARM 11/8/65,
+  p 0.65 (indistinguishable). Activity: 56 episodes with recovery, 97 attempts, 365 assessments,
+  160 blocked, 31 gated, 155 option prompts (143 taken: link 58, search 42, Enter 36), guard 45/4,
+  memory 81 written / 15 shown. Losses: GitLab r1 (blocked transient click + SeeAct 5-no-op stop),
+  Debian security r1 (/security/index.en.html = target page, exact rule misses it; no other run saw
+  the variant → candidate neutral re-score), black hole r0 (query 'box article black holes', same as
+  C), EU countries r1. Doc: `docs/TASK2_WEB_V5_SEEACT_WEBFARM_RESULTS.md` (Tables 16–20);
+  rows for all four systems: `.task2-assets/comparison/four_system_rows.json`.
+- `docs/Results_Comparison_Handout.pdf` rebuilt (12 pages): "Ours" → WebFARM throughout; Table 4 gets the
+  SeeAct rows (+20.2), Table 5 a SeeAct failure row, Table 11 is now a four-system per-task table generated
+  from `four_system_rows.json`; new section Tables 12–20 (four-system completion, all paired tests, by split,
+  rescue/harm, cost, recovery activity on both agents, SeeAct failure modes, T stop reasons, the four lost
+  pairs) with "What this means" notes; summary and reference [11] SeeAct updated.
+- `docs/FIGURE_PLAN_V2.md`: figure list for the two-agent paper. 12 recommended (M1, M2, B1, B3, C1 main
+  two-agent bars, C2 transfer slope, C3 paired outcomes, C6 cost, D2 options on both agents, D3 failure-mode
+  contrast, D5 intervention timeline, E2 SeeAct case study) + appendix (C4 per-task, E5–E7 pending the
+  labelling script). 10 existing figures to regenerate with four systems; 5 new; fig8/fig10/fig13 merged or dropped.
+- **Results figures v2 generated** (`docs/figures_v2/`, 16 figures × PDF/SVG/PNG, script
+  `scripts/make_results_figures_v2.py`, captions in `docs/figures_v2/README.md`): R01 trained vs prompted
+  (v1 unchanged), R02 confusion matrices (from Task 1 per-case records + scoring-only labels; MCC 0.649 /
+  0.841 reproduced), R03 main two-agent bars, R04 transfer slope, R05 paired diverging bars, R06 cost,
+  R07 step budget, R08 options on both agents, R09 failure modes (scroll vs click loops), R10 detector
+  scores, R11 intervention timeline, R12 cPanel case (v1 layout renamed), R13 SeeAct EPA case; appendix
+  A1 per-task, A2 per-site, A3 funnel. All numbers asserted against the handout tables; every figure
+  rendered and checked for overlaps. Concept: grey alone / blue +WebFARM / red harm; agent by panel,
+  line style (dashed SeeAct) or marker (square SeeAct). v1 figures in docs/figures/ kept.
+- Case-study figures R12/R13 redesigned (user: too small, then too much text): now the WebVoyager/SeeAct convention - two rows (alone / + WebFARM), two 16:9 frames of 92 mm per row (60 mm was still unreadable; detail frames are zoomed crops), red box on the failing action, blue box on the target, small tags (scroll, x12, P(failure)), the chosen WebFARM option named in the frame label, two-line labels; details moved to the captions in docs/figures_v2/README.md. Found while doing it: raw SeeAct's EPA loop clicks the <dt> title row next to the real <a> link with the same words.
+- Case studies final form (user showed a WebVoyager figure): one image per step, step1..step4 per case (docs/figures_v2/R12_case_browser_use_wikipedia/, R13_case_seeact_epa/), 90 mm each, orange box + callout on the acted element, red P1-failure tag, blue WebFARM-option tag, step label under the image; *_all.* = 2x2 preview. Browser Use example switched from cPanel (cookie overlay) to held-out Wikipedia 'Marie Curie' r0 (P = 1.00 at step 2; options search -> Enter). Superseded storyboard files removed (never committed).
+- Next: commit/push everything; decide on the index.en.html re-score; error analysis across 4 systems;
+  figures for the two-agent result; rename "Ours" → WebFARM at the end.
+
+## 2026-10-13 — web-v4 resumed; design for SeeAct + framework (system T) written
+- **web-v4-seeact COMPLETE 14:30: 84/84.** SeeAct 52/84 = 61.9 % [51.2, 71.6]; Browser Use 61/84 =
+  72.6 %; Browser Use + WebFARM 72/84 = 85.7 %. WebFARM vs SeeAct: 23 better / 3 worse / 58 same,
+  p < 0.001. Browser Use vs SeeAct: 18 / 9 / 57, p = 0.12. Dev 60.0 / 70.0 / 87.5; held-out 63.6 /
+  75.0 / 84.1. SeeAct mean 182 s. Failures: 28/32 budget, 19/32 click loops (85 % CLICK), 56 rejected
+  executions (stale/hidden selectors), 0 invalid outputs, 0 limit hits. Coursera r0 needed 4 reset
+  attempts (intermittent `load`); plan.json amendments #2 (worker parse/act) and #3 (compare_agents T)
+  recorded before the final resumes. Doc: `docs/TASK2_WEB_V4_SEEACT_RESULTS.md` (Tables 12–15).
+- **T pilot (`seeact-ours-pilot`, 5 tasks) 5/5 completed** 15:20. EPA: 2 confident failures (0.98,
+  0.91) → note + options → actor chose search / Enter / "Climate Change" link, executed as native
+  SeeAct TYPE / PRESS ENTER / GOTO, 2 memory writes; cPanel: failure 0.99 → "Pricing" link GOTO
+  (Playwright `load` timeout marked it rejected, but the navigation happened; completed). Gate held
+  back 3 uncertain alarms (0.84, 0.67, …). Guard never needed. Whole pipeline works on SeeAct
+  unchanged. Next: T full run `web-v5-seeact-ours` (84 episodes) on the user's go.
+- Resumed `web-v4-seeact` 11:24 (69 done, 15 to run; interrupted/: debian-security r0, coursera r0,
+  ietf-about r1). Autostop 16:45 armed.
+- `docs/SEEACT_FRAMEWORK_INTEGRATION_PLAN.md`: design only. Reuse the agent-independent modules
+  (assess, recovery_note, facts, experience memory, same_action, choose) unchanged; new glue loop
+  `seeact_framework.py` with hooks: assessment async after finish, gate 0.9, note appended to SeeAct's
+  "Previous Actions" block in turn 0, option prompt replacing the two turns, options mapped to SeeAct
+  actions (GOTO/TYPE/PRESS ENTER/PRESS HOME/GO BACK), guard on turn 1 with element identity
+  (tag_with_role, description) instead of xpath. live.py untouched. D3–D6 taken as proposed.
+- **System T implemented** (same day): `seeact_framework.py` (`seeact_framework_episode`, ~300 lines;
+  assess/gate/note/memory logic copied verbatim from live.assess_step), `seeact_worker.py` ops `parse`
+  and `act` (additive; S path unchanged; web-v4 plan amendment #2), `compare_agents.py` system `T` +
+  `seeact_pairs` report block. Tests: `tests/task2/test_seeact_framework.py` (6: helpers, failure →
+  note → option executed as GOTO → memory write, note position + guard regeneration, 0.9 gate +
+  moving-scroll rule, wall clock, settings guard); 112 Task 2 tests pass. Real-browser smoke of
+  parse/act (TYPE, PRESS ENTER, GOTO, PRESS HOME, GO BACK) passed. **Not yet run with the model**:
+  pilot after web-v4 finishes (GPU busy).
+
+## 2026-10-11 — SeeAct raw baseline (system S) implemented; 5-task pilot started
+- **System name decided 2026-10-13: WebFARM** (Failure-Aware Recovery and Memory for web agents).
+  Replace "Browser Use + Ours" → "Browser Use + WebFARM", "SeeAct + Ours" → "SeeAct + WebFARM" in
+  tables, figures and docs at the end (user: do the renaming last). REVIVE rejected.
+- Full SeeAct run `web-v4-seeact` (84 S episodes, same plan as web-v3) started 12:08; at 16:23:
+  66 results, 2 infra errors (Coursera reset timeout; debian-security r0 hit the 2700 s wall clock
+  because SeeAct's element listing takes ~5 min/step on planet.debian.org). **Fixed 16:35:**
+  seeact_live now records wall-clock exhaustion as a failed result (`stop_reason: wall_clock`);
+  test added (8 pass); plan.json amendment #1 recorded; the Debian episode reruns on resume.
+  Preliminary on 66 matched: BU 69.7 %, Ours 84.8 %, SeeAct 63.6 %.
+- New: `src/web_agent/eval/task2/seeact_worker.py` (runs in `.task2-assets/seeact-env`; ops attach /
+  prepare / finish / close; SeeAct 0.2.9.0 decision code untouched, model call moved out, CDP attach,
+  three robustness guards), `seeact_live.py` (`seeact_episode()`, same budget/records/result schema as
+  live.py), `seeact_common.py` (domain rule, action-type map). `compare_agents.py`: system `S`,
+  `freeze --systems`, report adds `versus_baseline`. Tests: `tests/task2/test_seeact.py` (7) + 98 old pass.
+- seeact-env: Python 3.12, playwright 1.44.0 (matches browser env), seeact installed `--no-deps` from
+  the clone; its pins (litellm 1.35.32, openai 1.24) are gone from PyPI and only its API engines use
+  them, which we never call. litellm 1.104 / openai 2.54 installed so the package imports.
+- Scripted smoke (no model): type → Enter → Alan Turing page; GOTO google blocked and undone; invalid
+  output → NONE; TERMINATE honoured. Needed a post-action settle (1 s + load ≤ 15 s) and a retry of the
+  element listing during navigation ("Execution context was destroyed").
+- **Finding (applies to web-v3 too):** the web_worker `score` op reads `page.url` without a Playwright
+  round-trip, so it reflects the state as of the previous `observe` flush: in web-v3, 214/217
+  URL-changing steps were scored one step late, identically for A and C (this is the "scored after the
+  next step" note in the cPanel case study). The S loop keeps the same order (score, then observe) so
+  the rule is unchanged; do not "fix" it mid-study.
+- Pilot: `.task2-assets/comparison/seeact-pilot` (S only, 1 repeat: alan-turing, ted-talks,
+  jquery-download, epa-climate-change, cpanel-pricing), 512-token limit (D1), autostop 16:45 armed.
+- **Pilot result: SeeAct 5/5 completed** (2–5 steps, mean 96 s). Valid ELEMENT/ACTION/VALUE in every
+  step; turn-0 reasoning 54–102 tokens, 0 limit hits (D1 settled: 512 is enough). One SeeAct-native
+  stale-selector click failure on EPA (DOM changed during model time), recovered by SeeAct itself.
+- Pilot infra fix: TED /talks never finishes web fonts → Playwright screenshot timeout (episode moved to
+  interrupted/). Added web_worker's Chrome `Page.captureScreenshot` fallback to seeact_worker; recorded
+  as a plan.json `amendments` entry; TED rerun completed in 3 steps.
+- **Caution for the study:** on these 5 tasks web-v3 Browser Use completed 4/10 and Ours 9/10, so SeeAct
+  (5/5) may be a stronger raw agent than Browser Use with this 7B actor. The pilot tasks were chosen
+  where Ours rescued Browser Use (selection-biased) and ran 5 days after web-v3, so it is not a
+  comparison. Only the full paired run (D2) can say where SeeAct stands relative to Ours.
+
+## 2026-10-07 — SeeAct raw-baseline plan (analysis only, nothing implemented)
+- User wants other raw open-source agents (no framework) on the same 42 tasks with the same
+  Qwen2.5-VL-7B actor, first SeeAct. Plan: `docs/SEEACT_BASELINE_PLAN.md`.
+- SeeAct source cloned read-only to `.task2-assets/external/SeeAct` (commit 2434627, pkg 0.2.9.0).
+  Findings: 2 model calls per step; viewport-only element list with set-of-mark boxes; hard-coded
+  `headless=False`; no local-model engine; crash on `None` element in the execute error path;
+  pinned openai/litellm need a separate venv. Integration: CDP attach to web_worker's browser,
+  split predict into prepare/finish so the orchestrator's model_worker does the generation.
+- Found while checking baselines: web-v3 Browser Use already ran with its built-in loop-detection
+  nudge (fired in 17 A episodes, 16 failed; 9 C episodes, 3 failed). Mention in the paper.
+- Open decisions: D1 token limit (512 vs 1024 for SeeAct), D2 rerun Ours or only Browser Use as
+  drift anchor.
+
 ## 2026-10-06 — web-v3 COMPLETE: 168/168 episodes, 84 pairs
 
 - Resumed 12:42 (13 left); the Coursera r0 baseline episode hit a 60 s
