@@ -7,6 +7,10 @@ Before the test is opened, the same checkpoint is re-scored on the 7,861 primary
 rows and must reproduce the outcome MCC recorded in its run report. This proves the
 checkpoint, config and data were loaded exactly as during selection.
 
+Resumable: rows are scored in chunks of CHUNK_ROWS, and each finished chunk is saved under
+--work-dir. If the run stops (power cut, crash, closed session), run the same command again:
+finished chunks are loaded from disk and only the remaining ones are scored.
+
 Example (lab DGX):
     python scripts/evaluate_locked_test.py \
         --model-id qwen25vl_7b_gold_v2_8_dgx \
@@ -33,6 +37,7 @@ CONFIGS = {
 }
 EXPECTED_TEST_ROWS = 7_855
 EXPECTED_VAL_ROWS = 7_861
+CHUNK_ROWS = 400   # multiple of the batch size (4), so batches match an unchunked run
 REPORT_METRICS = (
     "outcome_mcc", "failure_macro_f1", "failtype_macro_f1", "action_macro_f1",
     "recovery_macro_f1", "recovery_outcome_mcc", "recovery_outcome_macro_f1",
@@ -56,6 +61,7 @@ def main() -> None:
     ap.add_argument("--data-root", required=True, type=Path)
     ap.add_argument("--supplement-root", type=Path, help="as used in training; rebuilds identical loss weights")
     ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--work-dir", type=Path, help="where finished chunks are kept; default: next to --out")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--num-workers", type=int, default=8)
     ap.add_argument("--val-tolerance", type=float, default=0.005)
@@ -65,6 +71,7 @@ def main() -> None:
 
     repo = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(repo / "src"))
+    import numpy as np
     import torch
     from peft import set_peft_model_state_dict
     from web_agent.config import load_config
@@ -82,6 +89,19 @@ def main() -> None:
             "this checkpoint is not the validation-selected one in the report")
         assert report.get("test_rows_read", 0) == 0
         expected_val = float(report["best_metric"])
+
+    work = args.work_dir or args.out.parent / f"{args.model_id}_parts"
+    work.mkdir(parents=True, exist_ok=True)
+    ckpt_sha = sha256(args.checkpoint)
+    manifest = work / "manifest.json"
+    if manifest.is_file():
+        old = json.loads(manifest.read_text(encoding="utf-8"))
+        assert old["checkpoint_sha256"] == ckpt_sha and old["chunk_rows"] == CHUNK_ROWS, (
+            f"{work} holds chunks from a different checkpoint or chunk size; use a new --work-dir")
+        print(f"resuming from {work}", flush=True)
+    else:
+        manifest.write_text(json.dumps({"model_id": args.model_id, "checkpoint_sha256": ckpt_sha,
+                                        "chunk_rows": CHUNK_ROWS}, indent=2), encoding="utf-8")
 
     cfg = load_config(str(repo / CONFIGS[args.model_id]))
     cfg["data"]["root"] = str(args.data_root)
@@ -106,11 +126,31 @@ def main() -> None:
     def score(which: str, expected_rows: int) -> tuple[dict, dict, int]:
         records = load_gold_split(cfg, which)
         assert len(records) == expected_rows, f"{which}: {len(records)} rows, expected {expected_rows}"
-        loader = build_gold_dataloader(cfg, which, comp.processor, records=records, shuffle=False,
-                                       num_workers=args.num_workers, seed=args.seed,
-                                       trajectory_records=records)
-        with torch.no_grad():
-            pred = collect_predictions(comp.model, loader, comp.device)
+        starts = list(range(0, len(records), CHUNK_ROWS))
+        parts = []
+        for i, start in enumerate(starts):
+            part = work / f"{which}_{i:03d}.npz"
+            if not part.is_file():
+                chunk = records[start:start + CHUNK_ROWS]
+                loader = build_gold_dataloader(cfg, which, comp.processor, records=chunk, shuffle=False,
+                                               num_workers=args.num_workers, seed=args.seed,
+                                               trajectory_records=records)
+                with torch.no_grad():
+                    pred = collect_predictions(comp.model, loader, comp.device)
+                tmp = part.with_name(part.stem + ".tmp.npz")
+                np.savez(tmp, **pred)
+                tmp.replace(part)          # a chunk counts as done only once fully written
+                status = "scored"
+            else:
+                status = "loaded from disk"
+            parts.append(part)
+            print(f"{dt.datetime.now():%H:%M:%S} {which} chunk {i + 1}/{len(starts)} {status}", flush=True)
+        loaded = [dict(np.load(p)) for p in parts]
+        pred = {}
+        for key in loaded[0]:
+            arrays = [d[key] for d in loaded if d[key].size]
+            pred[key] = np.concatenate(arrays, axis=0) if arrays else loaded[0][key]
+        assert len(pred["outcome_true"]) == len(records), "chunk rows do not add up"
         return compute_metrics(pred), build_diagnostics(pred), len(records)
 
     validation_check = {"skipped": True}
@@ -136,7 +176,7 @@ def main() -> None:
         "model_id": args.model_id,
         "config": CONFIGS[args.model_id],
         "checkpoint": str(args.checkpoint),
-        "checkpoint_sha256": sha256(args.checkpoint),
+        "checkpoint_sha256": ckpt_sha,
         "code_commit": commit,
         "evaluated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "seed": args.seed,
