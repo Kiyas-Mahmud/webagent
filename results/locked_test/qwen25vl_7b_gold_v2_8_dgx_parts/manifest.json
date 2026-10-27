@@ -1,0 +1,5 @@
+{
+  "model_id": "qwen25vl_7b_gold_v2_8_dgx",
+  "checkpoint_sha256": "71f867cc357d0410337a9b23398b109cc95d6c25c2ffc971138b7b8e3aafef2c",
+  "chunk_rows": 400
+}

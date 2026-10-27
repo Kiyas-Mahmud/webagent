@@ -1,5 +1,19 @@
 # Project Progress Tracker
 
+## 2026-10-27 — Locked Web-Gold-40K test opened once: selected Qwen2.5-VL-7B assessor
+- `scripts/evaluate_locked_test.py` (from origin/Code 190be97) run on the DGX for checkpoint `71f867cc…`
+  (`best_e0_outcome-mcc0.678.ckpt`, report `test_rows_read` = 0). The 26 Oct attempts never scored a chunk
+  (PC rebooted at 12:12). Run 11:35–16:43, 40 chunks of 400 rows, resumable.
+- Validation re-scored first: outcome MCC **0.6783 = recorded 0.6783** (guard ±0.005), then the test opened.
+- **Test (7,855 interactions, 1,861 recovery cases) vs validation:** step-failure MCC **0.642** (0.678),
+  macro-F1 0.821 (0.839); recovery-outcome MCC **0.854** (0.852), macro-F1 0.925 (0.925), acc 93.4 %;
+  memory MCC 0.660 (0.695), macro-F1 0.828 (0.846); failure type 0.533 (0.542); strategy 0.363 (0.347);
+  action 0.269 (0.318); ECE 0.100 (0.072); bbox IoU 0.126. Files: `results/locked_test/`
+  (JSON, log, per-chunk predictions, validation_vs_test.csv).
+- Added `scripts/locked_test_progress.py` (live read-only progress bar, terminal) and notebook cell 5b
+  (live bar); notebook cell 4 now prints "already running" instead of raising.
+- Next: add the test column to Table 1, RESULTS_FULL_REPORT.md and the handout.
+
 ## 2026-10-14 — web-v5-seeact-ours COMPLETE: WebFARM on SeeAct, 84/84
 - Run 10:57–14:03 (+ one rerun of cPanel r0: browser page closed after navigation; completed).
   No plan amendments. **SeeAct 52/84 = 61.9 % → SeeAct + WebFARM 69/84 = 82.1 % [72.6, 88.9]**;

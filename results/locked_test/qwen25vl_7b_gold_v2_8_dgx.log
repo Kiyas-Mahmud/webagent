@@ -1,0 +1,83 @@
+The image processor of type `Qwen2VLImageProcessor` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. Note that this behavior will be extended to all models in a future release.
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:30<02:02, 30.73s/it]Loading checkpoint shards:  40%|████      | 2/5 [01:09<01:46, 35.52s/it]Loading checkpoint shards:  60%|██████    | 3/5 [01:50<01:16, 38.01s/it]resuming from /home/aiub/kiyas/webagent/results/locked_test/qwen25vl_7b_gold_v2_8_dgx_parts
+The image processor of type `Qwen2VLImageProcessor` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. Note that this behavior will be extended to all models in a future release.
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:32<02:11, 32.99s/it]Loading checkpoint shards:  40%|████      | 2/5 [01:13<01:52, 37.57s/it]Loading checkpoint shards:  60%|██████    | 3/5 [01:57<01:20, 40.28s/it]Loading checkpoint shards:  80%|████████  | 4/5 [02:38<00:40, 40.50s/it]Loading checkpoint shards: 100%|██████████| 5/5 [02:44<00:00, 28.38s/it]Loading checkpoint shards: 100%|██████████| 5/5 [02:44<00:00, 33.00s/it]
+trainable params: 47,589,376 || all params: 8,339,756,032 || trainable%: 0.5706
+train rows: 24107
+action weights: [1.02, 1.01, 1.01, 1.01, 0.88, 1.1]
+failure weights: [0.57, 0.98, 0.9, 8.56]
+outcome weights: [1.28, 1.0]
+recovery weights: [0.0, 1.44, 0.57, 1.04, 0.47, 1.48]
+recovery pos_weight: 1.75 (attempted success=2228, failure=3898)
+needs-recovery pos_weight: 3.26 (needed=5518, not-needed=17981)
+bbox log-size prior: {'source': 'valid training bbox rows only', 'valid_rows': 6719, 'excluded_invalid_rows': 2042, 'log_wh': [-2.0102704703153313, -3.032421267570985], 'geometric_mean_wh': [0.13395243961019124, 0.04819879455016559]}
+resuming from results/locked_test/qwen25vl_7b_gold_v2_8_dgx_parts
+The image processor of type `Qwen2VLImageProcessor` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. Note that this behavior will be extended to all models in a future release.
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:38<02:33, 38.32s/it]Loading checkpoint shards:  40%|████      | 2/5 [01:26<02:11, 43.90s/it]Loading checkpoint shards:  60%|██████    | 3/5 [02:11<01:28, 44.46s/it]Loading checkpoint shards:  80%|████████  | 4/5 [02:56<00:44, 44.91s/it]Loading checkpoint shards: 100%|██████████| 5/5 [03:04<00:00, 31.54s/it]Loading checkpoint shards: 100%|██████████| 5/5 [03:04<00:00, 36.94s/it]
+trainable params: 47,589,376 || all params: 8,339,756,032 || trainable%: 0.5706
+train rows: 24107
+action weights: [1.02, 1.01, 1.01, 1.01, 0.88, 1.1]
+failure weights: [0.57, 0.98, 0.9, 8.56]
+outcome weights: [1.28, 1.0]
+recovery weights: [0.0, 1.44, 0.57, 1.04, 0.47, 1.48]
+recovery pos_weight: 1.75 (attempted success=2228, failure=3898)
+needs-recovery pos_weight: 3.26 (needed=5518, not-needed=17981)
+bbox log-size prior: {'source': 'valid training bbox rows only', 'valid_rows': 6719, 'excluded_invalid_rows': 2042, 'log_wh': [-2.0102704703153313, -3.032421267570985], 'geometric_mean_wh': [0.13395243961019124, 0.04819879455016559]}
+11:47:21 val chunk 1/20 scored
+11:56:24 val chunk 2/20 scored
+12:05:18 val chunk 3/20 scored
+12:14:10 val chunk 4/20 scored
+12:23:06 val chunk 5/20 scored
+12:31:54 val chunk 6/20 scored
+12:40:42 val chunk 7/20 scored
+12:49:26 val chunk 8/20 scored
+12:57:41 val chunk 9/20 scored
+13:05:41 val chunk 10/20 scored
+13:13:42 val chunk 11/20 scored
+13:20:19 val chunk 12/20 scored
+13:26:59 val chunk 13/20 scored
+13:33:36 val chunk 14/20 scored
+13:40:14 val chunk 15/20 scored
+13:46:53 val chunk 16/20 scored
+13:53:31 val chunk 17/20 scored
+14:00:13 val chunk 18/20 scored
+14:06:55 val chunk 19/20 scored
+/home/aiub/kiyas/webagent/.venv/lib/python3.12/site-packages/bitsandbytes/backends/cuda/ops.py:944: UserWarning: inner dimension (3420) is not aligned for fast kernel with blocksize=64, falling back to slower implementation.
+  warn(
+14:11:16 val chunk 20/20 scored
+validation reproduced: outcome MCC 0.6783
+14:20:06 test chunk 1/20 scored
+14:28:58 test chunk 2/20 scored
+14:37:50 test chunk 3/20 scored
+14:46:42 test chunk 4/20 scored
+14:55:31 test chunk 5/20 scored
+15:04:20 test chunk 6/20 scored
+15:13:12 test chunk 7/20 scored
+15:21:57 test chunk 8/20 scored
+15:30:13 test chunk 9/20 scored
+15:38:18 test chunk 10/20 scored
+15:46:21 test chunk 11/20 scored
+15:53:00 test chunk 12/20 scored
+15:59:40 test chunk 13/20 scored
+16:06:19 test chunk 14/20 scored
+16:12:58 test chunk 15/20 scored
+16:19:38 test chunk 16/20 scored
+16:26:19 test chunk 17/20 scored
+16:33:00 test chunk 18/20 scored
+16:39:39 test chunk 19/20 scored
+16:43:53 test chunk 20/20 scored
+{
+  "model_id": "qwen25vl_7b_gold_v2_8_dgx",
+  "test_rows": 7855,
+  "outcome_mcc": 0.6421,
+  "failure_macro_f1": 0.8208,
+  "failtype_macro_f1": 0.5334,
+  "action_macro_f1": 0.269,
+  "recovery_macro_f1": 0.3629,
+  "recovery_outcome_mcc": 0.8542,
+  "recovery_outcome_macro_f1": 0.9245,
+  "memory_mcc": 0.6597,
+  "memory_macro_f1": 0.8282,
+  "outcome_ece": 0.1
+}
+written results/locked_test/qwen25vl_7b_gold_v2_8_dgx.json
